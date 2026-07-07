@@ -444,6 +444,28 @@ function disconnectDrive(){
 function openDriveFolder(){
   window.open('https://drive.google.com/drive/folders/'+DRIVE_FOLDER_ID, '_blank');
 }
+/* ניסיון התחברות שקטה: אם המשתמש כבר אישר בעבר וסשן Google עדיין פעיל בדפדפן,
+   ייתכן שנקבל טוקן בלי להציג חלון כלל. אם זה לא מצליח - פשוט לא קורה כלום,
+   והמשתמש ילחץ ידנית על "התחבר" כרגיל. לעולם לא נכשל בצורה גלויה. */
+function attemptSilentDriveReconnect(){
+  try{
+    if(typeof google==='undefined' || !google.accounts || !google.accounts.oauth2) return;
+    if(driveConnected) return;
+    if(!tokenClient){
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: function(response){
+          if(response.error) return;
+          driveAccessToken = response.access_token;
+          driveConnected = true;
+          afterDriveConnect();
+        }
+      });
+    }
+    tokenClient.requestAccessToken({prompt:''});
+  }catch(e){ /* שקט - זה בסדר גמור שזה ייכשל */ }
+}
 
 
 const LEAD_STATUSES=['חדש','בטיפול','ממתין למידע','נשלח הסכם','הסכם חתום','לא רלוונטי','עסקה מתקדמת','נסגרה עסקה'];
@@ -1691,20 +1713,4 @@ try{
   loadDB();
   document.documentElement.style.setProperty('--buyer-bg', DB.settings.buyerColor||'#EAF2FB');
   document.documentElement.style.setProperty('--seller-bg', DB.settings.sellerColor||'#FBF3E1');
-  const dashBtn=document.querySelector('.nav-btn[data-screen="dashboard"]'); if(dashBtn) dashBtn.classList.add('active');
-  render();
-  if(!storageAvailable){
-    setTimeout(()=>{ toast('⚠️ הדפדפן חוסם שמירה מקומית בקובץ זה - שינויים לא יישמרו לאחר סגירה. מומלץ לפתוח את הקובץ מתוך Chrome.'); }, 400);
-  }
-}catch(initErr){
-  const app=document.getElementById('app');
-  if(app) app.innerHTML = '<div style="max-width:480px;margin:40px auto;text-align:center;background:#fff;padding:24px;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.1);">'
-    + '<div style="font-size:32px;margin-bottom:10px;">⚠️</div>'
-    + '<div style="color:#1B2A4A;font-weight:700;margin-bottom:8px;">האפליקציה נתקלה בתקלה בטעינה</div>'
-    + '<div style="font-size:12.5px;color:#6b7280;">נסה לרענן את הדף. אם הבעיה נמשכת, נסה לפתוח את הקובץ מתוך הדפדפן Chrome (ולא מתוך תצוגה מקדימה כמו WhatsApp, Gmail או Drive).</div>'
-    + '</div>';
-  if(window.console) console.error(initErr);
-}
-</script>
-</body>
-</html>
+  const dashBtn=document.querySelector('.nav-btn[data-screen="dashboard"]'); if(dashBtn) dashBtn.
