@@ -76,14 +76,22 @@
     <select id="fBuyer"><option value="all">כל הקונים</option></select>
     <select id="fBiz"><option value="all">כל העסקים</option></select>
     <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
+    <select id="fCreatedBy"><option value="all">כל מי שהזין</option></select>
+    <select id="fSort">
+      <option value="updated_desc">עודכן לאחרונה</option>
+      <option value="created_desc">נוצר לאחרונה</option>
+      <option value="created_by_asc">הוזן ע"י (א-ת)</option>
+    </select>
   </div>
 
+  <div style="overflow-x:auto;">
   <table>
     <thead>
-      <tr><th>קונה</th><th>עסק</th><th>אחוז התאמה</th><th>סטטוס</th><th>מטפל כרגע</th><th>עודכן</th><th>פעולות</th></tr>
+      <tr><th>קונה</th><th>עסק</th><th>אחוז התאמה</th><th>סטטוס</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>נוצר</th><th>עודכן</th><th>פעולות</th></tr>
     </thead>
-    <tbody id="matchBody"><tr class="empty-row"><td colspan="7">טוען...</td></tr></tbody>
+    <tbody id="matchBody"><tr class="empty-row"><td colspan="9">טוען...</td></tr></tbody>
   </table>
+  </div>
 </div>
 
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
@@ -140,10 +148,20 @@ async function loadLookups(){
   MATCH_STATUSES.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; sSel.appendChild(o); });
 }
 
+function populateCreatedByFilter(){
+  const sel = document.getElementById('fCreatedBy');
+  const existing = new Set(Array.from(sel.options).map(o=>o.value));
+  const creators = [...new Set(ALL_MATCHES.map(m=>m.created_by).filter(Boolean))];
+  creators.forEach(uid=>{
+    if (!existing.has(uid)){ const o=document.createElement('option'); o.value=uid; o.textContent=userName(uid); sel.appendChild(o); }
+  });
+}
+
 async function loadMatches(){
   const { data, error } = await window.supabaseClient.from('matches').select('*').order('updated_at',{ascending:false});
   if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
   ALL_MATCHES = data || [];
+  populateCreatedByFilter();
   renderTable();
 }
 
@@ -151,33 +169,44 @@ function renderTable(){
   const fBuyer = document.getElementById('fBuyer').value;
   const fBiz = document.getElementById('fBiz').value;
   const fStatus = document.getElementById('fStatus').value;
+  const fCreatedBy = document.getElementById('fCreatedBy').value;
+  const fSort = document.getElementById('fSort').value;
 
   let rows = ALL_MATCHES.filter(m=>{
     if (fBuyer !== 'all' && m.buyer_id !== fBuyer) return false;
     if (fBiz !== 'all' && m.business_id !== fBiz) return false;
     if (fStatus !== 'all' && m.status !== fStatus) return false;
+    if (fCreatedBy !== 'all' && m.created_by !== fCreatedBy) return false;
     return true;
   });
 
+  rows.sort((a,b)=>{
+    if (fSort === 'created_desc') return new Date(b.created_at) - new Date(a.created_at);
+    if (fSort === 'created_by_asc') return userName(a.created_by).localeCompare(userName(b.created_by), 'he');
+    return new Date(b.updated_at) - new Date(a.updated_at);
+  });
+
   const body = document.getElementById('matchBody');
-  if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="7">לא נמצאו התאמות</td></tr>'; return; }
+  if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="9">לא נמצאו התאמות</td></tr>'; return; }
 
   body.innerHTML = rows.map(m=>`
     <tr>
-      <td>${esc(buyerName(m.buyer_id))}</td>
-      <td>${esc(bizName(m.business_id))}</td>
-      <td>${m.match_percent!==null&&m.match_percent!==undefined ? m.match_percent+'%' : '—'}</td>
-      <td><span class="status-pill ${statusClass(m.status)}">${esc(m.status)}</span></td>
-      <td>${esc(userName(m.current_handler))}</td>
-      <td>${fmtDate(m.updated_at)}</td>
-      <td class="row-actions">
+      <td data-label="קונה">${esc(buyerName(m.buyer_id))}</td>
+      <td data-label="עסק">${esc(bizName(m.business_id))}</td>
+      <td data-label="אחוז התאמה">${m.match_percent!==null&&m.match_percent!==undefined ? m.match_percent+'%' : '—'}</td>
+      <td data-label="סטטוס"><span class="status-pill ${statusClass(m.status)}">${esc(m.status)}</span></td>
+      <td data-label="הוזן ע&quot;י">${m.created_by ? esc(userName(m.created_by)) : 'לא ידוע'}</td>
+      <td data-label="מטופל ע&quot;י">${esc(userName(m.current_handler))}</td>
+      <td data-label="נוצר">${fmtDate(m.created_at)}</td>
+      <td data-label="עודכן">${fmtDate(m.updated_at)}</td>
+      <td class="row-actions" data-label="">
         <button title="פתח" onclick="openMatchForm('${m.id}')">📂</button>
       </td>
     </tr>
   `).join('');
 }
 
-['fBuyer','fBiz','fStatus'].forEach(id=>document.getElementById(id).addEventListener('change', renderTable));
+['fBuyer','fBiz','fStatus','fCreatedBy','fSort'].forEach(id=>document.getElementById(id).addEventListener('change', renderTable));
 
 function buyerOptions(selected){
   return '<option value="">— בחר קונה —</option>' + ALL_BUYERS.map(b=>
@@ -205,6 +234,10 @@ async function openMatchForm(id){
     <h3>${match ? 'פרטי התאמה' : 'התאמה חדשה'}</h3>
     <form id="matchForm">
       <div class="form-grid">
+        ${match ? `<div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;">
+          מספר מזהה: <b>${esc(match.internal_code||'—')}</b> · נוצרה ע"י: <b>${esc(userName(match.created_by))}</b> בתאריך ${fmtDate(match.created_at)}
+          ${match.transferred_by ? ` · הועברה ע"י: <b>${esc(userName(match.transferred_by))}</b>` : ''}
+        </div>` : ''}
         <div class="field"><label>קונה</label><select id="buyer_id" ${match?'disabled':''}>${buyerOptions(match?.buyer_id)}</select></div>
         <div class="field"><label>עסק</label><select id="business_id" ${match?'disabled':''}>${bizOptions(match?.business_id)}</select></div>
         <div class="field"><label>אחוז התאמה</label><input type="number" id="match_percent" min="0" max="100" value="${match?.match_percent??''}"></div>

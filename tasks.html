@@ -132,13 +132,13 @@ function renderTable(){
   body.innerHTML = rows.map(t=>{
     const isOverdue = t.due_date && t.due_date < todayISO() && t.status === 'פתוחה';
     return `<tr>
-      <td>${esc(t.title)}</td>
-      <td>${t.related_type ? esc(relatedLabels[t.related_type]||t.related_type) : '—'}</td>
-      <td class="${isOverdue?'overdue':''}">${fmtDate(t.due_date)}</td>
-      <td><span class="pill ${t.status==='פתוחה'?'pill-open':'pill-done'}">${esc(t.status)}</span></td>
-      <td class="${t.priority==='גבוהה'?'pri-high':'pri-normal'}">${esc(t.priority)}</td>
-      <td>${esc(userName(t.assigned_to))}</td>
-      <td class="row-actions">
+      <td data-label="כותרת">${esc(t.title)}</td>
+      <td data-label="קשור ל">${t.related_type ? esc(relatedLabels[t.related_type]||t.related_type) : '—'}</td>
+      <td data-label="תאריך יעד" class="${isOverdue?'overdue':''}">${fmtDate(t.due_date)}</td>
+      <td data-label="סטטוס"><span class="pill ${t.status==='פתוחה'?'pill-open':'pill-done'}">${esc(t.status)}</span></td>
+      <td data-label="עדיפות" class="${t.priority==='גבוהה'?'pri-high':'pri-normal'}">${esc(t.priority)}</td>
+      <td data-label="אחראי">${esc(userName(t.assigned_to))}</td>
+      <td class="row-actions" data-label="">
         <button title="ערוך" onclick="openTaskForm('${t.id}')">✏️</button>
         ${t.status==='פתוחה' ? `<button title="סמן כהושלם" onclick="completeTask('${t.id}')">✅</button>` : ''}
         <button title="מחק" onclick="deleteTask('${t.id}')">🗑️</button>
