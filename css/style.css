@@ -1,0 +1,104 @@
+:root{
+  --navy:#0e1b34;
+  --navy-light:#16264a;
+  --gold:#c9a24b;
+  --gold-light:#e8cf8a;
+  --bg:#fbfaf6;
+  --text:#1c2333;
+  --danger:#b3402c;
+  --success:#3c7a5a;
+  --warn:#c98a2b;
+  --info:#2b6fc9;
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  font-family:'Heebo','Rubik',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  direction:rtl;
+}
+
+.bsd-header{
+  background:linear-gradient(90deg,var(--navy),var(--navy-light));
+  border-bottom:3px solid var(--gold);
+  color:#fff;
+  padding:14px 28px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.bsd-header .brand{
+  font-weight:700;
+  font-size:1.15rem;
+  letter-spacing:.5px;
+}
+.bsd-header .brand small{
+  display:block;
+  font-weight:400;
+  font-size:.7rem;
+  color:var(--gold-light);
+}
+
+.login-wrap{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:radial-gradient(circle at 50% 0%,var(--navy-light),var(--navy) 70%);
+}
+.login-card{
+  background:#fff;
+  border-radius:14px;
+  padding:40px 36px;
+  width:100%;
+  max-width:380px;
+  box-shadow:0 20px 60px rgba(0,0,0,.35);
+  text-align:center;
+}
+.login-card h1{
+  font-size:1.3rem;
+  margin:0 0 4px;
+  color:var(--navy);
+}
+.login-card p.tagline{
+  color:var(--gold);
+  font-size:.8rem;
+  margin:0 0 24px;
+  font-weight:600;
+}
+.login-card input{
+  width:100%;
+  padding:12px 14px;
+  margin-bottom:14px;
+  border:1px solid #d8d3c4;
+  border-radius:8px;
+  font-size:.95rem;
+  font-family:inherit;
+  text-align:right;
+}
+.login-card input:focus{
+  outline:none;
+  border-color:var(--gold);
+  box-shadow:0 0 0 3px rgba(201,162,75,.2);
+}
+.login-card button{
+  width:100%;
+  padding:13px;
+  border:none;
+  border-radius:8px;
+  background:var(--navy);
+  color:#fff;
+  font-weight:700;
+  font-size:.95rem;
+  cursor:pointer;
+  transition:.15s;
+}
+.login-card button:hover{background:var(--navy-light);}
+.login-error{
+  color:var(--danger);
+  font-size:.85rem;
+  margin-top:10px;
+  min-height:18px;
+}
