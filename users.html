@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>BSD CRM - ניהול משתמשים</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:1200px;margin:0 auto;}
+  .nav a{color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;}
+  .nav a.active{background:rgba(255,255,255,.12);color:#fff;font-weight:700;}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+  .toolbar h2{margin:0;color:var(--navy);font-size:1.3rem;}
+  .btn{border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-size:.85rem;cursor:pointer;font-weight:700;}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);}
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.06);}
+  thead th{background:var(--navy);color:#fff;padding:12px 14px;font-size:.8rem;text-align:right;white-space:nowrap;}
+  tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
+  .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
+  .badge-admin{background:#1c2333;color:#fff;}
+  .badge-manager{background:#2b6fc9;color:#fff;}
+  .badge-broker{background:var(--gold);color:#1c2333;}
+  .badge-user{background:#eef1f6;color:var(--navy);}
+  .badge-viewer{background:#eee;color:#666;}
+  .badge-active{background:#dff0e4;color:#245c40;}
+  .badge-blocked{background:#fbe4e0;color:#832d1f;}
+  .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
+  .denied{text-align:center;padding:60px;color:#999;}
+
+  .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
+  .overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:14px;max-width:600px;width:100%;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  .modal h3{margin:0 0 18px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .form-grid .full{grid-column:1/3;}
+  .field label{display:block;font-size:.78rem;color:#666;margin-bottom:4px;}
+  .field input, .field select, .field textarea{width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+  .toast{position:fixed;bottom:24px;left:24px;background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.3);}
+  .role-note{background:#fbf8ee;border:1px solid #e6dfc7;padding:14px 16px;border-radius:10px;font-size:.78rem;color:#665;margin-bottom:16px;line-height:1.6;}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <div class="brand">BSD CRM <small>BSD Business Brokers Israel</small></div>
+    <div class="nav" style="display:flex;gap:6px;">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+    <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
+    <a href="tasks.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משימות</a>
+    <a href="users.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משתמשים</a>
+  </div>
+  <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+</div>
+
+<div class="wrap" id="mainWrap">
+  <div class="toolbar">
+    <h2>ניהול משתמשים</h2>
+    <button class="btn btn-primary" onclick="openCreateForm()">+ משתמש חדש</button>
+  </div>
+
+  <div class="role-note">
+    <b>הרשאות לפי תפקיד:</b> Admin — גישה וניהול מלאים לכל המערכת. מנהל — ניהול רחב, ללא ניהול משתמשים.
+    מתווך/משתמש — יצירה ועריכה של קונים/מוכרים/עסקים/התאמות/משימות. צופה בלבד — צפייה בלבד, ללא יצירה/עריכה/מחיקה.
+  </div>
+
+  <table>
+    <thead><tr><th>שם מלא</th><th>אימייל</th><th>תפקיד</th><th>סטטוס</th><th>כניסה אחרונה</th><th>מס' כניסות</th><th>פעולות</th></tr></thead>
+    <tbody id="usersBody"><tr><td colspan="7" style="text-align:center;padding:30px;color:#999;">טוען...</td></tr></tbody>
+  </table>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
+<div id="toastBox"></div>
+
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
+<script>
+let ALL_USERS = [];
+const ROLE_LABELS = {admin:'Admin', manager:'מנהל', broker:'מתווך', user:'משתמש', viewer:'צופה בלבד'};
+
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDateTime(iso){ if(!iso) return 'מעולם לא'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
+function toast(msg){
+  const box = document.getElementById('toastBox');
+  const el = document.createElement('div'); el.className='toast'; el.textContent = msg;
+  box.appendChild(el); setTimeout(()=>el.remove(), 3500);
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); document.getElementById('modalBox').innerHTML=''; }
+
+async function loadUsers(){
+  const { data, error } = await window.supabaseClient.from('profiles').select('*').order('created_at',{ascending:false});
+  if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
+  ALL_USERS = data || [];
+  renderTable();
+}
+
+function renderTable(){
+  const body = document.getElementById('usersBody');
+  if (ALL_USERS.length === 0){ body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#999;">אין משתמשים</td></tr>'; return; }
+  body.innerHTML = ALL_USERS.map(u=>{
+    const name = u.full_name && u.full_name.trim() ? u.full_name : '—';
+    return `<tr>
+      <td>${esc(name)}</td>
+      <td>${esc(u.email)}</td>
+      <td><span class="badge badge-${u.role}">${ROLE_LABELS[u.role]||u.role}</span></td>
+      <td><span class="badge badge-${u.status}">${u.status==='active'?'פעיל':'חסום'}</span></td>
+      <td>${fmtDateTime(u.last_login_at)}</td>
+      <td>${u.login_count||0}</td>
+      <td class="row-actions">
+        <button title="ערוך" onclick="openEditForm('${u.id}')">✏️</button>
+        <button title="${u.status==='active'?'חסום':'הפעל'}" onclick="toggleStatus('${u.id}','${u.status}')">${u.status==='active'?'🚫':'✅'}</button>
+        <button title="איפוס סיסמה" onclick="resetPassword('${u.email}')">🔑</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function roleOptions(selected){
+  return Object.entries(ROLE_LABELS).map(([v,l])=>`<option value="${v}" ${v===selected?'selected':''}>${l}</option>`).join('');
+}
+
+function openEditForm(id){
+  const u = ALL_USERS.find(x=>x.id===id);
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>עריכת משתמש</h3>
+    <form id="editForm">
+      <div class="form-grid">
+        <div class="field"><label>שם פרטי</label><input id="first_name" value="${esc(u.first_name)}"></div>
+        <div class="field"><label>שם משפחה</label><input id="last_name" value="${esc(u.last_name)}"></div>
+        <div class="field"><label>טלפון</label><input id="phone" value="${esc(u.phone)}"></div>
+        <div class="field"><label>עיר</label><input id="city" value="${esc(u.city)}"></div>
+        <div class="field"><label>חברה/משרד</label><input id="company" value="${esc(u.company)}"></div>
+        <div class="field"><label>תפקיד בחברה</label><input id="job_title" value="${esc(u.job_title)}"></div>
+        <div class="field"><label>תחום התמחות</label><input id="specialization" value="${esc(u.specialization)}"></div>
+        <div class="field"><label>מספר רישיון</label><input id="license_number" value="${esc(u.license_number)}"></div>
+        <div class="field"><label>תפקיד במערכת</label><select id="role">${roleOptions(u.role)}</select></div>
+        <div class="field full"><label>הערות</label><textarea id="notes">${esc(u.notes)}</textarea></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+        <button type="submit" class="btn btn-primary">שמירה</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('editForm').dataset.userId = id;
+  document.getElementById('editForm').addEventListener('submit', saveEdit);
+}
+
+async function saveEdit(e){
+  e.preventDefault();
+  const id = e.target.dataset.userId;
+  const g = k => document.getElementById(k).value;
+  const payload = {
+    first_name: g('first_name'), last_name: g('last_name'), phone: g('phone'),
+    city: g('city'), company: g('company'), job_title: g('job_title'),
+    specialization: g('specialization'), license_number: g('license_number'),
+    role: g('role'), notes: g('notes')
+  };
+  const { error } = await window.supabaseClient.from('profiles').update(payload).eq('id', id);
+  if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+  toast('נשמר בהצלחה');
+  closeModal();
+  await loadUsers();
+}
+
+async function toggleStatus(id, currentStatus){
+  const newStatus = currentStatus === 'active' ? 'blocked' : 'active';
+  const label = newStatus === 'blocked' ? 'לחסום' : 'להפעיל';
+  if (!confirm(`בטוח שברצונך ${label} משתמש זה?`)) return;
+  const { error } = await window.supabaseClient.from('profiles').update({ status: newStatus }).eq('id', id);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  toast('הסטטוס עודכן');
+  await loadUsers();
+}
+
+async function resetPassword(email){
+  const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email);
+  if (error){ toast('שגיאה בשליחת איפוס סיסמה: ' + error.message); return; }
+  toast('נשלח מייל איפוס סיסמה אל ' + email);
+}
+
+function openCreateForm(){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>משתמש חדש</h3>
+    <form id="createForm">
+      <div class="form-grid">
+        <div class="field"><label>אימייל</label><input type="email" id="new_email" required></div>
+        <div class="field"><label>סיסמה זמנית</label><input type="text" id="new_password" required minlength="6"></div>
+        <div class="field"><label>שם פרטי</label><input id="new_first_name"></div>
+        <div class="field"><label>שם משפחה</label><input id="new_last_name"></div>
+        <div class="field"><label>טלפון</label><input id="new_phone"></div>
+        <div class="field"><label>עיר</label><input id="new_city"></div>
+        <div class="field"><label>תפקיד במערכת</label><select id="new_role">${roleOptions('user')}</select></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+        <button type="submit" class="btn btn-primary">צור משתמש</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('createForm').addEventListener('submit', createUser);
+}
+
+async function createUser(e){
+  e.preventDefault();
+  const g = k => document.getElementById(k).value;
+
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (!session){ toast('פג תוקף החיבור, התחבר מחדש'); return; }
+
+  const functionUrl = window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/create-user';
+
+  try {
+    const resp = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + session.access_token
+      },
+      body: JSON.stringify({
+        email: g('new_email'), password: g('new_password'),
+        first_name: g('new_first_name'), last_name: g('new_last_name'),
+        phone: g('new_phone'), city: g('new_city'), role: g('new_role')
+      })
+    });
+    const result = await resp.json();
+    if (!resp.ok){ toast('שגיאה: ' + (result.error || 'לא ידועה')); return; }
+    toast('המשתמש נוצר בהצלחה');
+    closeModal();
+    await loadUsers();
+  } catch (err){
+    toast('שגיאת רשת: ' + err.message + ' (יש לוודא שה-Edge Function נפרסה)');
+  }
+}
+
+(async function init(){
+  const profile = await requireAuth();
+  if (!profile) return;
+  if (profile.role !== 'admin'){
+    document.getElementById('mainWrap').innerHTML = '<div class="denied">עמוד זה זמין ל-Admin בלבד.</div>';
+    return;
+  }
+  await loadUsers();
+})();
+</script>
+</body>
+</html>

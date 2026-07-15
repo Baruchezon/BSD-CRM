@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>BSD CRM - משימות</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
+  .nav a{color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;}
+  .nav a.active{background:rgba(255,255,255,.12);color:#fff;font-weight:700;}
+  .nav a:hover{color:#fff;}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+  .toolbar h2{margin:0;color:var(--navy);font-size:1.3rem;}
+  .btn{border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-size:.85rem;cursor:pointer;font-weight:700;}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);}
+
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .filters input, .filters select{padding:9px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.06);}
+  thead th{background:var(--navy);color:#fff;padding:12px 14px;font-size:.8rem;text-align:right;white-space:nowrap;}
+  tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
+  tbody tr:hover{background:#faf8f2;}
+  .empty-row td{text-align:center;color:#999;padding:30px;}
+  .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
+  .pill{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
+  .pill-open{background:#fdeccb;color:#8a5a10;}
+  .pill-done{background:#dff0e4;color:#245c40;}
+  .pri-high{color:#b3402c;font-weight:700;}
+  .pri-normal{color:#555;}
+  .overdue{color:#b3402c;font-weight:700;}
+
+  .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
+  .overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:14px;max-width:520px;width:100%;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  .modal h3{margin:0 0 18px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:.78rem;color:#666;margin-bottom:4px;}
+  .field input, .field select, .field textarea{width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+  .toast{position:fixed;bottom:24px;left:24px;background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.3);}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <div class="brand">BSD CRM <small>BSD Business Brokers Israel</small></div>
+      <div class="nav" style="display:flex;gap:6px;">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+    <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
+    <a href="tasks.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משימות</a>
+    <a href="users.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משתמשים</a>
+  </div>
+  <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+</div>
+
+<div class="wrap">
+  <div class="toolbar">
+    <h2>משימות</h2>
+    <button class="btn btn-primary" onclick="openTaskForm(null)">+ משימה חדשה</button>
+  </div>
+
+  <div class="filters">
+    <select id="fStatus">
+      <option value="open">פתוחות</option>
+      <option value="all">הכל</option>
+      <option value="done">הושלמו</option>
+    </select>
+    <select id="fAssigned"><option value="all">כל המשתמשים</option></select>
+  </div>
+
+  <table>
+    <thead><tr><th>כותרת</th><th>קשור ל</th><th>תאריך יעד</th><th>סטטוס</th><th>עדיפות</th><th>אחראי</th><th>פעולות</th></tr></thead>
+    <tbody id="taskBody"><tr class="empty-row"><td colspan="7">טוען...</td></tr></tbody>
+  </table>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
+<div id="toastBox"></div>
+
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
+<script>
+let ALL_TASKS = [], ALL_USERS = [], CURRENT_PROFILE = null;
+
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function toast(msg){
+  const box = document.getElementById('toastBox');
+  const el = document.createElement('div'); el.className='toast'; el.textContent = msg;
+  box.appendChild(el); setTimeout(()=>el.remove(), 3000);
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); document.getElementById('modalBox').innerHTML=''; }
+function userName(id){ const u = ALL_USERS.find(x=>x.id===id); return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—'; }
+
+async function loadUsers(){
+  const { data } = await window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active');
+  ALL_USERS = data || [];
+  const sel = document.getElementById('fAssigned');
+  ALL_USERS.forEach(u=>{ const o=document.createElement('option'); o.value=u.id; o.textContent = u.full_name && u.full_name.trim() ? u.full_name : u.email; sel.appendChild(o); });
+}
+
+async function loadTasks(){
+  const { data, error } = await window.supabaseClient.from('tasks').select('*').order('due_date', { ascending: true });
+  if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
+  ALL_TASKS = data || [];
+  renderTable();
+}
+
+function renderTable(){
+  const fStatus = document.getElementById('fStatus').value;
+  const fAssigned = document.getElementById('fAssigned').value;
+
+  let rows = ALL_TASKS.filter(t=>{
+    if (fStatus === 'open' && t.status !== 'פתוחה') return false;
+    if (fStatus === 'done' && t.status === 'פתוחה') return false;
+    if (fAssigned !== 'all' && t.assigned_to !== fAssigned) return false;
+    return true;
+  });
+
+  const body = document.getElementById('taskBody');
+  if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="7">אין משימות תואמות</td></tr>'; return; }
+
+  const relatedLabels = {lead:'ליד', business:'עסק', match:'התאמה'};
+  body.innerHTML = rows.map(t=>{
+    const isOverdue = t.due_date && t.due_date < todayISO() && t.status === 'פתוחה';
+    return `<tr>
+      <td>${esc(t.title)}</td>
+      <td>${t.related_type ? esc(relatedLabels[t.related_type]||t.related_type) : '—'}</td>
+      <td class="${isOverdue?'overdue':''}">${fmtDate(t.due_date)}</td>
+      <td><span class="pill ${t.status==='פתוחה'?'pill-open':'pill-done'}">${esc(t.status)}</span></td>
+      <td class="${t.priority==='גבוהה'?'pri-high':'pri-normal'}">${esc(t.priority)}</td>
+      <td>${esc(userName(t.assigned_to))}</td>
+      <td class="row-actions">
+        <button title="ערוך" onclick="openTaskForm('${t.id}')">✏️</button>
+        ${t.status==='פתוחה' ? `<button title="סמן כהושלם" onclick="completeTask('${t.id}')">✅</button>` : ''}
+        <button title="מחק" onclick="deleteTask('${t.id}')">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+['fStatus','fAssigned'].forEach(id=>document.getElementById(id).addEventListener('change', renderTable));
+
+function userOptions(selected){
+  return '<option value="">— ללא —</option>' + ALL_USERS.map(u=>{
+    const label = u.full_name && u.full_name.trim() ? u.full_name : u.email;
+    return `<option value="${u.id}" ${u.id===selected?'selected':''}>${esc(label)}</option>`;
+  }).join('');
+}
+
+function openTaskForm(id){
+  const task = id ? ALL_TASKS.find(t=>t.id===id) : null;
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>${task ? 'עריכת משימה' : 'משימה חדשה'}</h3>
+    <form id="taskForm">
+      <div class="field"><label>כותרת</label><input type="text" id="title" value="${esc(task?.title)}" required></div>
+      <div class="field"><label>תאריך יעד</label><input type="date" id="due_date" value="${task?.due_date||''}"></div>
+      <div class="field"><label>עדיפות</label>
+        <select id="priority">
+          <option value="רגילה" ${task?.priority==='רגילה'?'selected':''}>רגילה</option>
+          <option value="גבוהה" ${task?.priority==='גבוהה'?'selected':''}>גבוהה</option>
+        </select>
+      </div>
+      <div class="field"><label>אחראי</label><select id="assigned_to">${userOptions(task?.assigned_to)}</select></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+        <button type="submit" class="btn btn-primary">שמירה</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('taskForm').dataset.taskId = task ? task.id : '';
+  document.getElementById('taskForm').addEventListener('submit', saveTask);
+}
+
+async function saveTask(e){
+  e.preventDefault();
+  const form = e.target;
+  const taskId = form.dataset.taskId;
+  const g = id => document.getElementById(id).value;
+  const payload = {
+    title: g('title'),
+    due_date: g('due_date') || null,
+    priority: g('priority'),
+    assigned_to: g('assigned_to') || null
+  };
+  let error;
+  if (taskId){
+    ({ error } = await window.supabaseClient.from('tasks').update(payload).eq('id', taskId));
+  } else {
+    payload.status = 'פתוחה';
+    ({ error } = await window.supabaseClient.from('tasks').insert(payload));
+  }
+  if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+  toast('נשמר בהצלחה');
+  closeModal();
+  await loadTasks();
+}
+
+async function completeTask(id){
+  const { error } = await window.supabaseClient.from('tasks').update({ status: 'הושלמה' }).eq('id', id);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  toast('המשימה סומנה כהושלמה');
+  await loadTasks();
+}
+
+async function deleteTask(id){
+  if (!confirm('למחוק משימה זו?')) return;
+  const { error } = await window.supabaseClient.from('tasks').delete().eq('id', id);
+  if (error){ toast('אין הרשאה למחוק, או שגיאה: ' + error.message); return; }
+  toast('נמחקה בהצלחה');
+  await loadTasks();
+}
+
+(async function init(){
+  CURRENT_PROFILE = await requireAuth();
+  if (!CURRENT_PROFILE) return;
+  await loadUsers();
+  await loadTasks();
+})();
+</script>
+</body>
+</html>

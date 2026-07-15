@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>BSD CRM - לוח בקרה</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
+  .welcome{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;margin-bottom:22px;}
+  .welcome h2{margin:0 0 4px;color:var(--navy);font-size:1.4rem;}
+  .welcome span{color:#666;font-size:.85rem;}
+
+  .period-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px;}
+  .period-btn{border:1px solid #d8d3c4;background:#fff;color:var(--navy);padding:8px 16px;border-radius:20px;font-family:inherit;font-size:.85rem;cursor:pointer;transition:.15s;}
+  .period-btn.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .period-btn:hover{border-color:var(--gold);}
+  .custom-range{display:none;gap:8px;align-items:center;}
+  .custom-range.show{display:flex;}
+  .custom-range input{padding:7px 10px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;}
+
+  .section-title{font-size:1rem;font-weight:700;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;margin:28px 0 14px;}
+
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;}
+  .kpi{border-radius:14px;padding:18px 20px;color:#fff;box-shadow:0 6px 18px rgba(0,0,0,.12);position:relative;overflow:hidden;}
+  .kpi .num{font-size:2rem;font-weight:800;line-height:1;}
+  .kpi .label{font-size:.8rem;opacity:.92;margin-top:6px;}
+  .kpi .icon{position:absolute;left:14px;top:14px;font-size:1.3rem;opacity:.5;}
+
+  .c-navy{background:linear-gradient(135deg,var(--navy),var(--navy-light));}
+  .c-gold{background:linear-gradient(135deg,var(--gold),#a5792f);}
+  .c-blue{background:linear-gradient(135deg,#2b6fc9,#1a4a8f);}
+  .c-green{background:linear-gradient(135deg,#3c7a5a,#245c40);}
+  .c-orange{background:linear-gradient(135deg,#c98a2b,#a5661a);}
+  .c-red{background:linear-gradient(135deg,#b3402c,#832d1f);}
+  .c-teal{background:linear-gradient(135deg,#1f9c9c,#146a6a);}
+  .c-purple{background:linear-gradient(135deg,#7952b3,#54398a);}
+
+  .gauge-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;}
+  .gauge-card{background:#fff;border-radius:14px;padding:18px;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.08);}
+  .gauge-card .gauge-label{font-size:.85rem;color:var(--navy);font-weight:700;margin-top:8px;}
+  .gauge-card .gauge-sub{font-size:.72rem;color:#888;margin-top:2px;}
+
+  .activity-feed{background:#fff;border-radius:14px;padding:4px 0;box-shadow:0 4px 14px rgba(0,0,0,.08);}
+  .activity-row{display:flex;justify-content:space-between;padding:12px 20px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
+  .activity-row:last-child{border-bottom:none;}
+  .activity-row .who{font-weight:700;color:var(--navy);}
+  .activity-row .what{color:#555;}
+  .activity-row .when{color:#999;font-size:.75rem;white-space:nowrap;}
+  .empty-note{padding:20px;text-align:center;color:#999;font-size:.85rem;}
+
+  .logout{background:transparent;border:1px solid rgba(255,255,255,.5);color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-family:inherit;}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <div class="brand">BSD CRM <small>BSD Business Brokers Israel</small></div>
+        <div class="nav" style="display:flex;gap:6px;">
+    <a href="app.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+    <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
+    <a href="tasks.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משימות</a>
+    <a href="users.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משתמשים</a>
+  </div>
+  <button class="logout" onclick="bsdLogout()">יציאה</button>
+</div>
+
+<div class="wrap">
+  <div class="welcome">
+    <div>
+      <h2 id="welcomeName">טוען...</h2>
+      <span id="welcomeRole"></span>
+    </div>
+  </div>
+
+  <div class="section-title">תמונת מצב כללית</div>
+  <div class="kpi-grid">
+    <div class="kpi c-blue"><div class="icon">👤</div><div class="num" id="k_buyers">–</div><div class="label">קונים</div></div>
+    <div class="kpi c-gold"><div class="icon">🤝</div><div class="num" id="k_sellers">–</div><div class="label">מוכרים</div></div>
+    <div class="kpi c-navy"><div class="icon">🏢</div><div class="num" id="k_businesses">–</div><div class="label">עסקים למכירה</div></div>
+    <div class="kpi c-green"><div class="icon">🔗</div><div class="num" id="k_matches">–</div><div class="label">התאמות פתוחות</div></div>
+    <div class="kpi c-teal"><div class="icon">🧑‍💼</div><div class="num" id="k_activeUsers">–</div><div class="label">משתמשים פעילים</div></div>
+    <div class="kpi c-orange"><div class="icon">✅</div><div class="num" id="k_tasks">–</div><div class="label">משימות פתוחות</div></div>
+    <div class="kpi c-purple"><div class="icon">💬</div><div class="num" id="k_awaiting">–</div><div class="label">התאמות ממתינות לתגובה</div></div>
+    <div class="kpi c-red"><div class="icon">📉</div><div class="num" id="k_negotiation">–</div><div class="label">עסקאות במשא ומתן</div></div>
+    <div class="kpi c-green"><div class="icon">🏁</div><div class="num" id="k_closed">–</div><div class="label">עסקאות שנסגרו</div></div>
+    <div class="kpi c-navy"><div class="icon">📅</div><div class="num" id="k_meetings">–</div><div class="label">פגישות שנקבעו</div></div>
+    <div class="kpi c-red"><div class="icon">⏰</div><div class="num" id="k_inactive">–</div><div class="label">משתמשים לא פעילים 30+ יום</div></div>
+  </div>
+
+  <div class="section-title">נתונים לפי תקופה</div>
+  <div class="period-bar">
+    <button class="period-btn" data-p="today">היום</button>
+    <button class="period-btn active" data-p="week">השבוע</button>
+    <button class="period-btn" data-p="month">החודש</button>
+    <button class="period-btn" data-p="year">השנה</button>
+    <button class="period-btn" data-p="custom">טווח מותאם</button>
+    <div class="custom-range" id="customRange">
+      <input type="date" id="dateFrom">
+      <span>עד</span>
+      <input type="date" id="dateTo">
+      <button class="period-btn" onclick="applyCustomRange()">החל</button>
+    </div>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi c-blue"><div class="icon">🆕</div><div class="num" id="p_newBuyers">–</div><div class="label">קונים חדשים</div></div>
+    <div class="kpi c-gold"><div class="icon">🆕</div><div class="num" id="p_newSellers">–</div><div class="label">מוכרים חדשים</div></div>
+    <div class="kpi c-navy"><div class="icon">🆕</div><div class="num" id="p_newBusinesses">–</div><div class="label">עסקים חדשים</div></div>
+    <div class="kpi c-green"><div class="icon">🆕</div><div class="num" id="p_newMatches">–</div><div class="label">התאמות חדשות</div></div>
+  </div>
+
+  <div class="section-title">מדדים</div>
+  <div class="gauge-grid">
+    <div class="gauge-card">
+      <svg id="g_close" width="140" height="140" viewBox="0 0 140 140"></svg>
+      <div class="gauge-label">אחוז עסקאות שנסגרו</div>
+      <div class="gauge-sub" id="g_close_sub">מתוך כלל ההתאמות</div>
+    </div>
+    <div class="gauge-card">
+      <svg id="g_tasks" width="140" height="140" viewBox="0 0 140 140"></svg>
+      <div class="gauge-label">אחוז משימות שהושלמו</div>
+      <div class="gauge-sub" id="g_tasks_sub">מתוך כלל המשימות</div>
+    </div>
+    <div class="gauge-card">
+      <svg id="g_agree" width="140" height="140" viewBox="0 0 140 140"></svg>
+      <div class="gauge-label">אחוז עסקים עם הסכם חתום</div>
+      <div class="gauge-sub" id="g_agree_sub">מתוך כלל העסקים</div>
+    </div>
+  </div>
+
+  <div class="section-title">פעילות משתמשים אחרונה</div>
+  <div class="activity-feed" id="activityFeed">
+    <div class="empty-note">טוען פעילות...</div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
+<script>
+let currentPeriod = 'week';
+let customFrom = null, customTo = null;
+
+function drawGauge(svgId, percent, colorHex){
+  const svg = document.getElementById(svgId);
+  const r = 55, cx = 70, cy = 70;
+  const circumference = 2 * Math.PI * r;
+  const offset = circumference * (1 - percent/100);
+  svg.innerHTML = `
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#eee" stroke-width="14"/>
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colorHex}" stroke-width="14"
+      stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
+      stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"/>
+    <text x="${cx}" y="${cy+8}" text-anchor="middle" font-size="26" font-weight="800" fill="#1c2333">${Math.round(percent)}%</text>
+  `;
+}
+
+function periodStartDate(period){
+  const now = new Date();
+  let d;
+  if (period === 'today'){ d = new Date(now.getFullYear(), now.getMonth(), now.getDate()); }
+  else if (period === 'week'){ d = new Date(now); d.setDate(d.getDate()-6); }
+  else if (period === 'month'){ d = new Date(now.getFullYear(), now.getMonth(), 1); }
+  else if (period === 'year'){ d = new Date(now.getFullYear(), 0, 1); }
+  else return null;
+  return d.toISOString();
+}
+
+async function count(table, build){
+  let q = window.supabaseClient.from(table).select('*', { count: 'exact', head: true });
+  if (build) q = build(q);
+  const { count, error } = await q;
+  if (error){ console.error(table, error); return 0; }
+  return count || 0;
+}
+
+async function loadGeneral(){
+  document.getElementById('k_buyers').textContent = await count('leads', q=>q.eq('type','buyer'));
+  document.getElementById('k_sellers').textContent = await count('leads', q=>q.eq('type','seller'));
+  document.getElementById('k_businesses').textContent = await count('businesses');
+  document.getElementById('k_matches').textContent = await count('matches', q=>q.not('status','in','("העסקה נסגרה","העסקה נעצרה")'));
+  document.getElementById('k_activeUsers').textContent = await count('profiles', q=>q.eq('status','active'));
+  document.getElementById('k_tasks').textContent = await count('tasks', q=>q.eq('status','פתוחה'));
+  document.getElementById('k_awaiting').textContent = await count('matches', q=>q.eq('status','ממתין לתגובה'));
+  document.getElementById('k_negotiation').textContent = await count('matches', q=>q.eq('status','במשא ומתן'));
+  document.getElementById('k_closed').textContent = await count('matches', q=>q.eq('status','העסקה נסגרה'));
+  document.getElementById('k_meetings').textContent = await count('activity_thread', q=>q.eq('activity_type','פגישה'));
+
+  const thirtyDaysAgo = new Date(Date.now() - 30*24*60*60*1000).toISOString();
+  document.getElementById('k_inactive').textContent = await count('profiles', q=>
+    q.eq('status','active').or(`last_login_at.is.null,last_login_at.lt.${thirtyDaysAgo}`)
+  );
+}
+
+async function loadPeriod(){
+  let startISO = customFrom || periodStartDate(currentPeriod);
+  let endISO = customTo || null;
+
+  function applyRange(q){
+    if (startISO) q = q.gte('created_at', startISO);
+    if (endISO) q = q.lte('created_at', endISO);
+    return q;
+  }
+
+  document.getElementById('p_newBuyers').textContent = await count('leads', q=>applyRange(q.eq('type','buyer')));
+  document.getElementById('p_newSellers').textContent = await count('leads', q=>applyRange(q.eq('type','seller')));
+  document.getElementById('p_newBusinesses').textContent = await count('businesses', q=>applyRange(q));
+  document.getElementById('p_newMatches').textContent = await count('matches', q=>applyRange(q));
+}
+
+async function loadGauges(){
+  const totalMatches = await count('matches');
+  const closedMatches = await count('matches', q=>q.eq('status','העסקה נסגרה'));
+  const closePct = totalMatches ? (closedMatches/totalMatches*100) : 0;
+  drawGauge('g_close', closePct, '#3c7a5a');
+  document.getElementById('g_close_sub').textContent = `${closedMatches} מתוך ${totalMatches}`;
+
+  const totalTasks = await count('tasks');
+  const doneTasks = await count('tasks', q=>q.neq('status','פתוחה'));
+  const tasksPct = totalTasks ? (doneTasks/totalTasks*100) : 0;
+  drawGauge('g_tasks', tasksPct, '#c98a2b');
+  document.getElementById('g_tasks_sub').textContent = `${doneTasks} מתוך ${totalTasks}`;
+
+  const totalBiz = await count('businesses');
+  const signedBiz = await count('businesses', q=>q.eq('agreement_status','נחתם'));
+  const agreePct = totalBiz ? (signedBiz/totalBiz*100) : 0;
+  drawGauge('g_agree', agreePct, '#2b6fc9');
+  document.getElementById('g_agree_sub').textContent = `${signedBiz} מתוך ${totalBiz}`;
+}
+
+async function loadActivity(){
+  const { data, error } = await window.supabaseClient
+    .from('activity_log')
+    .select('action_type, entity_type, created_at, profiles(full_name, email)')
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  const feed = document.getElementById('activityFeed');
+  if (error || !data || data.length === 0){
+    feed.innerHTML = '<div class="empty-note">אין עדיין פעילות רשומה במערכת</div>';
+    return;
+  }
+  const actionLabels = {create:'יצר רשומה', update:'עדכן רשומה', delete:'מחק רשומה', login:'התחבר', logout:'התנתק'};
+  const entityLabels = {leads:'ליד', businesses:'עסק', matches:'התאמה', tasks:'משימה', profiles:'משתמש'};
+  feed.innerHTML = data.map(row => {
+    const who = (row.profiles && (row.profiles.full_name || row.profiles.email)) || 'משתמש';
+    const what = (actionLabels[row.action_type]||row.action_type) + ' · ' + (entityLabels[row.entity_type]||row.entity_type);
+    const when = new Date(row.created_at).toLocaleString('he-IL');
+    return `<div class="activity-row"><span class="who">${who}</span><span class="what">${what}</span><span class="when">${when}</span></div>`;
+  }).join('');
+}
+
+function applyCustomRange(){
+  const from = document.getElementById('dateFrom').value;
+  const to = document.getElementById('dateTo').value;
+  customFrom = from ? new Date(from).toISOString() : null;
+  customTo = to ? new Date(to+'T23:59:59').toISOString() : null;
+  loadPeriod();
+}
+
+document.querySelectorAll('.period-btn[data-p]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.period-btn[data-p]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPeriod = btn.dataset.p;
+    const customBox = document.getElementById('customRange');
+    if (currentPeriod === 'custom'){
+      customBox.classList.add('show');
+    } else {
+      customBox.classList.remove('show');
+      customFrom = null; customTo = null;
+      loadPeriod();
+    }
+  });
+});
+
+(async function init(){
+  const profile = await requireAuth();
+  if (!profile) return;
+
+  document.getElementById('welcomeName').textContent =
+    'שלום ' + (profile.full_name && profile.full_name.trim() ? profile.full_name : profile.email);
+  const roleLabels = {admin:'מנהל מערכת (Admin)', manager:'מנהל', broker:'מתווך', user:'משתמש', viewer:'צופה בלבד'};
+  document.getElementById('welcomeRole').textContent = 'תפקיד: ' + (roleLabels[profile.role] || profile.role);
+
+  await Promise.all([loadGeneral(), loadPeriod(), loadGauges(), loadActivity()]);
+})();
+</script>
+</body>
+</html>
