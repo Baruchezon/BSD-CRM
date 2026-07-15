@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>BSD CRM - עסקים למכירה</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
+  .nav a{color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;}
+  .nav a.active{background:rgba(255,255,255,.12);color:#fff;font-weight:700;}
+  .nav a:hover{color:#fff;}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+  .toolbar h2{margin:0;color:var(--navy);font-size:1.3rem;}
+  .btn{border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-size:.85rem;cursor:pointer;font-weight:700;}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);}
+
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .filters input, .filters select{padding:9px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .filters input[type=text]{min-width:220px;}
+
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.06);}
+  thead th{background:var(--navy);color:#fff;padding:12px 14px;font-size:.8rem;text-align:right;white-space:nowrap;}
+  tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
+  tbody tr:hover{background:#faf8f2;}
+  .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;background:#eef1f6;color:var(--navy);}
+  .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
+  .empty-row td{text-align:center;color:#999;padding:30px;}
+  .price{font-weight:700;color:#245c40;}
+
+  .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
+  .overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:14px;max-width:680px;width:100%;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  .modal h3{margin:0 0 18px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .form-grid .full{grid-column:1/3;}
+  .field label{display:block;font-size:.78rem;color:#666;margin-bottom:4px;}
+  .field input, .field select, .field textarea{width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .field textarea{resize:vertical;min-height:60px;}
+  .section-h{grid-column:1/3;font-size:.8rem;font-weight:700;color:var(--gold);margin:10px 0 -4px;text-transform:uppercase;letter-spacing:.5px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+  .toast{position:fixed;bottom:24px;left:24px;background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.3);}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <div class="brand">BSD CRM <small>BSD Business Brokers Israel</small></div>
+        <div class="nav" style="display:flex;gap:6px;">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="businesses.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+    <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
+    <a href="tasks.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משימות</a>
+    <a href="users.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משתמשים</a>
+  </div>
+  <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+</div>
+
+<div class="wrap">
+  <div class="toolbar">
+    <h2>עסקים למכירה</h2>
+    <button class="btn btn-primary" onclick="openBizForm(null)">+ עסק חדש</button>
+  </div>
+
+  <div class="filters">
+    <input type="text" id="fSearch" placeholder="חיפוש לפי שם עסק, עיר, תחום, מחיר, סטטוס...">
+    <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
+    <select id="fField"><option value="all">כל התחומים</option></select>
+    <select id="fSort">
+      <option value="updated_desc">עודכן לאחרונה</option>
+      <option value="created_desc">נוצר לאחרונה</option>
+      <option value="price_desc">מחיר (גבוה לנמוך)</option>
+      <option value="name_asc">שם (א-ת)</option>
+    </select>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>שם פנימי</th><th>תחום</th><th>עיר</th><th>מחיר מבוקש</th><th>סטטוס</th><th>מטפל</th><th>עודכן</th><th>פעולות</th>
+      </tr>
+    </thead>
+    <tbody id="bizBody">
+      <tr class="empty-row"><td colspan="8">טוען...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
+<div id="toastBox"></div>
+
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
+<script>
+let ALL_BIZ = [];
+let ALL_SELLERS = [];
+let ALL_USERS = [];
+
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
+function fmtMoney(n){ if(n===null||n===undefined) return '—'; return '₪' + Number(n).toLocaleString('he-IL'); }
+function toast(msg){
+  const box = document.getElementById('toastBox');
+  const el = document.createElement('div');
+  el.className = 'toast'; el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(()=>el.remove(), 3000);
+}
+function closeModal(){
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('modalBox').innerHTML = '';
+}
+
+async function loadLookups(){
+  const { data: sellers } = await window.supabaseClient.from('leads').select('id, full_name').eq('type','seller');
+  ALL_SELLERS = sellers || [];
+  const { data: users } = await window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active');
+  ALL_USERS = users || [];
+}
+
+async function loadBusinesses(){
+  const { data, error } = await window.supabaseClient
+    .from('businesses')
+    .select('*')
+    .order('updated_at', { ascending: false });
+  if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
+  ALL_BIZ = data || [];
+  populateFilters();
+  renderTable();
+}
+
+function populateFilters(){
+  const statusSel = document.getElementById('fStatus');
+  const fieldSel = document.getElementById('fField');
+  const existingS = new Set(Array.from(statusSel.options).map(o=>o.value));
+  const existingF = new Set(Array.from(fieldSel.options).map(o=>o.value));
+  [...new Set(ALL_BIZ.map(b=>b.status).filter(Boolean))].forEach(s=>{
+    if (!existingS.has(s)){ const o=document.createElement('option'); o.value=s; o.textContent=s; statusSel.appendChild(o); }
+  });
+  [...new Set(ALL_BIZ.map(b=>b.field).filter(Boolean))].forEach(s=>{
+    if (!existingF.has(s)){ const o=document.createElement('option'); o.value=s; o.textContent=s; fieldSel.appendChild(o); }
+  });
+}
+
+function userName(id){
+  const u = ALL_USERS.find(x=>x.id===id);
+  return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
+}
+function sellerName(id){
+  const s = ALL_SELLERS.find(x=>x.id===id);
+  return s ? s.full_name : '—';
+}
+
+function renderTable(){
+  const search = document.getElementById('fSearch').value.trim().toLowerCase();
+  const status = document.getElementById('fStatus').value;
+  const field = document.getElementById('fField').value;
+  const sort = document.getElementById('fSort').value;
+
+  let rows = ALL_BIZ.filter(b=>{
+    if (status !== 'all' && b.status !== status) return false;
+    if (field !== 'all' && b.field !== field) return false;
+    if (search){
+      const hay = [b.internal_name, b.city, b.field, b.category, b.status, String(b.asking_price||'')].join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  rows.sort((a,b)=>{
+    if (sort === 'price_desc') return (b.asking_price||0) - (a.asking_price||0);
+    if (sort === 'name_asc') return (a.internal_name||'').localeCompare(b.internal_name||'', 'he');
+    if (sort === 'created_desc') return new Date(b.created_at) - new Date(a.created_at);
+    return new Date(b.updated_at) - new Date(a.updated_at);
+  });
+
+  const body = document.getElementById('bizBody');
+  if (rows.length === 0){
+    body.innerHTML = '<tr class="empty-row"><td colspan="8">לא נמצאו עסקים</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(b=>`
+    <tr>
+      <td>${esc(b.internal_name)}</td>
+      <td>${esc(b.field||'—')}</td>
+      <td>${esc(b.city||'—')}</td>
+      <td class="price">${fmtMoney(b.asking_price)}</td>
+      <td><span class="badge">${esc(b.status||'—')}</span></td>
+      <td>${esc(userName(b.handled_by))}</td>
+      <td>${fmtDate(b.updated_at)}</td>
+      <td class="row-actions">
+        <button title="ערוך" onclick="openBizForm('${b.id}')">✏️</button>
+        <button title="מחק" onclick="deleteBiz('${b.id}')">🗑️</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+['fSearch','fStatus','fField','fSort'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', renderTable);
+  document.getElementById(id).addEventListener('change', renderTable);
+});
+
+function fieldRow(id,label,value,type='text'){
+  return `<div class="field"><label>${label}</label><input type="${type}" id="${id}" value="${esc(value||'')}"></div>`;
+}
+function textareaRow(id,label,value){
+  return `<div class="field full"><label>${label}</label><textarea id="${id}">${esc(value||'')}</textarea></div>`;
+}
+function sellerOptions(selected){
+  return '<option value="">— ללא —</option>' + ALL_SELLERS.map(s=>
+    `<option value="${s.id}" ${s.id===selected?'selected':''}>${esc(s.full_name)}</option>`).join('');
+}
+function userOptions(selected){
+  return '<option value="">— ללא —</option>' + ALL_USERS.map(u=>{
+    const label = u.full_name && u.full_name.trim() ? u.full_name : u.email;
+    return `<option value="${u.id}" ${u.id===selected?'selected':''}>${esc(label)}</option>`;
+  }).join('');
+}
+
+function openBizForm(id){
+  const biz = id ? ALL_BIZ.find(b=>b.id===id) : null;
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>${biz ? 'עריכת עסק' : 'עסק חדש'}</h3>
+    <form id="bizForm">
+      <div class="form-grid">
+        <div class="section-h">זיהוי</div>
+        ${fieldRow('internal_code','מספר מזהה פנימי', biz?.internal_code)}
+        ${fieldRow('internal_name','שם העסק (פנימי)', biz?.internal_name)}
+        ${fieldRow('anonymous_name','שם אנונימי להצגה', biz?.anonymous_name)}
+        <div class="field"><label>מוכר משויך</label><select id="seller_id">${sellerOptions(biz?.seller_id)}</select></div>
+
+        <div class="section-h">סיווג ומיקום</div>
+        ${fieldRow('field','תחום פעילות', biz?.field)}
+        ${fieldRow('category','קטגוריה', biz?.category)}
+        ${fieldRow('subcategory','תת-קטגוריה', biz?.subcategory)}
+        ${fieldRow('city','עיר', biz?.city)}
+        ${fieldRow('region','אזור בארץ', biz?.region)}
+        ${fieldRow('address','כתובת', biz?.address)}
+
+        <div class="section-h">נתונים כספיים</div>
+        ${fieldRow('asking_price','מחיר מבוקש', biz?.asking_price, 'number')}
+        ${fieldRow('annual_revenue','מחזור שנתי', biz?.annual_revenue, 'number')}
+        ${fieldRow('operating_profit','רווח תפעולי', biz?.operating_profit, 'number')}
+        ${fieldRow('net_profit','רווח נקי', biz?.net_profit, 'number')}
+        ${fieldRow('employees_count','מספר עובדים', biz?.employees_count, 'number')}
+        ${fieldRow('years_active','שנות פעילות', biz?.years_active, 'number')}
+
+        <div class="section-h">ניהול ומעקב</div>
+        ${fieldRow('sale_reason','סיבת מכירה', biz?.sale_reason)}
+        ${fieldRow('status','סטטוס העסק', biz?.status)}
+        ${fieldRow('discretion_level','רמת דיסקרטיות', biz?.discretion_level)}
+        ${fieldRow('source','מקור העסק', biz?.source)}
+        ${fieldRow('agreement_status','סטטוס הסכם תיווך', biz?.agreement_status)}
+        <div class="field"><label>מטפל בעסק</label><select id="handled_by">${userOptions(biz?.handled_by)}</select></div>
+
+        <div class="section-h">הערות</div>
+        <div class="field full"><textarea id="notes_placeholder" style="display:none"></textarea></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+        <button type="submit" class="btn btn-primary">שמירה</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('bizForm').dataset.bizId = biz ? biz.id : '';
+  document.getElementById('bizForm').addEventListener('submit', saveBiz);
+}
+
+async function saveBiz(e){
+  e.preventDefault();
+  const form = e.target;
+  const bizId = form.dataset.bizId;
+  const g = id => document.getElementById(id) ? document.getElementById(id).value : null;
+  const num = v => v === '' || v === null ? null : Number(v);
+
+  const payload = {
+    internal_code: g('internal_code') || null,
+    internal_name: g('internal_name'),
+    anonymous_name: g('anonymous_name'),
+    seller_id: g('seller_id') || null,
+    field: g('field'), category: g('category'), subcategory: g('subcategory'),
+    city: g('city'), region: g('region'), address: g('address'),
+    asking_price: num(g('asking_price')), annual_revenue: num(g('annual_revenue')),
+    operating_profit: num(g('operating_profit')), net_profit: num(g('net_profit')),
+    employees_count: num(g('employees_count')), years_active: num(g('years_active')),
+    sale_reason: g('sale_reason'), status: g('status'),
+    discretion_level: g('discretion_level'), source: g('source'),
+    agreement_status: g('agreement_status'), handled_by: g('handled_by') || null
+  };
+
+  if (!payload.internal_name){ toast('שם העסק הוא שדה חובה'); return; }
+
+  let error;
+  if (bizId){
+    ({ error } = await window.supabaseClient.from('businesses').update(payload).eq('id', bizId));
+  } else {
+    ({ error } = await window.supabaseClient.from('businesses').insert(payload));
+  }
+  if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+  toast('נשמר בהצלחה');
+  closeModal();
+  await loadBusinesses();
+}
+
+async function deleteBiz(id){
+  if (!confirm('למחוק עסק זה? הפעולה בלתי הפיכה.')) return;
+  const { error } = await window.supabaseClient.from('businesses').delete().eq('id', id);
+  if (error){ toast('אין הרשאה למחוק, או שגיאה: ' + error.message); return; }
+  toast('נמחק בהצלחה');
+  await loadBusinesses();
+}
+
+(async function init(){
+  const profile = await requireAuth();
+  if (!profile) return;
+  await loadLookups();
+  await loadBusinesses();
+})();
+</script>
+</body>
+</html>

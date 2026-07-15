@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>BSD CRM - קונים ומשקיעים</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
+  .nav{display:flex;gap:6px;}
+  .nav a{color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;}
+  .nav a.active{background:rgba(255,255,255,.12);color:#fff;font-weight:700;}
+  .nav a:hover{color:#fff;}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+  .toolbar h2{margin:0;color:var(--navy);font-size:1.3rem;}
+  .add-btns{display:flex;gap:8px;}
+  .btn{border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-size:.85rem;cursor:pointer;font-weight:700;}
+  .btn-buyer{background:#2b6fc9;color:#fff;}
+  .btn-seller{background:var(--gold);color:#1c2333;}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-danger{background:var(--danger);color:#fff;}
+  .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);}
+
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .filters input, .filters select{padding:9px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .filters input[type=text]{min-width:220px;}
+
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.06);}
+  thead th{background:var(--navy);color:#fff;padding:12px 14px;font-size:.8rem;text-align:right;cursor:pointer;white-space:nowrap;}
+  thead th:hover{background:var(--navy-light);}
+  tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
+  tbody tr:hover{background:#faf8f2;}
+  .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
+  .badge-buyer{background:#e3edfa;color:#1a4a8f;}
+  .badge-seller{background:#f7ecd4;color:#8a651e;}
+  .primary-name{font-weight:700;color:var(--navy);}
+  .sub-name{font-size:.75rem;color:#888;margin-top:2px;}
+  .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
+  .empty-row td{text-align:center;color:#999;padding:30px;}
+
+  .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
+  .overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:14px;max-width:640px;width:100%;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  .modal h3{margin:0 0 18px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .form-grid .full{grid-column:1/3;}
+  .field label{display:block;font-size:.78rem;color:#666;margin-bottom:4px;}
+  .field input, .field select, .field textarea{width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .field textarea{resize:vertical;min-height:60px;}
+  .type-toggle{display:flex;gap:8px;margin-bottom:16px;}
+  .type-toggle button{flex:1;padding:10px;border-radius:8px;border:1px solid #d8d3c4;background:#fff;cursor:pointer;font-family:inherit;font-weight:700;}
+  .type-toggle button.active.buyer{background:#2b6fc9;color:#fff;border-color:#2b6fc9;}
+  .type-toggle button.active.seller{background:var(--gold);color:#1c2333;border-color:var(--gold);}
+  .section-h{grid-column:1/3;font-size:.8rem;font-weight:700;color:var(--gold);margin:10px 0 -4px;text-transform:uppercase;letter-spacing:.5px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+  .toast{position:fixed;bottom:24px;left:24px;background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.3);}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <div class="brand">BSD CRM <small>BSD Business Brokers Israel</small></div>
+        <div class="nav">
+    <a href="app.html">לוח בקרה</a>
+    <a href="businesses.html">עסקים למכירה</a>
+    <a href="leads.html" class="active">קונים ומשקיעים</a>
+    <a href="matches.html">התאמות</a>
+    <a href="tasks.html">משימות</a>
+    <a href="users.html">משתמשים</a>
+  </div>
+  <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+</div>
+
+<div class="wrap">
+  <div class="toolbar">
+    <h2>קונים ומשקיעים</h2>
+    <div class="add-btns">
+      <button class="btn btn-buyer" onclick="openLeadForm(null,'buyer')">+ קונה חדש</button>
+      <button class="btn btn-seller" onclick="openLeadForm(null,'seller')">+ מוכר חדש</button>
+      <button class="btn btn-primary" id="csvImportBtn" style="display:none;" onclick="openCsvImport()">📂 טעינת קונים חדש מקובץ</button>
+    </div>
+  </div>
+
+  <div class="filters">
+    <input type="text" id="fSearch" placeholder="חיפוש לפי שם עסק, שם, טלפון, עיר, תחום...">
+    <select id="fType">
+      <option value="all">כל הסוגים</option>
+      <option value="buyer">קונים בלבד</option>
+      <option value="seller">מוכרים בלבד</option>
+    </select>
+    <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
+    <select id="fSort">
+      <option value="updated_desc">עודכן לאחרונה</option>
+      <option value="created_desc">נוצר לאחרונה</option>
+      <option value="name_asc">שם (א-ת)</option>
+      <option value="city_asc">עיר (א-ת)</option>
+    </select>
+  </div>
+
+  <div style="overflow-x:auto;">
+  <table>
+    <thead>
+      <tr>
+        <th>שם / עסק</th><th>סוג</th><th>טלפון</th><th>עיר</th><th>אימייל</th><th>הערות</th><th>עודכן</th><th>פעולות</th>
+      </tr>
+    </thead>
+    <tbody id="leadsBody">
+      <tr class="empty-row"><td colspan="8">טוען...</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
+<div id="toastBox"></div>
+
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
+<script>
+let ALL_LEADS = [];
+let CURRENT_PROFILE = null;
+let PENDING_IMPORT_CANDIDATES = [];
+
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
+function toast(msg){
+  const box = document.getElementById('toastBox');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(()=>el.remove(), 3000);
+}
+function closeModal(){
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('modalBox').innerHTML = '';
+}
+
+async function loadLeads(){
+  const { data, error } = await window.supabaseClient
+    .from('leads')
+    .select('*')
+    .order('updated_at', { ascending: false });
+  if (error){ toast('שגיאה בטעינת נתונים: ' + error.message); return; }
+  ALL_LEADS = data || [];
+  populateStatusFilter();
+  renderTable();
+}
+
+function populateStatusFilter(){
+  const sel = document.getElementById('fStatus');
+  const existing = new Set(Array.from(sel.options).map(o=>o.value));
+  const statuses = [...new Set(ALL_LEADS.map(l=>l.status).filter(Boolean))];
+  statuses.forEach(s=>{
+    if (!existing.has(s)){
+      const opt = document.createElement('option');
+      opt.value = s; opt.textContent = s;
+      sel.appendChild(opt);
+    }
+  });
+}
+
+function renderTable(){
+  const search = document.getElementById('fSearch').value.trim().toLowerCase();
+  const type = document.getElementById('fType').value;
+  const status = document.getElementById('fStatus').value;
+  const sort = document.getElementById('fSort').value;
+
+  let rows = ALL_LEADS.filter(l=>{
+    if (type !== 'all' && l.type !== type) return false;
+    if (status !== 'all' && l.status !== status) return false;
+    if (search){
+      const hay = [l.full_name, l.first_name, l.last_name, l.phone, l.phone2, l.city, l.source, l.status, l.email,
+        l.business_name, l.business_field, l.business_city, l.requested_field, l.requested_area].join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  rows.sort((a,b)=>{
+    if (sort === 'name_asc') return (a.full_name||'').localeCompare(b.full_name||'', 'he');
+    if (sort === 'city_asc') return (a.city||'').localeCompare(b.city||'', 'he');
+    if (sort === 'created_desc') return new Date(b.created_at) - new Date(a.created_at);
+    return new Date(b.updated_at) - new Date(a.updated_at);
+  });
+
+  const body = document.getElementById('leadsBody');
+  if (rows.length === 0){
+    body.innerHTML = '<tr class="empty-row"><td colspan="8">לא נמצאו רשומות</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(l=>{
+    const personName = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || '—';
+    const typeBadge = l.type === 'buyer'
+      ? '<span class="badge badge-buyer">קונה</span>'
+      : '<span class="badge badge-seller">מוכר</span>';
+
+    let nameCell, cityCell;
+    if (l.type === 'seller'){
+      const bizName = l.business_name && l.business_name.trim() ? l.business_name : '(ללא שם עסק)';
+      nameCell = `<div class="primary-name">${esc(bizName)}</div><div class="sub-name">${esc(personName)}</div>`;
+      cityCell = esc(l.business_city || l.city || '—');
+    } else {
+      nameCell = `<div class="primary-name">${esc(personName)}</div>`;
+      cityCell = esc(l.requested_area || l.city || '—');
+    }
+
+    return `<tr>
+      <td>${nameCell}</td>
+      <td>${typeBadge}</td>
+      <td>${fmtPhone(l.phone)}</td>
+      <td>${cityCell}</td>
+      <td>${esc(l.email||'—')}</td>
+      <td title="${esc(l.notes||'')}">${truncate(l.notes, 40)}</td>
+      <td>${fmtDate(l.updated_at)}</td>
+      <td class="row-actions">
+        <button title="ערוך" onclick="openLeadForm('${l.id}')">✏️</button>
+        <button title="מחק" onclick="deleteLead('${l.id}')">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+['fSearch','fType','fStatus','fSort'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', renderTable);
+  document.getElementById(id).addEventListener('change', renderTable);
+});
+
+function fmtPhone(phone){
+  if (!phone) return '—';
+  const p = String(phone);
+  if (/^0\d{9}$/.test(p)) return p.slice(0,3) + '-' + p.slice(3);
+  if (/^0\d{8}$/.test(p)) return p.slice(0,2) + '-' + p.slice(2);
+  return p;
+}
+function truncate(s, n){
+  if (!s) return '—';
+  return s.length > n ? esc(s.slice(0,n)) + '…' : esc(s);
+}
+function fieldRow(id,label,value,type='text'){
+  return `<div class="field"><label>${label}</label><input type="${type}" id="${id}" value="${esc(value||'')}"></div>`;
+}
+function textareaRow(id,label,value){
+  return `<div class="field full"><label>${label}</label><textarea id="${id}">${esc(value||'')}</textarea></div>`;
+}
+
+function openLeadForm(id, forcedType){
+  const lead = id ? ALL_LEADS.find(l=>l.id===id) : null;
+  const type = lead ? lead.type : (forcedType || 'buyer');
+
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>${lead ? 'עריכת' : 'הוספת'} ${type==='buyer'?'קונה':'מוכר'}</h3>
+    <div class="type-toggle">
+      <button type="button" class="${type==='buyer'?'active buyer':''}" onclick="switchLeadType('buyer', ${lead?`'${lead.id}'`:'null'})">קונה</button>
+      <button type="button" class="${type==='seller'?'active seller':''}" onclick="switchLeadType('seller', ${lead?`'${lead.id}'`:'null'})">מוכר</button>
+    </div>
+    <form id="leadForm">
+      <div class="form-grid">
+        <div class="section-h">פרטים כלליים</div>
+        ${fieldRow('first_name','שם פרטי', lead?.first_name)}
+        ${fieldRow('last_name','שם משפחה', lead?.last_name)}
+        ${fieldRow('phone','טלפון', lead?.phone)}
+        ${fieldRow('phone2','טלפון נוסף', lead?.phone2)}
+        ${fieldRow('email','דוא"ל', lead?.email, 'email')}
+        ${fieldRow('city','עיר', lead?.city)}
+        ${fieldRow('address','כתובת', lead?.address)}
+        ${fieldRow('company','חברה', lead?.company)}
+        ${fieldRow('source','מקור הפנייה', lead?.source)}
+        ${fieldRow('status','סטטוס', lead?.status)}
+
+        ${type==='buyer' ? `
+          <div class="section-h">פרטי קונה</div>
+          ${fieldRow('buyer_type','סוג הקונה', lead?.buyer_type)}
+          ${fieldRow('requested_field','תחום עסקי מבוקש', lead?.requested_field)}
+          ${fieldRow('requested_categories','קטגוריות מבוקשות', lead?.requested_categories)}
+          ${fieldRow('requested_area','עיר/אזור מבוקש', lead?.requested_area)}
+          ${fieldRow('budget','תקציב', lead?.budget, 'number')}
+          ${fieldRow('equity','הון עצמי', lead?.equity, 'number')}
+          ${fieldRow('financing_capacity','יכולת מימון', lead?.financing_capacity)}
+          ${fieldRow('requested_revenue','מחזור מבוקש', lead?.requested_revenue, 'number')}
+          ${fieldRow('requested_profit','רווח מבוקש', lead?.requested_profit, 'number')}
+          ${fieldRow('involvement_level','רמת מעורבות רצויה', lead?.involvement_level)}
+          ${fieldRow('partnership_willingness','נכונות לשותפות', lead?.partnership_willingness)}
+        ` : `
+          <div class="section-h">פרטי העסק והמוכר</div>
+          ${fieldRow('business_name','שם העסק', lead?.business_name)}
+          ${fieldRow('business_field','תחום העסק', lead?.business_field)}
+          ${fieldRow('business_city','עיר העסק', lead?.business_city)}
+          ${fieldRow('business_address','כתובת העסק', lead?.business_address)}
+          ${fieldRow('role_in_business','תפקיד בעסק', lead?.role_in_business)}
+          ${fieldRow('ownership_percent','אחוז בעלות', lead?.ownership_percent, 'number')}
+          ${fieldRow('asking_price','מחיר מבוקש', lead?.asking_price, 'number')}
+          ${fieldRow('sale_reason','סיבת מכירה', lead?.sale_reason)}
+          <div class="field"><label>נשלח הסכם</label><select id="agreement_sent"><option value="false">לא</option><option value="true">כן</option></select></div>
+          <div class="field"><label>הסכם נחתם</label><select id="agreement_signed"><option value="false">לא</option><option value="true">כן</option></select></div>
+          ${fieldRow('agreement_signed_date','תאריך חתימת הסכם', lead?.agreement_signed_date, 'date')}
+        `}
+        <div class="section-h">הערות</div>
+        ${textareaRow('notes','הערות', lead?.notes)}
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+        <button type="submit" class="btn btn-primary">שמירה</button>
+      </div>
+    </form>
+  `;
+
+  if (type === 'seller' && lead){
+    document.getElementById('agreement_sent').value = String(!!lead.agreement_sent);
+    document.getElementById('agreement_signed').value = String(!!lead.agreement_signed);
+  }
+
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('leadForm').dataset.leadId = lead ? lead.id : '';
+  document.getElementById('leadForm').dataset.leadType = type;
+  document.getElementById('leadForm').addEventListener('submit', saveLead);
+}
+
+function switchLeadType(newType, leadId){
+  const lead = leadId ? ALL_LEADS.find(l=>l.id===leadId) : null;
+  openLeadForm(leadId, newType);
+}
+
+async function saveLead(e){
+  e.preventDefault();
+  const form = e.target;
+  const leadId = form.dataset.leadId;
+  const type = form.dataset.leadType;
+
+  const g = id => document.getElementById(id) ? document.getElementById(id).value : null;
+  const num = v => v === '' || v === null ? null : Number(v);
+
+  const payload = {
+    type,
+    first_name: g('first_name'), last_name: g('last_name'),
+    full_name: [g('first_name'), g('last_name')].filter(Boolean).join(' '),
+    phone: g('phone'), phone2: g('phone2'), email: g('email'),
+    city: g('city'), address: g('address'), company: g('company'),
+    source: g('source'), status: g('status'), notes: g('notes')
+  };
+
+  if (type === 'buyer'){
+    Object.assign(payload, {
+      buyer_type: g('buyer_type'), requested_field: g('requested_field'),
+      requested_categories: g('requested_categories'), requested_area: g('requested_area'),
+      budget: num(g('budget')), equity: num(g('equity')),
+      financing_capacity: g('financing_capacity'),
+      requested_revenue: num(g('requested_revenue')), requested_profit: num(g('requested_profit')),
+      involvement_level: g('involvement_level'), partnership_willingness: g('partnership_willingness')
+    });
+  } else {
+    Object.assign(payload, {
+      business_name: g('business_name'), business_field: g('business_field'),
+      business_city: g('business_city'), business_address: g('business_address'),
+      role_in_business: g('role_in_business'), ownership_percent: num(g('ownership_percent')),
+      asking_price: num(g('asking_price')), sale_reason: g('sale_reason'),
+      agreement_sent: g('agreement_sent') === 'true', agreement_signed: g('agreement_signed') === 'true',
+      agreement_signed_date: g('agreement_signed_date') || null
+    });
+  }
+
+  let error;
+  if (leadId){
+    ({ error } = await window.supabaseClient.from('leads').update(payload).eq('id', leadId));
+  } else {
+    ({ error } = await window.supabaseClient.from('leads').insert(payload));
+  }
+
+  if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+  toast('נשמר בהצלחה');
+  closeModal();
+  await loadLeads();
+}
+
+async function deleteLead(id){
+  if (!confirm('למחוק רשומה זו? הפעולה בלתי הפיכה.')) return;
+  const { error } = await window.supabaseClient.from('leads').delete().eq('id', id);
+  if (error){ toast('אין הרשאה למחוק, או שגיאה: ' + error.message); return; }
+  toast('נמחק בהצלחה');
+  await loadLeads();
+}
+
+// ============================================================
+// ייבוא קונים/משקיעים מקובץ CSV (Admin בלבד)
+// ============================================================
+const BUSINESS_SEEKER_KEYWORDS = ['מחפש עסק','מחפשת עסק','מחפש לקנות עסק','מחפש לרכוש עסק','מעוניין לרכוש עסק','רוצה לקנות עסק','מחפש הזדמנות עסקית'];
+const INVESTOR_KEYWORDS = ['משקיע','משקיעה','מחפש השקעה','מחפשת השקעה','רוצה להשקיע'];
+const BUYER_KEYWORDS = [...BUSINESS_SEEKER_KEYWORDS, ...INVESTOR_KEYWORDS];
+const ISRAELI_CITIES = [
+  'תל אביב','ירושלים','חיפה','ראשון לציון','פתח תקווה','אשדוד','נתניה','באר שבע','חולון','בני ברק',
+  'רמת גן','אשקלון','רחובות','בת ים','כפר סבא','הרצליה','חדרה','מודיעין','נהריה','לוד','רמלה',
+  'רעננה','גבעתיים','הוד השרון','קריית אתא','קריית גת','קריית ים','קריית מוצקין','קריית ביאליק',
+  'נצרת','עפולה','טבריה','אילת','דימונה','ערד','שדרות','אופקים','נס ציונה','יבנה','אור יהודה',
+  'קרית שמונה','מעלה אדומים','ביתר עילית','אלעד','טירת כרמל','זכרון יעקב','כפר יונה','גבעת שמואל',
+  'רמת השרון','שוהם','מזכרת בתיה','גדרה','פרדס חנה','בית שמש','אריאל'
+];
+
+function normalizePhoneJS(raw){
+  if (!raw) return null;
+  let digits = String(raw).replace(/[^0-9]/g,'');
+  if (digits.startsWith('00972')) digits = '0' + digits.slice(5);
+  else if (digits.startsWith('972')) digits = '0' + digits.slice(3);
+  if (digits.length < 9) return null;
+  return digits;
+}
+
+function openCsvImport(){
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => processCsvRows(results.data, results.meta.fields || [])
+    });
+  };
+  input.click();
+}
+
+// מוצא את שם העמודה המתאים לפי התאמת מילים חלקית (לא תלוי אותיות גדולות/קטנות)
+function findHeader(headers, patterns){
+  return headers.filter(h => patterns.some(p => h.toLowerCase().includes(p)));
+}
+
+// עמודות "רעש" מקבצי ייצוא אנשי קשר (Google/Outlook/iPhone) שאסור שיכנסו להערות
+const NOISE_VALUES = ['mobile','home','work','other','main','iphone','myContacts'.toLowerCase(),'* myContacts'.toLowerCase()];
+
+function processCsvRows(rows, headers){
+  const nameCol = headers.find(h => h.trim().toLowerCase() === 'name');
+  const givenCol = findHeader(headers, ['given name','first name','שם פרטי'])[0];
+  const familyCol = findHeader(headers, ['family name','last name','שם משפחה'])[0];
+  const notesCol = findHeader(headers, ['notes','note','הערות'])[0];
+  const orgCols = findHeader(headers, ['organization name','organization title','company','חברה']);
+  const emailCols = findHeader(headers, ['e-mail','email','אימייל']).filter(h => !h.toLowerCase().includes('type') && !h.toLowerCase().includes('label'));
+  const phoneCols = findHeader(headers, ['phone']).filter(h => !h.toLowerCase().includes('type') && !h.toLowerCase().includes('label'));
+  const cityCols = findHeader(headers, ['city','עיר']);
+
+  const useStructured = !!(nameCol || givenCol || familyCol);
+  const candidates = [];
+
+  rows.forEach(row => {
+    const allValues = Object.values(row).map(v => (v||'').toString().trim()).filter(Boolean);
+    if (allValues.length === 0) return;
+    const fullText = allValues.join(' ');
+
+    const matchedKeyword = BUYER_KEYWORDS.find(k => fullText.includes(k));
+    if (!matchedKeyword) return; // לא רלוונטי - מדלגים
+    const category = BUSINESS_SEEKER_KEYWORDS.includes(matchedKeyword) ? 'business' : 'investor';
+
+    let first_name, last_name, phone = null, email = null, city = null, realNotes = '';
+
+    if (useStructured){
+      // ייבוא מובנה (יודע לזהות עמודות אמיתיות של קובץ אנשי קשר)
+      if (givenCol || familyCol){
+        first_name = (row[givenCol] || '').trim();
+        last_name = (row[familyCol] || '').trim();
+      } else {
+        const parts = (row[nameCol] || '').trim().split(/\s+/);
+        first_name = parts[0] || '';
+        last_name = parts.slice(1).join(' ');
+      }
+      if (!first_name && !last_name && nameCol){
+        const parts = (row[nameCol] || '').trim().split(/\s+/);
+        first_name = parts[0] || 'ללא שם';
+        last_name = parts.slice(1).join(' ');
+      }
+      for (const c of phoneCols){ const p = normalizePhoneJS(row[c]); if (p && /^\d{9,10}$/.test(p)){ phone = p; break; } }
+      for (const c of emailCols){ if (row[c] && row[c].includes('@')){ email = row[c].trim(); break; } }
+      for (const c of cityCols){ if (row[c] && row[c].trim()){ city = row[c].trim(); break; } }
+      const orgText = orgCols.map(c => row[c]).filter(Boolean).join(' ');
+      realNotes = [orgText, notesCol ? (row[notesCol]||'').trim() : ''].filter(Boolean).join(' | ');
+    } else {
+      // גיבוי: קובץ ללא כותרות מוכרות - ניחוש לפי מיקום, עם סינון רעש ידוע
+      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+      const remaining = [];
+      allValues.forEach(cell => {
+        if (!phone){ const p = normalizePhoneJS(cell); if (p && /^\d{9,10}$/.test(p)){ phone = p; return; } }
+        if (!email && emailRegex.test(cell)){ email = cell.match(emailRegex)[0]; return; }
+        if (!city){ const fc = ISRAELI_CITIES.find(c => cell.includes(c)); if (fc){ city = fc; return; } }
+        if (NOISE_VALUES.includes(cell.toLowerCase())) return; // מדלג על תוויות רעש כמו Mobile/Home/* myContacts
+        remaining.push(cell);
+      });
+      const nameParts = (remaining.length ? remaining[0] : 'ללא שם').split(/\s+/);
+      first_name = nameParts[0] || 'ללא שם';
+      last_name = nameParts.slice(1).join(' ');
+      realNotes = remaining.slice(1).join(' | ');
+    }
+
+    candidates.push({
+      first_name: first_name || 'ללא שם', last_name: last_name || '',
+      full_name: [first_name,last_name].filter(Boolean).join(' ') || 'ללא שם',
+      phone, email, city, category,
+      notes: (realNotes ? realNotes + ' | ' : '') + 'זוהה ממילת מפתח: ' + matchedKeyword,
+      source: 'ייבוא CSV'
+    });
+  });
+
+  // מחפשי עסק קודם, משקיעים אחריהם
+  candidates.sort((a,b) => (a.category === b.category) ? 0 : (a.category === 'business' ? -1 : 1));
+
+  showImportPreview(candidates);
+}
+
+function showImportPreview(candidates){
+  // בדיקת כפילויות מול הרשימה הקיימת (טלפון/אימייל/שם מלא)
+  const existingPhones = new Set(ALL_LEADS.map(l=>l.phone).filter(Boolean));
+  const existingEmails = new Set(ALL_LEADS.map(l=>l.email).filter(Boolean));
+
+  let newCount = 0, dupCount = 0;
+  candidates.forEach(c => {
+    const isDup = (c.phone && existingPhones.has(c.phone)) || (c.email && existingEmails.has(c.email));
+    c._duplicate = isDup;
+    if (isDup) dupCount++; else newCount++;
+  });
+
+  PENDING_IMPORT_CANDIDATES = candidates;
+
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>תצוגה מקדימה - ייבוא קונים/משקיעים</h3>
+    <p style="font-size:.85rem;color:#555;">
+      נמצאו <b>${candidates.length}</b> רשומות תואמות (מחפש עסק / משקיע) מתוך הקובץ.
+      <br>חדשים להוספה: <b style="color:#245c40;">${newCount}</b> · כפילויות (יידלגו): <b style="color:#832d1f;">${dupCount}</b>
+    </p>
+    <div style="max-height:320px;overflow-y:auto;border:1px solid #eee;border-radius:8px;">
+      <table style="width:100%;font-size:.78rem;">
+        <thead><tr style="background:#f5f3ec;"><th style="padding:6px;text-align:right;">שם</th><th style="padding:6px;text-align:right;">סוג</th><th style="padding:6px;text-align:right;">טלפון</th><th style="padding:6px;text-align:right;">עיר</th><th style="padding:6px;text-align:right;">סטטוס</th></tr></thead>
+        <tbody>
+          ${candidates.map(c=>`<tr style="${c._duplicate?'color:#bbb;':''}">
+            <td style="padding:6px;">${esc(c.full_name)}</td>
+            <td style="padding:6px;">${c.category==='business'?'מחפש עסק':'משקיע'}</td>
+            <td style="padding:6px;">${esc(c.phone||'—')}</td>
+            <td style="padding:6px;">${esc(c.city||'—')}</td>
+            <td style="padding:6px;">${c._duplicate?'כפילות - ידולג':'חדש'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button type="button" class="btn btn-primary" onclick="confirmImport()">יבא ${newCount} רשומות חדשות</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('open');
+}
+
+async function confirmImport(){
+  const candidates = PENDING_IMPORT_CANDIDATES || [];
+  const toInsert = candidates.filter(c => !c._duplicate).map(c => ({
+    type: 'buyer',
+    first_name: c.first_name, last_name: c.last_name,
+    full_name: c.full_name,
+    phone: c.phone, email: c.email, city: c.city,
+    notes: c.notes, source: c.source
+  }));
+
+  if (toInsert.length === 0){ toast('אין רשומות חדשות לייבוא'); closeModal(); return; }
+
+  const { error } = await window.supabaseClient.from('leads').insert(toInsert);
+  if (error){ toast('שגיאה בייבוא: ' + error.message); return; }
+  toast(`יובאו ${toInsert.length} קונים/משקיעים חדשים`);
+  closeModal();
+  await loadLeads();
+}
+
+(async function init(){
+  CURRENT_PROFILE = await requireAuth();
+  if (!CURRENT_PROFILE) return;
+  if (CURRENT_PROFILE.role === 'admin'){
+    document.getElementById('csvImportBtn').style.display = 'inline-block';
+  }
+  await loadLeads();
+})();
+</script>
+</body>
+</html>

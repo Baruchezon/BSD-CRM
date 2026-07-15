@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>BSD CRM - כניסה למערכת</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="login-card">
+    <h1>BSD CRM</h1>
+    <p class="tagline">משביחים עסקים, מלווים בנאמנות, ומובילים לעסקה הנכונה</p>
+
+    <form id="loginForm">
+      <input type="email" id="email" placeholder="אימייל" required autocomplete="username" list="emailHistory">
+      <datalist id="emailHistory"></datalist>
+      <input type="password" id="password" placeholder="סיסמה" required autocomplete="current-password">
+      <button type="submit" id="loginBtn">כניסה למערכת</button>
+    </form>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
+<script>
+(async function checkExistingSession(){
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (session) window.location.href = 'app.html';
+})();
+
+// זיכרון אימיילים קודמים (לא סיסמאות!) - מציג רשימת השלמה אוטומטית של הדפדפן
+// כשלוחצים על שדה האימייל, מבוסס על עד 6 הכתובות האחרונות שהתחברת איתן בהצלחה.
+function getEmailHistory(){
+  try { return JSON.parse(localStorage.getItem('bsd_email_history') || '[]'); }
+  catch(e){ return []; }
+}
+function addToEmailHistory(email){
+  let history = getEmailHistory().filter(e => e !== email);
+  history.unshift(email);
+  history = history.slice(0, 6);
+  localStorage.setItem('bsd_email_history', JSON.stringify(history));
+}
+function renderEmailHistory(){
+  const list = document.getElementById('emailHistory');
+  list.innerHTML = getEmailHistory().map(e => `<option value="${e}">`).join('');
+}
+renderEmailHistory();
+const history0 = getEmailHistory();
+if (history0.length > 0){ document.getElementById('email').value = history0[0]; }
+
+document.getElementById('loginForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  const errBox = document.getElementById('loginError');
+  errBox.textContent = '';
+  btn.disabled = true;
+  btn.textContent = 'מתחבר...';
+
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+
+  const result = await bsdLogin(email, password);
+
+  if (!result.ok) {
+    errBox.textContent = result.message;
+    btn.disabled = false;
+    btn.textContent = 'כניסה למערכת';
+    return;
+  }
+
+  addToEmailHistory(email);
+  window.location.href = 'app.html';
+});
+</script>
+</body>
+</html>
