@@ -47,6 +47,9 @@
   .email-cell{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .phone-cell{white-space:nowrap;min-width:100px;}
   @media (max-width: 700px){ .phone-cell{min-width:0;} }
+  .proportional-table{table-layout:fixed;min-width:1150px;}
+  .proportional-table th, .proportional-table td{overflow-wrap:break-word;}
+  @media (max-width: 700px){ .proportional-table{table-layout:auto;min-width:0;} }
   .empty-row td{text-align:center;color:#999;padding:30px;}
 
   .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
@@ -118,7 +121,12 @@
   </div>
 
   <div style="overflow-x:auto;">
-  <table>
+  <table class="proportional-table">
+    <colgroup>
+      <col style="width:11%;"><col style="width:8%;"><col style="width:9%;"><col style="width:7%;">
+      <col style="width:8%;"><col style="width:8%;"><col style="width:8%;"><col style="width:8%;">
+      <col style="width:6%;"><col style="width:6%;"><col style="width:23%;"><col style="width:6%;">
+    </colgroup>
     <thead>
       <tr>
         <th>שם / עסק</th><th>סוג</th><th>טלפון</th><th>עיר</th><th>אימייל</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>נוצר</th><th>עודכן</th><th>הערות</th><th>פעולות</th>
@@ -513,8 +521,14 @@ function stripNoiseTokens(text){
   if (!text) return text;
   const segments = text.split('|').map(s=>s.trim());
   const kept = segments.filter(seg=>{
+    if (seg === '') return false;
     const cleaned = seg.toLowerCase().replace(/[*\s:]/g,'');
-    return seg !== '' && !NOISE_VALUES.some(nv => nv.replace(/[*\s:]/g,'') === cleaned);
+    if (NOISE_VALUES.some(nv => nv.replace(/[*\s:]/g,'') === cleaned)) return false;
+    // מסיר קישורים (URL) ומזהים טכניים ארוכים בלי רווחים (כמו קישורי תמונת פרופיל / hash-ים)
+    if (/https?:\/\//i.test(seg)) return false;
+    if (/googleusercontent|gstatic|ggpht/i.test(seg)) return false;
+    if (!seg.includes(' ') && seg.length > 18 && /[a-zA-Z]/.test(seg) && /[0-9]/.test(seg)) return false;
+    return true;
   });
   return kept.join(' | ');
 }
@@ -586,7 +600,7 @@ function processCsvRows(rows, headers){
       first_name: first_name || 'ללא שם', last_name: last_name || '',
       full_name: [first_name,last_name].filter(Boolean).join(' ') || 'ללא שם',
       phone, email, city, company: stripNoiseTokens(company), category,
-      notes: stripNoiseTokens((realNotes ? realNotes + ' | ' : '') + 'זוהה ממילת מפתח: ' + matchedKeyword),
+      notes: stripNoiseTokens(realNotes),
       source: 'ייבוא CSV'
     });
   });
