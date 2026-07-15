@@ -36,9 +36,17 @@
   .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
   .badge-buyer{background:#e3edfa;color:#1a4a8f;}
   .badge-seller{background:#f7ecd4;color:#8a651e;}
+  .agr-badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;white-space:nowrap;}
+  .agr-none{background:#f1f1f1;color:#777;}
+  .agr-sent{background:#fdeccb;color:#8a5a10;}
+  .agr-signed{background:#dff0e4;color:#245c40;}
   .primary-name{font-weight:700;color:var(--navy);}
   .sub-name{font-size:.75rem;color:#888;margin-top:2px;}
   .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
+  .notes-cell{white-space:normal;word-break:break-word;max-width:420px;line-height:1.4;}
+  .email-cell{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .phone-cell{white-space:nowrap;min-width:100px;}
+  @media (max-width: 700px){ .phone-cell{min-width:0;} }
   .empty-row td{text-align:center;color:#999;padding:30px;}
 
   .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
@@ -92,11 +100,20 @@
       <option value="seller">מוכרים בלבד</option>
     </select>
     <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
+    <select id="fAgreement">
+      <option value="all">כל סטטוסי ההסכם</option>
+      <option value="אין הסכם">אין הסכם</option>
+      <option value="נשלח הסכם לחתימה">נשלח הסכם לחתימה</option>
+      <option value="יש הסכם חתום">יש הסכם חתום</option>
+    </select>
+    <select id="fCreatedBy"><option value="all">כל מי שהזין</option></select>
     <select id="fSort">
       <option value="updated_desc">עודכן לאחרונה</option>
       <option value="created_desc">נוצר לאחרונה</option>
       <option value="name_asc">שם (א-ת)</option>
       <option value="city_asc">עיר (א-ת)</option>
+      <option value="created_by_asc">הוזן ע"י (א-ת)</option>
+      <option value="agreement_asc">סטטוס הסכם</option>
     </select>
   </div>
 
@@ -104,11 +121,11 @@
   <table>
     <thead>
       <tr>
-        <th>שם / עסק</th><th>סוג</th><th>טלפון</th><th>עיר</th><th>אימייל</th><th>הערות</th><th>עודכן</th><th>פעולות</th>
+        <th>שם / עסק</th><th>סוג</th><th>טלפון</th><th>עיר</th><th>אימייל</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>נוצר</th><th>עודכן</th><th>הערות</th><th>פעולות</th>
       </tr>
     </thead>
     <tbody id="leadsBody">
-      <tr class="empty-row"><td colspan="8">טוען...</td></tr>
+      <tr class="empty-row"><td colspan="12">טוען...</td></tr>
     </tbody>
   </table>
   </div>
@@ -122,6 +139,7 @@
 <script src="js/auth.js"></script>
 <script>
 let ALL_LEADS = [];
+let ALL_USERS = [];
 let CURRENT_PROFILE = null;
 let PENDING_IMPORT_CANDIDATES = [];
 
@@ -140,6 +158,21 @@ function closeModal(){
   document.getElementById('modalBox').innerHTML = '';
 }
 
+async function loadUsers(){
+  const { data } = await window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active');
+  ALL_USERS = data || [];
+}
+function userName(id){
+  const u = ALL_USERS.find(x=>x.id===id);
+  return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
+}
+function userOptions(selected){
+  return '<option value="">— ללא —</option>' + ALL_USERS.map(u=>{
+    const label = u.full_name && u.full_name.trim() ? u.full_name : u.email;
+    return `<option value="${u.id}" ${u.id===selected?'selected':''}>${esc(label)}</option>`;
+  }).join('');
+}
+
 async function loadLeads(){
   const { data, error } = await window.supabaseClient
     .from('leads')
@@ -148,6 +181,7 @@ async function loadLeads(){
   if (error){ toast('שגיאה בטעינת נתונים: ' + error.message); return; }
   ALL_LEADS = data || [];
   populateStatusFilter();
+  populateCreatedByFilter();
   renderTable();
 }
 
@@ -164,15 +198,32 @@ function populateStatusFilter(){
   });
 }
 
+function populateCreatedByFilter(){
+  const sel = document.getElementById('fCreatedBy');
+  const existing = new Set(Array.from(sel.options).map(o=>o.value));
+  const creators = [...new Set(ALL_LEADS.map(l=>l.created_by).filter(Boolean))];
+  creators.forEach(uid=>{
+    if (!existing.has(uid)){
+      const opt = document.createElement('option');
+      opt.value = uid; opt.textContent = userName(uid);
+      sel.appendChild(opt);
+    }
+  });
+}
+
 function renderTable(){
   const search = document.getElementById('fSearch').value.trim().toLowerCase();
   const type = document.getElementById('fType').value;
   const status = document.getElementById('fStatus').value;
+  const agreement = document.getElementById('fAgreement').value;
+  const createdBy = document.getElementById('fCreatedBy').value;
   const sort = document.getElementById('fSort').value;
 
   let rows = ALL_LEADS.filter(l=>{
     if (type !== 'all' && l.type !== type) return false;
     if (status !== 'all' && l.status !== status) return false;
+    if (agreement !== 'all' && (l.agreement_status || 'אין הסכם') !== agreement) return false;
+    if (createdBy !== 'all' && l.created_by !== createdBy) return false;
     if (search){
       const hay = [l.full_name, l.first_name, l.last_name, l.phone, l.phone2, l.city, l.source, l.status, l.email,
         l.business_name, l.business_field, l.business_city, l.requested_field, l.requested_area].join(' ').toLowerCase();
@@ -185,12 +236,14 @@ function renderTable(){
     if (sort === 'name_asc') return (a.full_name||'').localeCompare(b.full_name||'', 'he');
     if (sort === 'city_asc') return (a.city||'').localeCompare(b.city||'', 'he');
     if (sort === 'created_desc') return new Date(b.created_at) - new Date(a.created_at);
+    if (sort === 'created_by_asc') return userName(a.created_by).localeCompare(userName(b.created_by), 'he');
+    if (sort === 'agreement_asc') return (a.agreement_status||'').localeCompare(b.agreement_status||'', 'he');
     return new Date(b.updated_at) - new Date(a.updated_at);
   });
 
   const body = document.getElementById('leadsBody');
   if (rows.length === 0){
-    body.innerHTML = '<tr class="empty-row"><td colspan="8">לא נמצאו רשומות</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="12">לא נמצאו רשומות</td></tr>';
     return;
   }
   body.innerHTML = rows.map(l=>{
@@ -210,14 +263,18 @@ function renderTable(){
     }
 
     return `<tr>
-      <td>${nameCell}</td>
-      <td>${typeBadge}</td>
-      <td>${fmtPhone(l.phone)}</td>
-      <td>${cityCell}</td>
-      <td>${esc(l.email||'—')}</td>
-      <td title="${esc(l.notes||'')}">${truncate(l.notes, 40)}</td>
-      <td>${fmtDate(l.updated_at)}</td>
-      <td class="row-actions">
+      <td data-label="שם / עסק">${nameCell}</td>
+      <td data-label="סוג">${typeBadge}</td>
+      <td data-label="טלפון" class="phone-cell">${fmtPhone(l.phone)}</td>
+      <td data-label="עיר">${cityCell}</td>
+      <td data-label="אימייל" class="email-cell" title="${esc(l.email||'')}">${esc(l.email||'—')}</td>
+      <td data-label="הוזן ע&quot;י">${l.created_by ? esc(userName(l.created_by)) : 'לא ידוע'}</td>
+      <td data-label="מטופל ע&quot;י">${l.handled_by ? esc(userName(l.handled_by)) : '—'}</td>
+      <td data-label="סטטוס הסכם">${agreementBadge(l.agreement_status)}</td>
+      <td data-label="נוצר">${fmtDate(l.created_at)}</td>
+      <td data-label="עודכן">${fmtDate(l.updated_at)}</td>
+      <td data-label="הערות" class="notes-cell">${esc(l.notes||'—')}</td>
+      <td class="row-actions" data-label="">
         <button title="ערוך" onclick="openLeadForm('${l.id}')">✏️</button>
         <button title="מחק" onclick="deleteLead('${l.id}')">🗑️</button>
       </td>
@@ -225,7 +282,13 @@ function renderTable(){
   }).join('');
 }
 
-['fSearch','fType','fStatus','fSort'].forEach(id=>{
+function agreementBadge(status){
+  const s = status || 'אין הסכם';
+  const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
+  return `<span class="agr-badge ${cls}">${esc(s)}</span>`;
+}
+
+['fSearch','fType','fStatus','fAgreement','fCreatedBy','fSort'].forEach(id=>{
   document.getElementById(id).addEventListener('input', renderTable);
   document.getElementById(id).addEventListener('change', renderTable);
 });
@@ -261,6 +324,10 @@ function openLeadForm(id, forcedType){
     </div>
     <form id="leadForm">
       <div class="form-grid">
+        ${lead ? `<div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;">
+          מספר מזהה: <b>${esc(lead.internal_code||'—')}</b> · הוזן ע"י: <b>${esc(userName(lead.created_by))}</b> בתאריך ${fmtDate(lead.created_at)}
+        </div>` : ''}
+        <div class="field"><label>מטפל כרגע</label><select id="handled_by">${userOptions(lead?.handled_by)}</select></div>
         <div class="section-h">פרטים כלליים</div>
         ${fieldRow('first_name','שם פרטי', lead?.first_name)}
         ${fieldRow('last_name','שם משפחה', lead?.last_name)}
@@ -272,6 +339,13 @@ function openLeadForm(id, forcedType){
         ${fieldRow('company','חברה', lead?.company)}
         ${fieldRow('source','מקור הפנייה', lead?.source)}
         ${fieldRow('status','סטטוס', lead?.status)}
+        <div class="field"><label>סטטוס הסכם</label>
+          <select id="agreement_status">
+            <option value="אין הסכם" ${(!lead?.agreement_status || lead.agreement_status==='אין הסכם')?'selected':''}>אין הסכם</option>
+            <option value="נשלח הסכם לחתימה" ${lead?.agreement_status==='נשלח הסכם לחתימה'?'selected':''}>נשלח הסכם לחתימה</option>
+            <option value="יש הסכם חתום" ${lead?.agreement_status==='יש הסכם חתום'?'selected':''}>יש הסכם חתום</option>
+          </select>
+        </div>
 
         ${type==='buyer' ? `
           <div class="section-h">פרטי קונה</div>
@@ -292,13 +366,12 @@ function openLeadForm(id, forcedType){
           ${fieldRow('business_field','תחום העסק', lead?.business_field)}
           ${fieldRow('business_city','עיר העסק', lead?.business_city)}
           ${fieldRow('business_address','כתובת העסק', lead?.business_address)}
+          ${fieldRow('website','אתר אינטרנט', lead?.website)}
           ${fieldRow('role_in_business','תפקיד בעסק', lead?.role_in_business)}
           ${fieldRow('ownership_percent','אחוז בעלות', lead?.ownership_percent, 'number')}
           ${fieldRow('asking_price','מחיר מבוקש', lead?.asking_price, 'number')}
           ${fieldRow('sale_reason','סיבת מכירה', lead?.sale_reason)}
-          <div class="field"><label>נשלח הסכם</label><select id="agreement_sent"><option value="false">לא</option><option value="true">כן</option></select></div>
-          <div class="field"><label>הסכם נחתם</label><select id="agreement_signed"><option value="false">לא</option><option value="true">כן</option></select></div>
-          ${fieldRow('agreement_signed_date','תאריך חתימת הסכם', lead?.agreement_signed_date, 'date')}
+          ${fieldRow('agreement_signed_date','תאריך חתימת הסכם (אם רלוונטי)', lead?.agreement_signed_date, 'date')}
         `}
         <div class="section-h">הערות</div>
         ${textareaRow('notes','הערות', lead?.notes)}
@@ -311,8 +384,7 @@ function openLeadForm(id, forcedType){
   `;
 
   if (type === 'seller' && lead){
-    document.getElementById('agreement_sent').value = String(!!lead.agreement_sent);
-    document.getElementById('agreement_signed').value = String(!!lead.agreement_signed);
+  // (agreement_status הוחלף בשדה מאוחד - אין צורך למלא checkbox-ים ישנים)
   }
 
   document.getElementById('overlay').classList.add('open');
@@ -341,7 +413,9 @@ async function saveLead(e){
     full_name: [g('first_name'), g('last_name')].filter(Boolean).join(' '),
     phone: g('phone'), phone2: g('phone2'), email: g('email'),
     city: g('city'), address: g('address'), company: g('company'),
-    source: g('source'), status: g('status'), notes: g('notes')
+    source: g('source'), status: g('status'), notes: g('notes'),
+    handled_by: g('handled_by') || null,
+    agreement_status: g('agreement_status') || 'אין הסכם'
   };
 
   if (type === 'buyer'){
@@ -357,9 +431,9 @@ async function saveLead(e){
     Object.assign(payload, {
       business_name: g('business_name'), business_field: g('business_field'),
       business_city: g('business_city'), business_address: g('business_address'),
+      website: (function(){ let w=g('website'); if(!w) return null; w=w.trim(); if(!w) return null; if(!/^https?:\/\//i.test(w)) w='https://'+w; return w; })(),
       role_in_business: g('role_in_business'), ownership_percent: num(g('ownership_percent')),
       asking_price: num(g('asking_price')), sale_reason: g('sale_reason'),
-      agreement_sent: g('agreement_sent') === 'true', agreement_signed: g('agreement_signed') === 'true',
       agreement_signed_date: g('agreement_signed_date') || null
     });
   }
@@ -433,12 +507,24 @@ function findHeader(headers, patterns){
 // עמודות "רעש" מקבצי ייצוא אנשי קשר (Google/Outlook/iPhone) שאסור שיכנסו להערות
 const NOISE_VALUES = ['mobile','home','work','other','main','iphone','myContacts'.toLowerCase(),'* myContacts'.toLowerCase()];
 
+// מסיר תוויות רעש (Mobile / Home / Work / * myContacts וכו') רק כשהן מופיעות כמקטע שלם (בין "|"),
+// כדי לא לפגוע בטקסט אמיתי שבמקרה מכיל את אותה מילה (למשל "רחוב הראשי")
+function stripNoiseTokens(text){
+  if (!text) return text;
+  const segments = text.split('|').map(s=>s.trim());
+  const kept = segments.filter(seg=>{
+    const cleaned = seg.toLowerCase().replace(/[*\s:]/g,'');
+    return seg !== '' && !NOISE_VALUES.some(nv => nv.replace(/[*\s:]/g,'') === cleaned);
+  });
+  return kept.join(' | ');
+}
+
 function processCsvRows(rows, headers){
   const nameCol = headers.find(h => h.trim().toLowerCase() === 'name');
   const givenCol = findHeader(headers, ['given name','first name','שם פרטי'])[0];
   const familyCol = findHeader(headers, ['family name','last name','שם משפחה'])[0];
   const notesCol = findHeader(headers, ['notes','note','הערות'])[0];
-  const orgCols = findHeader(headers, ['organization name','organization title','company','חברה']);
+  const orgCols = findHeader(headers, ['organization','company','חברה']);
   const emailCols = findHeader(headers, ['e-mail','email','אימייל']).filter(h => !h.toLowerCase().includes('type') && !h.toLowerCase().includes('label'));
   const phoneCols = findHeader(headers, ['phone']).filter(h => !h.toLowerCase().includes('type') && !h.toLowerCase().includes('label'));
   const cityCols = findHeader(headers, ['city','עיר']);
@@ -455,7 +541,7 @@ function processCsvRows(rows, headers){
     if (!matchedKeyword) return; // לא רלוונטי - מדלגים
     const category = BUSINESS_SEEKER_KEYWORDS.includes(matchedKeyword) ? 'business' : 'investor';
 
-    let first_name, last_name, phone = null, email = null, city = null, realNotes = '';
+    let first_name, last_name, phone = null, email = null, city = null, company = null, realNotes = '';
 
     if (useStructured){
       // ייבוא מובנה (יודע לזהות עמודות אמיתיות של קובץ אנשי קשר)
@@ -475,8 +561,8 @@ function processCsvRows(rows, headers){
       for (const c of phoneCols){ const p = normalizePhoneJS(row[c]); if (p && /^\d{9,10}$/.test(p)){ phone = p; break; } }
       for (const c of emailCols){ if (row[c] && row[c].includes('@')){ email = row[c].trim(); break; } }
       for (const c of cityCols){ if (row[c] && row[c].trim()){ city = row[c].trim(); break; } }
-      const orgText = orgCols.map(c => row[c]).filter(Boolean).join(' ');
-      realNotes = [orgText, notesCol ? (row[notesCol]||'').trim() : ''].filter(Boolean).join(' | ');
+      for (const c of orgCols){ if (row[c] && row[c].trim()){ company = row[c].trim(); break; } }
+      realNotes = notesCol ? (row[notesCol]||'').trim() : '';
     } else {
       // גיבוי: קובץ ללא כותרות מוכרות - ניחוש לפי מיקום, עם סינון רעש ידוע
       const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
@@ -485,20 +571,22 @@ function processCsvRows(rows, headers){
         if (!phone){ const p = normalizePhoneJS(cell); if (p && /^\d{9,10}$/.test(p)){ phone = p; return; } }
         if (!email && emailRegex.test(cell)){ email = cell.match(emailRegex)[0]; return; }
         if (!city){ const fc = ISRAELI_CITIES.find(c => cell.includes(c)); if (fc){ city = fc; return; } }
-        if (NOISE_VALUES.includes(cell.toLowerCase())) return; // מדלג על תוויות רעש כמו Mobile/Home/* myContacts
+        const cleanedCell = cell.toLowerCase().replace(/[*\s:]/g,'');
+        if (NOISE_VALUES.some(nv => nv.replace(/[*\s:]/g,'') === cleanedCell)) return; // מדלג על תוויות רעש כמו Mobile/Home/* myContacts
         remaining.push(cell);
       });
       const nameParts = (remaining.length ? remaining[0] : 'ללא שם').split(/\s+/);
       first_name = nameParts[0] || 'ללא שם';
       last_name = nameParts.slice(1).join(' ');
-      realNotes = remaining.slice(1).join(' | ');
+      company = remaining.length > 1 ? remaining[1] : null;
+      realNotes = remaining.slice(2).join(' | ');
     }
 
     candidates.push({
       first_name: first_name || 'ללא שם', last_name: last_name || '',
       full_name: [first_name,last_name].filter(Boolean).join(' ') || 'ללא שם',
-      phone, email, city, category,
-      notes: (realNotes ? realNotes + ' | ' : '') + 'זוהה ממילת מפתח: ' + matchedKeyword,
+      phone, email, city, company: stripNoiseTokens(company), category,
+      notes: stripNoiseTokens((realNotes ? realNotes + ' | ' : '') + 'זוהה ממילת מפתח: ' + matchedKeyword),
       source: 'ייבוא CSV'
     });
   });
@@ -510,43 +598,81 @@ function processCsvRows(rows, headers){
 }
 
 function showImportPreview(candidates){
-  // בדיקת כפילויות מול הרשימה הקיימת (טלפון/אימייל/שם מלא)
-  const existingPhones = new Set(ALL_LEADS.map(l=>l.phone).filter(Boolean));
-  const existingEmails = new Set(ALL_LEADS.map(l=>l.email).filter(Boolean));
+  // התאמה חכמה מול הרשימה הקיימת: חדש / יש עדכון (משלים פרטים חסרים) / ללא שינוי
+  let newCount = 0, updateCount = 0, unchangedCount = 0;
 
-  let newCount = 0, dupCount = 0;
   candidates.forEach(c => {
-    const isDup = (c.phone && existingPhones.has(c.phone)) || (c.email && existingEmails.has(c.email));
-    c._duplicate = isDup;
-    if (isDup) dupCount++; else newCount++;
+    const existing = ALL_LEADS.find(l => (c.phone && l.phone === c.phone) || (c.email && l.email === c.email));
+    if (!existing){
+      c._status = 'new';
+      newCount++;
+      return;
+    }
+    c._existingId = existing.id;
+    const updates = {};
+    if (c.email && !existing.email) updates.email = c.email;
+    if (c.city && !existing.city) updates.city = c.city;
+    if (c.company && !existing.company) updates.company = c.company;
+    if (c.phone && !existing.phone) updates.phone = c.phone;
+    if (c.notes){
+      const existingNotes = existing.notes || '';
+      if (!existingNotes.includes(c.notes.split(' | ')[0])){ // רק אם יש מידע חדש שלא הופיע כבר
+        updates.notes = existingNotes ? existingNotes + ' | ' + c.notes : c.notes;
+      }
+    }
+    if (Object.keys(updates).length > 0){
+      c._status = 'update';
+      c._updates = updates;
+      updateCount++;
+    } else {
+      c._status = 'unchanged';
+      unchangedCount++;
+    }
   });
 
   PENDING_IMPORT_CANDIDATES = candidates;
+
+  const statusLabel = { new: 'חדש - יתווסף', update: 'קיים - יעודכן', unchanged: 'קיים - ללא שינוי' };
+  const statusColor = { new: 'color:#245c40;font-weight:700;', update: 'color:#8a5a10;font-weight:700;', unchanged: 'color:#aaa;' };
 
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>תצוגה מקדימה - ייבוא קונים/משקיעים</h3>
     <p style="font-size:.85rem;color:#555;">
       נמצאו <b>${candidates.length}</b> רשומות תואמות (מחפש עסק / משקיע) מתוך הקובץ.
-      <br>חדשים להוספה: <b style="color:#245c40;">${newCount}</b> · כפילויות (יידלגו): <b style="color:#832d1f;">${dupCount}</b>
+      <br>חדשים להוספה: <b style="color:#245c40;">${newCount}</b> ·
+      קיימים שיעודכנו: <b style="color:#8a5a10;">${updateCount}</b> ·
+      ללא שינוי: <b style="color:#aaa;">${unchangedCount}</b>
     </p>
     <div style="max-height:320px;overflow-y:auto;border:1px solid #eee;border-radius:8px;">
       <table style="width:100%;font-size:.78rem;">
-        <thead><tr style="background:#f5f3ec;"><th style="padding:6px;text-align:right;">שם</th><th style="padding:6px;text-align:right;">סוג</th><th style="padding:6px;text-align:right;">טלפון</th><th style="padding:6px;text-align:right;">עיר</th><th style="padding:6px;text-align:right;">סטטוס</th></tr></thead>
+        <thead><tr style="background:#f5f3ec;">
+          <th style="padding:6px;text-align:right;">שם</th>
+          <th style="padding:6px;text-align:right;">סוג</th>
+          <th style="padding:6px;text-align:right;">טלפון</th>
+          <th style="padding:6px;text-align:right;">עיר</th>
+          <th style="padding:6px;text-align:right;">אימייל</th>
+          <th style="padding:6px;text-align:right;">חברה</th>
+          <th style="padding:6px;text-align:right;">הערות</th>
+          <th style="padding:6px;text-align:right;">סטטוס</th>
+        </tr></thead>
         <tbody>
-          ${candidates.map(c=>`<tr style="${c._duplicate?'color:#bbb;':''}">
+          ${candidates.map(c=>`<tr style="${c._status==='unchanged'?'color:#ccc;':''}">
             <td style="padding:6px;">${esc(c.full_name)}</td>
             <td style="padding:6px;">${c.category==='business'?'מחפש עסק':'משקיע'}</td>
             <td style="padding:6px;">${esc(c.phone||'—')}</td>
             <td style="padding:6px;">${esc(c.city||'—')}</td>
-            <td style="padding:6px;">${c._duplicate?'כפילות - ידולג':'חדש'}</td>
+            <td style="padding:6px;">${esc(c.email||'—')}</td>
+            <td style="padding:6px;">${esc(c.company||'—')}</td>
+            <td style="padding:6px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(c.notes||'')}">${esc(c.notes||'—')}</td>
+            <td style="padding:6px;${statusColor[c._status]}">${statusLabel[c._status]}</td>
           </tr>`).join('')}
         </tbody>
       </table>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-      <button type="button" class="btn btn-primary" onclick="confirmImport()">יבא ${newCount} רשומות חדשות</button>
+      <button type="button" class="btn btn-primary" onclick="confirmImport()">יבא ${newCount} חדשים + עדכן ${updateCount}</button>
     </div>
   `;
   document.getElementById('overlay').classList.add('open');
@@ -554,19 +680,32 @@ function showImportPreview(candidates){
 
 async function confirmImport(){
   const candidates = PENDING_IMPORT_CANDIDATES || [];
-  const toInsert = candidates.filter(c => !c._duplicate).map(c => ({
+  const toInsert = candidates.filter(c => c._status === 'new').map(c => ({
     type: 'buyer',
     first_name: c.first_name, last_name: c.last_name,
     full_name: c.full_name,
-    phone: c.phone, email: c.email, city: c.city,
+    phone: c.phone, email: c.email, city: c.city, company: c.company,
     notes: c.notes, source: c.source
   }));
+  const toUpdate = candidates.filter(c => c._status === 'update');
 
-  if (toInsert.length === 0){ toast('אין רשומות חדשות לייבוא'); closeModal(); return; }
+  let insertedCount = 0, updatedCount = 0, errors = [];
 
-  const { error } = await window.supabaseClient.from('leads').insert(toInsert);
-  if (error){ toast('שגיאה בייבוא: ' + error.message); return; }
-  toast(`יובאו ${toInsert.length} קונים/משקיעים חדשים`);
+  if (toInsert.length > 0){
+    const { error, data } = await window.supabaseClient.from('leads').insert(toInsert).select('id');
+    if (error){ errors.push('הוספה: ' + error.message); }
+    else { insertedCount = data ? data.length : toInsert.length; }
+  }
+
+  for (const c of toUpdate){
+    const { error } = await window.supabaseClient.from('leads').update(c._updates).eq('id', c._existingId);
+    if (error){ errors.push(`עדכון ${c.full_name}: ` + error.message); }
+    else { updatedCount++; }
+  }
+
+  if (errors.length > 0){ toast('הושלם עם שגיאות: ' + errors[0]); }
+  else { toast(`נוספו ${insertedCount} חדשים, עודכנו ${updatedCount} קיימים`); }
+
   closeModal();
   await loadLeads();
 }
@@ -577,6 +716,7 @@ async function confirmImport(){
   if (CURRENT_PROFILE.role === 'admin'){
     document.getElementById('csvImportBtn').style.display = 'inline-block';
   }
+  await loadUsers();
   await loadLeads();
 })();
 </script>

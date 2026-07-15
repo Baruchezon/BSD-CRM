@@ -106,13 +106,13 @@ function renderTable(){
   body.innerHTML = ALL_USERS.map(u=>{
     const name = u.full_name && u.full_name.trim() ? u.full_name : '—';
     return `<tr>
-      <td>${esc(name)}</td>
-      <td>${esc(u.email)}</td>
-      <td><span class="badge badge-${u.role}">${ROLE_LABELS[u.role]||u.role}</span></td>
-      <td><span class="badge badge-${u.status}">${u.status==='active'?'פעיל':'חסום'}</span></td>
-      <td>${fmtDateTime(u.last_login_at)}</td>
-      <td>${u.login_count||0}</td>
-      <td class="row-actions">
+      <td data-label="שם מלא">${esc(name)}</td>
+      <td data-label="אימייל">${esc(u.email)}</td>
+      <td data-label="תפקיד"><span class="badge badge-${u.role}">${ROLE_LABELS[u.role]||u.role}</span></td>
+      <td data-label="סטטוס"><span class="badge badge-${u.status}">${u.status==='active'?'פעיל':'חסום'}</span></td>
+      <td data-label="כניסה אחרונה">${fmtDateTime(u.last_login_at)}</td>
+      <td data-label="מס' כניסות">${u.login_count||0}</td>
+      <td class="row-actions" data-label="">
         <button title="ערוך" onclick="openEditForm('${u.id}')">✏️</button>
         <button title="${u.status==='active'?'חסום':'הפעל'}" onclick="toggleStatus('${u.id}','${u.status}')">${u.status==='active'?'🚫':'✅'}</button>
         <button title="איפוס סיסמה" onclick="resetPassword('${u.email}')">🔑</button>

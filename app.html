@@ -73,6 +73,7 @@
     <div>
       <h2 id="welcomeName">טוען...</h2>
       <span id="welcomeRole"></span>
+      <div id="welcomeBlessing" style="color:var(--gold);font-size:.85rem;font-weight:600;margin-top:4px;"></div>
     </div>
   </div>
 
@@ -175,6 +176,33 @@ async function count(table, build){
   const { count, error } = await q;
   if (error){ console.error(table, error); return 0; }
   return count || 0;
+}
+
+const WARM_BLESSINGS = [
+  'שיהיה לך יום שמביא איתו רק חדשות טובות',
+  'שכל עסקה שתיגע בה היום תצליח',
+  'שיהיה לך יום קליל, פורה ומלא סיפוקים',
+  'מאחלים לך יום נעים ומלא הצלחות',
+  'שהיום הזה יביא לך לפחות חיוך אחד גדול',
+  'שתהיה לך אנרגיה טובה לכל מה שמחכה לך היום',
+  'שכל טלפון שתענה עליו היום יהיה בשורה משמחת',
+  'יום נפלא ומלא באורות ירוקים בדרך',
+  'שהיום הזה יזרום לך בקלות ובנחת',
+  'שיהיה לך יום שמזכיר לך למה אתה אוהב את העבודה הזו',
+  'מקווים שהיום הזה יפתיע אותך לטובה',
+  'שכל מה שתיגע בו היום יצליח ביד רחבה'
+];
+
+function getGreeting(){
+  const hour = new Date().getHours();
+  let timeGreeting;
+  if (hour >= 5 && hour < 12) timeGreeting = 'בוקר טוב';
+  else if (hour >= 12 && hour < 17) timeGreeting = 'צהריים טובים';
+  else if (hour >= 17 && hour < 21) timeGreeting = 'ערב טוב';
+  else timeGreeting = 'לילה טוב';
+
+  const blessing = WARM_BLESSINGS[Math.floor(Math.random() * WARM_BLESSINGS.length)];
+  return { timeGreeting, blessing };
 }
 
 async function loadGeneral(){
@@ -281,10 +309,12 @@ document.querySelectorAll('.period-btn[data-p]').forEach(btn=>{
   const profile = await requireAuth();
   if (!profile) return;
 
-  document.getElementById('welcomeName').textContent =
-    'שלום ' + (profile.full_name && profile.full_name.trim() ? profile.full_name : profile.email);
+  const { timeGreeting, blessing } = getGreeting();
+  const displayName = profile.full_name && profile.full_name.trim() ? profile.full_name : profile.email;
+  document.getElementById('welcomeName').textContent = `${timeGreeting}, ${displayName}`;
   const roleLabels = {admin:'מנהל מערכת (Admin)', manager:'מנהל', broker:'מתווך', user:'משתמש', viewer:'צופה בלבד'};
   document.getElementById('welcomeRole').textContent = 'תפקיד: ' + (roleLabels[profile.role] || profile.role);
+  document.getElementById('welcomeBlessing').textContent = blessing + ' ✨';
 
   await Promise.all([loadGeneral(), loadPeriod(), loadGauges(), loadActivity()]);
 })();

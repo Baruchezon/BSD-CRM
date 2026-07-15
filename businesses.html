@@ -27,6 +27,10 @@
   tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
   tbody tr:hover{background:#faf8f2;}
   .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;background:#eef1f6;color:var(--navy);}
+  .agr-badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;white-space:nowrap;}
+  .agr-none{background:#f1f1f1;color:#777;}
+  .agr-sent{background:#fdeccb;color:#8a5a10;}
+  .agr-signed{background:#dff0e4;color:#245c40;}
   .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
   .empty-row td{text-align:center;color:#999;padding:30px;}
   .price{font-weight:700;color:#245c40;}
@@ -70,24 +74,34 @@
     <input type="text" id="fSearch" placeholder="חיפוש לפי שם עסק, עיר, תחום, מחיר, סטטוס...">
     <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
     <select id="fField"><option value="all">כל התחומים</option></select>
+    <select id="fAgreement">
+      <option value="all">כל סטטוסי ההסכם</option>
+      <option value="אין הסכם">אין הסכם</option>
+      <option value="נשלח הסכם לחתימה">נשלח הסכם לחתימה</option>
+      <option value="יש הסכם חתום">יש הסכם חתום</option>
+    </select>
+    <select id="fCreatedBy"><option value="all">כל מי שהזין</option></select>
     <select id="fSort">
       <option value="updated_desc">עודכן לאחרונה</option>
       <option value="created_desc">נוצר לאחרונה</option>
       <option value="price_desc">מחיר (גבוה לנמוך)</option>
       <option value="name_asc">שם (א-ת)</option>
+      <option value="agreement_asc">סטטוס הסכם</option>
     </select>
   </div>
 
+  <div style="overflow-x:auto;">
   <table>
     <thead>
       <tr>
-        <th>שם פנימי</th><th>תחום</th><th>עיר</th><th>מחיר מבוקש</th><th>סטטוס</th><th>מטפל</th><th>עודכן</th><th>פעולות</th>
+        <th>שם פנימי</th><th>תחום</th><th>עיר</th><th>מחיר מבוקש</th><th>סטטוס</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>נוצר</th><th>עודכן</th><th>פעולות</th>
       </tr>
     </thead>
     <tbody id="bizBody">
-      <tr class="empty-row"><td colspan="8">טוען...</td></tr>
+      <tr class="empty-row"><td colspan="11">טוען...</td></tr>
     </tbody>
   </table>
+  </div>
 </div>
 
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
@@ -137,13 +151,18 @@ async function loadBusinesses(){
 function populateFilters(){
   const statusSel = document.getElementById('fStatus');
   const fieldSel = document.getElementById('fField');
+  const createdBySel = document.getElementById('fCreatedBy');
   const existingS = new Set(Array.from(statusSel.options).map(o=>o.value));
   const existingF = new Set(Array.from(fieldSel.options).map(o=>o.value));
+  const existingC = new Set(Array.from(createdBySel.options).map(o=>o.value));
   [...new Set(ALL_BIZ.map(b=>b.status).filter(Boolean))].forEach(s=>{
     if (!existingS.has(s)){ const o=document.createElement('option'); o.value=s; o.textContent=s; statusSel.appendChild(o); }
   });
   [...new Set(ALL_BIZ.map(b=>b.field).filter(Boolean))].forEach(s=>{
     if (!existingF.has(s)){ const o=document.createElement('option'); o.value=s; o.textContent=s; fieldSel.appendChild(o); }
+  });
+  [...new Set(ALL_BIZ.map(b=>b.created_by).filter(Boolean))].forEach(uid=>{
+    if (!existingC.has(uid)){ const o=document.createElement('option'); o.value=uid; o.textContent=userName(uid); createdBySel.appendChild(o); }
   });
 }
 
@@ -155,16 +174,25 @@ function sellerName(id){
   const s = ALL_SELLERS.find(x=>x.id===id);
   return s ? s.full_name : '—';
 }
+function agreementBadge(status){
+  const s = status || 'אין הסכם';
+  const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
+  return `<span class="agr-badge ${cls}">${esc(s)}</span>`;
+}
 
 function renderTable(){
   const search = document.getElementById('fSearch').value.trim().toLowerCase();
   const status = document.getElementById('fStatus').value;
   const field = document.getElementById('fField').value;
+  const agreement = document.getElementById('fAgreement').value;
+  const createdBy = document.getElementById('fCreatedBy').value;
   const sort = document.getElementById('fSort').value;
 
   let rows = ALL_BIZ.filter(b=>{
     if (status !== 'all' && b.status !== status) return false;
     if (field !== 'all' && b.field !== field) return false;
+    if (agreement !== 'all' && (b.agreement_status || 'אין הסכם') !== agreement) return false;
+    if (createdBy !== 'all' && b.created_by !== createdBy) return false;
     if (search){
       const hay = [b.internal_name, b.city, b.field, b.category, b.status, String(b.asking_price||'')].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
@@ -176,24 +204,28 @@ function renderTable(){
     if (sort === 'price_desc') return (b.asking_price||0) - (a.asking_price||0);
     if (sort === 'name_asc') return (a.internal_name||'').localeCompare(b.internal_name||'', 'he');
     if (sort === 'created_desc') return new Date(b.created_at) - new Date(a.created_at);
+    if (sort === 'agreement_asc') return (a.agreement_status||'').localeCompare(b.agreement_status||'', 'he');
     return new Date(b.updated_at) - new Date(a.updated_at);
   });
 
   const body = document.getElementById('bizBody');
   if (rows.length === 0){
-    body.innerHTML = '<tr class="empty-row"><td colspan="8">לא נמצאו עסקים</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="11">לא נמצאו עסקים</td></tr>';
     return;
   }
   body.innerHTML = rows.map(b=>`
     <tr>
-      <td>${esc(b.internal_name)}</td>
-      <td>${esc(b.field||'—')}</td>
-      <td>${esc(b.city||'—')}</td>
-      <td class="price">${fmtMoney(b.asking_price)}</td>
-      <td><span class="badge">${esc(b.status||'—')}</span></td>
-      <td>${esc(userName(b.handled_by))}</td>
-      <td>${fmtDate(b.updated_at)}</td>
-      <td class="row-actions">
+      <td data-label="שם פנימי"><div class="primary-name" style="font-weight:700;">${esc(b.internal_name)}</div>${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}</td>
+      <td data-label="תחום">${esc(b.field||'—')}</td>
+      <td data-label="עיר">${esc(b.city||'—')}</td>
+      <td class="price" data-label="מחיר מבוקש">${fmtMoney(b.asking_price)}</td>
+      <td data-label="סטטוס"><span class="badge">${esc(b.status||'—')}</span></td>
+      <td data-label="הוזן ע&quot;י">${b.created_by ? esc(userName(b.created_by)) : 'לא ידוע'}</td>
+      <td data-label="מטופל ע&quot;י">${b.handled_by ? esc(userName(b.handled_by)) : '—'}</td>
+      <td data-label="סטטוס הסכם">${agreementBadge(b.agreement_status)}</td>
+      <td data-label="נוצר">${fmtDate(b.created_at)}</td>
+      <td data-label="עודכן">${fmtDate(b.updated_at)}</td>
+      <td class="row-actions" data-label="">
         <button title="ערוך" onclick="openBizForm('${b.id}')">✏️</button>
         <button title="מחק" onclick="deleteBiz('${b.id}')">🗑️</button>
       </td>
@@ -201,7 +233,7 @@ function renderTable(){
   `).join('');
 }
 
-['fSearch','fStatus','fField','fSort'].forEach(id=>{
+['fSearch','fStatus','fField','fAgreement','fCreatedBy','fSort'].forEach(id=>{
   document.getElementById(id).addEventListener('input', renderTable);
   document.getElementById(id).addEventListener('change', renderTable);
 });
@@ -231,10 +263,29 @@ function openBizForm(id){
     <form id="bizForm">
       <div class="form-grid">
         <div class="section-h">זיהוי</div>
-        ${fieldRow('internal_code','מספר מזהה פנימי', biz?.internal_code)}
+        <div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;">
+          מספר מזהה פנימי: <b>${biz?.internal_code ? esc(biz.internal_code) : 'ייווצר אוטומטית עם השמירה'}</b>
+          ${biz ? ` · הוזן ע"י: <b>${esc(userName(biz.created_by))}</b> בתאריך ${fmtDate(biz.created_at)}` : ''}
+        </div>
         ${fieldRow('internal_name','שם העסק (פנימי)', biz?.internal_name)}
-        ${fieldRow('anonymous_name','שם אנונימי להצגה', biz?.anonymous_name)}
+        <div class="field">
+          <label>שם אנונימי להצגה</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="anonymous_name" value="${esc(biz?.anonymous_name)}" style="flex:1;">
+            <button type="button" class="btn btn-ghost" style="white-space:nowrap;padding:0 12px;" onclick="suggestAnonymousName()">💡 הצע</button>
+          </div>
+        </div>
         <div class="field"><label>מוכר משויך</label><select id="seller_id">${sellerOptions(biz?.seller_id)}</select></div>
+        ${fieldRow('website','אתר אינטרנט', biz?.website, 'text')}
+
+        <div class="section-h">תיאור</div>
+        <div class="field full">
+          <label>תיאור קצר של העסק</label>
+          <div style="display:flex;gap:6px;align-items:flex-start;">
+            <textarea id="short_description" style="flex:1;">${esc(biz?.short_description)}</textarea>
+            <button type="button" class="btn btn-ghost" style="white-space:nowrap;padding:0 12px;height:38px;" onclick="suggestShortDescription()">💡 הצע</button>
+          </div>
+        </div>
 
         <div class="section-h">סיווג ומיקום</div>
         ${fieldRow('field','תחום פעילות', biz?.field)}
@@ -257,7 +308,13 @@ function openBizForm(id){
         ${fieldRow('status','סטטוס העסק', biz?.status)}
         ${fieldRow('discretion_level','רמת דיסקרטיות', biz?.discretion_level)}
         ${fieldRow('source','מקור העסק', biz?.source)}
-        ${fieldRow('agreement_status','סטטוס הסכם תיווך', biz?.agreement_status)}
+        <div class="field"><label>סטטוס הסכם</label>
+          <select id="agreement_status">
+            <option value="אין הסכם" ${(!biz?.agreement_status || biz.agreement_status==='אין הסכם')?'selected':''}>אין הסכם</option>
+            <option value="נשלח הסכם לחתימה" ${biz?.agreement_status==='נשלח הסכם לחתימה'?'selected':''}>נשלח הסכם לחתימה</option>
+            <option value="יש הסכם חתום" ${biz?.agreement_status==='יש הסכם חתום'?'selected':''}>יש הסכם חתום</option>
+          </select>
+        </div>
         <div class="field"><label>מטפל בעסק</label><select id="handled_by">${userOptions(biz?.handled_by)}</select></div>
 
         <div class="section-h">הערות</div>
@@ -274,6 +331,52 @@ function openBizForm(id){
   document.getElementById('bizForm').addEventListener('submit', saveBiz);
 }
 
+function normalizeWebsite(url){
+  if (!url) return null;
+  url = url.trim();
+  if (!url) return null;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  return url;
+}
+
+function suggestAnonymousName(){
+  const field = document.getElementById('field').value.trim();
+  const region = document.getElementById('region').value.trim();
+  const city = document.getElementById('city').value.trim();
+  const years = parseInt(document.getElementById('years_active').value) || 0;
+  const revenue = parseFloat(document.getElementById('annual_revenue').value) || 0;
+
+  const area = region || city || 'מרכז הארץ';
+  const ageDesc = years >= 15 ? 'ותיק' : (years >= 5 ? 'יציב' : 'צעיר וצומח');
+  const sizeDesc = revenue >= 3000000 ? 'רווחי בהיקף משמעותי' : (revenue >= 800000 ? 'רווחי' : 'בעל פוטנציאל צמיחה');
+  const fieldDesc = field || 'עסק';
+
+  const suggestion = `${fieldDesc} ${ageDesc}, ${sizeDesc}, באזור ${area}`;
+  document.getElementById('anonymous_name').value = suggestion;
+  toast('הוצע כינוי - ניתן לערוך לפני השמירה');
+}
+
+function suggestShortDescription(){
+  const field = document.getElementById('field').value.trim();
+  const category = document.getElementById('category').value.trim();
+  const years = parseInt(document.getElementById('years_active').value) || 0;
+  const employees = parseInt(document.getElementById('employees_count').value) || 0;
+  const region = document.getElementById('region').value.trim();
+  const city = document.getElementById('city').value.trim();
+  const area = region || city;
+
+  let parts = [];
+  parts.push(field ? `עסק בתחום ${field}` : 'עסק');
+  if (category) parts.push(`בקטגוריית ${category}`);
+  if (years) parts.push(`הפעיל כ-${years} שנים`);
+  if (employees) parts.push(`ומעסיק כ-${employees} עובדים`);
+  if (area) parts.push(`הממוקם באזור ${area}`);
+
+  const suggestion = parts.join(', ') + '.';
+  document.getElementById('short_description').value = suggestion;
+  toast('הוצע תיאור על בסיס הנתונים בטופס - ניתן לערוך לפני השמירה');
+}
+
 async function saveBiz(e){
   e.preventDefault();
   const form = e.target;
@@ -282,9 +385,10 @@ async function saveBiz(e){
   const num = v => v === '' || v === null ? null : Number(v);
 
   const payload = {
-    internal_code: g('internal_code') || null,
     internal_name: g('internal_name'),
     anonymous_name: g('anonymous_name'),
+    website: normalizeWebsite(g('website')),
+    short_description: g('short_description'),
     seller_id: g('seller_id') || null,
     field: g('field'), category: g('category'), subcategory: g('subcategory'),
     city: g('city'), region: g('region'), address: g('address'),
