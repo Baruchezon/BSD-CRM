@@ -102,3 +102,134 @@ body{
   margin-top:10px;
   min-height:18px;
 }
+
+/* ============================================================
+   התאמה מלאה לסלולרי / Android - משותף לכל המסכים
+   ============================================================ */
+
+/* מונע זום אוטומטי ב-iOS/Android בלחיצה על שדה - כל שדה קלט חייב 16px+ */
+input, select, textarea, button{
+  font-size:16px;
+}
+.field label, .filters select, .filters input{ font-size:14px; }
+
+/* כותרת עליונה - עוטפת ולא נחתכת, תפריט גולש אופקית בלי לשבור פריסה */
+.bsd-header{
+  flex-wrap:wrap;
+  gap:8px;
+  padding:12px 16px;
+}
+.nav{
+  display:flex;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  white-space:nowrap;
+  gap:4px;
+  max-width:100%;
+  scrollbar-width:thin;
+}
+.nav a{ flex:0 0 auto; }
+
+/* כפתורי פעולה - גודל נוח ללחיצה (מינימום 44px גובה) */
+.btn, .login-card button, .period-btn{
+  min-height:44px;
+  touch-action:manipulation;
+}
+
+/* חלונות קופצים - תמיד נכנסים למסך, נגללים, וכפתורי שמירה/ביטול תמיד נגישים */
+.overlay{
+  padding:0;
+  align-items:stretch;
+}
+.modal{
+  max-width:100%;
+  width:100%;
+  height:100%;
+  max-height:100%;
+  border-radius:0;
+  display:flex;
+  flex-direction:column;
+  padding:20px 16px 0;
+}
+.modal > form, .modal > div{ overflow-y:auto; flex:1; padding-bottom:16px; }
+.modal-actions{
+  position:sticky;
+  bottom:0;
+  background:#fff;
+  padding:12px 0;
+  margin-top:0;
+  border-top:1px solid #eee;
+  z-index:5;
+}
+
+@media (min-width: 640px){
+  .overlay{ padding:40px 20px; align-items:flex-start; }
+  .modal{
+    max-width:640px;
+    height:auto;
+    max-height:calc(100vh - 80px);
+    border-radius:14px;
+    padding:28px;
+  }
+  .modal > form, .modal > div{ padding-bottom:0; }
+}
+
+/* טפסים - עמודה אחת בסלולרי */
+@media (max-width: 700px){
+  .form-grid{ grid-template-columns:1fr !important; }
+  .form-grid .full{ grid-column:1 !important; }
+  .filters{ flex-direction:column; }
+  .filters input, .filters select{ width:100%; min-width:0; }
+  .toolbar{ flex-direction:column; align-items:stretch !important; }
+  .add-btns{ flex-direction:column; }
+  .add-btns .btn{ width:100%; }
+  .wrap{ padding:16px !important; }
+}
+
+/* טבלאות - הופכות לכרטיסים בסלולרי, נגללות בעדינות אם יש טבלה שלא ניתנת להמרה */
+@media (max-width: 700px){
+  table thead{ display:none; }
+  table, table tbody, table tr, table td{ display:block; width:100%; }
+  table{ border-radius:12px; }
+  table tr{
+    margin-bottom:12px;
+    border:1px solid #eee;
+    border-radius:12px;
+    padding:8px 0;
+    background:#fff;
+  }
+  table td{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    padding:8px 14px;
+    border-bottom:1px solid #f5f3ec;
+    text-align:left;
+  }
+  table td:last-child{ border-bottom:none; }
+  table td::before{
+    content:attr(data-label);
+    font-weight:700;
+    color:var(--navy);
+    font-size:.75rem;
+    flex-shrink:0;
+  }
+  table td.row-actions{ justify-content:flex-end; gap:14px; }
+  table td.row-actions::before{ content:''; }
+}
+
+/* מניעת גלילה אופקית מיותרת של כל העמוד */
+html, body{ overflow-x:hidden; max-width:100%; }
+.wrap{ max-width:100%; }
+
+/* לוח בקרה - כרטיסי KPI קטנים יותר במסך צר מאוד */
+@media (max-width: 400px){
+  .kpi-grid{ grid-template-columns:repeat(2,1fr) !important; }
+  .kpi .num{ font-size:1.5rem !important; }
+}
+
+/* מסך כניסה - שוליים נוחים גם במסך הכי צר (360px) */
+@media (max-width: 380px){
+  .login-card{ padding:28px 20px; }
+}
