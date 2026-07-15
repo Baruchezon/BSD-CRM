@@ -151,7 +151,7 @@ input, select, textarea, button{
   flex-direction:column;
   padding:20px 16px 0;
 }
-.modal > form, .modal > div{ overflow-y:auto; flex:1; padding-bottom:16px; }
+.modal > form, .modal > div:not(.modal-actions){ overflow-y:auto; flex:1; padding-bottom:16px; }
 .modal-actions{
   position:sticky;
   bottom:0;
@@ -171,7 +171,7 @@ input, select, textarea, button{
     border-radius:14px;
     padding:28px;
   }
-  .modal > form, .modal > div{ padding-bottom:0; }
+  .modal > form, .modal > div:not(.modal-actions){ padding-bottom:0; }
 }
 
 /* טפסים - עמודה אחת בסלולרי */
