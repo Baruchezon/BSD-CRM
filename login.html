@@ -17,7 +17,10 @@
     <form id="loginForm">
       <input type="email" id="email" placeholder="אימייל" required autocomplete="username" list="emailHistory">
       <datalist id="emailHistory"></datalist>
-      <input type="password" id="password" placeholder="סיסמה" required autocomplete="current-password">
+      <div style="position:relative;">
+        <input type="password" id="password" placeholder="סיסמה" required autocomplete="current-password" style="padding-left:40px;">
+        <button type="button" id="togglePwd" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.1rem;color:#888;padding:4px;">👁️</button>
+      </div>
       <button type="submit" id="loginBtn">כניסה למערכת</button>
     </form>
     <div class="login-error" id="loginError"></div>
@@ -52,6 +55,12 @@ function renderEmailHistory(){
 renderEmailHistory();
 const history0 = getEmailHistory();
 if (history0.length > 0){ document.getElementById('email').value = history0[0]; }
+
+document.getElementById('togglePwd').addEventListener('click', function(){
+  const pwd = document.getElementById('password');
+  if (pwd.type === 'password'){ pwd.type = 'text'; this.textContent = '🙈'; }
+  else { pwd.type = 'password'; this.textContent = '👁️'; }
+});
 
 document.getElementById('loginForm').addEventListener('submit', async function(e){
   e.preventDefault();
