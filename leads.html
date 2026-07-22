@@ -40,6 +40,10 @@
   .agr-none{background:#f1f1f1;color:#777;}
   .agr-sent{background:#fdeccb;color:#8a5a10;}
   .agr-signed{background:#dff0e4;color:#245c40;}
+  tbody tr.row-signed{background:#f2faf5;border-right:5px solid #2e9e5b;}
+  tbody tr.row-signed:hover{background:#e7f5ec;}
+  tbody tr.row-sent{background:#fffaf0;border-right:5px solid #d99a2b;}
+  tbody tr.row-sent:hover{background:#fff3dd;}
   .primary-name{font-weight:700;color:var(--navy);}
   .sub-name{font-size:.75rem;color:#888;margin-top:2px;}
   .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
@@ -270,7 +274,10 @@ function renderTable(){
       cityCell = esc(l.requested_area || l.city || '—');
     }
 
-    return `<tr>
+    const agrStatus = l.agreement_status || 'אין הסכם';
+    const rowCls = agrStatus === 'יש הסכם חתום' ? 'row-signed' : (agrStatus === 'נשלח הסכם לחתימה' ? 'row-sent' : 'row-none');
+
+    return `<tr class="${rowCls}">
       <td data-label="שם / עסק">${nameCell}</td>
       <td data-label="סוג">${typeBadge}</td>
       <td data-label="טלפון" class="phone-cell">${fmtPhone(l.phone)}</td>
@@ -321,7 +328,7 @@ function textareaRow(id,label,value){
 
 function openLeadForm(id, forcedType){
   const lead = id ? ALL_LEADS.find(l=>l.id===id) : null;
-  const type = lead ? lead.type : (forcedType || 'buyer');
+  const type = forcedType || (lead ? lead.type : 'buyer');
 
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
