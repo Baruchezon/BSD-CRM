@@ -201,7 +201,7 @@ function renderTable(){
     if (createdBy !== 'all' && b.created_by !== createdBy) return false;
     if (search){
       const hay = [b.internal_name, b.owner_name, b.owner_phone, b.city, b.field, b.category, b.subcategory, b.status, String(b.asking_price||''),
-        b.short_description, b.sale_reason, b.region, b.address, b.source, b.notes].join(' ').toLowerCase();
+        b.short_description, b.sale_reason, b.region, b.address, b.source, b.notes, b.id_number, b.entity_type].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -295,6 +295,8 @@ function openBizForm(id){
         ${fieldRow('owner_name','שם הבעלים', biz?.owner_name)}
         ${fieldRow('owner_phone','טלפון הבעלים', biz?.owner_phone)}
         ${fieldRow('owner_email','אימייל הבעלים', biz?.owner_email, 'email')}
+        ${fieldRow('id_number','ת.ז / ח.פ', biz?.id_number)}
+        ${fieldRow('entity_type','חברה / עוסק מורשה', biz?.entity_type)}
 
         <div class="section-h">תיאור</div>
         <div class="field full">
@@ -467,6 +469,7 @@ async function saveBiz(e){
     website: normalizeWebsite(g('website')),
     short_description: g('short_description'),
     owner_name: g('owner_name'), owner_phone: g('owner_phone'), owner_email: g('owner_email'),
+    id_number: g('id_number'), entity_type: g('entity_type'),
     notes: g('notes'),
     field: g('field'), category: g('category'), subcategory: g('subcategory'),
     city: g('city'), region: g('region'), address: g('address'),
