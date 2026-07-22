@@ -75,6 +75,11 @@
       <span id="welcomeRole"></span>
       <div id="welcomeBlessing" style="color:var(--gold);font-size:.85rem;font-weight:600;margin-top:4px;"></div>
     </div>
+    <div>
+      <button id="aiMatchBtn" onclick="runAiMatchSuggestions()" style="background:var(--gold);color:#1c2333;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.15);">
+        🧠 קבל הצעות התאמה חכמות
+      </button>
+    </div>
   </div>
 
   <div class="section-title">תמונת מצב כללית</div>
@@ -304,6 +309,50 @@ document.querySelectorAll('.period-btn[data-p]').forEach(btn=>{
     }
   });
 });
+
+function toast(msg){
+  let box = document.getElementById('toastBox');
+  if (!box){
+    box = document.createElement('div');
+    box.id = 'toastBox';
+    box.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:80;';
+    document.body.appendChild(box);
+  }
+  const el = document.createElement('div');
+  el.style.cssText = 'background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;margin-top:8px;box-shadow:0 6px 20px rgba(0,0,0,.3);';
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(()=>el.remove(), 4000);
+}
+
+async function runAiMatchSuggestions(){
+  const btn = document.getElementById('aiMatchBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ מפיק הצעות...';
+  try {
+    const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/match-suggestions-report', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: '{}'
+    });
+    const data = await res.json();
+    if (!res.ok || data.error){
+      toast('שגיאה בהפקת ההצעות: ' + (data.error || res.status));
+    } else if (data.skipped) {
+      toast('הדוח לא נשלח: ' + (data.reason || ''));
+    } else {
+      toast(`נשלחו ${data.count ?? 0} הצעות התאמה למייל שלך 📧`);
+    }
+  } catch (e) {
+    toast('שגיאה בחיבור: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🧠 קבל הצעות התאמה חכמות';
+  }
+}
 
 (async function init(){
   const profile = await requireAuth();
