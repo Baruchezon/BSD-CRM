@@ -31,12 +31,12 @@
   .agr-none{background:#f1f1f1;color:#777;}
   .agr-sent{background:#fdeccb;color:#8a5a10;}
   .agr-signed{background:#dff0e4;color:#245c40;}
-  tbody tr.row-signed{background:#d9f2e3;border-right:9px solid #1f8a4c;}
-  tbody tr.row-signed td{font-weight:600;}
-  tbody tr.row-signed:hover{background:#c9ecd7;}
-  tbody tr.row-sent{background:#fdecc8;border-right:9px solid #c9820f;}
-  tbody tr.row-sent td{font-weight:600;}
-  tbody tr.row-sent:hover{background:#fbe2ac;}
+  tbody tr.row-signed{background:#16a34a !important;border-right:10px solid #0b5e29;}
+  tbody tr.row-signed td{color:#fff !important;font-weight:700;}
+  tbody tr.row-signed:hover{background:#128a3e !important;}
+  tbody tr.row-sent{background:#e08a00 !important;border-right:10px solid #8a5400;}
+  tbody tr.row-sent td{color:#fff !important;font-weight:700;}
+  tbody tr.row-sent:hover{background:#c97a00 !important;}
   .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
   .empty-row td{text-align:center;color:#999;padding:30px;}
   .price{font-weight:700;color:#245c40;}
@@ -222,9 +222,10 @@ function renderTable(){
   body.innerHTML = rows.map(b=>{
     const agrStatus = b.agreement_status || 'אין הסכם';
     const rowCls = agrStatus === 'יש הסכם חתום' ? 'row-signed' : (agrStatus === 'נשלח הסכם לחתימה' ? 'row-sent' : 'row-none');
+    const statusEmoji = rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
     return `
     <tr class="${rowCls}">
-      <td data-label="שם פנימי"><div class="primary-name" style="font-weight:700;">${esc(b.internal_name)}</div>${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}</td>
+      <td data-label="שם פנימי"><div class="primary-name" style="font-weight:700;">${statusEmoji}${esc(b.internal_name)}</div>${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}</td>
       <td data-label="תחום">${esc(b.field||'—')}</td>
       <td data-label="עיר">${esc(b.city||'—')}</td>
       <td class="price" data-label="מחיר מבוקש">${fmtMoney(b.asking_price)}</td>
