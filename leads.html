@@ -295,6 +295,7 @@ function renderTable(){
       <td data-label="הערות" class="notes-cell">${esc(l.notes||'—')}</td>
       <td class="row-actions" data-label="">
         <button title="ערוך" onclick="openLeadForm('${l.id}')">✏️</button>
+        <button title="שלח הסכם" onclick="sendAgreementForLead('${l.id}')">📄</button>
         <button title="מחק" onclick="deleteLead('${l.id}')">🗑️</button>
       </td>
     </tr>`;
@@ -468,6 +469,20 @@ async function saveLead(e){
   toast('נשמר בהצלחה');
   closeModal();
   await loadLeads();
+}
+
+function sendAgreementForLead(id){
+  const l = ALL_LEADS.find(x=>x.id===id);
+  if (!l){ toast('רשומה לא נמצאה'); return; }
+  const personName = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || '';
+  const bizField = l.type === 'seller' ? (l.business_name || '') : (l.requested_field || '');
+  const params = new URLSearchParams({
+    type: l.type === 'buyer' ? 'buyer' : 'seller',
+    name: personName,
+    phone: l.phone || '',
+    biz: bizField
+  });
+  window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
 }
 
 async function deleteLead(id){
