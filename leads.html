@@ -102,7 +102,7 @@
   </div>
 
   <div class="filters">
-    <input type="text" id="fSearch" placeholder="חיפוש לפי שם עסק, שם, טלפון, עיר, תחום...">
+    <input type="text" id="fSearch" placeholder="חיפוש לפי שם, טלפון, עיר, תחום, הערות...">
     <select id="fType">
       <option value="all">כל הסוגים</option>
       <option value="buyer">קונים בלבד</option>
@@ -240,7 +240,8 @@ function renderTable(){
     if (createdBy !== 'all' && l.created_by !== createdBy) return false;
     if (search){
       const hay = [l.full_name, l.first_name, l.last_name, l.phone, l.phone2, l.city, l.source, l.status, l.email,
-        l.business_name, l.business_field, l.business_city, l.requested_field, l.requested_area].join(' ').toLowerCase();
+        l.business_name, l.business_field, l.business_city, l.requested_field, l.requested_area,
+        l.requested_categories, l.company, l.address, l.notes].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
