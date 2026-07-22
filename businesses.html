@@ -100,7 +100,7 @@
   <table>
     <thead>
       <tr>
-        <th>שם פנימי</th><th>תחום</th><th>עיר</th><th>מחיר מבוקש</th><th>סטטוס</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>נוצר</th><th>עודכן</th><th>פעולות</th>
+        <th>שם פנימי</th><th>טלפון בעלים</th><th>תחום</th><th>עיר</th><th>מחיר מבוקש</th><th>סטטוס</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>נוצר</th><th>עודכן</th><th>פעולות</th>
       </tr>
     </thead>
     <tbody id="bizBody">
@@ -200,8 +200,8 @@ function renderTable(){
     if (agreement !== 'all' && (b.agreement_status || 'אין הסכם') !== agreement) return false;
     if (createdBy !== 'all' && b.created_by !== createdBy) return false;
     if (search){
-      const hay = [b.internal_name, b.city, b.field, b.category, b.subcategory, b.status, String(b.asking_price||''),
-        b.short_description, b.sale_reason, b.region, b.address, b.source].join(' ').toLowerCase();
+      const hay = [b.internal_name, b.owner_name, b.owner_phone, b.city, b.field, b.category, b.subcategory, b.status, String(b.asking_price||''),
+        b.short_description, b.sale_reason, b.region, b.address, b.source, b.notes].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -217,7 +217,7 @@ function renderTable(){
 
   const body = document.getElementById('bizBody');
   if (rows.length === 0){
-    body.innerHTML = '<tr class="empty-row"><td colspan="11">לא נמצאו עסקים</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="12">לא נמצאו עסקים</td></tr>';
     return;
   }
   body.innerHTML = rows.map(b=>{
@@ -226,7 +226,8 @@ function renderTable(){
     const statusEmoji = rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
     return `
     <tr class="${rowCls}">
-      <td data-label="שם פנימי"><div class="primary-name" style="font-weight:700;">${statusEmoji}${esc(b.internal_name)}</div>${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}</td>
+      <td data-label="שם פנימי"><div class="primary-name" style="font-weight:700;">${statusEmoji}${esc(b.internal_name)}</div>${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}</td>
+      <td data-label="טלפון בעלים" class="phone-cell">${b.owner_phone ? esc(b.owner_phone) : '—'}</td>
       <td data-label="תחום">${esc(b.field||'—')}</td>
       <td data-label="עיר">${esc(b.city||'—')}</td>
       <td class="price" data-label="מחיר מבוקש">${fmtMoney(b.asking_price)}</td>
@@ -288,8 +289,12 @@ function openBizForm(id){
             <button type="button" class="btn btn-ghost" style="white-space:nowrap;padding:0 12px;" onclick="suggestAnonymousName()">💡 הצע</button>
           </div>
         </div>
-        <div class="field"><label>מוכר משויך</label><select id="seller_id">${sellerOptions(biz?.seller_id)}</select></div>
         ${fieldRow('website','אתר אינטרנט', biz?.website, 'text')}
+
+        <div class="section-h">פרטי בעל העסק</div>
+        ${fieldRow('owner_name','שם הבעלים', biz?.owner_name)}
+        ${fieldRow('owner_phone','טלפון הבעלים', biz?.owner_phone)}
+        ${fieldRow('owner_email','אימייל הבעלים', biz?.owner_email, 'email')}
 
         <div class="section-h">תיאור</div>
         <div class="field full">
@@ -331,7 +336,7 @@ function openBizForm(id){
         <div class="field"><label>מטפל בעסק</label><select id="handled_by">${userOptions(biz?.handled_by)}</select></div>
 
         <div class="section-h">הערות</div>
-        <div class="field full"><textarea id="notes_placeholder" style="display:none"></textarea></div>
+        <div class="field full">${textareaRow('notes','הערות חופשיות', biz?.notes)}</div>
       </div>
 
       ${biz ? `
@@ -461,7 +466,8 @@ async function saveBiz(e){
     anonymous_name: g('anonymous_name'),
     website: normalizeWebsite(g('website')),
     short_description: g('short_description'),
-    seller_id: g('seller_id') || null,
+    owner_name: g('owner_name'), owner_phone: g('owner_phone'), owner_email: g('owner_email'),
+    notes: g('notes'),
     field: g('field'), category: g('category'), subcategory: g('subcategory'),
     city: g('city'), region: g('region'), address: g('address'),
     asking_price: num(g('asking_price')), annual_revenue: num(g('annual_revenue')),
@@ -489,11 +495,10 @@ async function saveBiz(e){
 function sendAgreementForBiz(id){
   const b = ALL_BIZ.find(x=>x.id===id);
   if (!b){ toast('עסק לא נמצא'); return; }
-  const seller = b.seller_id ? ALL_SELLERS.find(s=>s.id===b.seller_id) : null;
   const params = new URLSearchParams({
     type: 'seller',
-    name: seller?.full_name || '',
-    phone: seller?.phone || '',
+    name: b.owner_name || '',
+    phone: b.owner_phone || '',
     biz: b.internal_name || ''
   });
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
