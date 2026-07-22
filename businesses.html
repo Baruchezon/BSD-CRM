@@ -137,7 +137,7 @@ function closeModal(){
 }
 
 async function loadLookups(){
-  const { data: sellers } = await window.supabaseClient.from('leads').select('id, full_name').eq('type','seller');
+  const { data: sellers } = await window.supabaseClient.from('leads').select('id, full_name, phone').eq('type','seller');
   ALL_SELLERS = sellers || [];
   const { data: users } = await window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active');
   ALL_USERS = users || [];
@@ -237,6 +237,7 @@ function renderTable(){
       <td data-label="עודכן">${fmtDate(b.updated_at)}</td>
       <td class="row-actions" data-label="">
         <button title="ערוך" onclick="openBizForm('${b.id}')">✏️</button>
+        <button title="שלח הסכם" onclick="sendAgreementForBiz('${b.id}')">📄</button>
         <button title="מחק" onclick="deleteBiz('${b.id}')">🗑️</button>
       </td>
     </tr>
@@ -331,6 +332,19 @@ function openBizForm(id){
         <div class="section-h">הערות</div>
         <div class="field full"><textarea id="notes_placeholder" style="display:none"></textarea></div>
       </div>
+
+      ${biz ? `
+      <div class="section-h" style="margin-top:14px;">קבצים מצורפים</div>
+      <div class="field full">
+        <input type="file" id="bizFileInput">
+        <button type="button" class="btn btn-ghost" style="margin-top:6px;" onclick="uploadBizFile('${biz.id}')">📎 העלה קובץ</button>
+        <div id="bizFilesList" style="margin-top:10px;font-size:.82rem;">טוען קבצים...</div>
+      </div>
+      ` : `
+      <div class="section-h" style="margin-top:14px;">קבצים מצורפים</div>
+      <div class="field full" style="color:#999;font-size:.8rem;">שמור את העסק תחילה, ואז תוכל לצרף קבצים בעריכה.</div>
+      `}
+
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
         <button type="submit" class="btn btn-primary">שמירה</button>
@@ -340,6 +354,52 @@ function openBizForm(id){
   document.getElementById('overlay').classList.add('open');
   document.getElementById('bizForm').dataset.bizId = biz ? biz.id : '';
   document.getElementById('bizForm').addEventListener('submit', saveBiz);
+  if (biz) loadBizFiles(biz.id);
+}
+
+const MAX_FILE_MB = 20;
+const BIZ_FILES_BUCKET = 'business-files';
+
+async function loadBizFiles(bizId){
+  const box = document.getElementById('bizFilesList');
+  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).list(bizId, { sortBy: { column: 'created_at', order: 'desc' } });
+  if (error){ box.innerHTML = '<span style="color:#b3402c;">שגיאה בטעינת קבצים: ' + esc(error.message) + '</span>'; return; }
+  if (!data || data.length === 0){ box.innerHTML = '<span style="color:#999;">אין קבצים מצורפים עדיין</span>'; return; }
+  box.innerHTML = data.map(f => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0ede4;">
+      <span>📄 ${esc(f.name)}</span>
+      <span>
+        <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="downloadBizFile('${bizId}','${esc(f.name)}')">הורדה</button>
+        <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="deleteBizFile('${bizId}','${esc(f.name)}')">מחק</button>
+      </span>
+    </div>`).join('');
+}
+
+async function uploadBizFile(bizId){
+  const input = document.getElementById('bizFileInput');
+  const file = input.files[0];
+  if (!file){ toast('בחר קובץ תחילה'); return; }
+  if (file.size > MAX_FILE_MB * 1024 * 1024){ toast(`הקובץ גדול מדי (מקסימום ${MAX_FILE_MB}MB)`); return; }
+  const path = `${bizId}/${Date.now()}_${file.name}`;
+  const { error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).upload(path, file);
+  if (error){ toast('שגיאה בהעלאה: ' + error.message); return; }
+  toast('הקובץ הועלה בהצלחה');
+  input.value = '';
+  loadBizFiles(bizId);
+}
+
+async function downloadBizFile(bizId, fileName){
+  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/${fileName}`, 60);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
+async function deleteBizFile(bizId, fileName){
+  if (!confirm('למחוק קובץ זה?')) return;
+  const { error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).remove([`${bizId}/${fileName}`]);
+  if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
+  toast('הקובץ נמחק');
+  loadBizFiles(bizId);
 }
 
 function normalizeWebsite(url){
@@ -423,6 +483,19 @@ async function saveBiz(e){
   toast('נשמר בהצלחה');
   closeModal();
   await loadBusinesses();
+}
+
+function sendAgreementForBiz(id){
+  const b = ALL_BIZ.find(x=>x.id===id);
+  if (!b){ toast('עסק לא נמצא'); return; }
+  const seller = b.seller_id ? ALL_SELLERS.find(s=>s.id===b.seller_id) : null;
+  const params = new URLSearchParams({
+    type: 'seller',
+    name: seller?.full_name || '',
+    phone: seller?.phone || '',
+    biz: b.internal_name || ''
+  });
+  window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
 }
 
 async function deleteBiz(id){
