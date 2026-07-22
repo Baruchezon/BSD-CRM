@@ -325,6 +325,52 @@ function toast(msg){
   setTimeout(()=>el.remove(), 4000);
 }
 
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function closeAiModal(){
+  const ov = document.getElementById('aiMatchOverlay');
+  if (ov) ov.remove();
+}
+
+function renderAiMatchModal(suggestions){
+  closeAiModal();
+  const rowsHtml = suggestions.length ? suggestions.map(s => `
+    <tr>
+      <td style="padding:8px 10px;border-bottom:1px solid #f0ede4;">${esc(s.buyer)}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f0ede4;">${esc(s.business)}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f0ede4;text-align:center;">
+        <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-weight:700;font-size:.78rem;
+          background:${s.score>=75?'#dff0e4':'#fdeccb'};color:${s.score>=75?'#245c40':'#8a5a10'};">${s.score}%</span>
+      </td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f0ede4;color:#666;font-size:.78rem;">${esc(s.reason)}</td>
+    </tr>`).join('') : `<tr><td colspan="4" style="padding:20px;text-align:center;color:#999;">לא נמצאו הצעות התאמה מובהקות הפעם</td></tr>`;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'aiMatchOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:90;padding:40px 20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:720px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 6px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">הצעות התאמה חכמות</h3>
+      <p style="color:#777;font-size:.82rem;margin:6px 0 16px;">נמצאו ${suggestions.length} הצעות עם פוטנציאל (מעל 50% התאמה). זו המלצה בלבד - תבחר אילו להוסיף בפועל כהתאמה.</p>
+      <div style="max-height:50vh;overflow-y:auto;border:1px solid #f0ede4;border-radius:8px;">
+        <table style="width:100%;border-collapse:collapse;font-size:.85rem;">
+          <thead><tr style="background:#f7f5ef;position:sticky;top:0;">
+            <th style="padding:8px 10px;text-align:right;">קונה</th>
+            <th style="padding:8px 10px;text-align:right;">עסק</th>
+            <th style="padding:8px 10px;text-align:center;">אחוז</th>
+            <th style="padding:8px 10px;text-align:right;">נימוק</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;">
+        <button onclick="closeAiModal()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
+        <button id="aiMailBtn" onclick="emailAiMatchSuggestions()" style="background:var(--navy);color:#fff;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">📧 שלח גם למייל</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
 async function runAiMatchSuggestions(){
   const btn = document.getElementById('aiMatchBtn');
   btn.disabled = true;
@@ -336,21 +382,46 @@ async function runAiMatchSuggestions(){
         'Authorization': 'Bearer ' + window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY,
         'Content-Type': 'application/json'
       },
-      body: '{}'
+      body: JSON.stringify({ send_email: false })
     });
     const data = await res.json();
     if (!res.ok || data.error){
       toast('שגיאה בהפקת ההצעות: ' + (data.error || res.status));
-    } else if (data.skipped) {
-      toast('הדוח לא נשלח: ' + (data.reason || ''));
     } else {
-      toast(`נשלחו ${data.count ?? 0} הצעות התאמה למייל שלך 📧`);
+      renderAiMatchModal(data.suggestions || []);
     }
   } catch (e) {
     toast('שגיאה בחיבור: ' + e.message);
   } finally {
     btn.disabled = false;
     btn.textContent = '🧠 קבל הצעות התאמה חכמות';
+  }
+}
+
+async function emailAiMatchSuggestions(){
+  const btn = document.getElementById('aiMailBtn');
+  if (btn){ btn.disabled = true; btn.textContent = 'שולח...'; }
+  try {
+    const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/match-suggestions-report', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ send_email: true })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error){
+      toast('שגיאה בשליחת המייל: ' + (data.error || res.status));
+    } else if (data.skipped) {
+      toast('המייל לא נשלח: ' + (data.reason || ''));
+    } else {
+      toast('הדוח נשלח למייל שלך 📧');
+    }
+  } catch (e) {
+    toast('שגיאה בחיבור: ' + e.message);
+  } finally {
+    if (btn){ btn.disabled = false; btn.textContent = '📧 שלח גם למייל'; }
   }
 }
 
