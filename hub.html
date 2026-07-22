@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>BSD Hub</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0e1b34">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BSD Hub">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&display=swap');
+
+  :root{
+    --navy:#0e1b34; --navy-2:#16264a;
+    --gold:#c9a24b; --gold-light:#e8cf8a;
+    --izun-teal:#0d3b3a; --izun-copper:#c76b3f; --izun-copper-light:#e79a6d;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{ height:100%; }
+  body{
+    min-height:100vh;
+    background: radial-gradient(circle at 50% 0%, #1a2947 0%, #0a1224 60%, #060a15 100%);
+    font-family:'Heebo', sans-serif;
+    padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
+    display:flex; flex-direction:column; align-items:center;
+  }
+
+  .header{ text-align:center; margin-bottom:28px; }
+  .header .kicker{ color:var(--gold); font-size:11px; letter-spacing:.18em; font-weight:700; text-transform:uppercase; }
+  .header h1{ color:#f5f2e9; font-size:22px; font-weight:900; margin-top:8px; }
+  .header .rule{ width:40px; height:2px; background:linear-gradient(90deg,var(--gold),var(--gold-light)); margin:12px auto 0; border-radius:2px; }
+
+  .wrap{ width:100%; max-width:440px; }
+
+  .group-label{
+    display:flex; align-items:center; gap:8px;
+    font-size:11.5px; font-weight:700; letter-spacing:.06em;
+    color:#9aa4c0; margin:22px 2px 10px;
+  }
+  .group-label .dot{ width:7px; height:7px; border-radius:50%; }
+  .group-label.bsd .dot{ background:var(--gold); }
+  .group-label.izun .dot{ background:var(--izun-copper); }
+
+  a.card{
+    display:flex; align-items:center; gap:16px;
+    border-radius:20px; padding:18px 18px;
+    margin-bottom:14px;
+    text-decoration:none;
+    box-shadow: 0 10px 24px -8px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.12) inset;
+    position:relative; overflow:hidden;
+    transition: transform .15s ease;
+  }
+  a.card:active{ transform: scale(0.97); }
+  a.card::after{ content:""; position:absolute; inset:0; background:linear-gradient(120deg, rgba(255,255,255,.13), transparent 60%); }
+
+  .card.crm{ background:linear-gradient(135deg,#16264a,#0a1530); border:1px solid rgba(201,162,75,.4); }
+  .card.contracts{ background:linear-gradient(135deg,#1c3560,#0e1b34); border:1px solid rgba(201,162,75,.4); }
+  .card.cashflow{ background:linear-gradient(135deg,#13453f,#0a2a26); border:1px solid rgba(231,154,109,.45); }
+  .card.disabled{ opacity:.55; filter:grayscale(.3); }
+
+  .card-icon{ flex:0 0 auto; width:56px; height:56px; border-radius:15px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.09); }
+  .card-icon svg{ width:28px; height:28px; }
+
+  .card-text{ flex:1; z-index:1; }
+  .card-text .name{ color:#f7f4ea; font-size:16.5px; font-weight:700; }
+  .card-text .sub{ color:rgba(255,255,255,.62); font-size:11.5px; margin-top:3px; }
+
+  .arrow{ color:rgba(255,255,255,.5); font-size:20px; z-index:1; }
+
+  .footer{ margin-top:auto; padding-top:26px; text-align:center; }
+  .footer p{ color:#7c85a3; font-size:10.5px; line-height:1.6; }
+
+  .install-tip{
+    margin-top:22px; padding:12px 16px; border-radius:14px;
+    background:rgba(255,255,255,.06); border:1px dashed rgba(232,207,138,.35);
+    color:#c7cfe5; font-size:11.5px; line-height:1.7; text-align:center; max-width:440px;
+  }
+  .install-tip b{ color:var(--gold-light); }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="kicker">מרכז השליטה שלי</div>
+    <h1>BSD &amp; Izun</h1>
+    <div class="rule"></div>
+  </div>
+
+  <div class="wrap">
+    <div class="group-label bsd"><span class="dot"></span> BSD BUSINESS BROKERS ISRAEL</div>
+
+    <a class="card crm" href="https://baruchezon.github.io/BSD-CRM/login.html">
+      <div class="card-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#e8cf8a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="8" r="3.2"/><circle cx="17" cy="8" r="2.6"/>
+          <path d="M3.5 20c0-3.3 2-5.5 4.5-5.5s4.5 2.2 4.5 5.5"/>
+          <path d="M13.5 20c0-2.6 1.5-4.3 3.5-4.3s3.5 1.7 3.5 4.3"/>
+        </svg>
+      </div>
+      <div class="card-text">
+        <div class="name">BSD CRM</div>
+        <div class="sub">ניהול עסקים, קונים והתאמות</div>
+      </div>
+      <div class="arrow">‹</div>
+    </a>
+
+    <a class="card contracts" href="https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html">
+      <div class="card-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#e8cf8a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 3.5h9l3.5 3.5V20a.7.7 0 0 1-.7.7H6.7A.7.7 0 0 1 6 20V3.5z"/>
+          <path d="M15 3.5V7h3.5"/><path d="M9 12.5l2 2 4.2-4.2"/>
+        </svg>
+      </div>
+      <div class="card-text">
+        <div class="name">אדמין הסכם</div>
+        <div class="sub">הכנת ושליחת הסכם התקשרות</div>
+      </div>
+      <div class="arrow">‹</div>
+    </a>
+
+    <div class="group-label izun"><span class="dot"></span> איזון תעשיות מתכת</div>
+
+    <a class="card cashflow disabled" href="#" onclick="alert('כתובת מערכת התזרים עדיין לא הוגדרה - נעדכן ברגע שתהיה זמינה.'); return false;">
+      <div class="card-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#e79a6d" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3.5 19.5V13l4-4 3.5 3 5.5-6 4 3.5"/><path d="M3.5 19.5h17"/>
+        </svg>
+      </div>
+      <div class="card-text">
+        <div class="name">תזרים מזומנים</div>
+        <div class="sub">ממתין לכתובת אינטרנט</div>
+      </div>
+      <div class="arrow">‹</div>
+    </a>
+
+    <div class="install-tip">
+      📲 <b>להוספה כאייקון:</b> באנדרואיד/כרום - תפריט (⋮) ← "התקן אפליקציה" / "הוסף למסך הבית".
+      במחשב - סמל ההתקנה (⊕/מסך קטן) בסרגל הכתובת של כרום.
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>ברוך איזון | BSD Business Brokers Israel | bsd-bbi.co.il</p>
+  </div>
+
+</body>
+</html>
