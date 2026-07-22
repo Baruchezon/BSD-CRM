@@ -37,6 +37,21 @@
   tbody tr.row-sent{background:#e08a00 !important;border-right:10px solid #8a5400;}
   tbody tr.row-sent td{color:#fff !important;font-weight:700;}
   tbody tr.row-sent:hover{background:#c97a00 !important;}
+  tbody tr.row-removed{
+    background:
+      linear-gradient(#8a2e2e 0 0) 0 42%/100% 3px no-repeat,
+      linear-gradient(#8a2e2e 0 0) 0 58%/100% 3px no-repeat,
+      #f5d94e !important;
+    border-right:10px solid #b8860b;
+  }
+  tbody tr.row-removed td{color:#5a4a00 !important;font-weight:600;}
+  tbody tr.row-removed:hover{background:
+      linear-gradient(#8a2e2e 0 0) 0 42%/100% 3px no-repeat,
+      linear-gradient(#8a2e2e 0 0) 0 58%/100% 3px no-repeat,
+      #ecd03e !important;}
+  tbody tr.row-sold{background:#2563c9 !important;border-right:10px solid #143a72;}
+  tbody tr.row-sold td{color:#fff !important;font-weight:700;}
+  tbody tr.row-sold:hover{background:#1d54ac !important;}
   .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
   .empty-row td{text-align:center;color:#999;padding:30px;}
   .price{font-weight:700;color:#245c40;}
@@ -201,7 +216,7 @@ function renderTable(){
     if (createdBy !== 'all' && b.created_by !== createdBy) return false;
     if (search){
       const hay = [b.internal_name, b.owner_name, b.owner_phone, b.city, b.field, b.category, b.subcategory, b.status, String(b.asking_price||''),
-        b.short_description, b.sale_reason, b.region, b.address, b.source, b.notes, b.id_number, b.entity_type].join(' ').toLowerCase();
+        b.short_description, b.sale_reason, b.region, b.address, b.source, b.notes, b.id_number, b.entity_type, b.removal_reason, b.sold_to].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -222,8 +237,10 @@ function renderTable(){
   }
   body.innerHTML = rows.map(b=>{
     const agrStatus = b.agreement_status || 'אין הסכם';
-    const rowCls = agrStatus === 'יש הסכם חתום' ? 'row-signed' : (agrStatus === 'נשלח הסכם לחתימה' ? 'row-sent' : 'row-none');
-    const statusEmoji = rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
+    const rowCls = b.listing_status === 'sold' ? 'row-sold'
+      : b.listing_status === 'removed' ? 'row-removed'
+      : agrStatus === 'יש הסכם חתום' ? 'row-signed' : (agrStatus === 'נשלח הסכם לחתימה' ? 'row-sent' : 'row-none');
+    const statusEmoji = rowCls === 'row-sold' ? '🔵 ' : rowCls === 'row-removed' ? '⛔ ' : rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
     return `
     <tr class="${rowCls}">
       <td data-label="שם פנימי"><div class="primary-name" style="font-weight:700;">${statusEmoji}${esc(b.internal_name)}</div>${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}</td>
@@ -267,6 +284,12 @@ function userOptions(selected){
     const label = u.full_name && u.full_name.trim() ? u.full_name : u.email;
     return `<option value="${u.id}" ${u.id===selected?'selected':''}>${esc(label)}</option>`;
   }).join('');
+}
+
+function toggleListingFields(){
+  const v = document.getElementById('listing_status').value;
+  document.getElementById('removalReasonField').style.display = v === 'removed' ? 'block' : 'none';
+  document.getElementById('soldToField').style.display = v === 'sold' ? 'block' : 'none';
 }
 
 function openBizForm(id){
@@ -336,6 +359,24 @@ function openBizForm(id){
           </select>
         </div>
         <div class="field"><label>מטפל בעסק</label><select id="handled_by">${userOptions(biz?.handled_by)}</select></div>
+
+        <div class="section-h">מצב מדף</div>
+        <div class="field">
+          <label>סטטוס מכירה</label>
+          <select id="listing_status" onchange="toggleListingFields()">
+            <option value="active" ${(!biz?.listing_status || biz.listing_status==='active')?'selected':''}>פעיל למכירה</option>
+            <option value="removed" ${biz?.listing_status==='removed'?'selected':''}>ירד מהמדף - לא נמכר</option>
+            <option value="sold" ${biz?.listing_status==='sold'?'selected':''}>נמכר</option>
+          </select>
+        </div>
+        <div class="field" id="removalReasonField" style="display:${biz?.listing_status==='removed'?'block':'none'};">
+          <label>סיבת ההורדה</label>
+          <input type="text" id="removal_reason" value="${esc(biz?.removal_reason)}">
+        </div>
+        <div class="field" id="soldToField" style="display:${biz?.listing_status==='sold'?'block':'none'};">
+          <label>נמכר למי (כמה מילים)</label>
+          <input type="text" id="sold_to" value="${esc(biz?.sold_to)}">
+        </div>
 
         <div class="section-h">הערות</div>
         <div class="field full">${textareaRow('notes','הערות חופשיות', biz?.notes)}</div>
@@ -478,7 +519,10 @@ async function saveBiz(e){
     employees_count: num(g('employees_count')), years_active: num(g('years_active')),
     sale_reason: g('sale_reason'), status: g('status'),
     discretion_level: g('discretion_level'), source: g('source'),
-    agreement_status: g('agreement_status'), handled_by: g('handled_by') || null
+    agreement_status: g('agreement_status'), handled_by: g('handled_by') || null,
+    listing_status: g('listing_status'),
+    removal_reason: g('listing_status') === 'removed' ? g('removal_reason') : null,
+    sold_to: g('listing_status') === 'sold' ? g('sold_to') : null
   };
 
   if (!payload.internal_name){ toast('שם העסק הוא שדה חובה'); return; }
