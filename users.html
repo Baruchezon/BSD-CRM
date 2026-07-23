@@ -21,9 +21,8 @@
   .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
   .badge-admin{background:#1c2333;color:#fff;}
   .badge-manager{background:#2b6fc9;color:#fff;}
-  .badge-broker{background:var(--gold);color:#1c2333;}
-  .badge-user{background:#eef1f6;color:var(--navy);}
-  .badge-viewer{background:#eee;color:#666;}
+  .badge-agent_authorized{background:var(--gold);color:#1c2333;}
+  .badge-agent{background:#eef1f6;color:var(--navy);}
   .badge-active{background:#dff0e4;color:#245c40;}
   .badge-blocked{background:#fbe4e0;color:#832d1f;}
   .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
@@ -64,13 +63,16 @@
   </div>
 
   <div class="role-note">
-    <b>הרשאות לפי תפקיד:</b> Admin — גישה וניהול מלאים לכל המערכת. מנהל — ניהול רחב, ללא ניהול משתמשים.
-    מתווך/משתמש — יצירה ועריכה של קונים/מוכרים/עסקים/התאמות/משימות. צופה בלבד — צפייה בלבד, ללא יצירה/עריכה/מחיקה.
+    <b>הרשאות לפי תפקיד:</b> Admin — גישה וניהול מלאים לכל המערכת, כולל ניהול משתמשים (בלעדיו בלבד).
+    מנהל — הרשאות רחבות כמו Admin, ללא ניהול משתמשים.
+    סוכן מורשה — צופה בכל הנתונים הקיימים, ומזין נתונים חדשים (מתויגים אוטומטית על שמו).
+    סוכן — רואה רק את מה שהזין בעצמו, במערכת אישית ממותגת על שמו.
+    כפתורי "סקר" ו"הצעות התאמה חכמות" מוסתרים כברירת מחדל לסוכן מורשה וסוכן - ניתן להפעיל לכל משתמש בנפרד.
   </div>
 
   <table>
-    <thead><tr><th>שם מלא</th><th>אימייל</th><th>תפקיד</th><th>סטטוס</th><th>כניסה אחרונה</th><th>מס' כניסות</th><th>פעולות</th></tr></thead>
-    <tbody id="usersBody"><tr><td colspan="7" style="text-align:center;padding:30px;color:#999;">טוען...</td></tr></tbody>
+    <thead><tr><th>שם מלא</th><th>אימייל</th><th>תפקיד</th><th>הרשאות נוספות</th><th>סטטוס</th><th>כניסה אחרונה</th><th>מס' כניסות</th><th>פעולות</th></tr></thead>
+    <tbody id="usersBody"><tr><td colspan="8" style="text-align:center;padding:30px;color:#999;">טוען...</td></tr></tbody>
   </table>
 </div>
 
@@ -82,7 +84,7 @@
 <script src="js/auth.js"></script>
 <script>
 let ALL_USERS = [];
-const ROLE_LABELS = {admin:'Admin', manager:'מנהל', broker:'מתווך', user:'משתמש', viewer:'צופה בלבד'};
+const ROLE_LABELS = {admin:'Admin', manager:'מנהל', agent_authorized:'סוכן מורשה', agent:'סוכן'};
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDateTime(iso){ if(!iso) return 'מעולם לא'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
@@ -102,13 +104,15 @@ async function loadUsers(){
 
 function renderTable(){
   const body = document.getElementById('usersBody');
-  if (ALL_USERS.length === 0){ body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#999;">אין משתמשים</td></tr>'; return; }
+  if (ALL_USERS.length === 0){ body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#999;">אין משתמשים</td></tr>'; return; }
   body.innerHTML = ALL_USERS.map(u=>{
     const name = u.full_name && u.full_name.trim() ? u.full_name : '—';
+    const perms = [u.can_use_survey ? '🔍 סקר' : null, u.can_use_ai_match ? '🧠 התאמות' : null].filter(Boolean).join(', ') || '—';
     return `<tr>
       <td data-label="שם מלא">${esc(name)}</td>
       <td data-label="אימייל">${esc(u.email)}</td>
       <td data-label="תפקיד"><span class="badge badge-${u.role}">${ROLE_LABELS[u.role]||u.role}</span></td>
+      <td data-label="הרשאות נוספות" style="font-size:.75rem;color:#666;">${perms}</td>
       <td data-label="סטטוס"><span class="badge badge-${u.status}">${u.status==='active'?'פעיל':'חסום'}</span></td>
       <td data-label="כניסה אחרונה">${fmtDateTime(u.last_login_at)}</td>
       <td data-label="מס' כניסות">${u.login_count||0}</td>
@@ -116,6 +120,7 @@ function renderTable(){
         <button title="ערוך" onclick="openEditForm('${u.id}')">✏️</button>
         <button title="${u.status==='active'?'חסום':'הפעל'}" onclick="toggleStatus('${u.id}','${u.status}')">${u.status==='active'?'🚫':'✅'}</button>
         <button title="איפוס סיסמה" onclick="resetPassword('${u.email}')">🔑</button>
+        ${u.role !== 'admin' ? `<button title="מחיקת משתמש" onclick="deleteUser('${u.id}','${esc(name)}')">🗑️</button>` : ''}
       </td>
     </tr>`;
   }).join('');
@@ -141,6 +146,11 @@ function openEditForm(id){
         <div class="field"><label>תחום התמחות</label><input id="specialization" value="${esc(u.specialization)}"></div>
         <div class="field"><label>מספר רישיון</label><input id="license_number" value="${esc(u.license_number)}"></div>
         <div class="field"><label>תפקיד במערכת</label><select id="role">${roleOptions(u.role)}</select></div>
+        <div class="field full">
+          <label>הרשאות נוספות</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-left:18px;"><input type="checkbox" id="can_survey" style="width:auto;" ${u.can_use_survey?'checked':''}> אפשר כפתור "סקר"</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="can_ai_match" style="width:auto;" ${u.can_use_ai_match?'checked':''}> אפשר כפתור "הצעות התאמה חכמות"</label>
+        </div>
         <div class="field full"><label>הערות</label><textarea id="notes">${esc(u.notes)}</textarea></div>
       </div>
       <div class="modal-actions">
@@ -162,7 +172,9 @@ async function saveEdit(e){
     first_name: g('first_name'), last_name: g('last_name'), phone: g('phone'),
     city: g('city'), company: g('company'), job_title: g('job_title'),
     specialization: g('specialization'), license_number: g('license_number'),
-    role: g('role'), notes: g('notes')
+    role: g('role'), notes: g('notes'),
+    can_use_survey: document.getElementById('can_survey').checked,
+    can_use_ai_match: document.getElementById('can_ai_match').checked
   };
   const { error } = await window.supabaseClient.from('profiles').update(payload).eq('id', id);
   if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
@@ -187,6 +199,26 @@ async function resetPassword(email){
   toast('נשלח מייל איפוס סיסמה אל ' + email);
 }
 
+async function deleteUser(id, name){
+  if (!confirm(`בטוח שברצונך למחוק לצמיתות את המשתמש "${name}"? הפעולה בלתי הפיכה.`)) return;
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (!session){ toast('פג תוקף החיבור, התחבר מחדש'); return; }
+  const functionUrl = window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/delete-user';
+  try {
+    const resp = await fetch(functionUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ user_id: id })
+    });
+    const result = await resp.json();
+    if (!resp.ok){ toast('שגיאה: ' + (result.error || 'לא ידועה')); return; }
+    toast('המשתמש נמחק');
+    await loadUsers();
+  } catch (err){
+    toast('שגיאת רשת: ' + err.message + ' (יש לוודא שה-Edge Function נפרסה)');
+  }
+}
+
 function openCreateForm(){
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
@@ -199,7 +231,12 @@ function openCreateForm(){
         <div class="field"><label>שם משפחה</label><input id="new_last_name"></div>
         <div class="field"><label>טלפון</label><input id="new_phone"></div>
         <div class="field"><label>עיר</label><input id="new_city"></div>
-        <div class="field"><label>תפקיד במערכת</label><select id="new_role">${roleOptions('user')}</select></div>
+        <div class="field"><label>תפקיד במערכת</label><select id="new_role">${roleOptions('agent')}</select></div>
+        <div class="field full">
+          <label>הרשאות נוספות</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-left:18px;"><input type="checkbox" id="new_can_survey" style="width:auto;"> אפשר כפתור "סקר"</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="new_can_ai_match" style="width:auto;"> אפשר כפתור "הצעות התאמה חכמות"</label>
+        </div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
@@ -230,7 +267,9 @@ async function createUser(e){
       body: JSON.stringify({
         email: g('new_email'), password: g('new_password'),
         first_name: g('new_first_name'), last_name: g('new_last_name'),
-        phone: g('new_phone'), city: g('new_city'), role: g('new_role')
+        phone: g('new_phone'), city: g('new_city'), role: g('new_role'),
+        can_use_survey: document.getElementById('new_can_survey').checked,
+        can_use_ai_match: document.getElementById('new_can_ai_match').checked
       })
     });
     const result = await resp.json();
