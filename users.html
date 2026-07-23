@@ -118,7 +118,7 @@ function renderTable(){
       <td data-label="מס' כניסות">${u.login_count||0}</td>
       <td class="row-actions" data-label="">
         <button title="ערוך" onclick="openEditForm('${u.id}')">✏️</button>
-        <button title="${u.status==='active'?'חסום':'הפעל'}" onclick="toggleStatus('${u.id}','${u.status}')">${u.status==='active'?'🚫':'✅'}</button>
+        ${u.role !== 'admin' ? `<button title="${u.status==='active'?'חסום':'הפעל'}" onclick="toggleStatus('${u.id}','${u.status}')">${u.status==='active'?'🚫':'✅'}</button>` : ''}
         <button title="איפוס סיסמה" onclick="resetPassword('${u.email}')">🔑</button>
         ${u.role !== 'admin' ? `<button title="מחיקת משתמש" onclick="deleteUser('${u.id}','${esc(name)}')">🗑️</button>` : ''}
       </td>
@@ -184,6 +184,8 @@ async function saveEdit(e){
 }
 
 async function toggleStatus(id, currentStatus){
+  const u = ALL_USERS.find(x=>x.id===id);
+  if (u && u.role === 'admin'){ toast('לא ניתן לחסום משתמש בתפקיד Admin'); return; }
   const newStatus = currentStatus === 'active' ? 'blocked' : 'active';
   const label = newStatus === 'blocked' ? 'לחסום' : 'להפעיל';
   if (!confirm(`בטוח שברצונך ${label} משתמש זה?`)) return;
