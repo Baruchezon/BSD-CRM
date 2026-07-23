@@ -31,15 +31,15 @@
   .agr-none{background:#f1f1f1;color:#777;}
   .agr-sent{background:#fdeccb;color:#8a5a10;}
   .agr-signed{background:#dff0e4;color:#245c40;}
-  tbody tr.row-signed{background:#16a34a !important;border-right:10px solid #0b5e29;}
-  tbody tr.row-signed td{color:#fff !important;font-weight:700;}
-  tbody tr.row-signed:hover{background:#128a3e !important;}
+  tbody tr.row-signed{background:#d9f2e3 !important;border-right:10px solid #2e9e5b;}
+  tbody tr.row-signed td{color:#1a5c38 !important;font-weight:600;}
+  tbody tr.row-signed:hover{background:#c8ecd6 !important;}
   tbody tr.row-sent{background:#e08a00 !important;border-right:10px solid #8a5400;}
   tbody tr.row-sent td{color:#fff !important;font-weight:700;}
   tbody tr.row-sent:hover{background:#c97a00 !important;}
-  tbody tr.row-removed{background:#fff8d6 !important;border-right:10px solid #e0c94a;}
-  tbody tr.row-removed td{color:#6b5a00 !important;font-weight:600;}
-  tbody tr.row-removed:hover{background:#fdf0b0 !important;}
+  tbody tr.row-removed{background:#fbdcdc !important;border-right:10px solid #c94a4a;}
+  tbody tr.row-removed td{color:#7a1f1f !important;font-weight:600;}
+  tbody tr.row-removed:hover{background:#f7c8c8 !important;}
   tbody tr.row-sold{background:#2563c9 !important;border-right:10px solid #143a72;}
   tbody tr.row-sold td{color:#fff !important;font-weight:700;}
   tbody tr.row-sold:hover{background:#1d54ac !important;}
@@ -235,7 +235,7 @@ function renderTable(){
     return `
     <tr class="${rowCls}">
       <td data-label="שם פנימי"><div class="primary-name" style="font-weight:700;">${statusEmoji}${esc(b.internal_name)}</div>${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}</td>
-      <td data-label="טלפון בעלים" class="phone-cell">${b.owner_phone ? `<a href="tel:${esc(b.owner_phone)}" style="color:inherit;text-decoration:none;">📞 ${esc(b.owner_phone)}</a>` : '—'}</td>
+      <td data-label="טלפון בעלים" class="phone-cell">${b.owner_phone ? esc(b.owner_phone) : '—'}</td>
       <td data-label="תחום">${esc(b.field||'—')}</td>
       <td data-label="עיר">${esc(b.city||'—')}</td>
       <td class="price" data-label="מחיר מבוקש">${fmtMoney(b.asking_price)}</td>
