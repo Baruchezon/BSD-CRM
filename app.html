@@ -76,8 +76,11 @@
       <div id="welcomeBlessing" style="color:var(--gold);font-size:.85rem;font-weight:600;margin-top:4px;"></div>
     </div>
     <div>
-      <button id="aiMatchBtn" onclick="runAiMatchSuggestions()" style="background:var(--gold);color:#1c2333;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.15);">
+      <button id="aiMatchBtn" onclick="runAiMatchSuggestions()" style="background:var(--gold);color:#1c2333;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.15);margin-left:10px;">
         🧠 קבל הצעות התאמה חכמות
+      </button>
+      <button id="surveyBtn" onclick="openSurveyModal()" style="background:var(--navy);color:#fff;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.15);">
+        🔍 סקר
       </button>
     </div>
   </div>
@@ -423,6 +426,142 @@ async function emailAiMatchSuggestions(){
   } finally {
     if (btn){ btn.disabled = false; btn.textContent = '📧 שלח גם למייל'; }
   }
+}
+
+let SURVEY_TARGET_TYPE = 'business';
+
+function closeSurveyModal(){
+  const ov = document.getElementById('surveyOverlay');
+  if (ov) ov.remove();
+}
+
+async function openSurveyModal(){
+  closeSurveyModal();
+  const overlay = document.createElement('div');
+  overlay.id = 'surveyOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:90;padding:40px 20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">סקר</h3>
+
+      <div style="display:flex;gap:10px;margin-bottom:18px;">
+        <button id="surveyTypeBiz" onclick="setSurveyType('business')" style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--navy);background:var(--navy);color:#fff;font-family:inherit;font-weight:700;cursor:pointer;">🏢 עסק</button>
+        <button id="surveyTypeBuyer" onclick="setSurveyType('buyer')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #d8d3c4;background:#fff;color:var(--navy);font-family:inherit;font-weight:700;cursor:pointer;">👤 קונה / משקיע</button>
+      </div>
+
+      <div id="surveyPickFromList" style="margin-bottom:14px;">
+        <label style="display:block;font-size:.8rem;color:#666;margin-bottom:5px;">בחר מהרשימה</label>
+        <select id="surveySelect" style="width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;">
+          <option value="">טוען...</option>
+        </select>
+      </div>
+
+      <div style="text-align:center;color:#999;font-size:.78rem;margin:10px 0;">— או —</div>
+
+      <div id="surveyManualBiz" style="margin-bottom:14px;">
+        <label style="display:block;font-size:.8rem;color:#666;margin-bottom:5px;">הזנה ידנית - שם העסק</label>
+        <input type="text" id="manualBizName" placeholder="שם העסק" style="width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;">
+      </div>
+      <div id="surveyManualBuyer" style="display:none;margin-bottom:14px;">
+        <label style="display:block;font-size:.8rem;color:#666;margin-bottom:5px;">הזנה ידנית - שם ו/או טלפון</label>
+        <input type="text" id="manualBuyerName" placeholder="שם מלא" style="width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;margin-bottom:8px;">
+        <input type="text" id="manualBuyerPhone" placeholder="טלפון" style="width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;">
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px;">
+        <button onclick="closeSurveyModal()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
+        <button id="surveyRunBtn" onclick="runSurvey()" style="background:var(--gold);color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">בצע סקר</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  await loadSurveyList('business');
+}
+
+function setSurveyType(type){
+  SURVEY_TARGET_TYPE = type;
+  document.getElementById('surveyTypeBiz').style.background = type==='business' ? 'var(--navy)' : '#fff';
+  document.getElementById('surveyTypeBiz').style.color = type==='business' ? '#fff' : 'var(--navy)';
+  document.getElementById('surveyTypeBuyer').style.background = type==='buyer' ? 'var(--navy)' : '#fff';
+  document.getElementById('surveyTypeBuyer').style.color = type==='buyer' ? '#fff' : 'var(--navy)';
+  document.getElementById('surveyManualBiz').style.display = type==='business' ? 'block' : 'none';
+  document.getElementById('surveyManualBuyer').style.display = type==='buyer' ? 'block' : 'none';
+  loadSurveyList(type);
+}
+
+async function loadSurveyList(type){
+  const sel = document.getElementById('surveySelect');
+  sel.innerHTML = '<option value="">טוען...</option>';
+  if (type === 'business'){
+    const { data } = await window.supabaseClient.from('businesses').select('id, internal_name').order('internal_name');
+    sel.innerHTML = '<option value="">— בחר עסק —</option>' + (data||[]).map(b=>`<option value="${b.id}">${esc(b.internal_name)}</option>`).join('');
+  } else {
+    const { data } = await window.supabaseClient.from('leads').select('id, full_name, phone').eq('type','buyer').order('full_name');
+    sel.innerHTML = '<option value="">— בחר קונה/משקיע —</option>' + (data||[]).map(l=>`<option value="${l.id}">${esc(l.full_name)} (${esc(l.phone||'')})</option>`).join('');
+  }
+}
+
+async function runSurvey(){
+  const btn = document.getElementById('surveyRunBtn');
+  const selectedId = document.getElementById('surveySelect').value;
+  let payload = { target_type: SURVEY_TARGET_TYPE };
+
+  if (SURVEY_TARGET_TYPE === 'business'){
+    if (selectedId) payload.business_id = selectedId;
+    else payload.manual_name = document.getElementById('manualBizName').value.trim();
+  } else {
+    if (selectedId) payload.lead_id = selectedId;
+    else {
+      payload.manual_name = document.getElementById('manualBuyerName').value.trim();
+      payload.manual_phone = document.getElementById('manualBuyerPhone').value.trim();
+    }
+  }
+
+  if (!payload.business_id && !payload.lead_id && !payload.manual_name && !payload.manual_phone){
+    toast('נא לבחור מהרשימה או להזין פרטים ידנית');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'מבצע סקר...';
+  try {
+    const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/survey-report', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ ...payload, send_email: false })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error){
+      toast('שגיאה בביצוע הסקר: ' + (data.error || res.status));
+    } else {
+      renderSurveyResultModal(data);
+    }
+  } catch (e) {
+    toast('שגיאה בחיבור: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'בצע סקר';
+  }
+}
+
+function renderSurveyResultModal(data){
+  closeSurveyModal();
+  const overlay = document.createElement('div');
+  overlay.id = 'surveyResultOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:90;padding:40px 20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:680px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">תוצאות הסקר - ${esc(data.subject_name || '')}</h3>
+      <div style="max-height:55vh;overflow-y:auto;font-size:.88rem;line-height:1.7;color:#333;white-space:pre-wrap;">${esc(data.report_text || 'לא נמצא מידע')}</div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;">
+        <button onclick="document.getElementById('surveyResultOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
+        <button onclick="toast('שליחה למייל תתאפשר לאחר חיבור מפתח ה-AI')" style="background:var(--navy);color:#fff;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">📧 שלח גם למייל</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
 }
 
 (async function init(){
