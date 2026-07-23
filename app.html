@@ -337,16 +337,20 @@ function closeAiModal(){
 
 function renderAiMatchModal(suggestions){
   closeAiModal();
-  const rowsHtml = suggestions.length ? suggestions.map(s => `
-    <tr>
+  const tierBg = { white: '#ffffff', yellow: '#fff8d6', blue: '#dbeeff' };
+  const tierBadge = { white: 'background:#e8e8e8;color:#666;', yellow: 'background:#f5d94e;color:#6b5a00;', blue: 'background:#8ec6f0;color:#0a3a5c;' };
+  const rowsHtml = suggestions.length ? suggestions.map(s => {
+    const tier = s.tier || (s.score > 60 ? 'blue' : s.score >= 50 ? 'yellow' : 'white');
+    return `
+    <tr style="background:${tierBg[tier]};">
       <td style="padding:8px 10px;border-bottom:1px solid #f0ede4;">${esc(s.buyer)}</td>
       <td style="padding:8px 10px;border-bottom:1px solid #f0ede4;">${esc(s.business)}</td>
       <td style="padding:8px 10px;border-bottom:1px solid #f0ede4;text-align:center;">
-        <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-weight:700;font-size:.78rem;
-          background:${s.score>=75?'#dff0e4':'#fdeccb'};color:${s.score>=75?'#245c40':'#8a5a10'};">${s.score}%</span>
+        <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-weight:700;font-size:.78rem;${tierBadge[tier]}">${s.score}%</span>
       </td>
       <td style="padding:8px 10px;border-bottom:1px solid #f0ede4;color:#666;font-size:.78rem;">${esc(s.reason)}</td>
-    </tr>`).join('') : `<tr><td colspan="4" style="padding:20px;text-align:center;color:#999;">לא נמצאו הצעות התאמה מובהקות הפעם</td></tr>`;
+    </tr>`;
+  }).join('') : `<tr><td colspan="4" style="padding:20px;text-align:center;color:#999;">אין נתונים</td></tr>`;
 
   const overlay = document.createElement('div');
   overlay.id = 'aiMatchOverlay';
@@ -354,7 +358,7 @@ function renderAiMatchModal(suggestions){
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:14px;max-width:720px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
       <h3 style="margin:0 0 6px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">הצעות התאמה חכמות</h3>
-      <p style="color:#777;font-size:.82rem;margin:6px 0 16px;">נמצאו ${suggestions.length} הצעות עם פוטנציאל (מעל 50% התאמה). זו המלצה בלבד - תבחר אילו להוסיף בפועל כהתאמה.</p>
+      <p style="color:#777;font-size:.82rem;margin:6px 0 16px;">${suggestions.length} צירופים נבדקו. 🟡 צהוב = 50-60% התאמה, 🔵 כחול = מעל 60%. זו המלצה בלבד - תבחר אילו להוסיף בפועל כהתאמה.</p>
       <div style="max-height:50vh;overflow-y:auto;border:1px solid #f0ede4;border-radius:8px;">
         <table style="width:100%;border-collapse:collapse;font-size:.85rem;">
           <thead><tr style="background:#f7f5ef;position:sticky;top:0;">
