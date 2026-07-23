@@ -284,7 +284,7 @@ function renderTable(){
     return `<tr class="${rowCls}">
       <td data-label="שם / עסק">${nameCell}</td>
       <td data-label="סוג">${typeBadge}</td>
-      <td data-label="טלפון" class="phone-cell">${fmtPhone(l.phone)}</td>
+      <td data-label="טלפון" class="phone-cell">${l.phone ? `<a href="tel:${esc(l.phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(l.phone)}</a>` : '—'}</td>
       <td data-label="עיר">${cityCell}</td>
       <td data-label="אימייל" class="email-cell" title="${esc(l.email||'')}">${esc(l.email||'—')}</td>
       <td data-label="הוזן ע&quot;י">${l.created_by ? esc(userName(l.created_by)) : 'לא ידוע'}</td>
