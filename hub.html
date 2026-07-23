@@ -66,6 +66,20 @@
 
   .card-icon{ flex:0 0 auto; width:56px; height:56px; border-radius:15px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.09); }
   .card-icon svg{ width:28px; height:28px; }
+  .card-icon.round{ border-radius:50%; }
+
+  @media (min-width:600px){
+    .wrap{ max-width:640px; }
+    a.card{ padding:26px 26px; margin-bottom:20px; border-radius:26px; }
+    .card-icon{ width:84px; height:84px; }
+    .card-icon.round{ border-radius:50%; }
+    .card-icon:not(.round){ border-radius:22px; }
+    .card-icon svg{ width:42px; height:42px; }
+    .card-text .name{ font-size:21px; }
+    .card-text .sub{ font-size:14px; margin-top:5px; }
+    .arrow{ font-size:26px; }
+    .header h1{ font-size:28px; }
+  }
 
   .card-text{ flex:1; z-index:1; }
   .card-text .name{ color:#f7f4ea; font-size:16.5px; font-weight:700; }
@@ -96,7 +110,7 @@
     <div class="group-label bsd"><span class="dot"></span> BSD BUSINESS BROKERS ISRAEL</div>
 
     <a class="card crm" href="https://baruchezon.github.io/BSD-CRM/login.html">
-      <div class="card-icon">
+      <div class="card-icon round">
         <svg viewBox="0 0 24 24" fill="none" stroke="#e8cf8a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="8" cy="8" r="3.2"/><circle cx="17" cy="8" r="2.6"/>
           <path d="M3.5 20c0-3.3 2-5.5 4.5-5.5s4.5 2.2 4.5 5.5"/>
@@ -111,7 +125,7 @@
     </a>
 
     <a class="card contracts" href="https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html">
-      <div class="card-icon">
+      <div class="card-icon round">
         <svg viewBox="0 0 24 24" fill="none" stroke="#e8cf8a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
           <path d="M6 3.5h9l3.5 3.5V20a.7.7 0 0 1-.7.7H6.7A.7.7 0 0 1 6 20V3.5z"/>
           <path d="M15 3.5V7h3.5"/><path d="M9 12.5l2 2 4.2-4.2"/>
@@ -138,6 +152,11 @@
       </div>
       <div class="arrow">‹</div>
     </a>
+
+    <div class="install-tip">
+      📲 <b>להוספה כאייקון:</b> באנדרואיד/כרום - תפריט (⋮) ← "התקן אפליקציה" / "הוסף למסך הבית".
+      במחשב - סמל ההתקנה (⊕/מסך קטן) בסרגל הכתובת של כרום.
+    </div>
   </div>
 
   <div class="footer">
