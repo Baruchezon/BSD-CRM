@@ -211,8 +211,8 @@ async function deleteUser(id, name){
       body: JSON.stringify({ user_id: id })
     });
     const result = await resp.json();
-    if (!resp.ok){ toast('שגיאה: ' + (result.error || 'לא ידועה')); return; }
-    toast('המשתמש נמחק');
+    if (!resp.ok){ toast('שגיאה: ' + (result.error || 'לא ידועה') + (result.raw ? (' | ' + result.raw) : '')); return; }
+    toast(result.warning ? ('נמחק עם אזהרה: ' + result.warning) : 'המשתמש נמחק');
     await loadUsers();
   } catch (err){
     toast('שגיאת רשת: ' + err.message + ' (יש לוודא שה-Edge Function נפרסה)');
