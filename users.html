@@ -393,7 +393,7 @@ function openCreateForm(){
     <form id="createForm">
       <div class="form-grid">
         <div class="field"><label>אימייל</label><input type="email" id="new_email" required></div>
-        <div class="field" style="display:flex;align-items:flex-end;font-size:.78rem;color:#666;padding-bottom:9px;">📧 המשתמש יקבל מייל הזמנה ויקבע סיסמה בעצמו</div>
+        <div class="field"><label>סיסמה זמנית</label><input type="text" id="new_password" required minlength="6"></div>
         <div class="field"><label>שם פרטי</label><input id="new_first_name"></div>
         <div class="field"><label>שם משפחה</label><input id="new_last_name"></div>
         <div class="field"><label>טלפון</label><input id="new_phone"></div>
@@ -432,7 +432,7 @@ async function createUser(e){
         'Authorization': 'Bearer ' + session.access_token
       },
       body: JSON.stringify({
-        email: g('new_email'),
+        email: g('new_email'), password: g('new_password'),
         first_name: g('new_first_name'), last_name: g('new_last_name'),
         phone: g('new_phone'), city: g('new_city'), role: g('new_role'),
         can_use_survey: document.getElementById('new_can_survey').checked,
@@ -441,7 +441,7 @@ async function createUser(e){
     });
     const result = await resp.json();
     if (!resp.ok){ toast('שגיאה: ' + (result.error || 'לא ידועה')); return; }
-    toast('הזמנה נשלחה למייל - המשתמש יקבע סיסמה בעצמו');
+    toast('המשתמש נוצר בהצלחה');
     closeModal();
     await loadUsers();
   } catch (err){
