@@ -71,6 +71,7 @@
     <a href="tasks.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משימות</a>
     <a id="navUsersLink" href="users.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משתמשים</a>
   </div>
+  <button class="logout" onclick="openChangePassword()" style="margin-left:8px;">🔑 שנה סיסמה</button>
   <button class="logout" onclick="bsdLogout()">יציאה</button>
 </div>
 
@@ -643,6 +644,36 @@ function forceSetPassword(){
       resolve();
     });
   });
+}
+
+function openChangePassword(){
+  const overlay = document.createElement('div');
+  overlay.id = 'changePwdOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:400px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">שינוי סיסמה</h3>
+      <input type="password" id="changePwd1" placeholder="סיסמה חדשה" minlength="6" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;margin-bottom:10px;">
+      <input type="password" id="changePwd2" placeholder="אימות סיסמה" minlength="6" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;margin-bottom:10px;">
+      <div id="changePwdMsg" style="color:#b00020;font-size:.8rem;min-height:18px;margin-bottom:8px;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button onclick="document.getElementById('changePwdOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
+        <button onclick="submitChangePassword()" style="background:var(--gold);color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שמור סיסמה</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function submitChangePassword(){
+  const p1 = document.getElementById('changePwd1').value;
+  const p2 = document.getElementById('changePwd2').value;
+  const msg = document.getElementById('changePwdMsg');
+  if (p1.length < 6){ msg.textContent = 'הסיסמה חייבת להכיל לפחות 6 תווים'; return; }
+  if (p1 !== p2){ msg.textContent = 'הסיסמאות אינן תואמות'; return; }
+  const { error } = await window.supabaseClient.auth.updateUser({ password: p1 });
+  if (error){ msg.textContent = 'שגיאה: ' + error.message; return; }
+  document.getElementById('changePwdOverlay').remove();
+  toast('הסיסמה עודכנה בהצלחה');
 }
 
 (async function init(){
