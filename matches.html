@@ -112,9 +112,27 @@ function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace
 function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
 function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
 function toast(msg){
-  const box = document.getElementById('toastBox');
-  const el = document.createElement('div'); el.className='toast'; el.textContent = msg;
-  box.appendChild(el); setTimeout(()=>el.remove(), 3000);
+  let box = document.getElementById('toastBox');
+  if (!box){
+    box = document.createElement('div');
+    box.id = 'toastBox';
+    box.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:200;display:flex;flex-direction:column;gap:8px;max-width:380px;';
+    document.body.appendChild(box);
+  }
+  const isError = /שגיאה|error/i.test(msg);
+  const el = document.createElement('div');
+  el.style.cssText = `background:${isError ? '#b00020' : 'var(--navy,#0e1b34)'};color:#fff;padding:14px 18px;border-radius:10px;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.35);display:flex;align-items:flex-start;gap:10px;line-height:1.5;`;
+  const textSpan = document.createElement('span');
+  textSpan.style.flex = '1';
+  textSpan.textContent = msg;
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '×';
+  closeBtn.style.cssText = 'background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;line-height:1;padding:0;';
+  closeBtn.onclick = () => el.remove();
+  el.appendChild(textSpan);
+  el.appendChild(closeBtn);
+  box.appendChild(el);
+  setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
 }
 function closeModal(){
   document.getElementById('overlay').classList.remove('open');
