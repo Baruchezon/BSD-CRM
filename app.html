@@ -178,12 +178,43 @@ function periodStartDate(period){
   return d.toISOString();
 }
 
+let CURRENT_PROFILE = null;
+let AGENT_OWN_BIZ_IDS = null;
+let AGENT_OWN_LEAD_IDS = null;
+
 async function count(table, build){
   let q = window.supabaseClient.from(table).select('*', { count: 'exact', head: true });
   if (build) q = build(q);
   const { count, error } = await q;
   if (error){ console.error(table, error); return 0; }
   return count || 0;
+}
+
+// לתפקיד סוכן - מגביל ספירות ל-created_by שלו בלבד
+function ownFilter(q){
+  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
+    return q.eq('created_by', CURRENT_PROFILE.id);
+  }
+  return q;
+}
+
+// עבור טבלת matches (אין בה created_by ישיר) - מביא מראש את מזהי העסקים/הקונים
+// של הסוכן, כדי לסנן matches ששייכים אליהם
+async function loadAgentOwnIds(){
+  if (!CURRENT_PROFILE || CURRENT_PROFILE.role !== 'agent') return;
+  const [bizRes, leadRes] = await Promise.all([
+    window.supabaseClient.from('businesses').select('id').eq('created_by', CURRENT_PROFILE.id),
+    window.supabaseClient.from('leads').select('id').eq('created_by', CURRENT_PROFILE.id)
+  ]);
+  AGENT_OWN_BIZ_IDS = (bizRes.data || []).map(r => r.id);
+  AGENT_OWN_LEAD_IDS = (leadRes.data || []).map(r => r.id);
+}
+
+function matchesOwnFilter(q){
+  if (!CURRENT_PROFILE || CURRENT_PROFILE.role !== 'agent') return q;
+  const bizList = (AGENT_OWN_BIZ_IDS && AGENT_OWN_BIZ_IDS.length) ? AGENT_OWN_BIZ_IDS.join(',') : 'null';
+  const leadList = (AGENT_OWN_LEAD_IDS && AGENT_OWN_LEAD_IDS.length) ? AGENT_OWN_LEAD_IDS.join(',') : 'null';
+  return q.or(`business_id.in.(${bizList}),lead_id.in.(${leadList})`);
 }
 
 const WARM_BLESSINGS = [
@@ -214,15 +245,15 @@ function getGreeting(){
 }
 
 async function loadGeneral(){
-  document.getElementById('k_buyers').textContent = await count('leads', q=>q.eq('type','buyer'));
-  document.getElementById('k_sellers').textContent = await count('leads', q=>q.eq('type','seller'));
-  document.getElementById('k_businesses').textContent = await count('businesses');
-  document.getElementById('k_matches').textContent = await count('matches', q=>q.not('status','in','("העסקה נסגרה","העסקה נעצרה")'));
+  document.getElementById('k_buyers').textContent = await count('leads', q=>ownFilter(q.eq('type','buyer')));
+  document.getElementById('k_sellers').textContent = await count('leads', q=>ownFilter(q.eq('type','seller')));
+  document.getElementById('k_businesses').textContent = await count('businesses', q=>ownFilter(q));
+  document.getElementById('k_matches').textContent = await count('matches', q=>matchesOwnFilter(q.not('status','in','("העסקה נסגרה","העסקה נעצרה")')));
   document.getElementById('k_activeUsers').textContent = await count('profiles', q=>q.eq('status','active'));
   document.getElementById('k_tasks').textContent = await count('tasks', q=>q.eq('status','פתוחה'));
-  document.getElementById('k_awaiting').textContent = await count('matches', q=>q.eq('status','ממתין לתגובה'));
-  document.getElementById('k_negotiation').textContent = await count('matches', q=>q.eq('status','במשא ומתן'));
-  document.getElementById('k_closed').textContent = await count('matches', q=>q.eq('status','העסקה נסגרה'));
+  document.getElementById('k_awaiting').textContent = await count('matches', q=>matchesOwnFilter(q.eq('status','ממתין לתגובה')));
+  document.getElementById('k_negotiation').textContent = await count('matches', q=>matchesOwnFilter(q.eq('status','במשא ומתן')));
+  document.getElementById('k_closed').textContent = await count('matches', q=>matchesOwnFilter(q.eq('status','העסקה נסגרה')));
   document.getElementById('k_meetings').textContent = await count('activity_thread', q=>q.eq('activity_type','פגישה'));
 
   const thirtyDaysAgo = new Date(Date.now() - 30*24*60*60*1000).toISOString();
@@ -241,10 +272,10 @@ async function loadPeriod(){
     return q;
   }
 
-  document.getElementById('p_newBuyers').textContent = await count('leads', q=>applyRange(q.eq('type','buyer')));
-  document.getElementById('p_newSellers').textContent = await count('leads', q=>applyRange(q.eq('type','seller')));
-  document.getElementById('p_newBusinesses').textContent = await count('businesses', q=>applyRange(q));
-  document.getElementById('p_newMatches').textContent = await count('matches', q=>applyRange(q));
+  document.getElementById('p_newBuyers').textContent = await count('leads', q=>ownFilter(applyRange(q.eq('type','buyer'))));
+  document.getElementById('p_newSellers').textContent = await count('leads', q=>ownFilter(applyRange(q.eq('type','seller'))));
+  document.getElementById('p_newBusinesses').textContent = await count('businesses', q=>ownFilter(applyRange(q)));
+  document.getElementById('p_newMatches').textContent = await count('matches', q=>matchesOwnFilter(applyRange(q)));
 }
 
 async function loadGauges(){
@@ -571,6 +602,8 @@ function renderSurveyResultModal(data){
 (async function init(){
   const profile = await requireAuth();
   if (!profile) return;
+  CURRENT_PROFILE = profile;
+  await loadAgentOwnIds();
 
   const { timeGreeting, blessing } = getGreeting();
   const displayName = profile.full_name && profile.full_name.trim() ? profile.full_name : profile.email;
