@@ -75,7 +75,22 @@
     <thead><tr><th>שם מלא</th><th>אימייל</th><th>תפקיד</th><th>הרשאות נוספות</th><th>סטטוס</th><th>כניסה אחרונה</th><th>מס' כניסות</th><th>פעולות</th></tr></thead>
     <tbody id="usersBody"><tr><td colspan="8" style="text-align:center;padding:30px;color:#999;">טוען...</td></tr></tbody>
   </table>
+
+  <div class="toolbar" style="margin-top:34px;">
+    <h2>היסטוריית פעילות משתמשים</h2>
+  </div>
+  <div style="max-height:420px;overflow-y:scroll;border:1px solid #eee;border-radius:10px;scrollbar-width:thin;">
+    <table style="margin:0;">
+      <thead><tr><th>משתמש</th><th>פעולה</th><th>סוג ישות</th><th>תאריך ושעה</th></tr></thead>
+      <tbody id="activityBody"><tr><td colspan="4" style="text-align:center;padding:20px;color:#999;">טוען...</td></tr></tbody>
+    </table>
+  </div>
+  <div style="text-align:center;margin-top:10px;">
+    <button id="loadMoreActivityBtn" onclick="loadActivityLog(false)" class="btn btn-ghost">טען היסטוריה נוספת</button>
+  </div>
 </div>
+
+<div class="overlay" id="activityOverlay"><div class="modal" id="activityModalBox"></div></div>
 
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
@@ -89,12 +104,88 @@ const ROLE_LABELS = {admin:'Admin', manager:'מנהל', agent_authorized:'סוכ
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDateTime(iso){ if(!iso) return 'מעולם לא'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
+function userName(id){
+  const u = ALL_USERS.find(x => x.id === id);
+  return u ? ((u.full_name && u.full_name.trim()) ? u.full_name : u.email) : (id ? 'משתמש לא ידוע' : '—');
+}
 function toast(msg){
   const box = document.getElementById('toastBox');
   const el = document.createElement('div'); el.className='toast'; el.textContent = msg;
   box.appendChild(el); setTimeout(()=>el.remove(), 3500);
 }
 function closeModal(){ document.getElementById('overlay').classList.remove('open'); document.getElementById('modalBox').innerHTML=''; }
+
+let ACTIVITY_ITEMS = [];
+let ACTIVITY_OFFSET = 0;
+const ACTIVITY_PAGE_SIZE = 30;
+
+const ACTION_LABELS = { create: 'יצירה', update: 'עדכון', delete: 'מחיקה', insert: 'יצירה' };
+const ENTITY_LABELS = { leads: 'קונה/מוכר', businesses: 'עסק', matches: 'התאמה', tasks: 'משימה', profiles: 'משתמש' };
+
+function actionLabel(t){ return ACTION_LABELS[(t||'').toLowerCase()] || t || '—'; }
+function entityLabelText(t){ return ENTITY_LABELS[(t||'').toLowerCase()] || t || '—'; }
+
+async function loadActivityLog(reset){
+  if (reset){ ACTIVITY_OFFSET = 0; ACTIVITY_ITEMS = []; }
+  const from = ACTIVITY_OFFSET;
+  const to = ACTIVITY_OFFSET + ACTIVITY_PAGE_SIZE - 1;
+  const { data, error } = await window.supabaseClient
+    .from('activity_log')
+    .select('id, user_id, action_type, entity_type, entity_id, old_value, new_value, created_at')
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  const body = document.getElementById('activityBody');
+  if (error){ if (reset) body.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:#b00;">שגיאה: ${error.message}</td></tr>`; return; }
+
+  ACTIVITY_ITEMS = reset ? (data || []) : ACTIVITY_ITEMS.concat(data || []);
+  ACTIVITY_OFFSET += (data || []).length;
+
+  if (ACTIVITY_ITEMS.length === 0){
+    body.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:#999;">אין היסטוריה עדיין</td></tr>';
+    return;
+  }
+
+  body.innerHTML = ACTIVITY_ITEMS.map(a => `
+    <tr style="cursor:pointer;" onclick="showActivityDetail('${a.id}')">
+      <td>${esc(userName(a.user_id))}</td>
+      <td>${esc(actionLabel(a.action_type))}</td>
+      <td>${esc(entityLabelText(a.entity_type))}</td>
+      <td>${fmtDateTime ? fmtDateTime(a.created_at) : new Date(a.created_at).toLocaleString('he-IL')}</td>
+    </tr>`).join('');
+
+  const loadMoreBtn = document.getElementById('loadMoreActivityBtn');
+  if (loadMoreBtn) loadMoreBtn.style.display = (data || []).length < ACTIVITY_PAGE_SIZE ? 'none' : 'inline-block';
+}
+
+function showActivityDetail(id){
+  const a = ACTIVITY_ITEMS.find(x => x.id === id);
+  if (!a) return;
+  const hasValues = a.old_value || a.new_value;
+  document.getElementById('activityModalBox').innerHTML = `
+    <h3>פרטי פעילות</h3>
+    <div style="font-size:.9rem;line-height:1.8;color:#333;">
+      <div><b>משתמש:</b> ${esc(userName(a.user_id))}</div>
+      <div><b>פעולה:</b> ${esc(actionLabel(a.action_type))}</div>
+      <div><b>סוג ישות:</b> ${esc(entityLabelText(a.entity_type))}</div>
+      <div><b>מזהה רשומה:</b> ${esc(a.entity_id || '—')}</div>
+      <div><b>תאריך ושעה:</b> ${new Date(a.created_at).toLocaleString('he-IL')}</div>
+    </div>
+    ${hasValues ? `
+      <div style="margin-top:16px;">
+        ${a.old_value ? `<div style="margin-bottom:10px;"><b>ערך קודם:</b><pre style="background:#f7f5ef;border-radius:8px;padding:10px;font-size:.78rem;white-space:pre-wrap;max-height:180px;overflow-y:auto;">${esc(JSON.stringify(a.old_value, null, 2))}</pre></div>` : ''}
+        ${a.new_value ? `<div><b>ערך חדש:</b><pre style="background:#f7f5ef;border-radius:8px;padding:10px;font-size:.78rem;white-space:pre-wrap;max-height:180px;overflow-y:auto;">${esc(JSON.stringify(a.new_value, null, 2))}</pre></div>` : ''}
+      </div>` : '<div style="margin-top:14px;color:#999;">אין פרטים נוספים לפעולה זו</div>'}
+    <div style="text-align:left;margin-top:18px;">
+      <button class="btn btn-ghost" onclick="closeActivityModal()">סגירה</button>
+    </div>`;
+  document.getElementById('activityOverlay').classList.add('open');
+}
+
+function closeActivityModal(){
+  document.getElementById('activityOverlay').classList.remove('open');
+  document.getElementById('activityModalBox').innerHTML = '';
+}
 
 async function loadUsers(){
   const { data, error } = await window.supabaseClient.from('profiles').select('*').order('created_at',{ascending:false});
@@ -295,6 +386,7 @@ async function createUser(e){
     return;
   }
   await loadUsers();
+  await loadActivityLog(true);
 })();
 </script>
 </body>
