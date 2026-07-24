@@ -44,7 +44,8 @@
 <body>
 
 <div class="bsd-header">
-  <div class="brand">BSD CRM <small>BSD Business Brokers Israel</small></div>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small></div></a>
+  <div id="headerUserInfo" style="color:#cfd6e6;font-size:.78rem;white-space:nowrap;margin-inline-start:auto;margin-inline-end:14px;align-self:center;"></div>
     <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
     <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
@@ -288,6 +289,7 @@ async function createUser(e){
   const profile = await requireAuth();
   if (!profile) return;
   if (profile.role !== 'admin'){
+  document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email) + ' · ' + new Date().toLocaleDateString('he-IL');
     document.getElementById('mainWrap').innerHTML = '<div class="denied">עמוד זה זמין ל-Admin בלבד.</div>';
     return;
   }
