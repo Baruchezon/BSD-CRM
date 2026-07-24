@@ -575,9 +575,17 @@ function renderSurveyResultModal(data){
   const { timeGreeting, blessing } = getGreeting();
   const displayName = profile.full_name && profile.full_name.trim() ? profile.full_name : profile.email;
   document.getElementById('welcomeName').textContent = `${timeGreeting}, ${displayName}`;
-  const roleLabels = {admin:'מנהל מערכת (Admin)', manager:'מנהל', broker:'מתווך', user:'משתמש', viewer:'צופה בלבד'};
+  const roleLabels = {admin:'Admin', manager:'מנהל', agent_authorized:'סוכן מורשה', agent:'סוכן'};
   document.getElementById('welcomeRole').textContent = 'תפקיד: ' + (roleLabels[profile.role] || profile.role);
   document.getElementById('welcomeBlessing').textContent = blessing + ' ✨';
+
+  // הרשאות לכפתורי סקר / הצעות התאמה חכמות - זמינים תמיד ל-Admin/מנהל,
+  // ולסוכן מורשה/סוכן רק אם הופעלה עבורם ההרשאה הספציפית
+  const fullAccess = profile.role === 'admin' || profile.role === 'manager';
+  const aiBtn = document.getElementById('aiMatchBtn');
+  const surveyBtn = document.getElementById('surveyBtn');
+  if (!fullAccess && !profile.can_use_ai_match) aiBtn.style.display = 'none';
+  if (!fullAccess && !profile.can_use_survey) surveyBtn.style.display = 'none';
 
   await Promise.all([loadGeneral(), loadPeriod(), loadGauges(), loadActivity()]);
 })();
