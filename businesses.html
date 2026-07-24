@@ -145,7 +145,7 @@ function closeModal(){
 async function loadLookups(){
   const { data: sellers } = await window.supabaseClient.from('leads').select('id, full_name, phone').eq('type','seller');
   ALL_SELLERS = sellers || [];
-  const { data: users } = await window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active');
+  const { data: users } = await window.supabaseClient.from('profiles').select('id, full_name, email, role').eq('status','active');
   ALL_USERS = users || [];
 }
 
@@ -187,6 +187,13 @@ function populateFilters(){
 function userName(id){
   const u = ALL_USERS.find(x=>x.id===id);
   return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
+}
+function creatorColor(id){
+  const u = ALL_USERS.find(x=>x.id===id);
+  if (!u) return null;
+  if (u.role === 'agent') return '#e6c200'; // צהוב זוהר - סוכן
+  if (u.role === 'agent_authorized') return '#2ecc40'; // ירוק זוהר - סוכן מורשה
+  return null;
 }
 function sellerName(id){
   const s = ALL_SELLERS.find(x=>x.id===id);
@@ -241,12 +248,12 @@ function renderTable(){
     return `
     <tr class="${rowCls}">
       <td data-label="שם פנימי"><div class="primary-name" style="font-weight:700;">${statusEmoji}${esc(b.internal_name)}</div>${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}</td>
-      <td data-label="טלפון בעלים" class="phone-cell">${b.owner_phone ? `<a href="tel:${esc(b.owner_phone)}" style="color:inherit;text-decoration:none;">📞 ${esc(b.owner_phone)}</a>` : '—'}</td>
+      <td data-label="טלפון בעלים" class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;">${b.owner_phone ? `<a href="tel:${esc(b.owner_phone)}" style="color:inherit;text-decoration:none;">📞 ${esc(b.owner_phone)}</a>` : '—'}</td>
       <td data-label="תחום">${esc(b.field||'—')}</td>
       <td data-label="עיר">${esc(b.city||'—')}</td>
       <td class="price" data-label="מחיר מבוקש">${fmtMoney(b.asking_price)}</td>
       <td data-label="סטטוס"><span class="badge">${esc(b.status||'—')}</span></td>
-      <td data-label="הוזן ע&quot;י">${b.created_by ? `<b style="color:#b8860b;">${esc(userName(b.created_by))}</b>` : 'לא ידוע'}</td>
+      <td data-label="הוזן ע&quot;י">${b.created_by ? `<b style="color:${creatorColor(b.created_by) || '#333'};">${esc(userName(b.created_by))}</b>` : 'לא ידוע'}</td>
       <td data-label="מטופל ע&quot;י">${b.handled_by ? esc(userName(b.handled_by)) : '—'}</td>
       <td data-label="סטטוס הסכם">${agreementBadge(b.agreement_status)}</td>
       <td data-label="נוצר">${fmtDate(b.created_at)}</td>
