@@ -64,7 +64,8 @@
 <body>
 
 <div class="bsd-header">
-  <div class="brand">BSD CRM <small>BSD Business Brokers Israel</small></div>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small></div></a>
+  <div id="headerUserInfo" style="color:#cfd6e6;font-size:.78rem;white-space:nowrap;margin-inline-start:auto;margin-inline-end:14px;align-self:center;"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
     <a href="businesses.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
@@ -568,6 +569,7 @@ async function deleteBiz(id){
   CURRENT_PROFILE = await requireAuth();
   if (!CURRENT_PROFILE) return;
   await loadLookups();
+  document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL');
   await loadBusinesses();
 })();
 </script>
