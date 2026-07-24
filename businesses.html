@@ -262,7 +262,7 @@ function renderTable(){
       <td data-label="עודכן">${fmtDate(b.updated_at)}</td>
       <td class="row-actions" data-label="">
         ${canEditRecord(b.created_by) ? `<button title="ערוך" onclick="openBizForm('${b.id}')">✏️</button>` : ''}
-        <button title="הערות" onclick="openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')">📝</button>
+        <button title="הערות" onclick="openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" style="${notesIconStyle(b.id)}">📝</button>
         <button title="שלח הסכם" onclick="sendAgreementForBiz('${b.id}')">📄</button>
         ${canEditRecord(b.created_by) ? `<button title="מחק" onclick="deleteBiz('${b.id}')">🗑️</button>` : ''}
       </td>
@@ -461,6 +461,51 @@ function closeNotesPanel(){
   if (ov) ov.remove();
 }
 
+let NOTES_SUMMARY = {}; // record_id -> { count, maxCreatedAt }
+let NOTES_READS = {};   // record_id -> last_read_at (של המשתמש הנוכחי)
+
+async function loadNotesSummary(tableName){
+  const { data: notesData } = await window.supabaseClient
+    .from('record_notes').select('record_id, created_at').eq('table_name', tableName);
+  NOTES_SUMMARY = {};
+  (notesData || []).forEach(n => {
+    const cur = NOTES_SUMMARY[n.record_id];
+    if (!cur || n.created_at > cur.maxCreatedAt) {
+      NOTES_SUMMARY[n.record_id] = { count: (cur ? cur.count : 0) + 1, maxCreatedAt: n.created_at };
+    } else {
+      cur.count += 1;
+    }
+  });
+
+  if (CURRENT_PROFILE) {
+    const { data: readsData } = await window.supabaseClient
+      .from('record_notes_reads').select('record_id, last_read_at')
+      .eq('table_name', tableName).eq('user_id', CURRENT_PROFILE.id);
+    NOTES_READS = {};
+    (readsData || []).forEach(r => { NOTES_READS[r.record_id] = r.last_read_at; });
+  }
+}
+
+function notesIconStyle(recordId){
+  const summary = NOTES_SUMMARY[recordId];
+  if (!summary) return '';
+  const lastRead = NOTES_READS[recordId];
+  const unread = !lastRead || lastRead < summary.maxCreatedAt;
+  return unread
+    ? 'background:#1a3d8f;border-radius:6px;box-shadow:0 0 0 2px #1a3d8f;'
+    : 'background:#cfe8fb;border-radius:6px;';
+}
+
+async function markNotesRead(tableName, recordId){
+  if (!CURRENT_PROFILE) return;
+  await window.supabaseClient.from('record_notes_reads').upsert({
+    user_id: CURRENT_PROFILE.id, table_name: tableName, record_id: recordId,
+    last_read_at: new Date().toISOString()
+  }, { onConflict: 'user_id,table_name,record_id' });
+  NOTES_READS[recordId] = new Date().toISOString();
+  renderTable();
+}
+
 async function openNotesPanel(tableName, recordId, recordLabel){
   closeNotesPanel();
   const overlay = document.createElement('div');
@@ -469,7 +514,7 @@ async function openNotesPanel(tableName, recordId, recordLabel){
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:14px;max-width:560px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
       <h3 style="margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">הערות - ${esc(recordLabel)}</h3>
-      <div id="notesList" style="max-height:300px;overflow-y:auto;margin-bottom:16px;">טוען...</div>
+      <div id="notesList" style="max-height:340px;overflow-y:auto;margin-bottom:16px;"></div>
       <textarea id="newNoteText" placeholder="הוסף הערה..." style="width:100%;min-height:70px;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;margin-bottom:10px;"></textarea>
       <div style="display:flex;justify-content:flex-end;gap:10px;">
         <button onclick="closeNotesPanel()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
@@ -478,6 +523,7 @@ async function openNotesPanel(tableName, recordId, recordLabel){
     </div>`;
   document.body.appendChild(overlay);
   await loadNotes(tableName, recordId);
+  await markNotesRead(tableName, recordId);
 }
 
 async function loadNotes(tableName, recordId){
@@ -512,6 +558,8 @@ async function addNote(tableName, recordId){
   if (error){ toast('שגיאה בשמירת ההערה: ' + error.message); return; }
   document.getElementById('newNoteText').value = '';
   await loadNotes(tableName, recordId);
+  await loadNotesSummary(tableName);
+  await markNotesRead(tableName, recordId);
 }
 
 async function deleteBizFile(bizId, fileName){
@@ -637,6 +685,7 @@ async function deleteBiz(id){
   await loadLookups();
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL');
   if (CURRENT_PROFILE.role !== 'admin'){ const navUsers = document.getElementById('navUsersLink'); if (navUsers) navUsers.style.display = 'none'; }
+  await loadNotesSummary('businesses');
   await loadBusinesses();
 })();
 </script>
