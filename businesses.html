@@ -246,7 +246,7 @@ function renderTable(){
       <td data-label="עיר">${esc(b.city||'—')}</td>
       <td class="price" data-label="מחיר מבוקש">${fmtMoney(b.asking_price)}</td>
       <td data-label="סטטוס"><span class="badge">${esc(b.status||'—')}</span></td>
-      <td data-label="הוזן ע&quot;י">${b.created_by ? esc(userName(b.created_by)) : 'לא ידוע'}</td>
+      <td data-label="הוזן ע&quot;י">${b.created_by ? `<b style="color:#b8860b;">${esc(userName(b.created_by))}</b>` : 'לא ידוע'}</td>
       <td data-label="מטופל ע&quot;י">${b.handled_by ? esc(userName(b.handled_by)) : '—'}</td>
       <td data-label="סטטוס הסכם">${agreementBadge(b.agreement_status)}</td>
       <td data-label="נוצר">${fmtDate(b.created_at)}</td>
