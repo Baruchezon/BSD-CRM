@@ -58,23 +58,25 @@
 </div>
 
 <div class="wrap" id="mainWrap">
-  <div class="toolbar">
-    <h2>ניהול משתמשים</h2>
-    <button class="btn btn-primary" onclick="openCreateForm()">+ משתמש חדש</button>
-  </div>
+  <div id="usersManagementSection">
+    <div class="toolbar">
+      <h2>ניהול משתמשים</h2>
+      <button class="btn btn-primary" onclick="openCreateForm()">+ משתמש חדש</button>
+    </div>
 
-  <div class="role-note">
-    <b>הרשאות לפי תפקיד:</b> Admin — גישה וניהול מלאים לכל המערכת, כולל ניהול משתמשים (בלעדיו בלבד).
-    מנהל — הרשאות רחבות כמו Admin, ללא ניהול משתמשים.
-    סוכן מורשה — צופה בכל הנתונים הקיימים, ומזין נתונים חדשים (מתויגים אוטומטית על שמו).
-    סוכן — רואה רק את מה שהזין בעצמו, במערכת אישית ממותגת על שמו.
-    כפתורי "סקר" ו"הצעות התאמה חכמות" מוסתרים כברירת מחדל לסוכן מורשה וסוכן - ניתן להפעיל לכל משתמש בנפרד.
-  </div>
+    <div class="role-note">
+      <b>הרשאות לפי תפקיד:</b> Admin — גישה וניהול מלאים לכל המערכת, כולל ניהול משתמשים (בלעדיו בלבד).
+      מנהל — הרשאות רחבות כמו Admin, ללא ניהול משתמשים.
+      סוכן מורשה — צופה בכל הנתונים הקיימים, ומזין נתונים חדשים (מתויגים אוטומטית על שמו).
+      סוכן — רואה רק את מה שהזין בעצמו, במערכת אישית ממותגת על שמו.
+      כפתורי "סקר" ו"הצעות התאמה חכמות" מוסתרים כברירת מחדל לסוכן מורשה וסוכן - ניתן להפעיל לכל משתמש בנפרד.
+    </div>
 
-  <table>
-    <thead><tr><th>שם מלא</th><th>אימייל</th><th>תפקיד</th><th>הרשאות נוספות</th><th>סטטוס</th><th>כניסה אחרונה</th><th>מס' כניסות</th><th>פעולות</th></tr></thead>
-    <tbody id="usersBody"><tr><td colspan="8" style="text-align:center;padding:30px;color:#999;">טוען...</td></tr></tbody>
-  </table>
+    <table>
+      <thead><tr><th>שם מלא</th><th>אימייל</th><th>תפקיד</th><th>הרשאות נוספות</th><th>סטטוס</th><th>כניסה אחרונה</th><th>מס' כניסות</th><th>פעולות</th></tr></thead>
+      <tbody id="usersBody"><tr><td colspan="8" style="text-align:center;padding:30px;color:#999;">טוען...</td></tr></tbody>
+    </table>
+  </div>
 
   <div class="toolbar" style="margin-top:34px;">
     <h2>היסטוריית פעילות משתמשים</h2>
@@ -433,10 +435,17 @@ async function createUser(e){
   const profile = await requireAuth();
   if (!profile) return;
   document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email) + ' · ' + new Date().toLocaleDateString('he-IL');
-  if (profile.role !== 'admin'){ const navUsers = document.getElementById('navUsersLink'); if (navUsers) navUsers.style.display = 'none'; }
-  if (profile.role !== 'admin'){
-    document.getElementById('mainWrap').innerHTML = '<div class="denied">עמוד זה זמין ל-Admin בלבד.</div>';
+  const isAdmin = profile.role === 'admin';
+  const isManager = profile.role === 'manager';
+  if (!isAdmin){ const navUsers = document.getElementById('navUsersLink'); if (navUsers) navUsers.style.display = 'none'; }
+  if (!isAdmin && !isManager){
+    document.getElementById('mainWrap').innerHTML = '<div class="denied">עמוד זה זמין ל-Admin ולמנהל בלבד.</div>';
     return;
+  }
+  if (!isAdmin){
+    // מנהל - לא רואה את ניהול המשתמשים עצמו, רק את היסטוריית הפעילות
+    const usersSection = document.getElementById('usersManagementSection');
+    if (usersSection) usersSection.style.display = 'none';
   }
   await loadUsers();
   populateActivityUserFilter();
