@@ -50,7 +50,7 @@
   .sub-name{font-size:.75rem;color:#888;margin-top:2px;}
   .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
   .notes-cell{white-space:normal;word-break:break-word;max-width:420px;line-height:1.4;}
-  .email-cell{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .email-cell{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help;}
   .phone-cell{white-space:nowrap;min-width:100px;}
   @media (max-width: 700px){ .phone-cell{min-width:0;} }
   .proportional-table{table-layout:fixed;min-width:1150px;}
@@ -291,7 +291,7 @@ function renderTable(){
       <td data-label="טלפון" class="phone-cell">${l.phone ? `<a href="tel:${esc(l.phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(l.phone)}</a>` : '—'}</td>
       <td data-label="עיר">${cityCell}</td>
       <td data-label="אימייל" class="email-cell" title="${esc(l.email||'')}">${esc(l.email||'—')}</td>
-      <td data-label="הוזן ע&quot;י">${l.created_by ? esc(userName(l.created_by)) : 'לא ידוע'}</td>
+      <td data-label="הוזן ע&quot;י">${l.created_by ? `<b style="color:#b8860b;">${esc(userName(l.created_by))}</b>` : 'לא ידוע'}</td>
       <td data-label="מטופל ע&quot;י">${l.handled_by ? esc(userName(l.handled_by)) : '—'}</td>
       <td data-label="סטטוס הסכם">${agreementBadge(l.agreement_status)}</td>
       <td data-label="נוצר">${fmtDate(l.created_at)}</td>
