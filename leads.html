@@ -187,10 +187,14 @@ function userOptions(selected){
 }
 
 async function loadLeads(){
-  const { data, error } = await window.supabaseClient
+  let q = window.supabaseClient
     .from('leads')
     .select('*')
     .order('updated_at', { ascending: false });
+  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
+    q = q.eq('created_by', CURRENT_PROFILE.id);
+  }
+  const { data, error } = await q;
   if (error){ toast('שגיאה בטעינת נתונים: ' + error.message); return; }
   ALL_LEADS = data || [];
   populateStatusFilter();
@@ -462,6 +466,7 @@ async function saveLead(e){
   if (leadId){
     ({ error } = await window.supabaseClient.from('leads').update(payload).eq('id', leadId));
   } else {
+    payload.created_by = CURRENT_PROFILE ? CURRENT_PROFILE.id : null;
     ({ error } = await window.supabaseClient.from('leads').insert(payload));
   }
 
