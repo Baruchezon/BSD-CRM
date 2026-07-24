@@ -172,12 +172,19 @@ function closeModal(){
 }
 
 async function loadUsers(){
-  const { data } = await window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active');
+  const { data } = await window.supabaseClient.from('profiles').select('id, full_name, email, role').eq('status','active');
   ALL_USERS = data || [];
 }
 function userName(id){
   const u = ALL_USERS.find(x=>x.id===id);
   return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
+}
+function creatorColor(id){
+  const u = ALL_USERS.find(x=>x.id===id);
+  if (!u) return null;
+  if (u.role === 'agent') return '#e6c200'; // צהוב זוהר - סוכן
+  if (u.role === 'agent_authorized') return '#2ecc40'; // ירוק זוהר - סוכן מורשה
+  return null;
 }
 function userOptions(selected){
   return '<option value="">— ללא —</option>' + ALL_USERS.map(u=>{
@@ -288,10 +295,10 @@ function renderTable(){
     return `<tr class="${rowCls}">
       <td data-label="שם / עסק">${nameCell}</td>
       <td data-label="סוג">${typeBadge}</td>
-      <td data-label="טלפון" class="phone-cell">${l.phone ? `<a href="tel:${esc(l.phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(l.phone)}</a>` : '—'}</td>
+      <td data-label="טלפון" class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;">${l.phone ? `<a href="tel:${esc(l.phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(l.phone)}</a>` : '—'}</td>
       <td data-label="עיר">${cityCell}</td>
       <td data-label="אימייל" class="email-cell" title="${esc(l.email||'')}">${esc(l.email||'—')}</td>
-      <td data-label="הוזן ע&quot;י">${l.created_by ? `<b style="color:#b8860b;">${esc(userName(l.created_by))}</b>` : 'לא ידוע'}</td>
+      <td data-label="הוזן ע&quot;י">${l.created_by ? `<b style="color:${creatorColor(l.created_by) || '#333'};">${esc(userName(l.created_by))}</b>` : 'לא ידוע'}</td>
       <td data-label="מטופל ע&quot;י">${l.handled_by ? esc(userName(l.handled_by)) : '—'}</td>
       <td data-label="סטטוס הסכם">${agreementBadge(l.agreement_status)}</td>
       <td data-label="נוצר">${fmtDate(l.created_at)}</td>
