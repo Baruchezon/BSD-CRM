@@ -609,10 +609,48 @@ function renderSurveyResultModal(data){
   document.body.appendChild(overlay);
 }
 
+function forceSetPassword(){
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.id = 'forcePwdOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.85);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;';
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+        <h3 style="margin:0 0 6px;color:var(--navy);">ברוכים הבאים ל-BSD CRM</h3>
+        <p style="color:#666;font-size:.85rem;margin:0 0 16px;">לפני שממשיכים, נקבע לך סיסמה אישית להתחברות.</p>
+        <input type="password" id="forcePwd1" placeholder="סיסמה חדשה" minlength="6" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;margin-bottom:10px;">
+        <input type="password" id="forcePwd2" placeholder="אימות סיסמה" minlength="6" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;margin-bottom:10px;">
+        <div id="forcePwdMsg" style="color:#b00020;font-size:.8rem;min-height:18px;margin-bottom:8px;"></div>
+        <button id="forcePwdBtn" style="width:100%;background:var(--gold);color:#1c2333;border:none;padding:11px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">קבע סיסמה והמשך</button>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    document.getElementById('forcePwdBtn').addEventListener('click', async () => {
+      const p1 = document.getElementById('forcePwd1').value;
+      const p2 = document.getElementById('forcePwd2').value;
+      const msg = document.getElementById('forcePwdMsg');
+      if (p1.length < 6){ msg.textContent = 'הסיסמה חייבת להכיל לפחות 6 תווים'; return; }
+      if (p1 !== p2){ msg.textContent = 'הסיסמאות אינן תואמות'; return; }
+      const { error } = await window.supabaseClient.auth.updateUser({ password: p1 });
+      if (error){ msg.textContent = 'שגיאה: ' + error.message; return; }
+      overlay.remove();
+      history.replaceState(null, '', window.location.pathname);
+      resolve();
+    });
+  });
+}
+
 (async function init(){
   const profile = await requireAuth();
   if (!profile) return;
   CURRENT_PROFILE = profile;
+
+  // רשת ביטחון: אם המשתמש הגיע לכאן ישר מקישור הזמנה/איפוס (type=invite/recovery),
+  // נחייב אותו לקבוע סיסמה לפני שממשיכים - גם אם ההפניה לא הלכה לדף הייעודי.
+  if (/type=invite|type=recovery/.test(window.location.hash)){
+    await forceSetPassword();
+  }
+
   document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email) + ' · ' + new Date().toLocaleDateString('he-IL');
   if (profile.role !== 'admin'){ const navUsers = document.getElementById('navUsersLink'); if (navUsers) navUsers.style.display = 'none'; }
   await loadAgentOwnIds();
