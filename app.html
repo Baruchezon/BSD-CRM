@@ -5,6 +5,11 @@
 <title>BSD CRM - לוח בקרה</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="css/style.css">
+<script>
+  // תפיסת ה-hash של הכתובת מיד, לפני שספריית Supabase מנקה אותה באופן אוטומטי -
+  // כדי לזהות במדויק הזמנה/איפוס סיסמה שנחתו כאן במקום בדף הייעודי.
+  window.__authHashSnapshot = window.location.hash || '';
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -647,7 +652,7 @@ function forceSetPassword(){
 
   // רשת ביטחון: אם המשתמש הגיע לכאן ישר מקישור הזמנה/איפוס (type=invite/recovery),
   // נחייב אותו לקבוע סיסמה לפני שממשיכים - גם אם ההפניה לא הלכה לדף הייעודי.
-  if (/type=invite|type=recovery/.test(window.location.hash)){
+  if (/type=invite|type=recovery/.test(window.__authHashSnapshot || '')){
     await forceSetPassword();
   }
 
