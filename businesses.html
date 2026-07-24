@@ -130,6 +130,7 @@ let ALL_USERS = [];
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
+function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
 function fmtMoney(n){ if(n===null||n===undefined) return '—'; return '₪' + Number(n).toLocaleString('he-IL'); }
 function toast(msg){
   const box = document.getElementById('toastBox');
@@ -260,13 +261,20 @@ function renderTable(){
       <td data-label="נוצר">${fmtDate(b.created_at)}</td>
       <td data-label="עודכן">${fmtDate(b.updated_at)}</td>
       <td class="row-actions" data-label="">
-        <button title="ערוך" onclick="openBizForm('${b.id}')">✏️</button>
+        ${canEditRecord(b.created_by) ? `<button title="ערוך" onclick="openBizForm('${b.id}')">✏️</button>` : ''}
+        <button title="הערות" onclick="openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')">📝</button>
         <button title="שלח הסכם" onclick="sendAgreementForBiz('${b.id}')">📄</button>
-        <button title="מחק" onclick="deleteBiz('${b.id}')">🗑️</button>
+        ${canEditRecord(b.created_by) ? `<button title="מחק" onclick="deleteBiz('${b.id}')">🗑️</button>` : ''}
       </td>
     </tr>
   `;
   }).join('');
+}
+
+function canEditRecord(createdBy){
+  if (!CURRENT_PROFILE) return false;
+  if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
+  return createdBy === CURRENT_PROFILE.id;
 }
 
 ['fSearch','fStatus','fField','fAgreement','fCreatedBy','fSort'].forEach(id=>{
@@ -446,6 +454,64 @@ async function downloadBizFile(bizId, fileName){
   const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/${fileName}`, 60);
   if (error){ toast('שגיאה: ' + error.message); return; }
   window.open(data.signedUrl, '_blank');
+}
+
+function closeNotesPanel(){
+  const ov = document.getElementById('notesOverlay');
+  if (ov) ov.remove();
+}
+
+async function openNotesPanel(tableName, recordId, recordLabel){
+  closeNotesPanel();
+  const overlay = document.createElement('div');
+  overlay.id = 'notesOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:95;padding:40px 20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:560px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">הערות - ${esc(recordLabel)}</h3>
+      <div id="notesList" style="max-height:300px;overflow-y:auto;margin-bottom:16px;">טוען...</div>
+      <textarea id="newNoteText" placeholder="הוסף הערה..." style="width:100%;min-height:70px;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;margin-bottom:10px;"></textarea>
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button onclick="closeNotesPanel()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
+        <button onclick="addNote('${tableName}','${recordId}')" style="background:var(--gold);color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">הוסף הערה</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  await loadNotes(tableName, recordId);
+}
+
+async function loadNotes(tableName, recordId){
+  const { data } = await window.supabaseClient
+    .from('record_notes')
+    .select('id, note_text, created_at, author_id')
+    .eq('table_name', tableName).eq('record_id', recordId)
+    .order('created_at', { ascending: false });
+  const list = document.getElementById('notesList');
+  if (!list) return;
+  if (!data || data.length === 0){
+    list.innerHTML = '<div style="color:#999;text-align:center;padding:14px;">אין הערות עדיין</div>';
+    return;
+  }
+  list.innerHTML = data.map(n => `
+    <div style="border-bottom:1px solid #f0ede4;padding:10px 0;">
+      <div style="font-size:.78rem;color:#999;margin-bottom:3px;">
+        <b style="color:${creatorColor(n.author_id) || 'var(--navy)'};">${esc(userName(n.author_id))}</b> · ${fmtDateTime(n.created_at)}
+      </div>
+      <div style="font-size:.88rem;color:#333;white-space:pre-wrap;">${esc(n.note_text)}</div>
+    </div>`).join('');
+}
+
+async function addNote(tableName, recordId){
+  const text = document.getElementById('newNoteText').value.trim();
+  if (!text){ toast('נא להזין טקסט הערה'); return; }
+  const { error } = await window.supabaseClient.from('record_notes').insert({
+    table_name: tableName, record_id: recordId,
+    author_id: CURRENT_PROFILE ? CURRENT_PROFILE.id : null,
+    note_text: text
+  });
+  if (error){ toast('שגיאה בשמירת ההערה: ' + error.message); return; }
+  document.getElementById('newNoteText').value = '';
+  await loadNotes(tableName, recordId);
 }
 
 async function deleteBizFile(bizId, fileName){
