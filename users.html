@@ -79,6 +79,24 @@
   <div class="toolbar" style="margin-top:34px;">
     <h2>היסטוריית פעילות משתמשים</h2>
   </div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px;">
+    <div>
+      <label style="display:block;font-size:.78rem;color:#666;margin-bottom:4px;">מתאריך</label>
+      <input type="date" id="activityFrom" style="padding:7px 9px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;">
+    </div>
+    <div>
+      <label style="display:block;font-size:.78rem;color:#666;margin-bottom:4px;">עד תאריך</label>
+      <input type="date" id="activityTo" style="padding:7px 9px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;">
+    </div>
+    <div>
+      <label style="display:block;font-size:.78rem;color:#666;margin-bottom:4px;">משתמש</label>
+      <select id="activityUserFilter" style="padding:7px 9px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;min-width:160px;">
+        <option value="all">כולם</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" onclick="applyActivityFilter()">סנן</button>
+    <button class="btn btn-ghost" onclick="resetActivityFilter()">3 הימים האחרונים</button>
+  </div>
   <div style="max-height:420px;overflow-y:scroll;border:1px solid #eee;border-radius:10px;scrollbar-width:thin;">
     <table style="margin:0;">
       <thead><tr><th>משתמש</th><th>פעולה</th><th>סוג ישות</th><th>תאריך ושעה</th></tr></thead>
@@ -129,11 +147,22 @@ async function loadActivityLog(reset){
   if (reset){ ACTIVITY_OFFSET = 0; ACTIVITY_ITEMS = []; }
   const from = ACTIVITY_OFFSET;
   const to = ACTIVITY_OFFSET + ACTIVITY_PAGE_SIZE - 1;
-  const { data, error } = await window.supabaseClient
+
+  const fromDate = document.getElementById('activityFrom').value;
+  const toDate = document.getElementById('activityTo').value;
+  const userFilter = document.getElementById('activityUserFilter').value;
+
+  let q = window.supabaseClient
     .from('activity_log')
     .select('id, user_id, action_type, entity_type, entity_id, old_value, new_value, created_at')
-    .order('created_at', { ascending: false })
-    .range(from, to);
+    .order('created_at', { ascending: false });
+
+  if (fromDate) q = q.gte('created_at', new Date(fromDate + 'T00:00:00').toISOString());
+  if (toDate) q = q.lte('created_at', new Date(toDate + 'T23:59:59').toISOString());
+  if (userFilter && userFilter !== 'all') q = q.eq('user_id', userFilter);
+
+  q = q.range(from, to);
+  const { data, error } = await q;
 
   const body = document.getElementById('activityBody');
   if (error){ if (reset) body.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:#b00;">שגיאה: ${error.message}</td></tr>`; return; }
@@ -142,20 +171,44 @@ async function loadActivityLog(reset){
   ACTIVITY_OFFSET += (data || []).length;
 
   if (ACTIVITY_ITEMS.length === 0){
-    body.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:#999;">אין היסטוריה עדיין</td></tr>';
-    return;
+    body.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:#999;">אין פעילות בטווח שנבחר</td></tr>';
+  } else {
+    body.innerHTML = ACTIVITY_ITEMS.map(a => `
+      <tr style="cursor:pointer;" onclick="showActivityDetail('${a.id}')">
+        <td>${esc(userName(a.user_id))}</td>
+        <td>${esc(actionLabel(a.action_type))}</td>
+        <td>${esc(entityLabelText(a.entity_type))}</td>
+        <td>${fmtDateTime ? fmtDateTime(a.created_at) : new Date(a.created_at).toLocaleString('he-IL')}</td>
+      </tr>`).join('');
   }
-
-  body.innerHTML = ACTIVITY_ITEMS.map(a => `
-    <tr style="cursor:pointer;" onclick="showActivityDetail('${a.id}')">
-      <td>${esc(userName(a.user_id))}</td>
-      <td>${esc(actionLabel(a.action_type))}</td>
-      <td>${esc(entityLabelText(a.entity_type))}</td>
-      <td>${fmtDateTime ? fmtDateTime(a.created_at) : new Date(a.created_at).toLocaleString('he-IL')}</td>
-    </tr>`).join('');
 
   const loadMoreBtn = document.getElementById('loadMoreActivityBtn');
   if (loadMoreBtn) loadMoreBtn.style.display = (data || []).length < ACTIVITY_PAGE_SIZE ? 'none' : 'inline-block';
+}
+
+function populateActivityUserFilter(){
+  const sel = document.getElementById('activityUserFilter');
+  const existing = new Set(Array.from(sel.options).map(o => o.value));
+  ALL_USERS.forEach(u => {
+    if (!existing.has(u.id)){
+      const o = document.createElement('option');
+      o.value = u.id;
+      o.textContent = (u.full_name && u.full_name.trim()) ? u.full_name : u.email;
+      sel.appendChild(o);
+    }
+  });
+}
+
+function applyActivityFilter(){
+  loadActivityLog(true);
+}
+
+function resetActivityFilter(){
+  const threeDaysAgo = new Date(Date.now() - 3*24*60*60*1000);
+  document.getElementById('activityFrom').value = threeDaysAgo.toISOString().slice(0,10);
+  document.getElementById('activityTo').value = '';
+  document.getElementById('activityUserFilter').value = 'all';
+  loadActivityLog(true);
 }
 
 function showActivityDetail(id){
@@ -386,7 +439,8 @@ async function createUser(e){
     return;
   }
   await loadUsers();
-  await loadActivityLog(true);
+  populateActivityUserFilter();
+  resetActivityFilter();
 })();
 </script>
 </body>
