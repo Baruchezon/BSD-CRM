@@ -149,11 +149,17 @@ async function loadLookups(){
   ALL_USERS = users || [];
 }
 
+let CURRENT_PROFILE = null;
+
 async function loadBusinesses(){
-  const { data, error } = await window.supabaseClient
+  let q = window.supabaseClient
     .from('businesses')
     .select('*')
     .order('updated_at', { ascending: false });
+  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
+    q = q.eq('created_by', CURRENT_PROFILE.id);
+  }
+  const { data, error } = await q;
   if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
   ALL_BIZ = data || [];
   populateFilters();
@@ -522,6 +528,7 @@ async function saveBiz(e){
   if (bizId){
     ({ error } = await window.supabaseClient.from('businesses').update(payload).eq('id', bizId));
   } else {
+    payload.created_by = CURRENT_PROFILE ? CURRENT_PROFILE.id : null;
     ({ error } = await window.supabaseClient.from('businesses').insert(payload));
   }
   if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
@@ -551,8 +558,8 @@ async function deleteBiz(id){
 }
 
 (async function init(){
-  const profile = await requireAuth();
-  if (!profile) return;
+  CURRENT_PROFILE = await requireAuth();
+  if (!CURRENT_PROFILE) return;
   await loadLookups();
   await loadBusinesses();
 })();
