@@ -420,8 +420,8 @@ function openBizForm(id){
       ${biz ? `
       <div class="section-h" style="margin-top:14px;">קבצים מצורפים</div>
       <div class="field full">
-        <input type="file" id="bizFileInput">
-        <button type="button" class="btn btn-ghost" style="margin-top:6px;" onclick="uploadBizFile('${biz.id}')">📎 העלה קובץ</button>
+        <input type="file" id="bizFileInput" onchange="uploadBizFile('${biz.id}')">
+        <div id="bizUploadStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
         <div id="bizFilesList" style="margin-top:10px;font-size:.82rem;">טוען קבצים...</div>
       </div>
       ` : `
@@ -453,7 +453,7 @@ async function loadBizFiles(bizId){
     <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0ede4;">
       <span>📄 ${esc(f.name)}</span>
       <span>
-        <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="downloadBizFile('${bizId}','${esc(f.name)}')">הורדה</button>
+        <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="downloadBizFile('${bizId}','${esc(f.name)}')">📂 פתח / הורד</button>
         <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="deleteBizFile('${bizId}','${esc(f.name)}')">מחק</button>
       </span>
     </div>`).join('');
@@ -461,12 +461,24 @@ async function loadBizFiles(bizId){
 
 async function uploadBizFile(bizId){
   const input = document.getElementById('bizFileInput');
+  const statusEl = document.getElementById('bizUploadStatus');
   const file = input.files[0];
-  if (!file){ toast('בחר קובץ תחילה'); return; }
-  if (file.size > MAX_FILE_MB * 1024 * 1024){ toast(`הקובץ גדול מדי (מקסימום ${MAX_FILE_MB}MB)`); return; }
+  if (!file){ return; }
+  if (file.size > MAX_FILE_MB * 1024 * 1024){
+    if (statusEl) statusEl.textContent = `הקובץ גדול מדי (מקסימום ${MAX_FILE_MB}MB)`;
+    toast(`הקובץ גדול מדי (מקסימום ${MAX_FILE_MB}MB)`);
+    input.value = '';
+    return;
+  }
+  if (statusEl) statusEl.textContent = 'מעלה את "' + file.name + '"...';
   const path = `${bizId}/${Date.now()}_${file.name}`;
   const { error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).upload(path, file);
-  if (error){ toast('שגיאה בהעלאה: ' + error.message); return; }
+  if (error){
+    if (statusEl) statusEl.textContent = '';
+    toast('שגיאה בהעלאה: ' + error.message);
+    return;
+  }
+  if (statusEl) statusEl.textContent = '';
   toast('הקובץ הועלה בהצלחה');
   input.value = '';
   loadBizFiles(bizId);
