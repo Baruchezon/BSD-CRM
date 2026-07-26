@@ -320,6 +320,10 @@ function canSendAgreement(){
 function fieldRow(id,label,value,type='text'){
   return `<div class="field"><label>${label}</label><input type="${type}" id="${id}" value="${esc(value||'')}"></div>`;
 }
+function fieldRowPhone(id,label,value){
+  const v = value ? fmtPhone(value) : '';
+  return `<div class="field"><label>${label}</label><input type="tel" id="${id}" value="${esc(v)}" dir="ltr" style="text-align:right;" placeholder="05X-XXXXXXX" oninput="this.value=this.value.replace(/[^0-9+\\-]/g,'')" onblur="if(this.value) this.value=fmtPhone(this.value)"></div>`;
+}
 function textareaRow(id,label,value){
   return `<div class="field full"><label>${label}</label><textarea id="${id}">${esc(value||'')}</textarea></div>`;
 }
@@ -364,7 +368,7 @@ function openBizForm(id){
 
         <div class="section-h">פרטי בעל העסק</div>
         ${fieldRow('owner_name','שם הבעלים', biz?.owner_name)}
-        ${fieldRow('owner_phone','טלפון הבעלים', biz?.owner_phone)}
+        ${fieldRowPhone('owner_phone','טלפון הבעלים', biz?.owner_phone)}
         ${fieldRow('owner_email','אימייל הבעלים', biz?.owner_email, 'email')}
         ${fieldRow('id_number','ת.ז / ח.פ', biz?.id_number)}
         ${fieldRow('entity_type','חברה / עוסק מורשה', biz?.entity_type)}
