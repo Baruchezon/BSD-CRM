@@ -28,6 +28,8 @@
   .section-title{font-size:1rem;font-weight:700;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;margin:28px 0 14px;}
 
   .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;}
+  .kpi-link{text-decoration:none;display:block;cursor:pointer;transition:transform .15s ease;}
+  .kpi-link:hover{transform:translateY(-2px);}
   .kpi{border-radius:14px;padding:18px 20px;color:#fff;box-shadow:0 6px 18px rgba(0,0,0,.12);position:relative;overflow:hidden;}
   .kpi .num{font-size:2rem;font-weight:800;line-height:1;}
   .kpi .label{font-size:.8rem;opacity:.92;margin-top:6px;}
@@ -94,17 +96,16 @@
 
   <div class="section-title">תמונת מצב כללית</div>
   <div class="kpi-grid">
-    <div class="kpi c-blue"><div class="icon">👤</div><div class="num" id="k_buyers">–</div><div class="label">קונים</div></div>
-    <div class="kpi c-gold"><div class="icon">🤝</div><div class="num" id="k_sellers">–</div><div class="label">מוכרים</div></div>
-    <div class="kpi c-navy"><div class="icon">🏢</div><div class="num" id="k_businesses">–</div><div class="label">עסקים למכירה</div></div>
-    <div class="kpi c-green"><div class="icon">🔗</div><div class="num" id="k_matches">–</div><div class="label">התאמות פתוחות</div></div>
-    <div class="kpi c-teal"><div class="icon">🧑‍💼</div><div class="num" id="k_activeUsers">–</div><div class="label">משתמשים פעילים</div></div>
-    <div class="kpi c-orange"><div class="icon">✅</div><div class="num" id="k_tasks">–</div><div class="label">משימות פתוחות</div></div>
-    <div class="kpi c-purple"><div class="icon">💬</div><div class="num" id="k_awaiting">–</div><div class="label">התאמות ממתינות לתגובה</div></div>
-    <div class="kpi c-red"><div class="icon">📉</div><div class="num" id="k_negotiation">–</div><div class="label">עסקאות במשא ומתן</div></div>
-    <div class="kpi c-green"><div class="icon">🏁</div><div class="num" id="k_closed">–</div><div class="label">עסקאות שנסגרו</div></div>
-    <div class="kpi c-navy"><div class="icon">📅</div><div class="num" id="k_meetings">–</div><div class="label">פגישות שנקבעו</div></div>
-    <div class="kpi c-red"><div class="icon">⏰</div><div class="num" id="k_inactive">–</div><div class="label">משתמשים לא פעילים 30+ יום</div></div>
+    <a href="leads.html" class="kpi-link"><div class="kpi c-blue"><div class="icon">👤</div><div class="num" id="k_buyers">–</div><div class="label">קונים</div></div></a>
+    <a href="businesses.html" class="kpi-link"><div class="kpi c-navy"><div class="icon">🏢</div><div class="num" id="k_businesses">–</div><div class="label">עסקים למכירה</div></div></a>
+    <a href="matches.html" class="kpi-link"><div class="kpi c-green"><div class="icon">🔗</div><div class="num" id="k_matches">–</div><div class="label">התאמות פתוחות</div></div></a>
+    <a href="users.html" class="kpi-link"><div class="kpi c-teal"><div class="icon">🧑‍💼</div><div class="num" id="k_activeUsers">–</div><div class="label">משתמשים פעילים</div></div></a>
+    <a href="tasks.html" class="kpi-link"><div class="kpi c-orange"><div class="icon">✅</div><div class="num" id="k_tasks">–</div><div class="label">משימות פתוחות</div></div></a>
+    <a href="matches.html" class="kpi-link"><div class="kpi c-purple"><div class="icon">💬</div><div class="num" id="k_awaiting">–</div><div class="label">התאמות ממתינות לתגובה</div></div></a>
+    <a href="matches.html" class="kpi-link"><div class="kpi c-red"><div class="icon">📉</div><div class="num" id="k_negotiation">–</div><div class="label">עסקאות במשא ומתן</div></div></a>
+    <a href="matches.html" class="kpi-link"><div class="kpi c-green"><div class="icon">🏁</div><div class="num" id="k_closed">–</div><div class="label">עסקאות שנסגרו</div></div></a>
+    <a href="tasks.html" class="kpi-link"><div class="kpi c-navy"><div class="icon">📅</div><div class="num" id="k_meetings">–</div><div class="label">פגישות שנקבעו</div></div></a>
+    <a href="users.html" class="kpi-link"><div class="kpi c-red"><div class="icon">⏰</div><div class="num" id="k_inactive">–</div><div class="label">משתמשים לא פעילים 30+ יום</div></div></a>
   </div>
 
   <div class="section-title">נתונים לפי תקופה</div>
@@ -122,10 +123,9 @@
     </div>
   </div>
   <div class="kpi-grid">
-    <div class="kpi c-blue"><div class="icon">🆕</div><div class="num" id="p_newBuyers">–</div><div class="label">קונים חדשים</div></div>
-    <div class="kpi c-gold"><div class="icon">🆕</div><div class="num" id="p_newSellers">–</div><div class="label">מוכרים חדשים</div></div>
-    <div class="kpi c-navy"><div class="icon">🆕</div><div class="num" id="p_newBusinesses">–</div><div class="label">עסקים חדשים</div></div>
-    <div class="kpi c-green"><div class="icon">🆕</div><div class="num" id="p_newMatches">–</div><div class="label">התאמות חדשות</div></div>
+    <a href="leads.html" class="kpi-link"><div class="kpi c-blue"><div class="icon">🆕</div><div class="num" id="p_newBuyers">–</div><div class="label">קונים חדשים</div></div></a>
+    <a href="businesses.html" class="kpi-link"><div class="kpi c-navy"><div class="icon">🆕</div><div class="num" id="p_newBusinesses">–</div><div class="label">עסקים חדשים</div></div></a>
+    <a href="matches.html" class="kpi-link"><div class="kpi c-green"><div class="icon">🆕</div><div class="num" id="p_newMatches">–</div><div class="label">התאמות חדשות</div></div></a>
   </div>
 
   <div class="section-title">מדדים</div>
@@ -253,7 +253,6 @@ function getGreeting(){
 
 async function loadGeneral(){
   document.getElementById('k_buyers').textContent = await count('leads', q=>ownFilter(q.eq('type','buyer')));
-  document.getElementById('k_sellers').textContent = await count('leads', q=>ownFilter(q.eq('type','seller')));
   document.getElementById('k_businesses').textContent = await count('businesses', q=>ownFilter(q));
   document.getElementById('k_matches').textContent = await count('matches', q=>matchesOwnFilter(q.not('status','in','("העסקה נסגרה","העסקה נעצרה")')));
   document.getElementById('k_activeUsers').textContent = await count('profiles', q=>q.eq('status','active'));
@@ -280,7 +279,6 @@ async function loadPeriod(){
   }
 
   document.getElementById('p_newBuyers').textContent = await count('leads', q=>ownFilter(applyRange(q.eq('type','buyer'))));
-  document.getElementById('p_newSellers').textContent = await count('leads', q=>ownFilter(applyRange(q.eq('type','seller'))));
   document.getElementById('p_newBusinesses').textContent = await count('businesses', q=>ownFilter(applyRange(q)));
   document.getElementById('p_newMatches').textContent = await count('matches', q=>matchesOwnFilter(applyRange(q)));
 }
