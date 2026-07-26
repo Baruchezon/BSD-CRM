@@ -368,6 +368,10 @@ function truncate(s, n){
 function fieldRow(id,label,value,type='text'){
   return `<div class="field"><label>${label}</label><input type="${type}" id="${id}" value="${esc(value||'')}"></div>`;
 }
+function fieldRowPhone(id,label,value){
+  const v = value ? fmtPhone(value) : '';
+  return `<div class="field"><label>${label}</label><input type="tel" id="${id}" value="${esc(v)}" dir="ltr" style="text-align:right;" placeholder="05X-XXXXXXX" oninput="this.value=this.value.replace(/[^0-9+\\-]/g,'')" onblur="if(this.value) this.value=fmtPhone(this.value)"></div>`;
+}
 function textareaRow(id,label,value){
   return `<div class="field full"><label>${label}</label><textarea id="${id}">${esc(value||'')}</textarea></div>`;
 }
@@ -392,8 +396,8 @@ function openLeadForm(id, forcedType){
         <div class="section-h">פרטים כלליים</div>
         ${fieldRow('first_name','שם פרטי', lead?.first_name)}
         ${fieldRow('last_name','שם משפחה', lead?.last_name)}
-        ${fieldRow('phone','טלפון', lead?.phone)}
-        ${fieldRow('phone2','טלפון נוסף', lead?.phone2)}
+        ${fieldRowPhone('phone','טלפון', lead?.phone)}
+        ${fieldRowPhone('phone2','טלפון נוסף', lead?.phone2)}
         ${fieldRow('email','דוא"ל', lead?.email, 'email')}
         ${fieldRow('city','עיר', lead?.city)}
         ${fieldRow('address','כתובת', lead?.address)}
