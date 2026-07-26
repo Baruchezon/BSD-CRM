@@ -43,7 +43,12 @@
   tbody tr.row-sold{background:#2563c9 !important;border-right:10px solid #143a72;}
   tbody tr.row-sold td{color:#fff !important;font-weight:700;}
   tbody tr.row-sold:hover{background:#1d54ac !important;}
-  .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
+  .row-actions button{border:none;cursor:pointer;font-size:1.05rem;padding:6px 8px;margin:0 2px;border-radius:50%;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s ease, box-shadow .12s ease;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+  .row-actions button:hover{transform:scale(1.12);box-shadow:0 3px 8px rgba(0,0,0,.25);}
+  .row-actions button.act-edit{background:#e3f0ff;}
+  .row-actions button.act-notes{background:#f0f0f0;}
+  .row-actions button.act-agreement{background:#fff2d9;}
+  .row-actions button.act-delete{background:#ffe1e1;}
   .empty-row td{text-align:center;color:#999;padding:30px;}
   .price{font-weight:700;color:#245c40;}
 
@@ -132,6 +137,14 @@ function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace
 function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
 function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
 function fmtMoney(n){ if(n===null||n===undefined) return '—'; return '₪' + Number(n).toLocaleString('he-IL'); }
+function fmtPhone(phone){
+  if (!phone) return '—';
+  let d = String(phone).replace(/\D/g,'');
+  if (d.startsWith('972')) d = '0' + d.slice(3);
+  if (d.length === 10 && d.startsWith('0')) return d.slice(0,3) + '-' + d.slice(3);
+  if (d.length === 9 && d.startsWith('0')) return d.slice(0,2) + '-' + d.slice(2);
+  return String(phone);
+}
 function toast(msg){
   let box = document.getElementById('toastBox');
   if (!box){
@@ -266,7 +279,7 @@ function renderTable(){
     return `
     <tr class="${rowCls}" style="cursor:pointer;" onclick="openBizForm('${b.id}')">
       <td data-label="שם פנימי"><div class="primary-name" style="font-weight:700;">${statusEmoji}${esc(b.internal_name)}</div>${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}</td>
-      <td data-label="טלפון בעלים" class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;" onclick="event.stopPropagation()">${b.owner_phone ? `<a href="tel:${esc(b.owner_phone)}" style="color:inherit;text-decoration:none;">📞 ${esc(b.owner_phone)}</a>` : '—'}</td>
+      <td data-label="טלפון בעלים" class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;white-space:nowrap;" onclick="event.stopPropagation()">${b.owner_phone ? `<a href="tel:${esc(b.owner_phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(b.owner_phone)}</a>` : '—'}</td>
       <td data-label="תחום">${esc(b.field||'—')}</td>
       <td data-label="עיר">${esc(b.city||'—')}</td>
       <td class="price" data-label="מחיר מבוקש">${fmtMoney(b.asking_price)}</td>
@@ -277,10 +290,10 @@ function renderTable(){
       <td data-label="נוצר">${fmtDate(b.created_at)}</td>
       <td data-label="עודכן">${fmtDate(b.updated_at)}</td>
       <td class="row-actions" data-label="" onclick="event.stopPropagation()">
-        ${canEditRecord(b.created_by) ? `<button title="ערוך" onclick="openBizForm('${b.id}')">✏️</button>` : ''}
-        <button title="הערות" onclick="openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" style="${notesIconStyle(b.id)}">📝</button>
-        ${canSendAgreement() ? `<button title="שלח הסכם" onclick="sendAgreementForBiz('${b.id}')">📄</button>` : ''}
-        ${canEditRecord(b.created_by) ? `<button title="מחק" onclick="deleteBiz('${b.id}')">🗑️</button>` : ''}
+        ${canEditRecord(b.created_by) ? `<button class="act-edit" title="ערוך" onclick="openBizForm('${b.id}')">✏️</button>` : ''}
+        <button class="act-notes" title="הערות" onclick="openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" style="${notesIconStyle(b.id)}">📝</button>
+        ${canSendAgreement() ? `<button class="act-agreement" title="שלח הסכם" onclick="sendAgreementForBiz('${b.id}')">📄</button>` : ''}
+        ${canEditRecord(b.created_by) ? `<button class="act-delete" title="מחק" onclick="deleteBiz('${b.id}')">🗑️</button>` : ''}
       </td>
     </tr>
   `;
