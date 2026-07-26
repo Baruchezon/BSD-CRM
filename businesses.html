@@ -484,7 +484,15 @@ async function uploadBizFile(bizId){
   // Encode the original name into the key so any characters (רווחים, סוגריים, עברית)
   // are stored safely - the real name is decoded back for display in loadBizFiles().
   const path = `${bizId}/${Date.now()}__${encodeURIComponent(file.name)}`;
-  const { error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).upload(path, file);
+  let error;
+  try {
+    ({ error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).upload(path, file));
+  } catch (e){
+    if (statusEl) statusEl.textContent = '';
+    toast('שגיאה בהעלאה (חריגה): ' + (e && e.message ? e.message : String(e)));
+    console.error('uploadBizFile threw:', e);
+    return;
+  }
   if (error){
     if (statusEl) statusEl.textContent = '';
     toast('שגיאה בהעלאה: ' + error.message);
