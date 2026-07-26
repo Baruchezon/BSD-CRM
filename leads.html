@@ -309,10 +309,10 @@ function renderTable(){
     const statusEmoji = rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
     nameCell = statusEmoji + nameCell;
 
-    return `<tr class="${rowCls}">
+    return `<tr class="${rowCls}" style="cursor:pointer;" onclick="openLeadForm('${l.id}')">
       <td data-label="שם / עסק">${nameCell}</td>
       <td data-label="סוג">${typeBadge}</td>
-      <td data-label="טלפון" class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;">${l.phone ? `<a href="tel:${esc(l.phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(l.phone)}</a>` : '—'}</td>
+      <td data-label="טלפון" class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;" onclick="event.stopPropagation()">${l.phone ? `<a href="tel:${esc(l.phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(l.phone)}</a>` : '—'}</td>
       <td data-label="עיר">${cityCell}</td>
       <td data-label="אימייל" class="email-cell" title="${esc(l.email||'')}">${esc(l.email||'—')}</td>
       <td data-label="הוזן ע&quot;י">${l.created_by ? `<b style="color:${creatorColor(l.created_by) || '#333'};">${esc(userName(l.created_by))}</b>` : 'לא ידוע'}</td>
@@ -321,10 +321,10 @@ function renderTable(){
       <td data-label="נוצר">${fmtDate(l.created_at)}</td>
       <td data-label="עודכן">${fmtDate(l.updated_at)}</td>
       <td data-label="הערות" class="notes-cell">${esc(l.notes||'—')}</td>
-      <td class="row-actions" data-label="">
+      <td class="row-actions" data-label="" onclick="event.stopPropagation()">
         ${canEditRecord(l.created_by) ? `<button title="ערוך" onclick="openLeadForm('${l.id}')">✏️</button>` : ''}
         <button title="הערות" onclick="openNotesPanel('leads','${l.id}','${esc((l.full_name||'רשומה').replace(/'/g,''))}')" style="${notesIconStyle(l.id)}">📝</button>
-        <button title="שלח הסכם" onclick="sendAgreementForLead('${l.id}')">📄</button>
+        ${canSendAgreement() ? `<button title="שלח הסכם" onclick="sendAgreementForLead('${l.id}')">📄</button>` : ''}
         ${canEditRecord(l.created_by) ? `<button title="מחק" onclick="deleteLead('${l.id}')">🗑️</button>` : ''}
       </td>
     </tr>`;
@@ -335,6 +335,12 @@ function canEditRecord(createdBy){
   if (!CURRENT_PROFILE) return false;
   if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
   return createdBy === CURRENT_PROFILE.id;
+}
+
+function canSendAgreement(){
+  if (!CURRENT_PROFILE) return false;
+  if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
+  return !!CURRENT_PROFILE.can_send_agreement;
 }
 
 function agreementBadge(status){
