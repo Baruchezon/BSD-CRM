@@ -30,7 +30,10 @@
   .status-closed{background:#dff0e4;color:#245c40;}
   .status-stopped{background:#fbe4e0;color:#832d1f;}
   .status-negotiation{background:#fdeccb;color:#8a5a10;}
-  .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
+  .row-actions button{border:none;cursor:pointer;font-size:1.05rem;padding:6px 8px;margin:0 2px;border-radius:50%;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s ease, box-shadow .12s ease;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+  .row-actions button:hover{transform:scale(1.12);box-shadow:0 3px 8px rgba(0,0,0,.25);}
+  .row-actions button.act-edit{background:#e3f0ff;}
+  .row-actions button.act-delete{background:#ffe1e1;}
 
   .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
   .overlay.open{display:flex;}
@@ -218,8 +221,9 @@ function renderTable(){
       <td data-label="מטופל ע&quot;י">${esc(userName(m.current_handler))}</td>
       <td data-label="נוצר">${fmtDate(m.created_at)}</td>
       <td data-label="עודכן">${fmtDate(m.updated_at)}</td>
-      <td class="row-actions" data-label="">
-        <button title="פתח" onclick="openMatchForm('${m.id}')">📂</button>
+      <td class="row-actions" data-label="" onclick="event.stopPropagation()">
+        <button class="act-edit" title="פתח / ערוך" onclick="openMatchForm('${m.id}')">📂</button>
+        <button class="act-delete" title="מחק" onclick="deleteMatch('${m.id}')">🗑️</button>
       </td>
     </tr>
   `).join('');
@@ -365,6 +369,14 @@ async function saveMatch(e){
 
   toast('נשמר בהצלחה');
   closeModal();
+  await loadMatches();
+}
+
+async function deleteMatch(id){
+  if (!confirm('למחוק את ההתאמה הזו? הפעולה אינה הפיכה.')) return;
+  const { error } = await window.supabaseClient.from('matches').delete().eq('id', id);
+  if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
+  toast('ההתאמה נמחקה');
   await loadMatches();
 }
 
