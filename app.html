@@ -61,7 +61,7 @@
   .gauge-card .gauge-label{font-size:.85rem;color:var(--navy);font-weight:700;margin-top:8px;}
   .gauge-card .gauge-sub{font-size:.72rem;color:#888;margin-top:2px;}
 
-  .activity-feed{background:#fff;border-radius:14px;padding:4px 0;
+  .activity-feed{background:#fff;border-radius:14px;padding:4px 0;max-height:520px;overflow-y:auto;
     box-shadow:0 1px 0 rgba(255,255,255,.8) inset, 0 8px 20px rgba(14,27,52,.10), 0 2px 6px rgba(14,27,52,.06);}
   .activity-row{display:flex;justify-content:space-between;padding:12px 20px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
   .activity-row:last-child{border-bottom:none;}
@@ -163,6 +163,17 @@
   </div>
 
   <div class="section-title">פעילות משתמשים אחרונה</div>
+  <div class="filters" id="activityFilters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+    <div class="seg" id="activityRangeSeg" style="display:flex;background:#f1efe6;border-radius:9px;padding:3px;">
+      <button data-ar="day" style="border:none;background:none;padding:7px 14px;border-radius:7px;font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;color:#6c7488;">היום</button>
+      <button data-ar="week" class="active" style="border:none;padding:7px 14px;border-radius:7px;font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;background:var(--navy);color:#fff;">השבוע</button>
+      <button data-ar="month" style="border:none;background:none;padding:7px 14px;border-radius:7px;font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;color:#6c7488;">החודש</button>
+      <button data-ar="all" style="border:none;background:none;padding:7px 14px;border-radius:7px;font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;color:#6c7488;">הכל</button>
+    </div>
+    <select id="activityUserFilter" style="display:none;padding:8px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;">
+      <option value="all">כל המשתמשים</option>
+    </select>
+  </div>
   <div class="activity-feed" id="activityFeed">
     <div class="empty-note">טוען פעילות...</div>
   </div>
@@ -339,16 +350,52 @@ async function loadGauges(){
   document.getElementById('g_agree_sub').textContent = `${signedBiz} מתוך ${totalBiz}`;
 }
 
+let ACTIVITY_RANGE = 'week';
+let ACTIVITY_USER = 'all';
+
+function activityRangeStart(range){
+  if (range === 'all') return null;
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  if (range === 'day') return d;
+  if (range === 'week') d.setDate(d.getDate() - 6);
+  else if (range === 'month') d.setDate(d.getDate() - 29);
+  return d;
+}
+
+async function populateActivityUserFilter(profile){
+  const isAdmin = profile.role === 'admin' || profile.role === 'manager';
+  const sel = document.getElementById('activityUserFilter');
+  if (!isAdmin){ sel.style.display = 'none'; return; }
+  sel.style.display = '';
+  const { data } = await window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active');
+  (data||[]).forEach(u=>{
+    const o = document.createElement('option');
+    o.value = u.id;
+    o.textContent = (u.full_name && u.full_name.trim()) ? u.full_name : u.email;
+    sel.appendChild(o);
+  });
+}
+
 async function loadActivity(){
-  const { data, error } = await window.supabaseClient
+  const isAdmin = CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager';
+  let q = window.supabaseClient
     .from('activity_log')
     .select('action_type, entity_type, created_at, profiles(full_name, email)')
     .order('created_at', { ascending: false })
-    .limit(10);
+    .limit(300);
+
+  const rangeStart = activityRangeStart(ACTIVITY_RANGE);
+  if (rangeStart) q = q.gte('created_at', rangeStart.toISOString());
+
+  if (!isAdmin) q = q.eq('user_id', CURRENT_PROFILE.id);
+  else if (ACTIVITY_USER !== 'all') q = q.eq('user_id', ACTIVITY_USER);
+
+  const { data, error } = await q;
 
   const feed = document.getElementById('activityFeed');
   if (error || !data || data.length === 0){
-    feed.innerHTML = '<div class="empty-note">אין עדיין פעילות רשומה במערכת</div>';
+    feed.innerHTML = '<div class="empty-note">אין פעילות רשומה בטווח שנבחר</div>';
     return;
   }
   const actionLabels = {create:'יצר רשומה', update:'עדכן רשומה', delete:'מחק רשומה', login:'התחבר', logout:'התנתק'};
@@ -360,6 +407,18 @@ async function loadActivity(){
     return `<div class="activity-row"><span class="who">${who}</span><span class="what">${what}</span><span class="when">${when}</span></div>`;
   }).join('');
 }
+
+document.getElementById('activityRangeSeg').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn) return;
+  document.querySelectorAll('#activityRangeSeg button').forEach(b=>{ b.classList.remove('active'); b.style.background='none'; b.style.color='#6c7488'; });
+  btn.classList.add('active'); btn.style.background='var(--navy)'; btn.style.color='#fff';
+  ACTIVITY_RANGE = btn.dataset.ar;
+  loadActivity();
+});
+document.getElementById('activityUserFilter').addEventListener('change', e=>{
+  ACTIVITY_USER = e.target.value;
+  loadActivity();
+});
 
 function applyCustomRange(){
   const from = document.getElementById('dateFrom').value;
@@ -830,6 +889,7 @@ function initTasksPopupWatcher(profile){
   if (!fullAccess && !profile.can_use_ai_match) aiBtn.style.display = 'none';
   if (!fullAccess && !profile.can_use_survey) surveyBtn.style.display = 'none';
 
+  await populateActivityUserFilter(profile);
   await Promise.all([loadGeneral(), loadPeriod(), loadGauges(), loadActivity()]);
   initTasksPopupWatcher(profile);
 })();
