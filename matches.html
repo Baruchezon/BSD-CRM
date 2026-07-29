@@ -400,22 +400,27 @@ async function saveMatch(e){
     stopped_reason: STATUSES_WITH_STOP_REASON.includes(status) ? g('stopped_reason') : null
   };
 
+  const schemaMissing = (err) => err && /column|schema cache/i.test(err.message || '');
+
   if (matchId){
-    const payload = {
+    const basePayload = {
       match_percent: num(g('match_percent')),
       status: status,
       current_handler: g('current_handler') || null,
       buyer_response: g('buyer_response'),
       match_reason: g('match_reason'),
-      notes: g('notes'),
-      ...extraFields
+      notes: g('notes')
     };
-    const { error } = await window.supabaseClient.from('matches').update(payload).eq('id', matchId);
+    let { error } = await window.supabaseClient.from('matches').update({ ...basePayload, ...extraFields }).eq('id', matchId);
+    if (error && schemaMissing(error)){
+      toast('שים לב: שדות תאריך/סיכום פגישה עדיין לא נשמרים — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף אותם לטבלת ההתאמות. שאר הנתונים נשמרו.');
+      ({ error } = await window.supabaseClient.from('matches').update(basePayload).eq('id', matchId));
+    }
     if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
   } else {
     const buyerId = g('buyer_id'), bizId = g('business_id');
     if (!buyerId || !bizId){ toast('יש לבחור קונה ועסק'); return; }
-    const payload = {
+    const basePayload = {
       buyer_id: buyerId, business_id: bizId,
       match_percent: num(g('match_percent')),
       status: status,
@@ -424,10 +429,13 @@ async function saveMatch(e){
       transferred_at: new Date().toISOString(),
       buyer_response: g('buyer_response'),
       match_reason: g('match_reason'),
-      notes: g('notes'),
-      ...extraFields
+      notes: g('notes')
     };
-    const { error } = await window.supabaseClient.from('matches').insert(payload);
+    let { error } = await window.supabaseClient.from('matches').insert({ ...basePayload, ...extraFields });
+    if (error && schemaMissing(error)){
+      toast('שים לב: שדות תאריך/סיכום פגישה עדיין לא נשמרים — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף אותם לטבלת ההתאמות. ההתאמה עצמה נשמרה.');
+      ({ error } = await window.supabaseClient.from('matches').insert(basePayload));
+    }
     if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
   }
 

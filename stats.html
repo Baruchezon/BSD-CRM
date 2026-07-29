@@ -89,7 +89,10 @@
 <div class="wrap">
   <div class="toolbar">
     <h2>📊 סטטיסטיקה</h2>
-    <span class="scope-badge" id="scopeBadge">טוען...</span>
+    <div>
+      <span class="scope-badge" id="scopeBadge">טוען...</span>
+      <span class="scope-badge" id="lastUpdated" style="margin-inline-start:8px;"></span>
+    </div>
   </div>
 
   <div class="panel">
@@ -574,6 +577,7 @@ async function refreshAll(){
   renderTimeChart(d);
   renderStatusChart(d);
   await renderLeaderboard();
+  document.getElementById('lastUpdated').textContent = 'עודכן לאחרונה: ' + new Date().toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
 }
 
 document.getElementById('granSeg').addEventListener('click', e=>{
@@ -618,6 +622,15 @@ document.getElementById('dOverlay').addEventListener('click', e=>{
   if (CURRENT_PROFILE.role !== 'admin'){ const navUsers = document.getElementById('navUsersLink'); if (navUsers) navUsers.style.display = 'none'; }
   await loadLookups();
   await refreshAll();
+
+  // Auto-refresh every 5 minutes so the screen always reflects the latest data,
+  // without the user needing to click "רענון" manually. Skips a tick if a
+  // drilldown list is open (so it doesn't yank the list away mid-read) or the
+  // tab isn't visible (no point refreshing in the background).
+  setInterval(() => {
+    const modalOpen = document.getElementById('dOverlay').classList.contains('open');
+    if (!modalOpen && document.visibilityState === 'visible') refreshAll();
+  }, 5 * 60 * 1000);
 })();
 </script>
 </body>
