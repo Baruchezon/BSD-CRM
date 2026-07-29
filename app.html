@@ -641,12 +641,6 @@ function forceSetPassword(customTitle, customSubtitle){
       if (p1 !== p2){ msg.textContent = 'הסיסמאות אינן תואמות'; return; }
       const { error } = await window.supabaseClient.auth.updateUser({ password: p1 });
       if (error){ msg.textContent = 'שגיאה: ' + error.message; return; }
-      // מנקה את דגל "חובה להחליף סיסמה" אם קיים (למשל אחרי איפוס סיסמה שכחתי-סיסמה)
-      try {
-        if (CURRENT_PROFILE && CURRENT_PROFILE.id){
-          await window.supabaseClient.from('profiles').update({ must_change_password: false }).eq('id', CURRENT_PROFILE.id);
-        }
-      } catch(e){ /* לא קריטי אם העמודה עוד לא קיימת */ }
       overlay.remove();
       history.replaceState(null, '', window.location.pathname);
       resolve();
@@ -693,15 +687,6 @@ async function submitChangePassword(){
   // נחייב אותו לקבוע סיסמה לפני שממשיכים - גם אם ההפניה לא הלכה לדף הייעודי.
   if (/type=invite|type=recovery/.test(window.__authHashSnapshot || '')){
     await forceSetPassword();
-  }
-
-  // אם המשתמש קיבל סיסמה זמנית דרך "שכחתי סיסמה" (must_change_password=true),
-  // מחייבים אותו לקבוע סיסמה אישית חדשה לפני שממשיכים הלאה.
-  if (profile.must_change_password){
-    await forceSetPassword(
-      'נדרש לקבוע סיסמה חדשה',
-      'התחברת עם סיסמה זמנית שנשלחה אליך במייל. מטעמי אבטחה, נא לקבוע סיסמה אישית חדשה לפני שממשיכים.'
-    );
   }
 
   document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email) + ' · ' + new Date().toLocaleDateString('he-IL');
