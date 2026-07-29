@@ -77,6 +77,14 @@
 </div>
 
 <div class="wrap">
+  <div id="schemaBanner" style="display:none;background:#fdeccb;border:1.5px solid #c98a2b;border-radius:10px;padding:14px 18px;margin-bottom:16px;">
+    <div style="font-weight:700;color:#8a5a10;margin-bottom:6px;">⚠️ פעולה נדרשת: שדות חדשים במשימות עדיין לא פעילים</div>
+    <div style="font-size:.85rem;color:#6b4a10;margin-bottom:8px;">בגלל זה: סימון "נקרא" לא נשמר (המשימה תמיד תיראה כלא-נקראה), ושעת יעד / תוכן משימה לא נשמרים גם אם הזנת אותם. יש להריץ פעם אחת ב-Supabase → SQL Editor:</div>
+    <code style="display:block;background:#fff;border-radius:6px;padding:10px 12px;font-size:.8rem;direction:ltr;text-align:left;white-space:pre-wrap;">alter table tasks
+  add column if not exists due_time time,
+  add column if not exists read_at timestamptz,
+  add column if not exists description text;</code>
+  </div>
   <div class="toolbar">
     <h2>משימות</h2>
     <button class="btn btn-primary" onclick="openTaskForm(null)">+ משימה חדשה</button>
@@ -147,7 +155,27 @@ async function loadTasks(){
   const { data, error } = await window.supabaseClient.from('tasks').select('*').order('due_date', { ascending: true });
   if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
   ALL_TASKS = data || [];
+  checkSchemaBanner();
   renderTable();
+}
+
+// select('*') never errors for missing columns (it just silently omits them) — so the
+// only reliable way to detect "the SQL migration wasn't run yet" is to actually try
+// writing one of the new columns and see if THAT fails. This runs once on load and
+// shows a banner that can't be missed/dismissed accidentally, since relying on a toast
+// during a save/read-toggle (which disappears in a few seconds) turned out to hide the
+// real problem: read-status silently never updated, and typed-in due time/description
+// silently never saved, with no persistent indication why.
+async function checkSchemaBanner(){
+  if (!ALL_TASKS.length) return;
+  const probeId = ALL_TASKS[0].id;
+  const { error } = await window.supabaseClient.from('tasks').update({ read_at: ALL_TASKS[0].read_at || null }).eq('id', probeId);
+  const banner = document.getElementById('schemaBanner');
+  if (error && /column|schema cache/i.test(error.message||'')){
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+  }
 }
 
 function renderTable(){
@@ -204,7 +232,9 @@ function openTaskForm(id){
   const task = id ? ALL_TASKS.find(t=>t.id===id) : null;
   if (task && !task.read_at){
     window.supabaseClient.from('tasks').update({ read_at: new Date().toISOString() }).eq('id', id)
-      .then(({error}) => { if (!error){ task.read_at = new Date().toISOString(); renderTable(); } });
+      .then(({error}) => {
+        if (!error){ task.read_at = new Date().toISOString(); renderTable(); }
+      });
   }
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
