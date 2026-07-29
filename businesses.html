@@ -31,6 +31,7 @@
   .agr-none{background:#f1f1f1;color:#777;}
   .agr-sent{background:#fdeccb;color:#8a5a10;}
   .agr-signed{background:#dff0e4;color:#245c40;}
+  .agr-banner{width:100%;box-sizing:border-box;padding:10px 16px;border-radius:8px;font-size:.95rem;font-weight:700;margin-bottom:14px;text-align:center;}
   tbody tr.row-signed{background:#d9f2e3 !important;border-right:10px solid #2e9e5b;}
   tbody tr.row-signed td{color:#1a5c38 !important;font-weight:600;}
   tbody tr.row-signed:hover{background:#c8ecd6 !important;}
@@ -236,6 +237,12 @@ function agreementBadge(status){
   const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
   return `<span class="agr-badge ${cls}">${esc(s)}</span>`;
 }
+function agreementBanner(status){
+  const s = status || 'אין הסכם';
+  const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
+  const icon = s === 'יש הסכם חתום' ? '✅' : (s === 'נשלח הסכם לחתימה' ? '📤' : '⭕');
+  return `<div class="agr-banner ${cls}">${icon} סטטוס הסכם: <b>${esc(s)}</b></div>`;
+}
 
 function renderTable(){
   const search = document.getElementById('fSearch').value.trim().toLowerCase();
@@ -350,6 +357,7 @@ function openBizForm(id){
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>${biz ? 'עריכת עסק' : 'עסק חדש'}</h3>
+    ${biz ? agreementBanner(biz.agreement_status) : ''}
     <form id="bizForm">
       <div class="form-grid">
         <div class="section-h">זיהוי</div>
@@ -372,7 +380,6 @@ function openBizForm(id){
         ${fieldRowPhone('owner_phone','טלפון הבעלים', biz?.owner_phone)}
         ${fieldRow('owner_email','אימייל הבעלים', biz?.owner_email, 'email')}
         ${fieldRow('id_number','ת.ז / ח.פ', biz?.id_number)}
-        ${fieldRow('entity_type','חברה / עוסק מורשה', biz?.entity_type)}
 
         <div class="section-h">תיאור</div>
         <div class="field full">
@@ -701,7 +708,7 @@ async function saveBiz(e){
     website: normalizeWebsite(g('website')),
     short_description: g('short_description'),
     owner_name: g('owner_name'), owner_phone: g('owner_phone'), owner_email: g('owner_email'),
-    id_number: g('id_number'), entity_type: g('entity_type'),
+    id_number: g('id_number'),
     notes: g('notes'),
     field: g('field'), category: g('category'), subcategory: g('subcategory'),
     city: g('city'), region: g('region'), address: g('address'),
