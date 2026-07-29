@@ -425,6 +425,7 @@ async function saveMatch(e){
       match_percent: num(g('match_percent')),
       status: status,
       current_handler: g('current_handler') || null,
+      created_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null,
       transferred_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null,
       transferred_at: new Date().toISOString(),
       buyer_response: g('buyer_response'),
