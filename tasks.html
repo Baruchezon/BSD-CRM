@@ -90,8 +90,8 @@
   </div>
 
   <table>
-    <thead><tr><th>כותרת</th><th>קשור ל</th><th>תאריך יעד</th><th>סטטוס</th><th>עדיפות</th><th>אחראי</th><th>פעולות</th></tr></thead>
-    <tbody id="taskBody"><tr class="empty-row"><td colspan="7">טוען...</td></tr></tbody>
+    <thead><tr><th>נקרא</th><th>כותרת</th><th>קשור ל</th><th>תאריך יעד</th><th>סטטוס</th><th>עדיפות</th><th>אחראי</th><th>פעולות</th></tr></thead>
+    <tbody id="taskBody"><tr class="empty-row"><td colspan="8">טוען...</td></tr></tbody>
   </table>
 </div>
 
@@ -161,24 +161,25 @@ function renderTable(){
   });
 
   const body = document.getElementById('taskBody');
-  if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="7">אין משימות תואמות</td></tr>'; return; }
+  if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="8">אין משימות תואמות</td></tr>'; return; }
 
   const relatedLabels = {lead:'ליד', business:'עסק', match:'התאמה'};
   body.innerHTML = rows.map(t=>{
     const isOverdue = t.due_date && t.due_date < todayISO() && t.status === 'פתוחה';
     const isUnread = !t.read_at;
-    return `<tr class="${isUnread?'task-unread':''}">
-      <td data-label="כותרת">${esc(t.title)} <span class="pill ${isUnread?'pill-unread':'pill-read'}">${isUnread?'🔵 לא נקראה':'✓ נקראה'}</span></td>
+    return `<tr class="${isUnread?'task-unread':''}" style="cursor:pointer;" onclick="openTaskForm('${t.id}')">
+      <td data-label="נקרא"><span class="pill ${isUnread?'pill-unread':'pill-read'}">${isUnread?'🔵 לא נקרא':'✓ נקרא'}</span></td>
+      <td data-label="כותרת">${esc(t.title)}</td>
       <td data-label="קשור ל">${t.related_type ? esc(relatedLabels[t.related_type]||t.related_type) : '—'}</td>
       <td data-label="תאריך יעד" class="${isOverdue?'overdue':''}">${fmtDate(t.due_date)}${t.due_time ? ' <span style="color:#8a93a8;font-size:.78rem;">' + esc(t.due_time.slice(0,5)) + '</span>' : ''}</td>
       <td data-label="סטטוס"><span class="pill ${t.status==='פתוחה'?'pill-open':'pill-done'}">${esc(t.status)}</span></td>
       <td data-label="עדיפות" class="${t.priority==='גבוהה'?'pri-high':'pri-normal'}">${esc(t.priority)}</td>
       <td data-label="אחראי">${esc(userName(t.assigned_to))}</td>
-      <td class="row-actions" data-label="">
+      <td class="row-actions" data-label="" onclick="event.stopPropagation()">
         <button class="act-edit" title="ערוך" onclick="openTaskForm('${t.id}')">✏️</button>
         ${isUnread
-          ? `<button class="act-read" title="סמן כנקראה" onclick="event.stopPropagation(); toggleTaskRead('${t.id}', true)">👁️</button>`
-          : `<button class="act-unread" title="סמן כלא נקראה" onclick="event.stopPropagation(); toggleTaskRead('${t.id}', false)">↺</button>`}
+          ? `<button class="act-read" title="סמן כנקרא" onclick="toggleTaskRead('${t.id}', true)">👁️</button>`
+          : `<button class="act-unread" title="סמן כלא נקרא" onclick="toggleTaskRead('${t.id}', false)">↺</button>`}
         ${t.status==='פתוחה' ? `<button class="act-done" title="סמן כהושלם" onclick="completeTask('${t.id}')">✅</button>` : ''}
         <button class="act-delete" title="מחק" onclick="deleteTask('${t.id}')">🗑️</button>
       </td>
@@ -207,6 +208,7 @@ function openTaskForm(id){
     <h3>${task ? 'עריכת משימה' : 'משימה חדשה'}</h3>
     <form id="taskForm">
       <div class="field"><label>כותרת</label><input type="text" id="title" value="${esc(task?.title)}" required></div>
+      <div class="field"><label>תוכן המשימה <span style="font-weight:400;color:#999;font-size:.75rem;">(לא חובה)</span></label><textarea id="description" rows="4" style="width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;resize:vertical;">${esc(task?.description)}</textarea></div>
       <div class="field"><label>תאריך יעד</label><input type="date" id="due_date" value="${task?.due_date||''}"></div>
       <div class="field"><label>שעת יעד <span style="font-weight:400;color:#999;font-size:.75rem;">(לא חובה)</span></label><input type="time" id="due_time" value="${task?.due_time||''}"></div>
       <div class="field"><label>עדיפות</label>
@@ -239,19 +241,21 @@ async function saveTask(e){
     assigned_to: g('assigned_to') || null
   };
   const dueTime = g('due_time') || null;
+  const description = g('description') || null;
+  const extra = { due_time: dueTime, description };
   const schemaMissing = (err) => err && /column|schema cache/i.test(err.message || '');
   let error;
   if (taskId){
-    ({ error } = await window.supabaseClient.from('tasks').update({ ...payload, due_time: dueTime }).eq('id', taskId));
+    ({ error } = await window.supabaseClient.from('tasks').update({ ...payload, ...extra }).eq('id', taskId));
     if (error && schemaMissing(error)){
-      toast('שים לב: שעת היעד עדיין לא נשמרת — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף אותה לטבלת המשימות. שאר הנתונים נשמרו.');
+      toast('שים לב: שעת יעד/תוכן משימה עדיין לא נשמרים — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף אותם לטבלת המשימות. שאר הנתונים נשמרו.');
       ({ error } = await window.supabaseClient.from('tasks').update(payload).eq('id', taskId));
     }
   } else {
     payload.status = 'פתוחה';
-    ({ error } = await window.supabaseClient.from('tasks').insert({ ...payload, due_time: dueTime }));
+    ({ error } = await window.supabaseClient.from('tasks').insert({ ...payload, ...extra }));
     if (error && schemaMissing(error)){
-      toast('שים לב: שעת היעד עדיין לא נשמרת — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף אותה לטבלת המשימות. המשימה עצמה נשמרה.');
+      toast('שים לב: שעת יעד/תוכן משימה עדיין לא נשמרים — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף אותם לטבלת המשימות. המשימה עצמה נשמרה.');
       ({ error } = await window.supabaseClient.from('tasks').insert(payload));
     }
   }
