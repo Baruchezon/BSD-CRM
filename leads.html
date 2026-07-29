@@ -40,6 +40,7 @@
   .agr-none{background:#f1f1f1;color:#777;}
   .agr-sent{background:#fdeccb;color:#8a5a10;}
   .agr-signed{background:#dff0e4;color:#245c40;}
+  .agr-banner{width:100%;box-sizing:border-box;padding:10px 16px;border-radius:8px;font-size:.95rem;font-weight:700;margin-bottom:14px;text-align:center;}
   tbody tr.row-signed{background:#16a34a !important;border-right:10px solid #0b5e29;}
   tbody tr.row-signed td{color:#fff !important;font-weight:700;}
   tbody tr.row-signed:hover{background:#128a3e !important;}
@@ -349,6 +350,12 @@ function agreementBadge(status){
   const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
   return `<span class="agr-badge ${cls}">${esc(s)}</span>`;
 }
+function agreementBanner(status){
+  const s = status || 'אין הסכם';
+  const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
+  const icon = s === 'יש הסכם חתום' ? '✅' : (s === 'נשלח הסכם לחתימה' ? '📤' : '⭕');
+  return `<div class="agr-banner ${cls}">${icon} סטטוס הסכם: <b>${esc(s)}</b></div>`;
+}
 
 ['fSearch','fType','fStatus','fAgreement','fCreatedBy','fSort'].forEach(id=>{
   document.getElementById(id).addEventListener('input', renderTable);
@@ -384,6 +391,7 @@ function openLeadForm(id, forcedType){
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>${lead ? 'עריכת' : 'הוספת'} ${type==='buyer'?'קונה':'מוכר'}</h3>
+    ${lead ? agreementBanner(lead.agreement_status) : ''}
     <div class="type-toggle">
       <button type="button" class="${type==='buyer'?'active buyer':''}" onclick="switchLeadType('buyer', ${lead?`'${lead.id}'`:'null'})">קונה</button>
       <button type="button" class="${type==='seller'?'active seller':''}" onclick="switchLeadType('seller', ${lead?`'${lead.id}'`:'null'})">מוכר</button>

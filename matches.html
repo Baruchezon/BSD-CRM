@@ -26,10 +26,7 @@
   tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
   tbody tr:hover{background:#faf8f2;}
   .empty-row td{text-align:center;color:#999;padding:30px;}
-  .status-pill{padding:4px 10px;border-radius:12px;font-size:.72rem;font-weight:700;background:#eef1f6;color:var(--navy);}
-  .status-closed{background:#dff0e4;color:#245c40;}
-  .status-stopped{background:#fbe4e0;color:#832d1f;}
-  .status-negotiation{background:#fdeccb;color:#8a5a10;}
+  .status-pill{padding:4px 10px;border-radius:12px;font-size:.72rem;font-weight:700;display:inline-block;white-space:nowrap;}
   .row-actions button{border:none;cursor:pointer;font-size:1.05rem;padding:6px 8px;margin:0 2px;border-radius:50%;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s ease, box-shadow .12s ease;box-shadow:0 1px 3px rgba(0,0,0,.15);}
   .row-actions button:hover{transform:scale(1.12);box-shadow:0 3px 8px rgba(0,0,0,.25);}
   .row-actions button.act-edit{background:#e3f0ff;}
@@ -115,9 +112,32 @@
 <script src="js/auth.js"></script>
 <script src="js/searchSelect.js"></script>
 <script>
-const MATCH_STATUSES = ['התאמה חדשה','טרם נשלח לקונה','נשלח לקונה','ממתין לתגובה','הקונה התעניין','לא מתאים לקונה',
-  'נחתם הסכם סודיות','נשלחו מסמכים','נקבעה פגישה','התקיימה פגישה','בבדיקה כלכלית','בבדיקת נאותות','במשא ומתן',
-  'הוגשה הצעה','העסקה נסגרה','העסקה נעצרה','הקונה ויתר','המוכר ויתר'];
+const MATCH_STATUSES = ['התאמה חדשה','נשלח לקונה - ממתין לתגובה (אנונימי)','נשלחו מסמכים לאחר חתימת הסכם',
+  'נקבעה פגישה','התקיימה פגישה','המשך מו"מ','לא מתאים לקונה','העסקה נסגרה','העסקה נעצרה'];
+
+// Statuses that need a meeting date field
+const STATUSES_WITH_MEETING_DATE = ['נקבעה פגישה','התקיימה פגישה','המשך מו"מ'];
+// Statuses that need the meeting-summary field (a meeting has already taken place)
+const STATUSES_WITH_MEETING_SUMMARY = ['התקיימה פגישה','המשך מו"מ','לא מתאים לקונה','העסקה נסגרה'];
+// Status that needs the "reason stopped" field
+const STATUSES_WITH_STOP_REASON = ['העסקה נעצרה'];
+
+// Progressive color scale: white → light green → darker green → teal (closed) ; red variants for the two negative outcomes
+const STATUS_STYLES = {
+  'התאמה חדשה':                              { bg:'#ffffff', color:'#4a5164', border:'1px solid #d8d3c4' },
+  'נשלח לקונה - ממתין לתגובה (אנונימי)':       { bg:'#eafaf1', color:'#1f7a4d' },
+  'נשלחו מסמכים לאחר חתימת הסכם':             { bg:'#d3f2df', color:'#1c6d46' },
+  'נקבעה פגישה':                              { bg:'#b7e8cb', color:'#186a41' },
+  'התקיימה פגישה':                            { bg:'#a3e0bd', color:'#155c38' },
+  'המשך מו"מ':                                { bg:'#6fce97', color:'#0f4a2c' },
+  'לא מתאים לקונה':                           { bg:'#f9d6d2', color:'#8a2e22' },
+  'העסקה נסגרה':                              { bg:'linear-gradient(90deg,#2fae7a,#2f8fc9)', color:'#ffffff' },
+  'העסקה נעצרה':                              { bg:'#ef9d92', color:'#5c140a' }
+};
+function statusStyle(status){
+  const st = STATUS_STYLES[status] || { bg:'#eef1f6', color:'var(--navy)' };
+  return `background:${st.bg};color:${st.color};${st.border?('border:'+st.border+';'):''}`;
+}
 
 let ALL_MATCHES = [], ALL_BUYERS = [], ALL_BIZ = [], ALL_USERS = [], CURRENT_PROFILE = null;
 
@@ -159,12 +179,7 @@ function userName(id){
   const u = ALL_USERS.find(x=>x.id===id);
   return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
 }
-function statusClass(status){
-  if (status === 'העסקה נסגרה') return 'status-closed';
-  if (status === 'העסקה נעצרה' || status === 'הקונה ויתר' || status === 'המוכר ויתר') return 'status-stopped';
-  if (status === 'במשא ומתן') return 'status-negotiation';
-  return '';
-}
+
 
 async function loadLookups(){
   const [{data:buyers}, {data:biz}, {data:users}] = await Promise.all([
@@ -232,7 +247,7 @@ function renderTable(){
       <td data-label="קונה">${esc(buyerName(m.buyer_id))}</td>
       <td data-label="עסק">${esc(bizName(m.business_id))}</td>
       <td data-label="אחוז התאמה">${m.match_percent!==null&&m.match_percent!==undefined ? m.match_percent+'%' : '—'}</td>
-      <td data-label="סטטוס"><span class="status-pill ${statusClass(m.status)}">${esc(m.status)}</span></td>
+      <td data-label="סטטוס"><span class="status-pill" style="${statusStyle(m.status)}">${esc(m.status)}</span></td>
       <td data-label="הוזן ע&quot;י">${m.created_by ? esc(userName(m.created_by)) : 'לא ידוע'}</td>
       <td data-label="מטופל ע&quot;י">${esc(userName(m.current_handler))}</td>
       <td data-label="נוצר">${fmtDate(m.created_at)}</td>
@@ -278,9 +293,12 @@ async function openMatchForm(id){
           selectedValue: match?.business_id || '', selectedLabel: bizLabel(match?.business_id), disabled: !!match
         })}</div>
         <div class="field"><label>אחוז התאמה</label><input type="number" id="match_percent" min="0" max="100" value="${match?.match_percent??''}"></div>
-        <div class="field"><label>סטטוס</label><select id="status">${statusOptions(match?.status||'התאמה חדשה')}</select></div>
+        <div class="field"><label>סטטוס</label><select id="status" onchange="onMatchStatusChange()">${statusOptions(match?.status||'התאמה חדשה')}</select></div>
         <div class="field"><label>מטפל כרגע</label><select id="current_handler">${userOptions(match?.current_handler)}</select></div>
         <div class="field"><label>תגובת הקונה</label><input type="text" id="buyer_response" value="${esc(match?.buyer_response)}"></div>
+        <div class="field" id="meetingDateField" style="display:none;"><label>תאריך הפגישה</label><input type="date" id="meeting_date" value="${match?.meeting_date||''}"></div>
+        <div class="field full" id="meetingSummaryField" style="display:none;"><label>סיכום הפגישה</label><textarea id="meeting_summary">${esc(match?.meeting_summary)}</textarea></div>
+        <div class="field full" id="stopReasonField" style="display:none;"><label>סיבת עצירת העסקה</label><textarea id="stopped_reason">${esc(match?.stopped_reason)}</textarea></div>
         <div class="field full"><label>סיבת ההתאמה</label><textarea id="match_reason">${esc(match?.match_reason)}</textarea></div>
         <div class="field full"><label>הערות</label><textarea id="notes">${esc(match?.notes)}</textarea></div>
       </div>
@@ -308,6 +326,7 @@ async function openMatchForm(id){
   document.getElementById('overlay').classList.add('open');
   document.getElementById('matchForm').dataset.matchId = match ? match.id : '';
   document.getElementById('matchForm').addEventListener('submit', saveMatch);
+  onMatchStatusChange();
 
   if (!match){
     initSearchSelect('buyer_id_box', ALL_BUYERS, { getId:b=>b.id, getLabel:b=>b.full_name, valueId:'buyer_id' });
@@ -318,6 +337,18 @@ async function openMatchForm(id){
     loadParticipants(match.id);
     loadHistory(match.id);
   }
+}
+
+function onMatchStatusChange(){
+  const sel = document.getElementById('status');
+  if (!sel) return;
+  const status = sel.value;
+  const dateField = document.getElementById('meetingDateField');
+  const summaryField = document.getElementById('meetingSummaryField');
+  const stopField = document.getElementById('stopReasonField');
+  if (dateField) dateField.style.display = STATUSES_WITH_MEETING_DATE.includes(status) ? '' : 'none';
+  if (summaryField) summaryField.style.display = STATUSES_WITH_MEETING_SUMMARY.includes(status) ? '' : 'none';
+  if (stopField) stopField.style.display = STATUSES_WITH_STOP_REASON.includes(status) ? '' : 'none';
 }
 
 async function loadParticipants(matchId){
@@ -356,15 +387,27 @@ async function saveMatch(e){
   const matchId = form.dataset.matchId;
   const g = id => document.getElementById(id) ? document.getElementById(id).value : null;
   const num = v => v === '' || v === null ? null : Number(v);
+  const status = g('status');
+
+  if (STATUSES_WITH_STOP_REASON.includes(status) && !(g('stopped_reason')||'').trim()){
+    toast('יש למלא סיבה לעצירת העסקה'); return;
+  }
+
+  const extraFields = {
+    meeting_date: STATUSES_WITH_MEETING_DATE.includes(status) ? (g('meeting_date') || null) : null,
+    meeting_summary: STATUSES_WITH_MEETING_SUMMARY.includes(status) ? g('meeting_summary') : null,
+    stopped_reason: STATUSES_WITH_STOP_REASON.includes(status) ? g('stopped_reason') : null
+  };
 
   if (matchId){
     const payload = {
       match_percent: num(g('match_percent')),
-      status: g('status'),
+      status: status,
       current_handler: g('current_handler') || null,
       buyer_response: g('buyer_response'),
       match_reason: g('match_reason'),
-      notes: g('notes')
+      notes: g('notes'),
+      ...extraFields
     };
     const { error } = await window.supabaseClient.from('matches').update(payload).eq('id', matchId);
     if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
@@ -374,17 +417,19 @@ async function saveMatch(e){
     const payload = {
       buyer_id: buyerId, business_id: bizId,
       match_percent: num(g('match_percent')),
-      status: g('status'),
+      status: status,
       current_handler: g('current_handler') || null,
       transferred_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null,
       transferred_at: new Date().toISOString(),
       buyer_response: g('buyer_response'),
       match_reason: g('match_reason'),
-      notes: g('notes')
+      notes: g('notes'),
+      ...extraFields
     };
     const { error } = await window.supabaseClient.from('matches').insert(payload);
     if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
   }
+
 
   toast('נשמר בהצלחה');
   closeModal();
