@@ -25,10 +25,10 @@
   .seg button.active{background:var(--navy);color:#fff;}
   .filters select, .filters input{padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.82rem;}
   .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
-  .agent-panel{display:none;position:absolute;top:110%;right:0;background:#fff;border:1px solid #d8d3c4;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:10px 12px;z-index:40;min-width:230px;max-height:280px;overflow-y:auto;}
-  .agent-panel.open{display:block;}
-  .agent-row{display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:.83rem;cursor:pointer;}
-  .agent-row:hover{color:var(--navy);}
+  .agent-chip{border:1.5px solid #d8d3c4;background:#fff;color:#4a5164;padding:6px 14px;border-radius:20px;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .15s ease;}
+  .agent-chip:hover{border-color:var(--navy);}
+  .agent-chip.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .agent-chip .cnt{font-size:.68rem;opacity:.75;margin-inline-start:4px;}
   .scope-badge{font-size:.78rem;color:#6c7488;background:#f7f3ea;border:1px solid #e3d9bd;padding:6px 12px;border-radius:8px;}
 
   .kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:20px;}
@@ -117,17 +117,12 @@
           <option value="mine">הנתונים שלי</option>
           <option value="team">כל הצוות</option>
         </select>
-        <div id="agentPicker" style="position:relative;display:none;">
-          <button type="button" class="btn btn-ghost" id="agentPickerBtn" onclick="toggleAgentPicker()">👥 כל הצוות ▾</button>
-          <div id="agentPickerPanel" class="agent-panel">
-            <label class="agent-row" style="font-weight:700;border-bottom:1px solid #f0ede4;padding-bottom:6px;margin-bottom:4px;">
-              <input type="checkbox" id="agentAllCb" checked onchange="onAgentAllToggle()"> כל הצוות
-            </label>
-            <div id="agentCbList"></div>
-          </div>
-        </div>
       </div>
       <button class="btn btn-ghost" onclick="refreshAll()">🔄 רענון</button>
+    </div>
+    <div id="agentChipsWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #f0ede4;">
+      <div style="font-size:.75rem;color:#8a93a8;margin-bottom:6px;">הצג נתונים עבור (ניתן לבחור כמה):</div>
+      <div id="agentChips" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
     </div>
   </div>
 
@@ -164,9 +159,10 @@
             <th data-sort="logins">כניסות למערכת</th>
             <th data-sort="last_login">כניסה אחרונה</th>
             <th data-sort="tenure_days">ותק במערכת</th>
+            <th data-sort="time_spent_ms">זמן שהייה בטווח</th>
           </tr>
         </thead>
-        <tbody id="leaderBody"><tr class="empty-row"><td colspan="9">טוען...</td></tr></tbody>
+        <tbody id="leaderBody"><tr class="empty-row"><td colspan="10">טוען...</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -279,43 +275,39 @@ async function loadLookups(){
   document.getElementById('scopeFilters').style.display = isAdmin ? 'flex' : 'none';
   document.getElementById('scopeBadge').textContent = isAdmin ? 'מנהל · יכול לצפות בכל הצוות' : 'מציג את הנתונים שלך בלבד';
   if (isAdmin){
-    const list = document.getElementById('agentCbList');
+    const wrap = document.getElementById('agentChips');
+    const allChip = document.createElement('button');
+    allChip.type = 'button'; allChip.className = 'agent-chip active'; allChip.id = 'chipAll';
+    allChip.textContent = '👥 כל הצוות';
+    allChip.onclick = () => selectAllAgents();
+    wrap.appendChild(allChip);
     ALL_PROFILES.filter(p=>p.role!=='admin').forEach(p=>{
       const name = (p.full_name && p.full_name.trim()) ? p.full_name : p.email;
-      const row = document.createElement('label');
-      row.className = 'agent-row';
-      row.innerHTML = `<input type="checkbox" class="agent-cb" data-id="${p.id}" onchange="onAgentCbChange('${p.id}', this.checked)"> ${esc(name)}`;
-      list.appendChild(row);
+      const chip = document.createElement('button');
+      chip.type = 'button'; chip.className = 'agent-chip'; chip.dataset.id = p.id;
+      chip.textContent = name;
+      chip.onclick = () => toggleAgentChip(p.id);
+      wrap.appendChild(chip);
     });
   }
 }
 
-function toggleAgentPicker(){
-  document.getElementById('agentPickerPanel').classList.toggle('open');
-}
-function updateAgentPickerLabel(){
-  const btn = document.getElementById('agentPickerBtn');
-  const n = SELECTED_AGENTS.size;
-  if (n === 0) btn.textContent = '👥 כל הצוות ▾';
-  else if (n === 1) btn.textContent = '👤 ' + userName([...SELECTED_AGENTS][0]) + ' ▾';
-  else btn.textContent = '👥 נבחרו ' + n + ' משתמשים ▾';
-}
-function onAgentAllToggle(){
+function selectAllAgents(){
   SELECTED_AGENTS.clear();
-  document.querySelectorAll('.agent-cb').forEach(cb=>cb.checked=false);
-  updateAgentPickerLabel();
+  syncAgentChips();
   refreshAll();
 }
-function onAgentCbChange(id, checked){
-  if (checked) SELECTED_AGENTS.add(id); else SELECTED_AGENTS.delete(id);
-  document.getElementById('agentAllCb').checked = SELECTED_AGENTS.size === 0;
-  updateAgentPickerLabel();
+function toggleAgentChip(id){
+  if (SELECTED_AGENTS.has(id)) SELECTED_AGENTS.delete(id); else SELECTED_AGENTS.add(id);
+  syncAgentChips();
   refreshAll();
 }
-document.addEventListener('click', e=>{
-  const picker = document.getElementById('agentPicker');
-  if (picker && !picker.contains(e.target)) document.getElementById('agentPickerPanel').classList.remove('open');
-});
+function syncAgentChips(){
+  document.getElementById('chipAll').classList.toggle('active', SELECTED_AGENTS.size===0);
+  document.querySelectorAll('.agent-chip[data-id]').forEach(chip=>{
+    chip.classList.toggle('active', SELECTED_AGENTS.has(chip.dataset.id));
+  });
+}
 
 async function fetchData(){
   const from = rangeStart();
@@ -535,16 +527,22 @@ async function renderLeaderboard(){
   if (!isAdmin || SCOPE !== 'team') return;
 
   const from = rangeStart().toISOString();
-  const [{data:biz}, {data:leads}, {data:matches}] = await Promise.all([
+  const agents = ALL_PROFILES.filter(p=>p.role !== 'admin' && (SELECTED_AGENTS.size===0 || SELECTED_AGENTS.has(p.id)));
+  const agentIds = agents.map(p=>p.id);
+
+  const [{data:biz}, {data:leads}, {data:matches}, {data:sessions}] = await Promise.all([
     window.supabaseClient.from('businesses').select('created_by').gte('created_at', from),
     window.supabaseClient.from('leads').select('created_by, type').gte('created_at', from),
-    window.supabaseClient.from('matches').select('created_by, current_handler, status').gte('created_at', from)
+    window.supabaseClient.from('matches').select('created_by, current_handler, status').gte('created_at', from),
+    agentIds.length ? window.supabaseClient.from('activity_log').select('user_id, action_type, created_at').in('user_id', agentIds).in('action_type', ['login','logout']).gte('created_at', from).order('created_at', { ascending:true }) : Promise.resolve({data:[]})
   ]);
 
-  const agents = ALL_PROFILES.filter(p=>p.role !== 'admin' && (SELECTED_AGENTS.size===0 || SELECTED_AGENTS.has(p.id)));
+  const sessionTotals = computeSessionTotals(sessions || []);
+
   LEADER_ROWS = agents.map(p=>{
     const owner = (m) => (m.current_handler || m.created_by);
     const tenureDays = p.created_at ? Math.max(0, Math.floor((Date.now() - new Date(p.created_at).getTime()) / 86400000)) : null;
+    const st = sessionTotals[p.id] || { totalMs:0, sessionCount:0 };
     return {
       id: p.id,
       name: (p.full_name && p.full_name.trim()) ? p.full_name : p.email,
@@ -556,10 +554,45 @@ async function renderLeaderboard(){
       logins: p.login_count || 0,
       last_login: p.last_login_at,
       tenure_days: tenureDays,
-      status: p.status
+      status: p.status,
+      time_spent_ms: st.totalMs,
+      session_count: st.sessionCount
     };
   });
   sortAndRenderLeaderboard();
+}
+
+// Pairs chronological login→logout events per user into sessions and sums their duration.
+// An unclosed session (login with no matching logout yet, e.g. still logged in) counts
+// up to "now" so today's active session isn't invisible.
+function computeSessionTotals(events){
+  const byUser = {};
+  events.forEach(e=>{ (byUser[e.user_id] = byUser[e.user_id]||[]).push(e); });
+  const totals = {};
+  Object.keys(byUser).forEach(uid=>{
+    let openLogin = null, totalMs = 0, sessionCount = 0;
+    byUser[uid].forEach(e=>{
+      if (e.action_type === 'login') openLogin = new Date(e.created_at).getTime();
+      else if (e.action_type === 'logout' && openLogin){
+        totalMs += Math.max(0, new Date(e.created_at).getTime() - openLogin);
+        sessionCount++;
+        openLogin = null;
+      }
+    });
+    if (openLogin){ totalMs += Math.max(0, Date.now() - openLogin); sessionCount++; }
+    totals[uid] = { totalMs, sessionCount };
+  });
+  return totals;
+}
+function fmtDuration(ms){
+  if (!ms) return '—';
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return mins + ' דק\'';
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  if (hrs < 24) return hrs + ' שע\'' + (remMins ? ' ' + remMins + ' דק\'' : '');
+  const days = Math.floor(hrs / 24);
+  return days + ' ימים ' + (hrs % 24) + ' שע\'';
 }
 
 function tenureLabel(days){
@@ -574,14 +607,18 @@ async function showLoginHistory(agentId, agentName){
   const from = rangeStart().toISOString();
   const { data, error } = await window.supabaseClient
     .from('activity_log')
-    .select('created_at')
+    .select('action_type, created_at')
     .eq('user_id', agentId)
-    .eq('action_type', 'login')
+    .in('action_type', ['login','logout'])
     .gte('created_at', from)
     .order('created_at', { ascending:false });
   if (error){ toast('שגיאה בטעינת היסטוריית כניסות: ' + error.message); return; }
-  const rows = (data||[]).map(r=>({ primary: fmtDateTime(r.created_at) }));
-  openDrilldown('היסטוריית כניסות · ' + agentName, rows.length + ' כניסות בטווח שנבחר', rows);
+  const rows = (data||[]).map(r=>({
+    primary: (r.action_type==='login' ? '🟢 כניסה' : '🔴 יציאה') + ' · ' + fmtDateTime(r.created_at)
+  }));
+  const totals = computeSessionTotals((data||[]).map(r=>({ user_id:agentId, action_type:r.action_type, created_at:r.created_at })));
+  const st = totals[agentId] || { totalMs:0, sessionCount:0 };
+  openDrilldown('היסטוריית כניסות · ' + agentName, `${rows.length} אירועים · סה"כ זמן שהייה בטווח: ${fmtDuration(st.totalMs)} (${st.sessionCount} כניסות)`, rows);
 }
 
 function sortAndRenderLeaderboard(){
@@ -606,8 +643,9 @@ function sortAndRenderLeaderboard(){
       <td><span style="text-decoration:underline;" onclick="event.stopPropagation(); showLoginHistory('${r.id}','${esc(r.name)}')">${r.logins}</span></td>
       <td>${fmtDateTime(r.last_login)}</td>
       <td>${tenureLabel(r.tenure_days)}</td>
+      <td>${fmtDuration(r.time_spent_ms)}${r.session_count ? ` <span style="color:#999;font-size:.72rem;">(${r.session_count})</span>` : ''}</td>
     </tr>
-  `).join('') : '<tr class="empty-row"><td colspan="9">אין נתונים בטווח שנבחר</td></tr>';
+  `).join('') : '<tr class="empty-row"><td colspan="10">אין נתונים בטווח שנבחר</td></tr>';
 
   if (leaderChart) leaderChart.destroy();
   leaderChart = new Chart(document.getElementById('leaderChart'), {
@@ -633,9 +671,10 @@ function sortAndRenderLeaderboard(){
 }
 function drillIntoAgent(agentId){
   SELECTED_AGENTS = new Set([agentId]);
-  document.querySelectorAll('.agent-cb').forEach(cb=>{ cb.checked = cb.dataset.id === agentId; });
-  document.getElementById('agentAllCb').checked = false;
-  updateAgentPickerLabel();
+  document.getElementById('fScope').value = 'team';
+  SCOPE = 'team';
+  document.getElementById('agentChipsWrap').style.display = 'block';
+  syncAgentChips();
   refreshAll();
 }
 
@@ -666,7 +705,7 @@ document.getElementById('rangeSeg').addEventListener('click', e=>{
 });
 document.getElementById('fScope').addEventListener('change', e=>{
   SCOPE = e.target.value;
-  document.getElementById('agentPicker').style.display = SCOPE === 'team' ? 'inline-block' : 'none';
+  document.getElementById('agentChipsWrap').style.display = SCOPE === 'team' ? 'block' : 'none';
   refreshAll();
 });
 document.getElementById('leaderTable').querySelector('thead').addEventListener('click', e=>{

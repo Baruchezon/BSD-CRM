@@ -136,6 +136,102 @@ input, select, textarea, button{
   touch-action:manipulation;
 }
 
+/* ============================================================
+   3D BUTTON SYSTEM — every .btn across the app gets a tactile,
+   professional "raised" look: subtle depth at rest, lifts higher
+   with a deepening shadow on hover (so it's unmistakable the
+   cursor is over something clickable), and presses down on
+   click for real tactile feedback. Background colors defined
+   per-page (.btn-primary/.btn-ghost) are untouched — this layer
+   only adds depth, motion and a glossy sheen on top of them.
+   ============================================================ */
+button, .btn{
+  position:relative;
+  overflow:hidden;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.25) inset,
+    0 -2px 4px rgba(0,0,0,.12) inset,
+    0 3px 0 rgba(14,27,52,.22),
+    0 6px 14px rgba(14,27,52,.16);
+  transform:translateY(0);
+  transition:transform .16s cubic-bezier(.34,1.56,.64,1), box-shadow .16s ease, filter .16s ease;
+  will-change:transform;
+}
+button::after, .btn::after{
+  content:'';
+  position:absolute; inset:0;
+  background:linear-gradient(180deg, rgba(255,255,255,.30) 0%, rgba(255,255,255,0) 42%, rgba(0,0,0,.05) 100%);
+  border-radius:inherit;
+  pointer-events:none;
+}
+button:hover, .btn:hover{
+  transform:translateY(-3px);
+  filter:brightness(1.04);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.3) inset,
+    0 -2px 4px rgba(0,0,0,.12) inset,
+    0 5px 0 rgba(14,27,52,.22),
+    0 12px 22px rgba(14,27,52,.22);
+}
+button:active, .btn:active{
+  transform:translateY(1px);
+  filter:brightness(.98);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.18) inset,
+    0 -1px 2px rgba(0,0,0,.14) inset,
+    0 1px 0 rgba(14,27,52,.22),
+    0 2px 5px rgba(14,27,52,.15);
+}
+button:disabled, .btn:disabled{
+  opacity:.55; cursor:not-allowed; transform:none !important; filter:none !important;
+  box-shadow:0 1px 0 rgba(14,27,52,.15) !important;
+}
+.btn-ghost{
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.5) inset,
+    0 2px 0 rgba(0,0,0,.06),
+    0 4px 10px rgba(0,0,0,.08);
+}
+.btn-ghost:hover{
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.5) inset,
+    0 4px 0 rgba(0,0,0,.06),
+    0 10px 18px rgba(0,0,0,.12);
+}
+.btn-ghost:active{
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.4) inset,
+    0 1px 0 rgba(0,0,0,.06),
+    0 2px 4px rgba(0,0,0,.08);
+}
+/* Small icon/row-action buttons (circular ✏️🗑️📄 etc.) get a lighter version
+   of the same depth so they match the same design language without
+   overpowering a dense table row. */
+.row-actions button{
+  box-shadow:0 2px 0 rgba(0,0,0,.12), 0 3px 6px rgba(0,0,0,.10);
+  transition:transform .14s cubic-bezier(.34,1.56,.64,1), box-shadow .14s ease;
+}
+.row-actions button:hover{
+  box-shadow:0 3px 0 rgba(0,0,0,.14), 0 7px 12px rgba(0,0,0,.16);
+}
+.row-actions button:active{
+  box-shadow:0 1px 0 rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.1);
+}
+/* Segmented toggle controls (יומי/שבועי/חודשי style) and filter chips —
+   flatter depth since they sit inside an already-raised panel. */
+.seg button.active, .agent-chip.active{
+  box-shadow:0 2px 5px rgba(14,27,52,.25) inset, 0 1px 0 rgba(255,255,255,.15);
+}
+.agent-chip{
+  box-shadow:0 1px 0 rgba(0,0,0,.04), 0 2px 4px rgba(0,0,0,.05);
+  transition:transform .14s cubic-bezier(.34,1.56,.64,1), box-shadow .14s ease, border-color .14s ease;
+}
+.agent-chip:hover{ transform:translateY(-1px); box-shadow:0 3px 8px rgba(0,0,0,.1); }
+.kpi-card{
+  box-shadow:0 4px 14px rgba(0,0,0,.06), 0 1px 0 rgba(255,255,255,.6) inset;
+}
+
+
 /* חלונות קופצים - תמיד נכנסים למסך, נגללים, וכפתורי שמירה/ביטול תמיד נגישים */
 .overlay{
   padding:0;
