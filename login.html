@@ -44,6 +44,9 @@
       <button type="submit" id="loginBtn">כניסה למערכת</button>
     </form>
     <div class="login-error" id="loginError"></div>
+    <div style="text-align:center;margin-top:12px;">
+      <button type="button" id="forgotPwdLink" style="background:none;border:none;color:var(--gold,#c9a24b);font-family:inherit;font-size:.85rem;cursor:pointer;text-decoration:underline;padding:4px;">שכחתי סיסמה</button>
+    </div>
   </div>
 </div>
 
@@ -80,6 +83,49 @@ document.getElementById('togglePwd').addEventListener('click', function(){
   const pwd = document.getElementById('password');
   if (pwd.type === 'password'){ pwd.type = 'text'; this.textContent = '🙈'; }
   else { pwd.type = 'password'; this.textContent = '👁️'; }
+});
+
+document.getElementById('forgotPwdLink').addEventListener('click', function(){
+  const overlay = document.createElement('div');
+  overlay.id = 'forgotPwdOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:380px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:inherit;">
+      <h3 style="margin:0 0 6px;color:#0e1b34;">שכחתי סיסמה</h3>
+      <p style="color:#666;font-size:.82rem;margin:0 0 14px;">הזן את כתובת האימייל שלך במערכת. אם היא קיימת, תישלח אליה סיסמה זמנית חדשה.</p>
+      <input type="email" id="forgotEmail" placeholder="אימייל" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;margin-bottom:10px;box-sizing:border-box;">
+      <div id="forgotMsg" style="font-size:.8rem;min-height:18px;margin-bottom:8px;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button type="button" id="forgotCancelBtn" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
+        <button type="button" id="forgotSendBtn" style="background:#c9a24b;color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שלח סיסמה חדשה</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('forgotCancelBtn').addEventListener('click', () => overlay.remove());
+
+  document.getElementById('forgotSendBtn').addEventListener('click', async function(){
+    const email = document.getElementById('forgotEmail').value.trim();
+    const msg = document.getElementById('forgotMsg');
+    const btn = this;
+    if (!email){ msg.style.color = '#b00020'; msg.textContent = 'נא להזין כתובת אימייל'; return; }
+    btn.disabled = true;
+    btn.textContent = 'שולח...';
+    msg.style.color = '#666';
+    msg.textContent = '';
+    try {
+      const resp = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY },
+        body: JSON.stringify({ email })
+      });
+      await resp.json().catch(() => ({}));
+    } catch (e) { /* עדיין מציגים הודעה גנרית, ראה הערה למטה */ }
+    // הודעה גנרית קבועה בכל מקרה - כדי לא לחשוף אילו כתובות אימייל קיימות במערכת
+    msg.style.color = '#2e6b4a';
+    msg.textContent = 'אם הכתובת קיימת במערכת, נשלחה אליה סיסמה זמנית חדשה.';
+    btn.textContent = 'נשלח';
+    setTimeout(() => overlay.remove(), 3500);
+  });
 });
 
 document.getElementById('loginForm').addEventListener('submit', async function(e){
