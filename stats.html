@@ -50,6 +50,22 @@
   .mini-bar{height:8px;border-radius:4px;background:linear-gradient(90deg,#2fae7a,#2f8fc9);}
   .empty-row td{text-align:center;color:#999;padding:26px;}
   .loading{text-align:center;color:#999;padding:40px;font-size:.9rem;}
+  .kpi-card{cursor:pointer;transition:transform .12s ease, box-shadow .12s ease;}
+  .kpi-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.12);}
+  .chart-wrap canvas{cursor:pointer;}
+  .hint{font-size:.68rem;color:#a3a9b8;text-align:left;margin-top:4px;}
+
+  .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:80;padding:40px 20px;}
+  .overlay.open{display:flex;}
+  .dmodal{background:#fff;border-radius:14px;max-width:640px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4);max-height:80vh;display:flex;flex-direction:column;}
+  .dmodal h3{margin:0 0 4px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;}
+  .dmodal .dsub{font-size:.78rem;color:#8a93a8;margin:0 0 14px 14px;}
+  .dmodal .dlist{overflow-y:auto;flex:1;}
+  .drow{display:flex;justify-content:space-between;align-items:center;padding:9px 10px;border-bottom:1px solid #f0ede4;font-size:.85rem;gap:10px;}
+  .drow .dprimary{font-weight:700;color:var(--navy);}
+  .drow .dsecondary{font-size:.76rem;color:#8a93a8;}
+  .drow .dpill{font-size:.7rem;padding:2px 8px;border-radius:10px;white-space:nowrap;}
+  .dmodal .dclose{align-self:flex-end;margin-top:14px;}
 </style>
 </head>
 <body>
@@ -108,12 +124,14 @@
 
   <div class="charts-grid">
     <div class="panel">
-      <h3>פעילות לאורך זמן</h3>
+      <h3 id="timeChartTitle">פעילות לאורך זמן</h3>
       <div class="chart-wrap"><canvas id="timeChart"></canvas></div>
+      <div class="hint">לחיצה על נקודה בגרף מציגה את הרשימה המלאה</div>
     </div>
     <div class="panel">
       <h3>התאמות לפי שלב (התקדמות)</h3>
       <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
+      <div class="hint">לחיצה על שלב מציגה את ההתאמות שבו</div>
     </div>
   </div>
 
@@ -140,12 +158,22 @@
   </div>
 </div>
 
+<div class="overlay" id="dOverlay">
+  <div class="dmodal">
+    <h3 id="dTitle">רשימה</h3>
+    <div class="dsub" id="dSub"></div>
+    <div class="dlist" id="dList"></div>
+    <button class="btn btn-ghost dclose" onclick="closeDrilldown()">סגירה</button>
+  </div>
+</div>
+
 <script src="js/config.js"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/auth.js"></script>
 <script>
 const STATUS_ORDER = ['התאמה חדשה','נשלח לקונה - ממתין לתגובה (אנונימי)','נשלחו מסמכים לאחר חתימת הסכם',
   'נקבעה פגישה','התקיימה פגישה','המשך מו"מ','לא מתאים לקונה','העסקה נסגרה','העסקה נעצרה'];
+const OTHER_STATUS = 'סטטוס ישן / אחר';
 const STATUS_STYLES = {
   'התאמה חדשה':                              '#c7cbd6',
   'נשלח לקונה - ממתין לתגובה (אנונימי)':       '#7fd9a8',
@@ -155,17 +183,25 @@ const STATUS_STYLES = {
   'המשך מו"מ':                                '#0f4a2c',
   'לא מתאים לקונה':                           '#e8756a',
   'העסקה נסגרה':                              '#2f8fc9',
-  'העסקה נעצרה':                              '#c0392b'
+  'העסקה נעצרה':                              '#c0392b',
+  [OTHER_STATUS]:                             '#b7bcc8'
 };
+const AGENT_COLORS = ['#2f8fc9','#c9a24b','#2fae7a','#c0392b','#8e44ad','#16a085','#d35400','#2c3e50','#e67e22','#27ae60'];
 
 let CURRENT_PROFILE = null;
 let ALL_PROFILES = [];
+let ALL_BUYERS = {}, ALL_BIZ = {};
 let GRAN = 'day', RANGE_DAYS = 30, SCOPE = 'mine', AGENT_FILTER = 'all';
 let timeChart = null, statusChart = null, leaderChart = null;
 let LEADER_ROWS = [];
 let LEADER_SORT = { key:'closed', dir:'desc' };
+let TIME_BUCKETS = [];
+let TIME_ITEM_MAP = { biz:{}, buyer:{}, matches:{} };
+let STATUS_ITEM_MAP = {};
+let LAST_D = null;
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return '—'; } }
 function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return '—'; } }
 function userName(id){
   const u = ALL_PROFILES.find(x=>x.id===id);
@@ -179,35 +215,34 @@ function rangeStart(){
   return d;
 }
 
-// ISO-ish bucket key generator (week starts Sunday, Israeli convention)
+// All bucketing uses LOCAL calendar-date components only — never toISOString/UTC —
+// so "today" always means today in the user's own timezone, and item keys always
+// agree with the bucket list keys (this was the bug: mixing UTC and local dates
+// silently dropped same-day entries).
+function localDateKey(d){
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 function bucketKey(date, gran){
   const d = new Date(date);
-  if (gran === 'day'){
-    return d.toISOString().slice(0,10);
-  }
+  if (gran === 'day') return localDateKey(d);
   if (gran === 'week'){
-    const day = d.getDay(); // 0 = Sunday
-    const start = new Date(d);
-    start.setDate(d.getDate() - day);
-    return start.toISOString().slice(0,10);
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay());
+    return localDateKey(start);
   }
-  // month
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
 }
 function bucketLabel(key, gran){
-  if (gran === 'month'){
-    const [y,m] = key.split('-');
-    return m + '/' + y.slice(2);
-  }
-  const d = new Date(key);
-  if (gran === 'week') return 'שבוע ' + d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit'});
-  return d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit'});
+  if (gran === 'month'){ const [y,m] = key.split('-'); return m + '/' + y.slice(2); }
+  const [y,m,day] = key.split('-');
+  if (gran === 'week') return 'שבוע ' + day + '/' + m;
+  return day + '/' + m;
 }
 function generateBuckets(from, to, gran){
   const buckets = [];
   const seen = new Set();
-  let cur = new Date(from);
-  while (cur <= to){
+  let cur = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  while (cur <= end){
     const key = bucketKey(cur, gran);
     if (!seen.has(key)){ seen.add(key); buckets.push(key); }
     cur.setDate(cur.getDate() + 1);
@@ -216,8 +251,15 @@ function generateBuckets(from, to, gran){
 }
 
 async function loadLookups(){
-  const { data } = await window.supabaseClient.from('profiles').select('id, full_name, email, role, login_count, last_login_at');
-  ALL_PROFILES = data || [];
+  const [{data:profiles}, {data:buyers}, {data:biz}] = await Promise.all([
+    window.supabaseClient.from('profiles').select('id, full_name, email, role, login_count, last_login_at'),
+    window.supabaseClient.from('leads').select('id, full_name'),
+    window.supabaseClient.from('businesses').select('id, internal_name')
+  ]);
+  ALL_PROFILES = profiles || [];
+  (buyers||[]).forEach(b=>ALL_BUYERS[b.id]=b.full_name);
+  (biz||[]).forEach(b=>ALL_BIZ[b.id]=b.internal_name);
+
   const isAdmin = CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager';
   document.getElementById('scopeFilters').style.display = isAdmin ? 'flex' : 'none';
   document.getElementById('scopeBadge').textContent = isAdmin ? 'מנהל · יכול לצפות בכל הצוות' : 'מציג את הנתונים שלך בלבד';
@@ -236,9 +278,9 @@ async function fetchData(){
   const from = rangeStart();
   const fromIso = from.toISOString();
 
-  let bizQ = window.supabaseClient.from('businesses').select('id, created_at, created_by').gte('created_at', fromIso);
-  let leadsQ = window.supabaseClient.from('leads').select('id, created_at, created_by, type').gte('created_at', fromIso);
-  let matchesQ = window.supabaseClient.from('matches').select('id, created_at, created_by, current_handler, status').gte('created_at', fromIso);
+  let bizQ = window.supabaseClient.from('businesses').select('id, internal_name, created_at, created_by').gte('created_at', fromIso);
+  let leadsQ = window.supabaseClient.from('leads').select('id, full_name, created_at, created_by, type').gte('created_at', fromIso);
+  let matchesQ = window.supabaseClient.from('matches').select('id, created_at, created_by, current_handler, status, buyer_id, business_id').gte('created_at', fromIso);
 
   const isAdmin = CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager';
   const effectiveScope = isAdmin ? SCOPE : 'mine';
@@ -257,74 +299,188 @@ async function fetchData(){
   return { biz: biz||[], leads: leads||[], matches: matches||[] };
 }
 
+// ---- Drilldown modal ----
+function openDrilldown(title, sub, rows){
+  document.getElementById('dTitle').textContent = title;
+  document.getElementById('dSub').textContent = sub || '';
+  document.getElementById('dList').innerHTML = rows.length ? rows.map(r=>`
+    <div class="drow">
+      <div><div class="dprimary">${esc(r.primary)}</div>${r.secondary?`<div class="dsecondary">${esc(r.secondary)}</div>`:''}</div>
+      ${r.pill?`<span class="dpill" style="background:${r.pillColor||'#eef1f6'};color:${r.pillTextColor||'#333'};">${esc(r.pill)}</span>`:''}
+    </div>
+  `).join('') : '<div class="drow"><span class="dsecondary">אין רשומות</span></div>';
+  document.getElementById('dOverlay').classList.add('open');
+}
+function closeDrilldown(){ document.getElementById('dOverlay').classList.remove('open'); }
+
+function bizRow(b){ return { primary: b.internal_name || 'עסק ללא שם', secondary: fmtDate(b.created_at) + (SCOPE==='team' ? ' · ' + userName(b.created_by) : '') }; }
+function leadRow(l){ return { primary: l.full_name || 'ליד ללא שם', secondary: fmtDate(l.created_at) + (SCOPE==='team' ? ' · ' + userName(l.created_by) : '') }; }
+function matchRow(m){
+  const label = (ALL_BUYERS[m.buyer_id]||'קונה') + ' ↔ ' + (ALL_BIZ[m.business_id]||'עסק');
+  const st = STATUS_STYLES[m.status] || STATUS_STYLES[OTHER_STATUS];
+  return {
+    primary: label,
+    secondary: fmtDate(m.created_at) + (SCOPE==='team' ? ' · ' + userName(m.created_by) : ''),
+    pill: m.status || OTHER_STATUS, pillColor: st, pillTextColor:'#fff'
+  };
+}
+
 function renderKPIs(d){
-  const buyers = d.leads.filter(l=>l.type==='buyer').length;
-  const sellers = d.leads.filter(l=>l.type==='seller').length;
-  const closed = d.matches.filter(m=>m.status==='העסקה נסגרה').length;
-  const stopped = d.matches.filter(m=>m.status==='העסקה נעצרה').length;
+  const buyers = d.leads.filter(l=>l.type==='buyer');
+  const sellers = d.leads.filter(l=>l.type==='seller');
+  const closed = d.matches.filter(m=>m.status==='העסקה נסגרה');
+  const stopped = d.matches.filter(m=>m.status==='העסקה נעצרה');
 
   const cards = [
-    { ico:'🏢', num:d.biz.length, lbl:'עסקים חדשים' },
-    { ico:'🧑‍💼', num:buyers, lbl:'קונים חדשים' },
-    { ico:'🤝', num:sellers, lbl:'מוכרים חדשים (לידים)' },
-    { ico:'🔗', num:d.matches.length, lbl:'התאמות שבוצעו' },
-    { ico:'✅', num:closed, lbl:'עסקאות שנסגרו' },
-    { ico:'⛔', num:stopped, lbl:'עסקאות שנעצרו' }
+    { ico:'🏢', num:d.biz.length, lbl:'עסקים חדשים', key:'biz' },
+    { ico:'🧑‍💼', num:buyers.length, lbl:'קונים חדשים', key:'buyers' },
+    { ico:'🤝', num:sellers.length, lbl:'מוכרים חדשים (לידים)', key:'sellers' },
+    { ico:'🔗', num:d.matches.length, lbl:'התאמות שבוצעו', key:'matches' },
+    { ico:'✅', num:closed.length, lbl:'עסקאות שנסגרו', key:'closed' },
+    { ico:'⛔', num:stopped.length, lbl:'עסקאות שנעצרו', key:'stopped' }
   ];
   document.getElementById('kpiGrid').innerHTML = cards.map(c=>`
-    <div class="kpi-card"><div class="ico">${c.ico}</div><div class="num">${c.num}</div><div class="lbl">${c.lbl}</div></div>
+    <div class="kpi-card" onclick="onKpiClick('${c.key}')"><div class="ico">${c.ico}</div><div class="num">${c.num}</div><div class="lbl">${c.lbl}</div></div>
   `).join('');
+}
+function onKpiClick(key){
+  const d = LAST_D; if (!d) return;
+  const map = {
+    biz: { title:'עסקים חדשים', rows: d.biz.map(bizRow) },
+    buyers: { title:'קונים חדשים', rows: d.leads.filter(l=>l.type==='buyer').map(leadRow) },
+    sellers: { title:'מוכרים חדשים (לידים)', rows: d.leads.filter(l=>l.type==='seller').map(leadRow) },
+    matches: { title:'התאמות שבוצעו', rows: d.matches.map(matchRow) },
+    closed: { title:'עסקאות שנסגרו', rows: d.matches.filter(m=>m.status==='העסקה נסגרה').map(matchRow) },
+    stopped: { title:'עסקאות שנעצרו', rows: d.matches.filter(m=>m.status==='העסקה נעצרה').map(matchRow) }
+  };
+  const c = map[key];
+  openDrilldown(c.title, c.rows.length + ' רשומות בטווח שנבחר', c.rows);
 }
 
 function renderTimeChart(d){
   const from = rangeStart();
   const to = new Date();
   const buckets = generateBuckets(from, to, GRAN);
-  const count = (arr) => {
-    const m = {};
-    buckets.forEach(b=>m[b]=0);
-    arr.forEach(item=>{ const k = bucketKey(item.created_at, GRAN); if (k in m) m[k]++; });
-    return buckets.map(b=>m[b]);
-  };
+  TIME_BUCKETS = buckets;
   const labels = buckets.map(b=>bucketLabel(b, GRAN));
-  const bizSeries = count(d.biz);
-  const buyerSeries = count(d.leads.filter(l=>l.type==='buyer'));
-  const matchSeries = count(d.matches);
+
+  const bucketItems = (arr) => {
+    const m = {}; buckets.forEach(b=>m[b]=[]);
+    arr.forEach(item=>{ const k = bucketKey(item.created_at, GRAN); if (k in m) m[k].push(item); });
+    return m;
+  };
+
+  const showPerAgent = SCOPE === 'team' && AGENT_FILTER === 'all';
 
   if (timeChart) timeChart.destroy();
-  timeChart = new Chart(document.getElementById('timeChart'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label:'עסקים', data:bizSeries, borderColor:'#c9a24b', backgroundColor:'rgba(201,162,75,.15)', tension:.3, fill:true },
-        { label:'קונים', data:buyerSeries, borderColor:'#2f8fc9', backgroundColor:'rgba(47,143,201,.15)', tension:.3, fill:true },
-        { label:'התאמות', data:matchSeries, borderColor:'#2fae7a', backgroundColor:'rgba(47,174,122,.15)', tension:.3, fill:true }
-      ]
-    },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      interaction:{ mode:'index', intersect:false },
-      scales: { y:{ beginAtZero:true, ticks:{ precision:0 } } },
-      plugins: { legend:{ position:'bottom' } }
-    }
-  });
+  document.getElementById('timeChartTitle').textContent = showPerAgent ? 'פעילות לאורך זמן — לפי סוכן' : 'פעילות לאורך זמן';
+
+  if (!showPerAgent){
+    const bizMap = bucketItems(d.biz);
+    const buyerMap = bucketItems(d.leads.filter(l=>l.type==='buyer'));
+    const matchMap = bucketItems(d.matches);
+    TIME_ITEM_MAP = { biz:bizMap, buyer:buyerMap, matches:matchMap };
+
+    timeChart = new Chart(document.getElementById('timeChart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { key:'biz', label:'עסקים', data:buckets.map(b=>bizMap[b].length), borderColor:'#c9a24b', backgroundColor:'rgba(201,162,75,.15)', tension:.3, fill:true },
+          { key:'buyer', label:'קונים', data:buckets.map(b=>buyerMap[b].length), borderColor:'#2f8fc9', backgroundColor:'rgba(47,143,201,.15)', tension:.3, fill:true },
+          { key:'matches', label:'התאמות', data:buckets.map(b=>matchMap[b].length), borderColor:'#2fae7a', backgroundColor:'rgba(47,174,122,.15)', tension:.3, fill:true }
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        interaction:{ mode:'index', intersect:false },
+        scales: { y:{ beginAtZero:true, ticks:{ precision:0 } } },
+        plugins: { legend:{ position:'bottom' } },
+        onClick: (evt, els, chart) => {
+          if (!els.length) return;
+          const el = els[0];
+          const dsKey = chart.data.datasets[el.datasetIndex].key;
+          const bucket = buckets[el.index];
+          const items = TIME_ITEM_MAP[dsKey][bucket] || [];
+          const titles = { biz:'עסקים', buyer:'קונים', matches:'התאמות' };
+          const rowFns = { biz:bizRow, buyer:leadRow, matches:matchRow };
+          openDrilldown(titles[dsKey] + ' · ' + bucketLabel(bucket, GRAN), items.length + ' רשומות', items.map(rowFns[dsKey]));
+        }
+      }
+    });
+  } else {
+    // one line per agent — total activity (businesses+buyers+matches) per bucket
+    const agents = ALL_PROFILES.filter(p=>p.role!=='admin');
+    const perAgentItems = {}; // agentId -> {bucket: [{type,item}]}
+    agents.forEach(p=>{ perAgentItems[p.id] = {}; buckets.forEach(b=>perAgentItems[p.id][b]=[]); });
+    const addAll = (arr, type) => arr.forEach(item=>{
+      const k = bucketKey(item.created_at, GRAN);
+      if (perAgentItems[item.created_by] && k in perAgentItems[item.created_by]) perAgentItems[item.created_by][k].push({type,item});
+    });
+    addAll(d.biz, 'biz');
+    addAll(d.leads.filter(l=>l.type==='buyer'), 'buyer');
+    addAll(d.matches, 'matches');
+    TIME_ITEM_MAP = { perAgent: perAgentItems };
+
+    const datasets = agents
+      .map((p,i)=>{
+        const name = (p.full_name && p.full_name.trim()) ? p.full_name : p.email;
+        const data = buckets.map(b=>perAgentItems[p.id][b].length);
+        return { key:p.id, name, label:name, data, borderColor:AGENT_COLORS[i%AGENT_COLORS.length], backgroundColor:'transparent', tension:.3 };
+      })
+      .filter(ds => ds.data.some(v=>v>0)); // hide agents with zero activity in range, keeps legend readable
+
+    timeChart = new Chart(document.getElementById('timeChart'), {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        interaction:{ mode:'index', intersect:false },
+        scales: { y:{ beginAtZero:true, ticks:{ precision:0 } } },
+        plugins: { legend:{ position:'bottom' } },
+        onClick: (evt, els, chart) => {
+          if (!els.length) return;
+          const el = els[0];
+          const ds = chart.data.datasets[el.datasetIndex];
+          const bucket = buckets[el.index];
+          const entries = perAgentItems[ds.key][bucket] || [];
+          const titles = { biz:'עסק', buyer:'קונה', matches:'התאמה' };
+          const rowFns = { biz:bizRow, buyer:leadRow, matches:matchRow };
+          const rows = entries.map(e=>({ ...rowFns[e.type](e.item), pill: rowFns[e.type](e.item).pill || titles[e.type], pillColor: rowFns[e.type](e.item).pillColor || '#eef1f6', pillTextColor: rowFns[e.type](e.item).pillTextColor || '#333' }));
+          openDrilldown(ds.name + ' · ' + bucketLabel(bucket, GRAN), rows.length + ' פעולות', rows);
+        }
+      }
+    });
+  }
 }
 
 function renderStatusChart(d){
-  const counts = STATUS_ORDER.map(s => d.matches.filter(m=>m.status===s).length);
+  const labels = [...STATUS_ORDER, OTHER_STATUS];
+  STATUS_ITEM_MAP = {};
+  labels.forEach(s=>STATUS_ITEM_MAP[s]=[]);
+  d.matches.forEach(m=>{
+    const key = STATUS_ORDER.includes(m.status) ? m.status : OTHER_STATUS;
+    STATUS_ITEM_MAP[key].push(m);
+  });
+  const counts = labels.map(s => STATUS_ITEM_MAP[s].length);
   if (statusChart) statusChart.destroy();
   statusChart = new Chart(document.getElementById('statusChart'), {
     type: 'bar',
     data: {
-      labels: STATUS_ORDER,
-      datasets: [{ data: counts, backgroundColor: STATUS_ORDER.map(s=>STATUS_STYLES[s]) }]
+      labels,
+      datasets: [{ data: counts, backgroundColor: labels.map(s=>STATUS_STYLES[s]) }]
     },
     options: {
       indexAxis: 'y',
       responsive:true, maintainAspectRatio:false,
       plugins: { legend:{ display:false } },
-      scales: { x:{ beginAtZero:true, ticks:{ precision:0 } } }
+      scales: { x:{ beginAtZero:true, ticks:{ precision:0 } } },
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const status = labels[els[0].index];
+        const items = STATUS_ITEM_MAP[status] || [];
+        openDrilldown('התאמות · ' + status, items.length + ' התאמות', items.map(matchRow));
+      }
     }
   });
 }
@@ -370,7 +526,7 @@ function sortAndRenderLeaderboard(){
 
   const maxClosed = Math.max(1, ...rows.map(r=>r.closed));
   document.getElementById('leaderBody').innerHTML = rows.length ? rows.map((r,i)=>`
-    <tr class="${i===0 && r.closed>0 ? 'rank-1':''}">
+    <tr class="${i===0 && r.closed>0 ? 'rank-1':''}" style="cursor:pointer;" onclick="drillIntoAgent('${r.id}')" title="לחיצה תציג את הנתונים של ${esc(r.name)} בלבד">
       <td>${i===0 && r.closed>0 ? '🏆 ' : ''}${esc(r.name)}</td>
       <td>${r.businesses}</td>
       <td>${r.buyers}</td>
@@ -395,14 +551,25 @@ function sortAndRenderLeaderboard(){
     options: {
       responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{ position:'bottom' } },
-      scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } }
+      scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } },
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const idx = els[0].index;
+        if (rows[idx]) drillIntoAgent(rows[idx].id);
+      }
     }
   });
+}
+function drillIntoAgent(agentId){
+  document.getElementById('fAgent').value = agentId;
+  AGENT_FILTER = agentId;
+  refreshAll();
 }
 
 async function refreshAll(){
   document.getElementById('kpiGrid').innerHTML = '<div class="loading">טוען נתונים...</div>';
   const d = await fetchData();
+  LAST_D = d;
   renderKPIs(d);
   renderTimeChart(d);
   renderStatusChart(d);
@@ -438,6 +605,10 @@ document.getElementById('leaderTable').querySelector('thead').addEventListener('
   if (LEADER_SORT.key === key){ LEADER_SORT.dir = LEADER_SORT.dir === 'asc' ? 'desc' : 'asc'; }
   else { LEADER_SORT = { key, dir: 'desc' }; }
   sortAndRenderLeaderboard();
+});
+
+document.getElementById('dOverlay').addEventListener('click', e=>{
+  if (e.target.id === 'dOverlay') closeDrilldown();
 });
 
 (async function init(){
