@@ -158,7 +158,7 @@ function renderTable(){
     return `<tr>
       <td data-label="כותרת">${esc(t.title)}</td>
       <td data-label="קשור ל">${t.related_type ? esc(relatedLabels[t.related_type]||t.related_type) : '—'}</td>
-      <td data-label="תאריך יעד" class="${isOverdue?'overdue':''}">${fmtDate(t.due_date)}</td>
+      <td data-label="תאריך יעד" class="${isOverdue?'overdue':''}">${fmtDate(t.due_date)}${t.due_time ? ' <span style="color:#8a93a8;font-size:.78rem;">' + esc(t.due_time.slice(0,5)) + '</span>' : ''}</td>
       <td data-label="סטטוס"><span class="pill ${t.status==='פתוחה'?'pill-open':'pill-done'}">${esc(t.status)}</span></td>
       <td data-label="עדיפות" class="${t.priority==='גבוהה'?'pri-high':'pri-normal'}">${esc(t.priority)}</td>
       <td data-label="אחראי">${esc(userName(t.assigned_to))}</td>
@@ -189,6 +189,7 @@ function openTaskForm(id){
     <form id="taskForm">
       <div class="field"><label>כותרת</label><input type="text" id="title" value="${esc(task?.title)}" required></div>
       <div class="field"><label>תאריך יעד</label><input type="date" id="due_date" value="${task?.due_date||''}"></div>
+      <div class="field"><label>שעת יעד <span style="font-weight:400;color:#999;font-size:.75rem;">(לא חובה)</span></label><input type="time" id="due_time" value="${task?.due_time||''}"></div>
       <div class="field"><label>עדיפות</label>
         <select id="priority">
           <option value="רגילה" ${task?.priority==='רגילה'?'selected':''}>רגילה</option>
@@ -218,12 +219,22 @@ async function saveTask(e){
     priority: g('priority'),
     assigned_to: g('assigned_to') || null
   };
+  const dueTime = g('due_time') || null;
+  const schemaMissing = (err) => err && /column|schema cache/i.test(err.message || '');
   let error;
   if (taskId){
-    ({ error } = await window.supabaseClient.from('tasks').update(payload).eq('id', taskId));
+    ({ error } = await window.supabaseClient.from('tasks').update({ ...payload, due_time: dueTime }).eq('id', taskId));
+    if (error && schemaMissing(error)){
+      toast('שים לב: שעת היעד עדיין לא נשמרת — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף אותה לטבלת המשימות. שאר הנתונים נשמרו.');
+      ({ error } = await window.supabaseClient.from('tasks').update(payload).eq('id', taskId));
+    }
   } else {
     payload.status = 'פתוחה';
-    ({ error } = await window.supabaseClient.from('tasks').insert(payload));
+    ({ error } = await window.supabaseClient.from('tasks').insert({ ...payload, due_time: dueTime }));
+    if (error && schemaMissing(error)){
+      toast('שים לב: שעת היעד עדיין לא נשמרת — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף אותה לטבלת המשימות. המשימה עצמה נשמרה.');
+      ({ error } = await window.supabaseClient.from('tasks').insert(payload));
+    }
   }
   if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
   toast('נשמר בהצלחה');
