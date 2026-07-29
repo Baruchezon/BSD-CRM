@@ -5,6 +5,9 @@
 <title>BSD CRM - לוח בקרה</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="css/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gveret+Levin&display=swap" rel="stylesheet">
 <script>
   // תפיסת ה-hash של הכתובת מיד, לפני שספריית Supabase מנקה אותה באופן אוטומטי -
   // כדי לזהות במדויק הזמנה/איפוס סיסמה שנחתו כאן במקום בדף הייעודי.
@@ -63,7 +66,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 29.07.2026 11:09</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 29.07.2026 11:21</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -83,7 +86,7 @@
     <div>
       <h2 id="welcomeName">טוען...</h2>
       <span id="welcomeRole"></span>
-      <div id="welcomeBlessing" style="color:#0e1b34;background:#fdf1cf;display:inline-block;padding:4px 12px;border-radius:8px;border:1px solid var(--gold);font-size:1.15rem;font-weight:800;margin-top:6px;"></div>
+      <div id="welcomeBlessing" style="font-family:'Gveret Levin',cursive;color:#0e1b34;background:#fdf1cf;display:inline-block;padding:4px 14px;border-radius:8px;border:1px solid var(--gold);font-size:1.4rem;font-weight:400;margin-top:6px;"></div>
     </div>
     <div>
       <button id="aiMatchBtn" onclick="runAiMatchSuggestions()" style="background:var(--gold);color:#1c2333;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.15);margin-left:10px;">
