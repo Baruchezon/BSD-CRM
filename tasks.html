@@ -25,13 +25,24 @@
   tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
   tbody tr:hover{background:#faf8f2;}
   .empty-row td{text-align:center;color:#999;padding:30px;}
-  .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
+  .row-actions button{border:none;cursor:pointer;font-size:1.05rem;padding:6px 8px;margin:0 2px;border-radius:50%;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s ease, box-shadow .12s ease;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+  .row-actions button:hover{transform:scale(1.12);box-shadow:0 3px 8px rgba(0,0,0,.25);}
+  .row-actions button.act-edit{background:#e3f0ff;}
+  .row-actions button.act-done{background:#dff0e4;}
+  .row-actions button.act-delete{background:#ffe1e1;}
+  .row-actions button.act-read{background:#fff2d9;}
+  .row-actions button.act-unread{background:#eef1f6;}
   .pill{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
   .pill-open{background:#fdeccb;color:#8a5a10;}
   .pill-done{background:#dff0e4;color:#245c40;}
+  .pill-unread{background:#0e1b34;color:#ffdd33;}
+  .pill-read{background:#eef1f6;color:#6c7488;}
   .pri-high{color:#b3402c;font-weight:700;}
   .pri-normal{color:#555;}
   .overdue{color:#b3402c;font-weight:700;}
+  tbody tr.task-unread{background:#fffaf0;border-right:6px solid var(--gold);}
+  tbody tr.task-unread:hover{background:#fdf3dc;}
+  tbody tr.task-unread td[data-label="כותרת"]{font-weight:700;color:var(--navy);}
 
   .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
   .overlay.open{display:flex;}
@@ -155,17 +166,21 @@ function renderTable(){
   const relatedLabels = {lead:'ליד', business:'עסק', match:'התאמה'};
   body.innerHTML = rows.map(t=>{
     const isOverdue = t.due_date && t.due_date < todayISO() && t.status === 'פתוחה';
-    return `<tr>
-      <td data-label="כותרת">${esc(t.title)}</td>
+    const isUnread = !t.read_at;
+    return `<tr class="${isUnread?'task-unread':''}">
+      <td data-label="כותרת">${esc(t.title)} <span class="pill ${isUnread?'pill-unread':'pill-read'}">${isUnread?'🔵 לא נקראה':'✓ נקראה'}</span></td>
       <td data-label="קשור ל">${t.related_type ? esc(relatedLabels[t.related_type]||t.related_type) : '—'}</td>
       <td data-label="תאריך יעד" class="${isOverdue?'overdue':''}">${fmtDate(t.due_date)}${t.due_time ? ' <span style="color:#8a93a8;font-size:.78rem;">' + esc(t.due_time.slice(0,5)) + '</span>' : ''}</td>
       <td data-label="סטטוס"><span class="pill ${t.status==='פתוחה'?'pill-open':'pill-done'}">${esc(t.status)}</span></td>
       <td data-label="עדיפות" class="${t.priority==='גבוהה'?'pri-high':'pri-normal'}">${esc(t.priority)}</td>
       <td data-label="אחראי">${esc(userName(t.assigned_to))}</td>
       <td class="row-actions" data-label="">
-        <button title="ערוך" onclick="openTaskForm('${t.id}')">✏️</button>
-        ${t.status==='פתוחה' ? `<button title="סמן כהושלם" onclick="completeTask('${t.id}')">✅</button>` : ''}
-        <button title="מחק" onclick="deleteTask('${t.id}')">🗑️</button>
+        <button class="act-edit" title="ערוך" onclick="openTaskForm('${t.id}')">✏️</button>
+        ${isUnread
+          ? `<button class="act-read" title="סמן כנקראה" onclick="event.stopPropagation(); toggleTaskRead('${t.id}', true)">👁️</button>`
+          : `<button class="act-unread" title="סמן כלא נקראה" onclick="event.stopPropagation(); toggleTaskRead('${t.id}', false)">↺</button>`}
+        ${t.status==='פתוחה' ? `<button class="act-done" title="סמן כהושלם" onclick="completeTask('${t.id}')">✅</button>` : ''}
+        <button class="act-delete" title="מחק" onclick="deleteTask('${t.id}')">🗑️</button>
       </td>
     </tr>`;
   }).join('');
@@ -183,6 +198,10 @@ function userOptions(selected){
 
 function openTaskForm(id){
   const task = id ? ALL_TASKS.find(t=>t.id===id) : null;
+  if (task && !task.read_at){
+    window.supabaseClient.from('tasks').update({ read_at: new Date().toISOString() }).eq('id', id)
+      .then(({error}) => { if (!error){ task.read_at = new Date().toISOString(); renderTable(); } });
+  }
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>${task ? 'עריכת משימה' : 'משימה חדשה'}</h3>
@@ -246,6 +265,16 @@ async function completeTask(id){
   const { error } = await window.supabaseClient.from('tasks').update({ status: 'הושלמה' }).eq('id', id);
   if (error){ toast('שגיאה: ' + error.message); return; }
   toast('המשימה סומנה כהושלמה');
+  await loadTasks();
+}
+
+async function toggleTaskRead(id, markRead){
+  const { error } = await window.supabaseClient.from('tasks').update({ read_at: markRead ? new Date().toISOString() : null }).eq('id', id);
+  if (error && /column|schema cache/i.test(error.message||'')){
+    toast('שים לב: סימון נקרא/לא נקרא עדיין לא נשמר — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף את העמודה לטבלת המשימות.');
+    return;
+  }
+  if (error){ toast('שגיאה: ' + error.message); return; }
   await loadTasks();
 }
 
