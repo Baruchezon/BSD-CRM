@@ -713,44 +713,76 @@ async function submitChangePassword(){
 }
 
 // ============================================================
-// TODAY'S TASKS POPUP — pops up once per calendar day (per user,
-// per browser) showing only the tasks assigned to the logged-in
-// user with a due date of today. Uses localStorage so it doesn't
-// nag again on every dashboard visit/reload the same day.
+// TODAY'S TASKS POPUP — shows each user's own open tasks due
+// today. Two behaviors depending on whether a task has a due
+// TIME set:
+//  - No time set: pop once per calendar day (first entry that day).
+//  - Time set: pop starting 15 minutes before that time (and stay
+//    poppable until shown), tracked per-task so it doesn't repeat.
+// Checked on load, then re-checked every minute while the
+// dashboard tab stays open, so a timed task still pops even if
+// the user was already on the page when its window opened.
 // ============================================================
 function localTodayKey(){
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
-async function maybeShowTodayTasksPopup(profile){
+let TASKS_POPUP_PROFILE = null;
+
+async function checkTasksPopup(){
+  const profile = TASKS_POPUP_PROFILE;
+  if (!profile) return;
   const today = localTodayKey();
-  const storageKey = 'bsdTasksPopupShown_' + profile.id;
-  if (localStorage.getItem(storageKey) === today) return; // already shown today
+  const dayShownKey = 'bsdTasksPopupShown_' + profile.id;
+  const dayAlreadyShown = localStorage.getItem(dayShownKey) === today;
 
   const { data, error } = await window.supabaseClient
     .from('tasks')
-    .select('id, title, priority, status')
+    .select('id, title, priority, status, due_time')
     .eq('assigned_to', profile.id)
     .eq('due_date', today)
     .neq('status', 'הושלמה')
     .order('priority', { ascending:false });
+  if (error || !data) return;
 
-  localStorage.setItem(storageKey, today); // don't ask again today, whether or not there were tasks
+  const noTimeTasks = data.filter(t => !t.due_time);
+  const timedTasks = data.filter(t => !!t.due_time);
 
-  if (error || !data || data.length === 0) return;
+  const now = new Date();
+  const nowMinutes = now.getHours()*60 + now.getMinutes();
+  const dueTaskShownKey = (id) => 'bsdTimedTaskShown_' + profile.id + '_' + id + '_' + today;
 
+  const timedDueNow = timedTasks.filter(t=>{
+    if (localStorage.getItem(dueTaskShownKey(t.id))) return false;
+    const [h,m] = t.due_time.split(':').map(Number);
+    const dueMinutes = h*60 + m;
+    return nowMinutes >= (dueMinutes - 15); // from 15 min before, onward (covers overdue too)
+  });
+
+  const toShow = [];
+  if (!dayAlreadyShown) toShow.push(...noTimeTasks);
+  toShow.push(...timedDueNow);
+  if (toShow.length === 0) return;
+
+  if (!dayAlreadyShown) localStorage.setItem(dayShownKey, today);
+  timedDueNow.forEach(t => localStorage.setItem(dueTaskShownKey(t.id), '1'));
+
+  showTasksPopup(toShow);
+}
+
+function showTasksPopup(tasks){
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:center;justify-content:center;z-index:9998;padding:20px;';
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:14px;padding:26px 28px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
       <div style="font-size:1.8rem;margin-bottom:4px;">📋</div>
       <div style="font-weight:700;color:#0e1b34;font-size:1.1rem;margin-bottom:2px;">המשימות שלך להיום</div>
-      <div style="color:#8a93a8;font-size:.82rem;margin-bottom:14px;">${data.length} משימות פתוחות עם תאריך יעד היום</div>
+      <div style="color:#8a93a8;font-size:.82rem;margin-bottom:14px;">${tasks.length} משימות פתוחות</div>
       <div style="max-height:280px;overflow-y:auto;margin-bottom:16px;">
-        ${data.map(t=>`
+        ${tasks.map(t=>`
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid #f0ede4;">
-            <span style="font-size:.92rem;color:#1c2333;">${esc(t.title)}</span>
+            <span style="font-size:.92rem;color:#1c2333;">${esc(t.title)}${t.due_time ? ' <span style="color:#8a93a8;font-size:.78rem;">· ' + esc(t.due_time.slice(0,5)) + '</span>' : ''}</span>
             <span style="font-size:.7rem;padding:3px 10px;border-radius:10px;white-space:nowrap;${t.priority==='גבוהה' ? 'background:#fbe4e0;color:#832d1f;' : 'background:#eef1f6;color:#0e1b34;'}">${esc(t.priority)}</span>
           </div>
         `).join('')}
@@ -762,6 +794,12 @@ async function maybeShowTodayTasksPopup(profile){
     </div>`;
   document.body.appendChild(overlay);
   document.getElementById('todayTasksCloseBtn').addEventListener('click', () => overlay.remove());
+}
+
+function initTasksPopupWatcher(profile){
+  TASKS_POPUP_PROFILE = profile;
+  checkTasksPopup();
+  setInterval(checkTasksPopup, 60 * 1000);
 }
 
 (async function init(){
@@ -795,7 +833,7 @@ async function maybeShowTodayTasksPopup(profile){
   if (!fullAccess && !profile.can_use_survey) surveyBtn.style.display = 'none';
 
   await Promise.all([loadGeneral(), loadPeriod(), loadGauges(), loadActivity()]);
-  await maybeShowTodayTasksPopup(profile);
+  initTasksPopupWatcher(profile);
 })();
 </script>
 </body>
