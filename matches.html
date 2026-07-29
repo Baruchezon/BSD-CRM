@@ -57,7 +57,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 29.07.2026 10:52</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 29.07.2026 10:58</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
       <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -78,8 +78,16 @@
   </div>
 
   <div class="filters">
-    <select id="fBuyer"><option value="all">כל הקונים</option></select>
-    <select id="fBiz"><option value="all">כל העסקים</option></select>
+    <div class="ss-box" id="fBuyerBox" style="min-width:200px;">
+      <input type="text" class="ss-input" id="fBuyerBox_input" autocomplete="off" placeholder="חיפוש קונה..." value="כל הקונים" style="width:100%;">
+      <input type="hidden" id="fBuyer" value="all">
+      <div class="ss-list" id="fBuyerBox_list"></div>
+    </div>
+    <div class="ss-box" id="fBizBox" style="min-width:200px;">
+      <input type="text" class="ss-input" id="fBizBox_input" autocomplete="off" placeholder="חיפוש עסק..." value="כל העסקים" style="width:100%;">
+      <input type="hidden" id="fBiz" value="all">
+      <div class="ss-list" id="fBizBox_list"></div>
+    </div>
     <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
     <select id="fCreatedBy"><option value="all">כל מי שהזין</option></select>
     <select id="fSort">
@@ -105,6 +113,7 @@
 <script src="js/config.js"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/auth.js"></script>
+<script src="js/searchSelect.js"></script>
 <script>
 const MATCH_STATUSES = ['התאמה חדשה','טרם נשלח לקונה','נשלח לקונה','ממתין לתגובה','הקונה התעניין','לא מתאים לקונה',
   'נחתם הסכם סודיות','נשלחו מסמכים','נקבעה פגישה','התקיימה פגישה','בבדיקה כלכלית','בבדיקת נאותות','במשא ומתן',
@@ -144,6 +153,8 @@ function closeModal(){
 }
 function buyerName(id){ const b = ALL_BUYERS.find(x=>x.id===id); return b ? b.full_name : '—'; }
 function bizName(id){ const b = ALL_BIZ.find(x=>x.id===id); return b ? b.internal_name : '—'; }
+function buyerLabel(id){ const b = ALL_BUYERS.find(x=>x.id===id); return b ? b.full_name : ''; }
+function bizLabel(id){ const b = ALL_BIZ.find(x=>x.id===id); return b ? b.internal_name : ''; }
 function userName(id){
   const u = ALL_USERS.find(x=>x.id===id);
   return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
@@ -163,10 +174,14 @@ async function loadLookups(){
   ]);
   ALL_BUYERS = buyers || []; ALL_BIZ = biz || []; ALL_USERS = users || [];
 
-  const bSel = document.getElementById('fBuyer');
-  ALL_BUYERS.forEach(b=>{ const o=document.createElement('option'); o.value=b.id; o.textContent=b.full_name; bSel.appendChild(o); });
-  const zSel = document.getElementById('fBiz');
-  ALL_BIZ.forEach(b=>{ const o=document.createElement('option'); o.value=b.id; o.textContent=b.internal_name; zSel.appendChild(o); });
+  initSearchSelect('fBuyerBox', ALL_BUYERS, {
+    getId:b=>b.id, getLabel:b=>b.full_name, valueId:'fBuyer',
+    allowClear:true, clearLabel:'כל הקונים'
+  });
+  initSearchSelect('fBizBox', ALL_BIZ, {
+    getId:b=>b.id, getLabel:b=>b.internal_name, valueId:'fBiz',
+    allowClear:true, clearLabel:'כל העסקים'
+  });
   const sSel = document.getElementById('fStatus');
   MATCH_STATUSES.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; sSel.appendChild(o); });
 }
@@ -232,14 +247,6 @@ function renderTable(){
 
 ['fBuyer','fBiz','fStatus','fCreatedBy','fSort'].forEach(id=>document.getElementById(id).addEventListener('change', renderTable));
 
-function buyerOptions(selected){
-  return '<option value="">— בחר קונה —</option>' + ALL_BUYERS.map(b=>
-    `<option value="${b.id}" ${b.id===selected?'selected':''}>${esc(b.full_name)}</option>`).join('');
-}
-function bizOptions(selected){
-  return '<option value="">— בחר עסק —</option>' + ALL_BIZ.map(b=>
-    `<option value="${b.id}" ${b.id===selected?'selected':''}>${esc(b.internal_name)}</option>`).join('');
-}
 function statusOptions(selected){
   return MATCH_STATUSES.map(s=>`<option value="${s}" ${s===selected?'selected':''}>${s}</option>`).join('');
 }
@@ -262,8 +269,14 @@ async function openMatchForm(id){
           מספר מזהה: <b>${esc(match.internal_code||'—')}</b> · נוצרה ע"י: <b>${esc(userName(match.created_by))}</b> בתאריך ${fmtDate(match.created_at)}
           ${match.transferred_by ? ` · הועברה ע"י: <b>${esc(userName(match.transferred_by))}</b>` : ''}
         </div>` : ''}
-        <div class="field"><label>קונה</label><select id="buyer_id" ${match?'disabled':''}>${buyerOptions(match?.buyer_id)}</select></div>
-        <div class="field"><label>עסק</label><select id="business_id" ${match?'disabled':''}>${bizOptions(match?.business_id)}</select></div>
+        <div class="field"><label>קונה</label>${searchSelectHTML({
+          boxId:'buyer_id_box', valueId:'buyer_id', placeholder:'הקלד לחיפוש קונה...',
+          selectedValue: match?.buyer_id || '', selectedLabel: buyerLabel(match?.buyer_id), disabled: !!match
+        })}</div>
+        <div class="field"><label>עסק</label>${searchSelectHTML({
+          boxId:'business_id_box', valueId:'business_id', placeholder:'הקלד לחיפוש עסק...',
+          selectedValue: match?.business_id || '', selectedLabel: bizLabel(match?.business_id), disabled: !!match
+        })}</div>
         <div class="field"><label>אחוז התאמה</label><input type="number" id="match_percent" min="0" max="100" value="${match?.match_percent??''}"></div>
         <div class="field"><label>סטטוס</label><select id="status">${statusOptions(match?.status||'התאמה חדשה')}</select></div>
         <div class="field"><label>מטפל כרגע</label><select id="current_handler">${userOptions(match?.current_handler)}</select></div>
@@ -295,6 +308,11 @@ async function openMatchForm(id){
   document.getElementById('overlay').classList.add('open');
   document.getElementById('matchForm').dataset.matchId = match ? match.id : '';
   document.getElementById('matchForm').addEventListener('submit', saveMatch);
+
+  if (!match){
+    initSearchSelect('buyer_id_box', ALL_BUYERS, { getId:b=>b.id, getLabel:b=>b.full_name, valueId:'buyer_id' });
+    initSearchSelect('business_id_box', ALL_BIZ, { getId:b=>b.id, getLabel:b=>b.internal_name, valueId:'business_id' });
+  }
 
   if (match){
     loadParticipants(match.id);
