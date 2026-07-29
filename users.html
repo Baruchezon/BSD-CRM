@@ -285,7 +285,7 @@ function renderTable(){
       <td class="row-actions" data-label="">
         <button title="ערוך" onclick="openEditForm('${u.id}')">✏️</button>
         ${u.role !== 'admin' ? `<button title="${u.status==='active'?'חסום':'הפעל'}" onclick="toggleStatus('${u.id}','${u.status}')">${u.status==='active'?'🚫':'✅'}</button>` : ''}
-        <button title="איפוס סיסמה" onclick="resetPassword('${u.email}')">🔑</button>
+        <button title="איפוס סיסמה" onclick="openResetPasswordModal('${u.id}','${esc(name)}','${esc(u.email)}')">🔑</button>
         ${u.role !== 'admin' ? `<button title="מחיקת משתמש" onclick="deleteUser('${u.id}','${esc(name)}')">🗑️</button>` : ''}
       </td>
     </tr>`;
@@ -363,10 +363,60 @@ async function toggleStatus(id, currentStatus){
   await loadUsers();
 }
 
-async function resetPassword(email){
-  const { error } = await window.supabaseClient.auth.resetPasswordForEmail(email);
-  if (error){ toast('שגיאה בשליחת איפוס סיסמה: ' + error.message); return; }
-  toast('נשלח מייל איפוס סיסמה אל ' + email);
+function genTempPassword(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let out = '';
+  for (let i=0;i<8;i++) out += chars[Math.floor(Math.random()*chars.length)];
+  return out;
+}
+
+function openResetPasswordModal(id, name, email){
+  const modal = document.getElementById('modalBox');
+  const suggested = genTempPassword();
+  modal.innerHTML = `
+    <h3>איפוס סיסמה - ${esc(name)}</h3>
+    <p style="color:#666;font-size:.85rem;margin:0 0 14px;">קובעים כאן ישירות סיסמה חדשה עבור ${esc(email)}. אין שליחת מייל - מסרו לו את הסיסמה בעצמכם (טלפון/וואטסאפ).</p>
+    <div class="field full">
+      <label>סיסמה חדשה</label>
+      <input type="text" id="resetPwdValue" value="${suggested}" minlength="6" style="font-family:monospace;letter-spacing:1px;">
+    </div>
+    <div id="resetPwdMsg" style="color:#b00020;font-size:.8rem;min-height:18px;margin:6px 0;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button type="button" class="btn btn-primary" id="resetPwdSubmitBtn" onclick="submitResetPassword('${id}')">קבע סיסמה</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('open');
+}
+
+async function submitResetPassword(id){
+  const input = document.getElementById('resetPwdValue');
+  const msg = document.getElementById('resetPwdMsg');
+  const btn = document.getElementById('resetPwdSubmitBtn');
+  const newPassword = input.value.trim();
+  if (newPassword.length < 6){ msg.textContent = 'הסיסמה חייבת להכיל לפחות 6 תווים'; return; }
+
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (!session){ toast('פג תוקף החיבור, התחבר מחדש'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'שומר...';
+  const functionUrl = window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/admin-set-password';
+  try {
+    const resp = await fetch(functionUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ user_id: id, new_password: newPassword })
+    });
+    const result = await resp.json();
+    if (!resp.ok){ msg.textContent = 'שגיאה: ' + (result.error || 'לא ידועה'); btn.disabled = false; btn.textContent = 'קבע סיסמה'; return; }
+    closeModal();
+    toast('הסיסמה עודכנה בהצלחה. מסור אותה למשתמש: ' + newPassword);
+  } catch (err){
+    msg.textContent = 'שגיאת רשת: ' + err.message + ' (יש לוודא שה-Edge Function נפרסה)';
+    btn.disabled = false;
+    btn.textContent = 'קבע סיסמה';
+  }
 }
 
 async function deleteUser(id, name){
