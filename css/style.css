@@ -141,25 +141,17 @@ input, select, textarea, button{
    ============================================================ */
 .nav a{
   position:relative;
-  overflow:hidden;
   box-shadow:0 2px 0 rgba(0,0,0,.16), 0 3px 7px rgba(0,0,0,.14);
-  transition:transform .16s cubic-bezier(.34,1.56,.64,1), box-shadow .16s ease;
-}
-.nav a::after{
-  content:'';
-  position:absolute; inset:0;
-  background:rgba(255,255,255,0);
-  transition:background .16s ease;
-  pointer-events:none;
-  border-radius:inherit;
+  transition:transform .16s cubic-bezier(.34,1.56,.64,1), box-shadow .16s ease, filter .16s ease;
 }
 .nav a:hover{
   transform:translateY(-2px);
+  filter:brightness(1.25);
   box-shadow:0 4px 0 rgba(0,0,0,.16), 0 9px 16px rgba(0,0,0,.2);
 }
-.nav a:hover::after{ background:rgba(255,255,255,.10); }
 .nav a:active{
   transform:translateY(1px);
+  filter:brightness(1.1);
   box-shadow:0 1px 0 rgba(0,0,0,.16), 0 1px 3px rgba(0,0,0,.14);
 }
 .nav a[style*="rgba(255,255,255,.12)"]{
@@ -167,9 +159,9 @@ input, select, textarea, button{
 }
 .nav a[style*="rgba(255,255,255,.12)"]:hover{
   transform:translateY(0);
+  filter:none;
   box-shadow:0 2px 6px rgba(0,0,0,.35) inset, 0 1px 0 rgba(255,255,255,.15);
 }
-.nav a[style*="rgba(255,255,255,.12)"]::after{ display:none; }
 
 /* כפתורי פעולה - גודל נוח ללחיצה (מינימום 44px גובה) */
 .btn, .login-card button, .period-btn{
@@ -197,13 +189,6 @@ button, .btn{
   transform:translateY(0);
   transition:transform .16s cubic-bezier(.34,1.56,.64,1), box-shadow .16s ease, filter .16s ease;
   will-change:transform;
-}
-button::after, .btn::after{
-  content:'';
-  position:absolute; inset:0;
-  background:linear-gradient(180deg, rgba(255,255,255,.30) 0%, rgba(255,255,255,0) 42%, rgba(0,0,0,.05) 100%);
-  border-radius:inherit;
-  pointer-events:none;
 }
 button:hover, .btn:hover{
   transform:translateY(-3px);
