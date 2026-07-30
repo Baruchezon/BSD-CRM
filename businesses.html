@@ -73,7 +73,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 14:20</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 14:45</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -93,6 +93,7 @@
   <div class="toolbar">
     <h2>עסקים למכירה</h2>
     <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost" onclick="openSendPresentationsModal()">📤 שלח מצגות לקונה</button>
       <button class="btn btn-ghost" id="selectModeBtn" onclick="toggleSelectMode()">☑️ בחירת עסקים לשליחת מצגות</button>
       <button class="btn btn-primary" onclick="openBizForm(null)">+ עסק חדש</button>
     </div>
@@ -886,26 +887,29 @@ function sendAgreementForBiz(id){
 }
 
 async function openSendPresentationsModal(){
-  const selectedIds = Array.from(SELECTED_BIZ_IDS);
-  const selectedBiz = ALL_BIZ.filter(b => selectedIds.includes(b.id));
-  const missingPreso = selectedBiz.filter(b => !b.anon_presentation_path);
+  const withPreso = ALL_BIZ.filter(b => b.anon_presentation_path);
 
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>שליחת מצגות אנונימיות</h3>
-    <div style="font-size:.85rem;color:#665;margin-bottom:14px;">
-      נבחרו ${selectedBiz.length} עסקים:
-      <ul style="margin:6px 0 0 0;padding-inline-start:20px;">
-        ${selectedBiz.map(b => `<li>${esc(b.internal_name)} ${b.anon_presentation_path ? '📄' : '<span style="color:#b3402c;">(אין מצגת!)</span>'}</li>`).join('')}
-      </ul>
-    </div>
-    ${missingPreso.length ? `<div class="tip" style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:.82rem;">
-      ⚠️ לעסקים המסומנים אין מצגת אנונימית מועלית — הם לא ייכללו בשליחה.
-    </div>` : ''}
 
-    <div class="field full" style="margin-bottom:10px;">
+    <div class="field full" style="margin-bottom:14px;overflow:visible;">
+      <label>בחר עסקים לשליחה (רק עסקים עם מצגת אנונימית מוצגים)</label>
+      ${withPreso.length === 0
+        ? `<div style="color:#b3402c;font-size:.85rem;padding:8px 0;">אין כרגע אף עסק עם מצגת אנונימית מועלית. יש להעלות מצגת לעסק דרך כרטיס העסק תחילה.</div>`
+        : `<div style="max-height:180px;overflow-y:auto;border:1px solid #e3ded0;border-radius:8px;padding:8px 10px;">
+            ${withPreso.map(b => `
+              <label style="display:flex;align-items:center;gap:8px;padding:5px 0;font-weight:400;font-size:.87rem;cursor:pointer;">
+                <input type="checkbox" class="presoBizCheck" value="${b.id}" ${SELECTED_BIZ_IDS.has(b.id) ? 'checked' : ''} onchange="updatePresoValidation()" style="width:16px;height:16px;">
+                📄 ${esc(b.internal_name)}
+              </label>
+            `).join('')}
+          </div>`}
+    </div>
+
+    <div class="field full" style="margin-bottom:10px;overflow:visible;">
       <label>בחר קונה</label>
-      <div id="presoBuyerBox">טוען קונים...</div>
+      <div id="presoBuyerBox" style="overflow:visible;">טוען קונים...</div>
     </div>
     <div id="presoBuyerInfo"></div>
 
@@ -963,10 +967,15 @@ function getSelectedPresoChannel(){
   return checked ? checked.value : 'email';
 }
 
+function getSelectedPresoBusinessIds(){
+  return Array.from(document.querySelectorAll('.presoBizCheck:checked')).map(el => el.value);
+}
+
 function updatePresoValidation(){
   const infoBox = document.getElementById('presoBuyerInfo');
   const sendBtn = document.getElementById('presoSendBtn');
   const buyer = PRESO_CURRENT_BUYER;
+  const noBizSelected = getSelectedPresoBusinessIds().length === 0;
   if (!buyer){ infoBox.innerHTML = ''; sendBtn.disabled = true; return; }
 
   const agr = buyer.agreement_status || 'אין הסכם';
@@ -994,7 +1003,7 @@ function updatePresoValidation(){
              </div>`
           : '')}
   `;
-  sendBtn.disabled = blocked || missingEmail || missingPhone;
+  sendBtn.disabled = blocked || missingEmail || missingPhone || noBizSelected;
   sendBtn.dataset.buyerId = buyer.id;
 }
 
@@ -1009,11 +1018,8 @@ async function confirmSendPresentations(){
   const needsEmail = channel === 'email' || channel === 'both';
   const needsWhatsapp = channel === 'whatsapp' || channel === 'both';
 
-  const businessIds = Array.from(SELECTED_BIZ_IDS).filter(id => {
-    const b = ALL_BIZ.find(x => x.id === id);
-    return b && b.anon_presentation_path;
-  });
-  if (!businessIds.length){ toast('אין עסקים עם מצגת מועלית בבחירה'); return; }
+  const businessIds = getSelectedPresoBusinessIds();
+  if (!businessIds.length){ toast('יש לבחור לפחות עסק אחד עם מצגת'); return; }
 
   // Open the WhatsApp window synchronously (before any await) so the browser
   // doesn't treat it as an unrequested popup once the async call resolves.
@@ -1045,7 +1051,7 @@ async function confirmSendPresentations(){
 
   toast('המצגות נשלחו בהצלחה!');
   closeModal();
-  toggleSelectMode();
+  if (SELECT_MODE) toggleSelectMode();
 }
 
 async function deleteBiz(id){
