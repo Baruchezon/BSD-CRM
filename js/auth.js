@@ -59,7 +59,19 @@ async function bsdLogout() {
 
 // שומר על כל מסך פנימי - מפנה ל-login אם אין session פעיל, ומחזיר את הפרופיל
 async function requireAuth() {
-  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  let { data: { session } } = await window.supabaseClient.auth.getSession();
+
+  // On a cold app-launch (e.g. opening from an installed home-screen/desktop
+  // icon) Supabase can occasionally still be restoring the session from
+  // storage at this point, making getSession() briefly report "no session"
+  // even though the user is actually logged in. Give it one short grace
+  // check before giving up and bouncing to login — this is what caused the
+  // login->app->login flicker some users saw only from the installed icon.
+  if (!session) {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    ({ data: { session } } = await window.supabaseClient.auth.getSession());
+  }
+
   if (!session) {
     window.location.href = 'login.html';
     return null;
