@@ -73,7 +73,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 13:20</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 13:35</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -617,12 +617,12 @@ async function uploadAnonPresentation(bizId){
   if (statusEl) statusEl.textContent = 'מעלה את "' + file.name + '"...';
 
   // Remove any existing presentation for this business first, so there's always only one.
-  const { data: existing } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).list(`${ANON_PRESENTATION_PREFIX}/${bizId}`);
+  const { data: existing } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).list(`${bizId}/${ANON_PRESENTATION_PREFIX}`);
   if (existing && existing.length){
-    await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).remove(existing.map(f => `${ANON_PRESENTATION_PREFIX}/${bizId}/${f.name}`));
+    await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).remove(existing.map(f => `${bizId}/${ANON_PRESENTATION_PREFIX}/${f.name}`));
   }
 
-  const path = `${ANON_PRESENTATION_PREFIX}/${bizId}/${Date.now()}__${encodeURIComponent(file.name)}`;
+  const path = `${bizId}/${ANON_PRESENTATION_PREFIX}/${Date.now()}__${encodeURIComponent(file.name)}`;
   const { error: upErr } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).upload(path, file);
   if (upErr){
     if (statusEl) statusEl.textContent = '';
