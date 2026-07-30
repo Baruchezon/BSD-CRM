@@ -73,7 +73,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 12:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 13:05</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -610,6 +610,10 @@ async function uploadAnonPresentation(bizId){
     toast(`הקובץ גדול מדי (מקסימום ${MAX_FILE_MB}MB)`);
     input.value = ''; return;
   }
+  if (!file.name.includes('אנונימי')){
+    toast('⚠️ שם הקובץ חייב להכיל את המילה "אנונימי" (למשל: מצגת_אנונימי.pdf) — יש לשנות את שם הקובץ ולנסות שוב');
+    input.value = ''; return;
+  }
   if (statusEl) statusEl.textContent = 'מעלה את "' + file.name + '"...';
 
   // Remove any existing presentation for this business first, so there's always only one.
@@ -901,6 +905,15 @@ async function openSendPresentationsModal(){
     </div>
     <div id="presoBuyerInfo"></div>
 
+    <div class="field full" style="margin-bottom:10px;">
+      <label>אמצעי שליחה</label>
+      <div style="display:flex;gap:16px;margin-top:4px;">
+        <label style="display:flex;align-items:center;gap:5px;font-weight:400;"><input type="radio" name="presoChannel" value="email" checked> 📧 מייל</label>
+        <label style="display:flex;align-items:center;gap:5px;font-weight:400;"><input type="radio" name="presoChannel" value="whatsapp"> 💬 וואטסאפ</label>
+        <label style="display:flex;align-items:center;gap:5px;font-weight:400;"><input type="radio" name="presoChannel" value="both"> שניהם</label>
+      </div>
+    </div>
+
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
       <button type="button" class="btn btn-primary" id="presoSendBtn" disabled onclick="confirmSendPresentations()">📤 שלח מצגות</button>
@@ -908,11 +921,15 @@ async function openSendPresentationsModal(){
   `;
   document.getElementById('overlay').classList.add('open');
 
-  const { data: buyers, error } = await window.supabaseClient
+  let buyerQuery = window.supabaseClient
     .from('leads')
-    .select('id,full_name,first_name,last_name,email,phone,agreement_status')
+    .select('id,full_name,first_name,last_name,email,phone,agreement_status,created_by')
     .eq('type', 'buyer')
     .order('full_name', { ascending: true });
+  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
+    buyerQuery = buyerQuery.eq('created_by', CURRENT_PROFILE.id);
+  }
+  const { data: buyers, error } = await buyerQuery;
 
   const box = document.getElementById('presoBuyerBox');
   if (error){ box.innerHTML = `<span style="color:#b3402c;">שגיאה בטעינת קונים: ${esc(error.message)}</span>`; return; }
@@ -925,15 +942,32 @@ async function openSendPresentationsModal(){
   });
 }
 
+let PRESO_CURRENT_BUYER = null;
+
 function renderPresoBuyerInfo(buyers, buyerId){
+  PRESO_CURRENT_BUYER = buyers.find(b => b.id === buyerId) || null;
+  updatePresoValidation();
+}
+
+function getSelectedPresoChannel(){
+  const checked = document.querySelector('input[name="presoChannel"]:checked');
+  return checked ? checked.value : 'email';
+}
+
+function updatePresoValidation(){
   const infoBox = document.getElementById('presoBuyerInfo');
   const sendBtn = document.getElementById('presoSendBtn');
-  const buyer = buyers.find(b => b.id === buyerId);
+  const buyer = PRESO_CURRENT_BUYER;
   if (!buyer){ infoBox.innerHTML = ''; sendBtn.disabled = true; return; }
 
   const agr = buyer.agreement_status || 'אין הסכם';
   const blocked = agr === 'אין הסכם';
   const buyerLabel = buyer.full_name || [buyer.first_name,buyer.last_name].filter(Boolean).join(' ') || '';
+  const channel = getSelectedPresoChannel();
+  const needsEmail = channel === 'email' || channel === 'both';
+  const needsPhone = channel === 'whatsapp' || channel === 'both';
+  const missingEmail = needsEmail && !buyer.email;
+  const missingPhone = needsPhone && !buyer.phone;
 
   infoBox.innerHTML = `
     <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.85rem;">
@@ -945,36 +979,59 @@ function renderPresoBuyerInfo(buyers, buyerId){
       ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:10px 12px;font-size:.85rem;">
            ❌ לא ניתן לשלוח מצגות ל${esc(buyerLabel || 'קונה זה')} — טרם נשלח לו הסכם התקשרות.
          </div>`
-      : (!buyer.email
-          ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:10px 12px;font-size:.85rem;">⚠️ לקונה הזה אין כתובת אימייל שמורה בכרטיס.</div>`
+      : ((missingEmail || missingPhone)
+          ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:10px 12px;font-size:.85rem;">
+               ⚠️ ${missingEmail ? 'לקונה הזה אין כתובת אימייל שמורה. ' : ''}${missingPhone ? 'לקונה הזה אין טלפון שמור.' : ''}
+             </div>`
           : '')}
   `;
-  sendBtn.disabled = blocked || !buyer.email;
-  sendBtn.dataset.buyerId = buyerId;
+  sendBtn.disabled = blocked || missingEmail || missingPhone;
+  sendBtn.dataset.buyerId = buyer.id;
 }
+
+document.addEventListener('change', (e) => {
+  if (e.target && e.target.name === 'presoChannel') updatePresoValidation();
+});
 
 async function confirmSendPresentations(){
   const sendBtn = document.getElementById('presoSendBtn');
-  const buyerId = sendBtn.dataset.buyerId;
+  const buyer = PRESO_CURRENT_BUYER;
+  const channel = getSelectedPresoChannel();
+  const needsEmail = channel === 'email' || channel === 'both';
+  const needsWhatsapp = channel === 'whatsapp' || channel === 'both';
+
   const businessIds = Array.from(SELECTED_BIZ_IDS).filter(id => {
     const b = ALL_BIZ.find(x => x.id === id);
     return b && b.anon_presentation_path;
   });
   if (!businessIds.length){ toast('אין עסקים עם מצגת מועלית בבחירה'); return; }
 
+  // Open the WhatsApp window synchronously (before any await) so the browser
+  // doesn't treat it as an unrequested popup once the async call resolves.
+  let waWindow = null;
+  if (needsWhatsapp) waWindow = window.open('', '_blank');
+
   sendBtn.disabled = true;
   sendBtn.textContent = 'שולח...';
 
-  const { data: sessionData } = await window.supabaseClient.auth.getSession();
   const { data, error } = await window.supabaseClient.functions.invoke('send-anonymous-presentations', {
-    body: { lead_id: buyerId, business_ids: businessIds }
+    body: { lead_id: buyer.id, business_ids: businessIds, send_email: needsEmail }
   });
 
   if (error){
     toast('שגיאה בשליחה: ' + error.message);
+    if (waWindow) waWindow.close();
     sendBtn.disabled = false;
     sendBtn.textContent = '📤 שלח מצגות';
     return;
+  }
+
+  if (needsWhatsapp && waWindow){
+    const links = (data && data.links) || [];
+    const lines = ['שלום,', 'מצורפים קישורים למצגות אנונימיות שביקשת:', ...links.map((u,i)=>`מצגת ${i+1}: ${u}`)];
+    const text = encodeURIComponent(lines.join('\n'));
+    const phoneDigits = (buyer.phone || '').replace(/\D/g,'').replace(/^0/, '972');
+    waWindow.location.href = `https://wa.me/${phoneDigits}?text=${text}`;
   }
 
   toast('המצגות נשלחו בהצלחה!');
