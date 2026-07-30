@@ -83,7 +83,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 17:40</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 20:20</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav">
     <a href="app.html">לוח בקרה</a>
@@ -468,6 +468,7 @@ function openLeadForm(id, forcedType){
   }
 
   document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
   document.getElementById('leadForm').dataset.leadId = lead ? lead.id : '';
   document.getElementById('leadForm').dataset.leadType = type;
   document.getElementById('leadForm').addEventListener('submit', saveLead);
@@ -889,6 +890,7 @@ function showImportPreview(candidates){
     </div>
   `;
   document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
 }
 
 async function confirmImport(){
