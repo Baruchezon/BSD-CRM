@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>עסקים למכירה | BSD Business Brokers Israel</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&display=swap');
+
+  :root{
+    --navy:#0e1b34; --navy-2:#16264a;
+    --gold:#c9a24b; --gold-light:#e8cf8a;
+    --bg:#fbfaf6; --text:#1c2333; --muted:#6b7280;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{ background:var(--bg); }
+  body{ font-family:'Heebo',sans-serif; color:var(--text); }
+
+  header.hero{
+    background:radial-gradient(circle at 30% 0%, #1a2947 0%, #0a1224 55%, #060a15 100%);
+    color:#f5f2e9;
+    padding:56px 24px 70px;
+    text-align:center;
+    position:relative;
+    overflow:hidden;
+  }
+  header.hero::after{
+    content:"";
+    position:absolute; inset:0;
+    background:radial-gradient(circle at 70% 100%, rgba(201,162,75,.18), transparent 60%);
+    pointer-events:none;
+  }
+  header.hero .kicker{ color:var(--gold-light); font-size:12px; letter-spacing:.22em; font-weight:700; text-transform:uppercase; }
+  header.hero h1{ font-size:clamp(28px,4.5vw,44px); font-weight:900; margin:14px 0 10px; }
+  header.hero p{ color:rgba(245,242,233,.75); font-size:15px; max-width:560px; margin:0 auto; line-height:1.6; }
+  header.hero .rule{ width:52px; height:3px; background:linear-gradient(90deg,var(--gold),var(--gold-light)); margin:20px auto 0; border-radius:3px; }
+
+  main{ max-width:1180px; margin:-40px auto 60px; padding:0 20px; position:relative; z-index:2; }
+
+  .filters{
+    background:#fff; border-radius:16px; padding:16px 20px;
+    box-shadow:0 12px 30px -10px rgba(14,27,52,.18);
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:28px;
+  }
+  .filters select, .filters input{
+    border:1px solid #e3ded0; border-radius:9px; padding:9px 12px; font-family:inherit; font-size:.85rem; background:#fbfaf6;
+  }
+  .filters .count{ margin-inline-start:auto; font-size:.82rem; color:var(--muted); }
+
+  .grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:20px;
+  }
+
+  .card{
+    background:#fff; border-radius:16px; overflow:hidden;
+    box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 10px 26px -12px rgba(14,27,52,.22);
+    display:flex; flex-direction:column;
+    transition:transform .18s ease, box-shadow .18s ease;
+  }
+  .card:hover{ transform:translateY(-4px); box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 18px 34px -12px rgba(14,27,52,.3); }
+
+  .card-top{
+    background:linear-gradient(135deg,var(--navy),var(--navy-2));
+    color:#fff; padding:18px 20px 16px;
+    position:relative;
+  }
+  .card-top .field-tag{
+    display:inline-block; background:rgba(201,162,75,.22); color:var(--gold-light);
+    font-size:.7rem; font-weight:700; padding:4px 10px; border-radius:20px; margin-bottom:8px;
+  }
+  .card-top h3{ font-size:1.08rem; font-weight:800; }
+  .card-top .region{ font-size:.78rem; color:rgba(255,255,255,.6); margin-top:3px; }
+
+  .card-body{ padding:18px 20px; flex:1; display:flex; flex-direction:column; gap:12px; }
+  .card-body .desc{ font-size:.85rem; color:#444; line-height:1.55; flex:1; }
+
+  .stats-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .stat{ background:#f7f5ef; border-radius:9px; padding:8px 10px; text-align:center; flex:1; min-width:80px; }
+  .stat .v{ font-size:.92rem; font-weight:800; color:var(--navy); }
+  .stat .l{ font-size:.66rem; color:var(--muted); margin-top:2px; }
+
+  .card-cta{
+    display:block; width:100%; background:linear-gradient(135deg,var(--gold-light),var(--gold));
+    color:var(--navy); font-weight:800; text-align:center; padding:11px; border:none;
+    border-radius:9px; cursor:pointer; font-family:inherit; font-size:.88rem;
+  }
+  .card-cta:hover{ filter:brightness(1.05); }
+
+  .empty{ text-align:center; padding:70px 20px; color:var(--muted); }
+  .empty .big{ font-size:2.4rem; margin-bottom:10px; }
+
+  /* Modal */
+  .overlay{ position:fixed; inset:0; background:rgba(14,27,52,.55); display:flex; align-items:center; justify-content:center; z-index:200; padding:20px; }
+  .modal{ background:#fff; border-radius:16px; padding:26px 24px; max-width:400px; width:100%; box-shadow:0 30px 70px rgba(0,0,0,.4); }
+  .modal h3{ color:var(--navy); margin-bottom:4px; }
+  .modal .sub{ font-size:.8rem; color:var(--muted); margin-bottom:16px; }
+  .modal input, .modal textarea{
+    width:100%; border:1px solid #e3ded0; border-radius:9px; padding:10px 12px; font-family:inherit;
+    font-size:.9rem; margin-bottom:10px; text-align:right;
+  }
+  .modal textarea{ min-height:70px; resize:vertical; }
+  .modal-actions{ display:flex; gap:8px; margin-top:6px; }
+  .modal-actions button{ flex:1; padding:11px; border-radius:9px; border:none; font-family:inherit; font-weight:700; cursor:pointer; font-size:.88rem; }
+  .btn-send{ background:var(--navy); color:#fff; }
+  .btn-cancel{ background:#f0eee6; color:var(--text); }
+  .thankyou{ text-align:center; padding:10px 0; }
+  .thankyou .big{ font-size:2.2rem; }
+
+  footer{ text-align:center; padding:26px 20px 40px; color:var(--muted); font-size:.78rem; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="kicker">BSD Business Brokers Israel</div>
+  <h1>עסקים למכירה</h1>
+  <p>מבחר עסקים איכותיים המיוצגים על ידי BSD — פרטים מלאים לאחר יצירת קשר, בדיסקרטיות מלאה.</p>
+  <div class="rule"></div>
+</header>
+
+<main>
+  <div class="filters">
+    <select id="fField"><option value="">כל התחומים</option></select>
+    <select id="fRegion"><option value="">כל האזורים</option></select>
+    <span class="count" id="resultCount"></span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="emptyState" style="display:none;">
+    <div class="big">🔍</div>
+    <div>לא נמצאו עסקים התואמים את הסינון</div>
+  </div>
+</main>
+
+<footer>
+  BSD Business Brokers Israel &middot; bsd-bbi.co.il &middot; ליווי עסקי ברוך איזון 054-2424999
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script>
+const supabasePublic = window.supabase.createClient(window.BSD_CONFIG.SUPABASE_URL, window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY);
+
+let ALL_LISTINGS = [];
+
+function fmtMoney(n){
+  if (n === null || n === undefined || n === '') return null;
+  return '₪' + Number(n).toLocaleString('he-IL');
+}
+
+function esc(s){
+  return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function card(b){
+  const stats = [];
+  if (b.asking_price) stats.push({v: fmtMoney(b.asking_price), l:'מחיר מבוקש'});
+  if (b.annual_revenue) stats.push({v: fmtMoney(b.annual_revenue), l:'מחזור שנתי'});
+  if (b.years_active) stats.push({v: b.years_active, l:'שנות פעילות'});
+
+  return `
+  <div class="card">
+    <div class="card-top">
+      <span class="field-tag">${esc(b.field || b.category || 'עסק')}</span>
+      <h3>${esc(b.anonymous_name || 'עסק למכירה')}</h3>
+      <div class="region">${esc(b.region || b.city || '')}</div>
+    </div>
+    <div class="card-body">
+      <div class="desc">${esc(b.short_description || 'פרטים נוספים ייחשפו לאחר יצירת קשר.')}</div>
+      ${stats.length ? `<div class="stats-row">${stats.map(s=>`<div class="stat"><div class="v">${s.v}</div><div class="l">${s.l}</div></div>`).join('')}</div>` : ''}
+      <button class="card-cta" onclick="openInquiry('${b.id}', '${esc(b.anonymous_name || '')}')">מעוניין? השאר פרטים</button>
+    </div>
+  </div>`;
+}
+
+function populateFilters(){
+  const fields = [...new Set(ALL_LISTINGS.map(b=>b.field).filter(Boolean))].sort();
+  const regions = [...new Set(ALL_LISTINGS.map(b=>b.region).filter(Boolean))].sort();
+  document.getElementById('fField').innerHTML = '<option value="">כל התחומים</option>' + fields.map(f=>`<option value="${esc(f)}">${esc(f)}</option>`).join('');
+  document.getElementById('fRegion').innerHTML = '<option value="">כל האזורים</option>' + regions.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('');
+}
+
+function render(){
+  const fField = document.getElementById('fField').value;
+  const fRegion = document.getElementById('fRegion').value;
+  const filtered = ALL_LISTINGS.filter(b =>
+    (!fField || b.field === fField) && (!fRegion || b.region === fRegion)
+  );
+  document.getElementById('resultCount').textContent = `${filtered.length} עסקים`;
+  document.getElementById('grid').style.display = filtered.length ? 'grid' : 'none';
+  document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
+  document.getElementById('grid').innerHTML = filtered.map(card).join('');
+}
+
+document.getElementById('fField').addEventListener('change', render);
+document.getElementById('fRegion').addEventListener('change', render);
+
+function openInquiry(businessId, name){
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.id = 'inquiryOverlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <h3>מעוניין ב"${esc(name)}"?</h3>
+      <div class="sub">השאירו פרטים ונחזור אליכם בהקדם, בדיסקרטיות מלאה.</div>
+      <form id="inquiryForm">
+        <input type="text" id="inqName" placeholder="שם מלא" required>
+        <input type="tel" id="inqPhone" placeholder="טלפון" required>
+        <textarea id="inqMsg" placeholder="הודעה (לא חובה)"></textarea>
+        <div class="modal-actions">
+          <button type="submit" class="btn-send">שלח פרטים</button>
+          <button type="button" class="btn-cancel" onclick="document.getElementById('inquiryOverlay').remove()">ביטול</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('inquiryForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('inqName').value.trim();
+    const phone = document.getElementById('inqPhone').value.trim();
+    const message = document.getElementById('inqMsg').value.trim();
+    const { error } = await supabasePublic.from('public_inquiries').insert({
+      business_id: businessId, name, phone, message
+    });
+    const modal = overlay.querySelector('.modal');
+    if (error) {
+      modal.innerHTML = `<div class="thankyou"><div class="big">⚠️</div><p>אירעה שגיאה בשליחה, נסו שוב או התקשרו ל-054-2424999.</p></div>`;
+    } else {
+      modal.innerHTML = `<div class="thankyou"><div class="big">✅</div><p>הפרטים נשלחו בהצלחה! ניצור קשר בהקדם.</p></div>`;
+    }
+    setTimeout(() => overlay.remove(), 2600);
+  });
+}
+
+async function loadListings(){
+  const { data, error } = await supabasePublic.from('public_business_listings').select('*');
+  if (error) {
+    document.getElementById('grid').innerHTML = '';
+    document.getElementById('emptyState').style.display = 'block';
+    document.getElementById('emptyState').innerHTML = '<div class="big">⚠️</div><div>לא ניתן לטעון כרגע את רשימת העסקים.</div>';
+    console.error(error);
+    return;
+  }
+  ALL_LISTINGS = data || [];
+  populateFilters();
+  render();
+}
+
+loadListings();
+</script>
+</body>
+</html>
