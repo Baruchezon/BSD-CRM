@@ -73,7 +73,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 16:45</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 17:05</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -312,7 +312,7 @@ function renderTable(){
       <td data-label="עודכן">${fmtDate(b.updated_at)}</td>
       <td class="row-actions" data-label="" onclick="event.stopPropagation()">
         ${canEditRecord(b.created_by) ? `<button class="act-edit" title="ערוך" onclick="openBizForm('${b.id}')">✏️</button>` : ''}
-        <button class="act-notes" title="הערות" onclick="openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" style="${notesIconStyle(b.id)}">📝</button>
+        <button class="act-notes" title="${notesTooltip(b.id)}" onclick="openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" style="${notesIconStyle(b.id)}">📝</button>
         ${canSendAgreement() ? `<button class="act-agreement" title="שלח הסכם" onclick="sendAgreementForBiz('${b.id}')">📄</button>` : ''}
         ${canEditRecord(b.created_by) ? `<button class="act-delete" title="מחק" onclick="deleteBiz('${b.id}')">🗑️</button>` : ''}
       </td>
@@ -679,6 +679,12 @@ function notesIconStyle(recordId){
   return unread
     ? 'background:#1a3d8f;border-radius:6px;box-shadow:0 0 0 2px #1a3d8f;'
     : 'background:#cfe8fb;border-radius:6px;';
+}
+
+function notesTooltip(recordId){
+  const summary = NOTES_SUMMARY[recordId];
+  if (!summary || !summary.count) return 'הערות (אין הערות עדיין)';
+  return summary.count === 1 ? 'הערה אחת' : `${summary.count} הערות`;
 }
 
 async function markNotesRead(tableName, recordId){
