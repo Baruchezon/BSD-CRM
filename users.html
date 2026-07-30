@@ -47,7 +47,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 15:50</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 16:20</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
     <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -279,7 +279,7 @@ function renderTable(){
   if (ALL_USERS.length === 0){ body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#999;">אין משתמשים</td></tr>'; return; }
   body.innerHTML = ALL_USERS.map(u=>{
     const name = u.full_name && u.full_name.trim() ? u.full_name : '—';
-    const perms = [u.can_use_survey ? '🔍 סקר' : null, u.can_use_ai_match ? '🧠 התאמות' : null, u.can_send_agreement ? '📄 הסכם' : null].filter(Boolean).join(', ') || '—';
+    const perms = [u.can_use_survey ? '🔍 סקר' : null, u.can_use_ai_match ? '🧠 התאמות' : null, u.can_send_agreement ? '📄 הסכם' : null, u.can_send_presentations ? '📤 מצגות' : null].filter(Boolean).join(', ') || '—';
     return `<tr>
       <td data-label="שם מלא">${esc(name)}</td>
       <td data-label="אימייל">${esc(u.email)}</td>
@@ -323,6 +323,7 @@ function openEditForm(id){
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-left:18px;"><input type="checkbox" id="can_survey" style="width:auto;" ${u.can_use_survey?'checked':''}> אפשר כפתור "סקר"</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="can_ai_match" style="width:auto;" ${u.can_use_ai_match?'checked':''}> אפשר כפתור "הצעות התאמה חכמות"</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_agreement" style="width:auto;" ${u.can_send_agreement?'checked':''}> אפשר שליחת הסכם התקשרות</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_presentations" style="width:auto;" ${u.can_send_presentations?'checked':''}> אפשר שליחת מצגות אנונימיות</label>
         </div>
         <div class="field full"><label>הערות</label><textarea id="notes">${esc(u.notes)}</textarea></div>
       </div>
@@ -348,7 +349,8 @@ async function saveEdit(e){
     role: g('role'), notes: g('notes'),
     can_use_survey: document.getElementById('can_survey').checked,
     can_use_ai_match: document.getElementById('can_ai_match').checked,
-    can_send_agreement: document.getElementById('can_agreement').checked
+    can_send_agreement: document.getElementById('can_agreement').checked,
+    can_send_presentations: document.getElementById('can_presentations').checked
   };
   const { error } = await window.supabaseClient.from('profiles').update(payload).eq('id', id);
   if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
@@ -463,6 +465,7 @@ function openCreateForm(){
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-left:18px;"><input type="checkbox" id="new_can_survey" style="width:auto;"> אפשר כפתור "סקר"</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="new_can_ai_match" style="width:auto;"> אפשר כפתור "הצעות התאמה חכמות"</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_agreement" style="width:auto;"> אפשר שליחת הסכם התקשרות</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_presentations" style="width:auto;"> אפשר שליחת מצגות אנונימיות</label>
         </div>
       </div>
       <div class="modal-actions">
@@ -497,7 +500,8 @@ async function createUser(e){
         phone: g('new_phone'), city: g('new_city'), role: g('new_role'),
         can_use_survey: document.getElementById('new_can_survey').checked,
         can_use_ai_match: document.getElementById('new_can_ai_match').checked,
-        can_send_agreement: document.getElementById('new_can_agreement').checked
+        can_send_agreement: document.getElementById('new_can_agreement').checked,
+        can_send_presentations: document.getElementById('new_can_presentations').checked
       })
     });
     const result = await resp.json();

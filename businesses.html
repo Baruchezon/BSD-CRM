@@ -73,7 +73,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 15:50</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 16:20</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -93,7 +93,7 @@
   <div class="toolbar">
     <h2>עסקים למכירה</h2>
     <div style="display:flex;gap:8px;">
-      <button class="btn btn-ghost" onclick="openSendPresentationsModal()">📤 שלח מצגות לקונה</button>
+      <button class="btn btn-ghost" id="sendPresoToolbarBtn" onclick="openSendPresentationsModal()">📤 שלח מצגות לקונה</button>
       <button class="btn btn-primary" onclick="openBizForm(null)">+ עסק חדש</button>
     </div>
   </div>
@@ -333,6 +333,12 @@ function canSendAgreement(){
   if (!CURRENT_PROFILE) return false;
   if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
   return !!CURRENT_PROFILE.can_send_agreement;
+}
+
+function canSendPresentations(){
+  if (!CURRENT_PROFILE) return false;
+  if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
+  return !!CURRENT_PROFILE.can_send_presentations;
 }
 
 ['fSearch','fStatus','fField','fAgreement','fCreatedBy','fSort'].forEach(id=>{
@@ -851,6 +857,7 @@ function sendAgreementForBiz(id){
 }
 
 async function openSendPresentationsModal(){
+  if (!canSendPresentations()){ toast('אין לך הרשאה לשלוח מצגות אנונימיות. פנה למנהל המערכת.'); return; }
   const withPreso = ALL_BIZ.filter(b => b.anon_presentation_path);
 
   const modal = document.getElementById('modalBox');
@@ -1025,6 +1032,7 @@ async function deleteBiz(id){
   await loadLookups();
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL');
   if (CURRENT_PROFILE.role !== 'admin'){ const navUsers = document.getElementById('navUsersLink'); if (navUsers) navUsers.style.display = 'none'; }
+  if (!canSendPresentations()){ const presoBtn = document.getElementById('sendPresoToolbarBtn'); if (presoBtn) presoBtn.style.display = 'none'; }
   await loadNotesSummary('businesses');
   await loadBusinesses();
 })();
