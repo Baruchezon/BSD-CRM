@@ -61,7 +61,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 20:20</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 20:55</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
       <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -172,11 +172,25 @@ async function loadUsers(){
   const { data } = await window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active');
   ALL_USERS = data || [];
   const sel = document.getElementById('fAssigned');
-  ALL_USERS.forEach(u=>{ const o=document.createElement('option'); o.value=u.id; o.textContent = u.full_name && u.full_name.trim() ? u.full_name : u.email; sel.appendChild(o); });
+  const isAdmin = CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin';
+
+  if (!isAdmin){
+    // Regular users never get a picker — they only ever see their own tasks.
+    sel.style.display = 'none';
+  } else {
+    ALL_USERS.forEach(u=>{ const o=document.createElement('option'); o.value=u.id; o.textContent = u.full_name && u.full_name.trim() ? u.full_name : u.email; sel.appendChild(o); });
+    // Admin defaults to seeing their own tasks too, with the option to switch to anyone (or "all").
+    sel.value = CURRENT_PROFILE.id;
+  }
 }
 
 async function loadTasks(){
-  const { data, error } = await window.supabaseClient.from('tasks').select('*').order('due_date', { ascending: true });
+  const isAdmin = CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin';
+  let q = window.supabaseClient.from('tasks').select('*').order('due_date', { ascending: true });
+  if (!isAdmin && CURRENT_PROFILE){
+    q = q.eq('assigned_to', CURRENT_PROFILE.id);
+  }
+  const { data, error } = await q;
   if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
   ALL_TASKS = data || [];
   checkSchemaBanner();
