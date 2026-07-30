@@ -19,7 +19,14 @@ self.addEventListener('push', event => {
     lang: 'he',
     data: { url: data.url || 'tasks.html' }
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+        clientList.forEach(client => client.postMessage({ type: 'BSD_PUSH_SOUND' }));
+      })
+    ])
+  );
 });
 
 self.addEventListener('notificationclick', event => {

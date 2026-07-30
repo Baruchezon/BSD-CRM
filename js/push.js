@@ -82,3 +82,14 @@ function bsdInitPushBell() {
 }
 
 document.addEventListener('DOMContentLoaded', bsdInitPushBell);
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data && event.data.type === 'BSD_PUSH_SOUND') {
+      try {
+        const audio = new Audio('sounds/task-notification.mp3');
+        audio.play().catch(() => {});
+      } catch (e) { /* ignore */ }
+    }
+  });
+}
