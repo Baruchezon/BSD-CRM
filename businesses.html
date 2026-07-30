@@ -73,7 +73,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 11:45</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 12:30</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -92,7 +92,10 @@
 <div class="wrap">
   <div class="toolbar">
     <h2>עסקים למכירה</h2>
-    <button class="btn btn-primary" onclick="openBizForm(null)">+ עסק חדש</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost" id="selectModeBtn" onclick="toggleSelectMode()">☑️ בחירת עסקים לשליחת מצגות</button>
+      <button class="btn btn-primary" onclick="openBizForm(null)">+ עסק חדש</button>
+    </div>
   </div>
 
   <div class="filters">
@@ -119,11 +122,12 @@
   <table>
     <thead>
       <tr>
-        <th>שם פנימי</th><th>טלפון בעלים</th><th>תחום</th><th>עיר</th><th>מחיר מבוקש</th><th>סטטוס</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>נוצר</th><th>עודכן</th><th>פעולות</th>
+        <th id="selectColHeader" style="display:none;"></th>
+        <th>שם פנימי</th><th>טלפון בעלים</th><th>תחום</th><th>עיר</th><th>מחיר מבוקש</th><th>סטטוס</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>📋 מצגת</th><th>נוצר</th><th>עודכן</th><th>פעולות</th>
       </tr>
     </thead>
     <tbody id="bizBody">
-      <tr class="empty-row"><td colspan="11">טוען...</td></tr>
+      <tr class="empty-row"><td colspan="13">טוען...</td></tr>
     </tbody>
   </table>
   </div>
@@ -132,10 +136,17 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
+<div id="sendPresoBar" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#0e1b34;color:#fff;padding:14px 24px;box-shadow:0 -6px 20px rgba(0,0,0,.25);z-index:150;display:flex;align-items:center;gap:14px;">
+  <span id="sendPresoCount" style="font-weight:700;"></span>
+  <button class="btn btn-primary" style="background:linear-gradient(135deg,#e8cf8a,#c9a24b);color:#0e1b34;font-weight:800;" onclick="openSendPresentationsModal()">📤 שלח מצגות לקונה</button>
+  <button class="btn btn-ghost" style="color:#fff;border-color:rgba(255,255,255,.4);margin-inline-start:auto;" onclick="toggleSelectMode()">ביטול</button>
+</div>
+
 <script src="js/config.js"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/push.js"></script>
+<script src="js/searchSelect.js"></script>
 <script>
 let ALL_BIZ = [];
 let ALL_SELLERS = [];
@@ -281,7 +292,7 @@ function renderTable(){
 
   const body = document.getElementById('bizBody');
   if (rows.length === 0){
-    body.innerHTML = '<tr class="empty-row"><td colspan="12">לא נמצאו עסקים</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="13">לא נמצאו עסקים</td></tr>';
     return;
   }
   body.innerHTML = rows.map(b=>{
@@ -291,7 +302,10 @@ function renderTable(){
       : agrStatus === 'יש הסכם חתום' ? 'row-signed' : (agrStatus === 'נשלח הסכם לחתימה' ? 'row-sent' : 'row-none');
     const statusEmoji = rowCls === 'row-sold' ? '🔵 ' : rowCls === 'row-removed' ? '⛔ ' : rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
     return `
-    <tr class="${rowCls}" style="cursor:pointer;" onclick="openBizForm('${b.id}')">
+    <tr class="${rowCls}" style="cursor:pointer;" onclick="${SELECT_MODE ? `toggleBizSelection('${b.id}', event)` : `openBizForm('${b.id}')`}">
+      <td class="select-col" style="display:${SELECT_MODE ? 'table-cell' : 'none'};" onclick="event.stopPropagation()">
+        <input type="checkbox" ${SELECTED_BIZ_IDS.has(b.id) ? 'checked' : ''} onchange="toggleBizSelection('${b.id}')" style="width:18px;height:18px;">
+      </td>
       <td data-label="שם פנימי"><div class="primary-name" style="font-weight:700;">${statusEmoji}${esc(b.internal_name)}</div>${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}</td>
       <td data-label="טלפון בעלים" class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;white-space:nowrap;" onclick="event.stopPropagation()">${b.owner_phone ? `<a href="tel:${esc(b.owner_phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(b.owner_phone)}</a>` : '—'}</td>
       <td data-label="תחום">${esc(b.field||'—')}</td>
@@ -301,6 +315,7 @@ function renderTable(){
       <td data-label="הוזן ע&quot;י">${b.created_by ? `<b style="color:${creatorColor(b.created_by) || '#333'};">${esc(userName(b.created_by))}</b>` : 'לא ידוע'}</td>
       <td data-label="מטופל ע&quot;י">${b.handled_by ? esc(userName(b.handled_by)) : '—'}</td>
       <td data-label="סטטוס הסכם">${agreementBadge(b.agreement_status)}</td>
+      <td data-label="מצגת" style="text-align:center;">${b.anon_presentation_name ? `<span title="${esc(b.anon_presentation_name)}">📄</span>` : '<span style="color:#ccc;">—</span>'}</td>
       <td data-label="נוצר">${fmtDate(b.created_at)}</td>
       <td data-label="עודכן">${fmtDate(b.updated_at)}</td>
       <td class="row-actions" data-label="" onclick="event.stopPropagation()">
@@ -318,6 +333,33 @@ function canEditRecord(createdBy){
   if (!CURRENT_PROFILE) return false;
   if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
   return createdBy === CURRENT_PROFILE.id;
+}
+
+let SELECT_MODE = false;
+let SELECTED_BIZ_IDS = new Set();
+
+function toggleSelectMode(){
+  SELECT_MODE = !SELECT_MODE;
+  if (!SELECT_MODE) SELECTED_BIZ_IDS.clear();
+  document.getElementById('selectColHeader').style.display = SELECT_MODE ? 'table-cell' : 'none';
+  document.getElementById('selectModeBtn').textContent = SELECT_MODE ? '✖️ ביטול בחירה' : '☑️ בחירת עסקים לשליחת מצגות';
+  updateSendPresoBar();
+  renderTable();
+}
+
+function toggleBizSelection(bizId, event){
+  if (event) event.stopPropagation();
+  if (SELECTED_BIZ_IDS.has(bizId)) SELECTED_BIZ_IDS.delete(bizId);
+  else SELECTED_BIZ_IDS.add(bizId);
+  updateSendPresoBar();
+  renderTable();
+}
+
+function updateSendPresoBar(){
+  const bar = document.getElementById('sendPresoBar');
+  const count = SELECTED_BIZ_IDS.size;
+  bar.style.display = (SELECT_MODE && count > 0) ? 'flex' : 'none';
+  document.getElementById('sendPresoCount').textContent = `נבחרו ${count} עסקים`;
 }
 
 function canSendAgreement(){
@@ -449,6 +491,22 @@ function openBizForm(id){
       </div>
 
       ${biz ? `
+      <div class="section-h" style="margin-top:14px;">📋 מצגת אנונימית</div>
+      <div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;">
+        <div id="anonPresentationStatus" style="font-size:.85rem;margin-bottom:8px;">
+          ${biz.anon_presentation_name
+            ? `📄 קיימת מצגת: <b>${esc(biz.anon_presentation_name)}</b>
+               &nbsp; <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="downloadAnonPresentation('${esc(biz.anon_presentation_path)}')">📂 פתח / הורד</button>
+               &nbsp; <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="deleteAnonPresentation('${biz.id}','${esc(biz.anon_presentation_path)}')">מחק</button>`
+            : `<span style="color:#999;">אין מצגת אנונימית מועלית עדיין</span>`}
+        </div>
+        <input type="file" id="anonPresentationInput">
+        <button type="button" class="btn btn-ghost" style="margin-inline-start:8px;" onclick="uploadAnonPresentation('${biz.id}')">⬆️ העלה / החלף מצגת</button>
+        <div id="anonUploadStatusMsg" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
+      </div>
+      ` : ``}
+
+      ${biz ? `
       <div class="section-h" style="margin-top:14px;">קבצים מצורפים</div>
       <div class="field full">
         <input type="file" id="bizFileInput">
@@ -539,6 +597,69 @@ async function downloadBizFile(bizId, fileName){
   const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/${fileName}`, 60);
   if (error){ toast('שגיאה: ' + error.message); return; }
   window.open(data.signedUrl, '_blank');
+}
+
+const ANON_PRESENTATION_PREFIX = 'anon';
+
+async function uploadAnonPresentation(bizId){
+  const input = document.getElementById('anonPresentationInput');
+  const statusEl = document.getElementById('anonUploadStatusMsg');
+  const file = input.files[0];
+  if (!file){ toast('יש לבחור קובץ קודם'); return; }
+  if (file.size > MAX_FILE_MB * 1024 * 1024){
+    toast(`הקובץ גדול מדי (מקסימום ${MAX_FILE_MB}MB)`);
+    input.value = ''; return;
+  }
+  if (statusEl) statusEl.textContent = 'מעלה את "' + file.name + '"...';
+
+  // Remove any existing presentation for this business first, so there's always only one.
+  const { data: existing } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).list(`${ANON_PRESENTATION_PREFIX}/${bizId}`);
+  if (existing && existing.length){
+    await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).remove(existing.map(f => `${ANON_PRESENTATION_PREFIX}/${bizId}/${f.name}`));
+  }
+
+  const path = `${ANON_PRESENTATION_PREFIX}/${bizId}/${Date.now()}__${encodeURIComponent(file.name)}`;
+  const { error: upErr } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).upload(path, file);
+  if (upErr){
+    if (statusEl) statusEl.textContent = '';
+    toast('שגיאה בהעלאה: ' + upErr.message);
+    return;
+  }
+
+  const { error: dbErr } = await window.supabaseClient.from('businesses').update({
+    anon_presentation_path: path,
+    anon_presentation_name: file.name
+  }).eq('id', bizId);
+  if (dbErr){
+    if (statusEl) statusEl.textContent = '';
+    toast('הקובץ הועלה אך עדכון הרשומה נכשל: ' + dbErr.message);
+    return;
+  }
+
+  if (statusEl) statusEl.textContent = '';
+  input.value = '';
+  toast('המצגת האנונימית הועלתה בהצלחה');
+  await loadBusinesses();
+  openBizForm(bizId);
+}
+
+async function downloadAnonPresentation(path){
+  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(path, 300);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
+async function deleteAnonPresentation(bizId, path){
+  if (!confirm('למחוק את המצגת האנונימית של העסק?')) return;
+  await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).remove([path]);
+  const { error } = await window.supabaseClient.from('businesses').update({
+    anon_presentation_path: null,
+    anon_presentation_name: null
+  }).eq('id', bizId);
+  if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
+  toast('המצגת נמחקה');
+  await loadBusinesses();
+  openBizForm(bizId);
 }
 
 function closeNotesPanel(){
@@ -754,6 +875,111 @@ function sendAgreementForBiz(id){
     biz: b.internal_name || ''
   });
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
+}
+
+async function openSendPresentationsModal(){
+  const selectedIds = Array.from(SELECTED_BIZ_IDS);
+  const selectedBiz = ALL_BIZ.filter(b => selectedIds.includes(b.id));
+  const missingPreso = selectedBiz.filter(b => !b.anon_presentation_path);
+
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>שליחת מצגות אנונימיות</h3>
+    <div style="font-size:.85rem;color:#665;margin-bottom:14px;">
+      נבחרו ${selectedBiz.length} עסקים:
+      <ul style="margin:6px 0 0 0;padding-inline-start:20px;">
+        ${selectedBiz.map(b => `<li>${esc(b.internal_name)} ${b.anon_presentation_path ? '📄' : '<span style="color:#b3402c;">(אין מצגת!)</span>'}</li>`).join('')}
+      </ul>
+    </div>
+    ${missingPreso.length ? `<div class="tip" style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:.82rem;">
+      ⚠️ לעסקים המסומנים אין מצגת אנונימית מועלית — הם לא ייכללו בשליחה.
+    </div>` : ''}
+
+    <div class="field full" style="margin-bottom:10px;">
+      <label>בחר קונה</label>
+      <div id="presoBuyerBox">טוען קונים...</div>
+    </div>
+    <div id="presoBuyerInfo"></div>
+
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button type="button" class="btn btn-primary" id="presoSendBtn" disabled onclick="confirmSendPresentations()">📤 שלח מצגות</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('open');
+
+  const { data: buyers, error } = await window.supabaseClient
+    .from('leads')
+    .select('id,full_name,first_name,last_name,email,phone,agreement_status')
+    .eq('type', 'buyer')
+    .order('full_name', { ascending: true });
+
+  const box = document.getElementById('presoBuyerBox');
+  if (error){ box.innerHTML = `<span style="color:#b3402c;">שגיאה בטעינת קונים: ${esc(error.message)}</span>`; return; }
+
+  box.innerHTML = window.searchSelectHTML({ boxId: 'presoBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
+  window.initSearchSelect('presoBuyerSelect', buyers || [], {
+    getId: b => b.id,
+    getLabel: b => b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || b.email || 'קונה ללא שם',
+    onChange: (buyerId) => renderPresoBuyerInfo(buyers, buyerId)
+  });
+}
+
+function renderPresoBuyerInfo(buyers, buyerId){
+  const infoBox = document.getElementById('presoBuyerInfo');
+  const sendBtn = document.getElementById('presoSendBtn');
+  const buyer = buyers.find(b => b.id === buyerId);
+  if (!buyer){ infoBox.innerHTML = ''; sendBtn.disabled = true; return; }
+
+  const agr = buyer.agreement_status || 'אין הסכם';
+  const blocked = agr === 'אין הסכם';
+  const buyerLabel = buyer.full_name || [buyer.first_name,buyer.last_name].filter(Boolean).join(' ') || '';
+
+  infoBox.innerHTML = `
+    <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.85rem;">
+      <div><b>${esc(buyerLabel)}</b></div>
+      <div>📧 ${esc(buyer.email || 'אין אימייל')}</div>
+      <div>📞 ${esc(buyer.phone || 'אין טלפון')}</div>
+    </div>
+    ${blocked
+      ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:10px 12px;font-size:.85rem;">
+           ❌ לא ניתן לשלוח מצגות ל${esc(buyerLabel || 'קונה זה')} — טרם נשלח לו הסכם התקשרות.
+         </div>`
+      : (!buyer.email
+          ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:10px 12px;font-size:.85rem;">⚠️ לקונה הזה אין כתובת אימייל שמורה בכרטיס.</div>`
+          : '')}
+  `;
+  sendBtn.disabled = blocked || !buyer.email;
+  sendBtn.dataset.buyerId = buyerId;
+}
+
+async function confirmSendPresentations(){
+  const sendBtn = document.getElementById('presoSendBtn');
+  const buyerId = sendBtn.dataset.buyerId;
+  const businessIds = Array.from(SELECTED_BIZ_IDS).filter(id => {
+    const b = ALL_BIZ.find(x => x.id === id);
+    return b && b.anon_presentation_path;
+  });
+  if (!businessIds.length){ toast('אין עסקים עם מצגת מועלית בבחירה'); return; }
+
+  sendBtn.disabled = true;
+  sendBtn.textContent = 'שולח...';
+
+  const { data: sessionData } = await window.supabaseClient.auth.getSession();
+  const { data, error } = await window.supabaseClient.functions.invoke('send-anonymous-presentations', {
+    body: { lead_id: buyerId, business_ids: businessIds }
+  });
+
+  if (error){
+    toast('שגיאה בשליחה: ' + error.message);
+    sendBtn.disabled = false;
+    sendBtn.textContent = '📤 שלח מצגות';
+    return;
+  }
+
+  toast('המצגות נשלחו בהצלחה!');
+  closeModal();
+  toggleSelectMode();
 }
 
 async function deleteBiz(id){
