@@ -163,6 +163,38 @@ input, select, textarea, button{
   box-shadow:0 2px 6px rgba(0,0,0,.35) inset, 0 1px 0 rgba(255,255,255,.15);
 }
 
+/* ============================================================
+   TASKS NAV BUTTON — elevated above the other nav links: gold-
+   filled, bolder, bigger, and positioned right after "לוח בקרה"
+   since it's the item that needs daily attention.
+   ============================================================ */
+.nav-tasks{
+  background:linear-gradient(135deg,var(--gold-light),var(--gold)) !important;
+  color:var(--navy) !important;
+  font-weight:800 !important;
+  font-size:.92rem !important;
+  padding:9px 20px !important;
+  border-radius:9px;
+  text-decoration:none;
+  border:1px solid rgba(255,255,255,.6);
+  box-shadow:0 3px 0 rgba(0,0,0,.24), 0 7px 16px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.65) inset !important;
+  transform:translateY(-1px);
+}
+.nav-tasks:hover{
+  filter:brightness(1.06);
+  transform:translateY(-3px) !important;
+  box-shadow:0 5px 0 rgba(0,0,0,.24), 0 12px 22px rgba(0,0,0,.32), 0 1px 0 rgba(255,255,255,.65) inset !important;
+}
+.nav-tasks:active{
+  transform:translateY(1px) !important;
+  box-shadow:0 1px 0 rgba(0,0,0,.24), 0 2px 6px rgba(0,0,0,.24), 0 1px 0 rgba(255,255,255,.65) inset !important;
+}
+.nav-tasks.nav-tasks-current{
+  background:linear-gradient(135deg,var(--gold),var(--gold-light)) !important;
+  box-shadow:0 2px 8px rgba(0,0,0,.4) inset, 0 1px 0 rgba(255,255,255,.5) !important;
+  transform:none !important;
+}
+
 /* כפתורי פעולה - גודל נוח ללחיצה (מינימום 44px גובה) */
 .btn, .login-card button, .period-btn{
   min-height:44px;
