@@ -61,7 +61,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 17:05</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 17:40</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
       <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -84,7 +84,8 @@
     <code style="display:block;background:#fff;border-radius:6px;padding:10px 12px;font-size:.8rem;direction:ltr;text-align:left;white-space:pre-wrap;">alter table tasks
   add column if not exists due_time time,
   add column if not exists read_at timestamptz,
-  add column if not exists description text;</code>
+  add column if not exists description text,
+  add column if not exists completed_at timestamptz;</code>
   </div>
   <div class="toolbar">
     <h2>משימות</h2>
@@ -93,17 +94,29 @@
 
   <div class="filters">
     <input type="text" id="fSearch" placeholder="חיפוש לפי כותרת משימה..." style="min-width:220px;">
-    <select id="fStatus">
-      <option value="open">פתוחות</option>
-      <option value="all">הכל</option>
-      <option value="done">הושלמו</option>
-    </select>
     <select id="fAssigned"><option value="all">כל המשתמשים</option></select>
   </div>
 
+  <h3 style="margin:18px 0 8px;">📋 משימות לביצוע</h3>
   <table>
     <thead><tr><th>נקרא</th><th>כותרת</th><th>קשור ל</th><th>תאריך יעד</th><th>סטטוס</th><th>עדיפות</th><th>אחראי</th><th>פעולות</th></tr></thead>
     <tbody id="taskBody"><tr class="empty-row"><td colspan="8">טוען...</td></tr></tbody>
+  </table>
+
+  <h3 style="margin:32px 0 8px;color:#666;">🗄️ היסטוריה — משימות שבוצעו</h3>
+  <div class="filters">
+    <input type="text" id="fHistSearch" placeholder="חיפוש לפי שם משימה..." style="min-width:220px;">
+    <select id="fHistPeriod">
+      <option value="7">7 ימים אחרונים</option>
+      <option value="30">30 יום אחרונים</option>
+      <option value="90">3 חודשים אחרונים</option>
+      <option value="365">שנה אחרונה</option>
+      <option value="all">הכל</option>
+    </select>
+  </div>
+  <table>
+    <thead><tr><th>כותרת</th><th>קשור ל</th><th>הושלמה בתאריך</th><th>עדיפות</th><th>אחראי</th><th>פעולות</th></tr></thead>
+    <tbody id="taskHistoryBody"><tr class="empty-row"><td colspan="6">טוען...</td></tr></tbody>
   </table>
 </div>
 
@@ -168,6 +181,7 @@ async function loadTasks(){
   ALL_TASKS = data || [];
   checkSchemaBanner();
   renderTable();
+  renderHistoryTable();
 }
 
 // select('*') never errors for missing columns (it just silently omits them) — so the
@@ -191,19 +205,17 @@ async function checkSchemaBanner(){
 
 function renderTable(){
   const fSearch = document.getElementById('fSearch').value.trim().toLowerCase();
-  const fStatus = document.getElementById('fStatus').value;
   const fAssigned = document.getElementById('fAssigned').value;
 
   let rows = ALL_TASKS.filter(t=>{
+    if (t.status !== 'פתוחה') return false;
     if (fSearch && !(t.title||'').toLowerCase().includes(fSearch)) return false;
-    if (fStatus === 'open' && t.status !== 'פתוחה') return false;
-    if (fStatus === 'done' && t.status === 'פתוחה') return false;
     if (fAssigned !== 'all' && t.assigned_to !== fAssigned) return false;
     return true;
   });
 
   const body = document.getElementById('taskBody');
-  if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="8">אין משימות תואמות</td></tr>'; return; }
+  if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="8">אין משימות פתוחות</td></tr>'; return; }
 
   const relatedLabels = {lead:'ליד', business:'עסק', match:'התאמה'};
   body.innerHTML = rows.map(t=>{
@@ -214,7 +226,7 @@ function renderTable(){
       <td data-label="כותרת">${esc(t.title)}</td>
       <td data-label="קשור ל">${t.related_type ? esc(relatedLabels[t.related_type]||t.related_type) : '—'}</td>
       <td data-label="תאריך יעד" class="${isOverdue?'overdue':''}">${fmtDate(t.due_date)}${t.due_time ? ' <span style="color:#8a93a8;font-size:.78rem;">' + esc(t.due_time.slice(0,5)) + '</span>' : ''}</td>
-      <td data-label="סטטוס"><span class="pill ${t.status==='פתוחה'?'pill-open':'pill-done'}">${esc(t.status)}</span></td>
+      <td data-label="סטטוס"><span class="pill pill-open">${esc(t.status)}</span></td>
       <td data-label="עדיפות" class="${t.priority==='גבוהה'?'pri-high':'pri-normal'}">${esc(t.priority)}</td>
       <td data-label="אחראי">${esc(userName(t.assigned_to))}</td>
       <td class="row-actions" data-label="" onclick="event.stopPropagation()">
@@ -222,15 +234,48 @@ function renderTable(){
         ${isUnread
           ? `<button class="act-read" title="סמן כנקרא" onclick="toggleTaskRead('${t.id}', true)">👁️</button>`
           : `<button class="act-unread" title="סמן כלא נקרא" onclick="toggleTaskRead('${t.id}', false)">↺</button>`}
-        ${t.status==='פתוחה' ? `<button class="act-done" title="סמן כהושלם" onclick="completeTask('${t.id}')">✅</button>` : ''}
+        <button class="act-done" title="סמן כהושלם" onclick="completeTask('${t.id}')">✅</button>
         <button class="act-delete" title="מחק" onclick="deleteTask('${t.id}')">🗑️</button>
       </td>
     </tr>`;
   }).join('');
 }
 
-['fStatus','fAssigned'].forEach(id=>document.getElementById(id).addEventListener('change', renderTable));
+function renderHistoryTable(){
+  const fSearch = document.getElementById('fHistSearch').value.trim().toLowerCase();
+  const fPeriod = document.getElementById('fHistPeriod').value;
+
+  let rows = ALL_TASKS.filter(t => t.status !== 'פתוחה');
+
+  if (fSearch) rows = rows.filter(t => (t.title||'').toLowerCase().includes(fSearch));
+  if (fPeriod !== 'all'){
+    const cutoff = new Date(Date.now() - Number(fPeriod) * 86400000).toISOString();
+    rows = rows.filter(t => (t.completed_at || t.updated_at) >= cutoff);
+  }
+  rows.sort((a,b) => new Date(b.completed_at || b.updated_at) - new Date(a.completed_at || a.updated_at));
+
+  const body = document.getElementById('taskHistoryBody');
+  if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="6">אין משימות שבוצעו בטווח הזה</td></tr>'; return; }
+
+  const relatedLabels = {lead:'ליד', business:'עסק', match:'התאמה'};
+  body.innerHTML = rows.map(t => `
+    <tr style="color:#999;">
+      <td data-label="כותרת"><span style="text-decoration:line-through;">${esc(t.title)}</span></td>
+      <td data-label="קשור ל">${t.related_type ? esc(relatedLabels[t.related_type]||t.related_type) : '—'}</td>
+      <td data-label="הושלמה בתאריך">${fmtDate(t.completed_at || t.updated_at)}</td>
+      <td data-label="עדיפות">${esc(t.priority)}</td>
+      <td data-label="אחראי">${esc(userName(t.assigned_to))}</td>
+      <td class="row-actions" data-label="">
+        <button class="act-unread" title="החזר לביצוע" onclick="reopenTask('${t.id}')">↺ בטל השלמה</button>
+        <button class="act-delete" title="מחק לצמיתות" onclick="deleteTask('${t.id}')">🗑️</button>
+      </td>
+    </tr>`).join('');
+}
+
+['fAssigned'].forEach(id=>document.getElementById(id).addEventListener('change', renderTable));
 document.getElementById('fSearch').addEventListener('input', renderTable);
+['fHistSearch'].forEach(id=>document.getElementById(id).addEventListener('input', renderHistoryTable));
+document.getElementById('fHistPeriod').addEventListener('change', renderHistoryTable);
 
 function userOptions(selected){
   return '<option value="">— ללא —</option>' + ALL_USERS.map(u=>{
@@ -310,9 +355,16 @@ async function saveTask(e){
 }
 
 async function completeTask(id){
-  const { error } = await window.supabaseClient.from('tasks').update({ status: 'הושלמה' }).eq('id', id);
+  const { error } = await window.supabaseClient.from('tasks').update({ status: 'הושלמה', completed_at: new Date().toISOString() }).eq('id', id);
   if (error){ toast('שגיאה: ' + error.message); return; }
   toast('המשימה סומנה כהושלמה');
+  await loadTasks();
+}
+
+async function reopenTask(id){
+  const { error } = await window.supabaseClient.from('tasks').update({ status: 'פתוחה', completed_at: null }).eq('id', id);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  toast('המשימה הוחזרה לביצוע');
   await loadTasks();
 }
 
