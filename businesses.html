@@ -73,7 +73,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 13:55</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 14:10</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -315,7 +315,9 @@ function renderTable(){
       <td data-label="הוזן ע&quot;י">${b.created_by ? `<b style="color:${creatorColor(b.created_by) || '#333'};">${esc(userName(b.created_by))}</b>` : 'לא ידוע'}</td>
       <td data-label="מטופל ע&quot;י">${b.handled_by ? esc(userName(b.handled_by)) : '—'}</td>
       <td data-label="סטטוס הסכם">${agreementBadge(b.agreement_status)}</td>
-      <td data-label="מצגת" style="text-align:center;">${b.anon_presentation_name ? `<span title="${esc(b.anon_presentation_name)}">📄</span>` : '<span style="color:#ccc;">—</span>'}</td>
+      <td data-label="מצגת" style="text-align:center;">${b.anon_presentation_name
+        ? `<span title="${esc(b.anon_presentation_name)}" style="display:inline-block;background:#e3f5e9;color:#1f7a45;font-weight:700;font-size:.75rem;padding:4px 10px;border-radius:20px;white-space:nowrap;">📄 יש מצגת</span>`
+        : `<span style="display:inline-block;background:#f2f0e8;color:#999;font-weight:600;font-size:.75rem;padding:4px 10px;border-radius:20px;white-space:nowrap;">אין מצגת</span>`}</td>
       <td data-label="נוצר">${fmtDate(b.created_at)}</td>
       <td data-label="עודכן">${fmtDate(b.updated_at)}</td>
       <td class="row-actions" data-label="" onclick="event.stopPropagation()">
