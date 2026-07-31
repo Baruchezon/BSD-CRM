@@ -5,7 +5,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>BSD CRM - הזנת עסק מהשטח</title>
+<title>BSD CRM - טופס סיכום פגישה עם קונה</title>
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
@@ -68,102 +68,82 @@
 
 <div class="wrap">
   <div id="schemaBanner" style="display:none;background:#fdeccb;color:#8a5a10;border:1.5px solid #dba43f;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:.85rem;line-height:1.6;">
-    ⚠️ העסק נשמר בהצלחה, אך לא ניתן היה לקשר את קובץ הסיכום לכרטיס העסק (טור <code>intake_form_path</code> עדיין לא קיים בטבלה). הקובץ עצמו כן נשמר בקבצי העסק ואפשר לפתוח אותו משם ידנית. יש להריץ פעם אחת ב-Supabase SQL Editor:
-    <pre style="background:#fff;padding:10px 12px;border-radius:8px;margin:8px 0 0;white-space:pre-wrap;direction:ltr;text-align:left;">alter table businesses
-  add column if not exists intake_form_path text,
-  add column if not exists intake_form_filled_by uuid references profiles(id) on delete set null,
-  add column if not exists intake_form_filled_at timestamptz;</pre>
+    ⚠️ הקונה נשמר בהצלחה, אך לא ניתן היה לקשר את קובץ הסיכום לכרטיס הקונה (חלק מהטורים הבאים עדיין לא קיימים בטבלה). הקובץ עצמו לא אבד - הוא ירד למכשיר. יש להריץ פעם אחת ב-Supabase SQL Editor:
+    <pre style="background:#fff;padding:10px 12px;border-radius:8px;margin:8px 0 0;white-space:pre-wrap;direction:ltr;text-align:left;">alter table leads
+  add column if not exists current_business_info text,
+  add column if not exists was_self_employed boolean,
+  add column if not exists meeting_summary text,
+  add column if not exists buyer_form_path text,
+  add column if not exists buyer_form_filled_by uuid references profiles(id) on delete set null,
+  add column if not exists buyer_form_filled_at timestamptz;</pre>
   </div>
 
   <div class="filler-banner">
-    <div>📋 <b>הזנת עסק מהשטח</b> - סיכום פגישה ראשונה עם בעל עסק</div>
+    <div>🧍 <b>טופס סיכום פגישה עם קונה</b> - סיכום שיחה עם קונה/משקיע פוטנציאלי</div>
     <div>מוזן על ידי: <b id="fillerName">טוען...</b> · <span id="fillerDate"></span></div>
   </div>
 
   <form id="intakeForm">
     <div class="card">
-      <div class="section-h">פרטי העסק</div>
-      <div class="field"><label>שם העסק <span class="req">*</span></label><input type="text" id="internal_name" required></div>
+      <div class="section-h">פרטי הקונה</div>
       <div class="grid-2">
-        <div class="field"><label>עיר</label><input type="text" id="city"></div>
-        <div class="field"><label>תחום פעילות</label><input type="text" id="field" placeholder="לדוגמה: מזון ומסעדנות, ייצור, מסחר..."></div>
-      </div>
-      <div class="field"><label>כתובת מלאה</label><input type="text" id="address"></div>
-      <div class="field"><label>כמה מילים על העסק</label><textarea id="short_description" placeholder="תיאור קצר: במה עוסק, ותק, נקודות חוזק..."></textarea></div>
-      <div class="grid-2">
-        <div class="field"><label>מחיר מבוקש (₪)</label><input type="text" inputmode="numeric" id="asking_price"></div>
-        <div class="field"><label>מספר עובדים</label><input type="text" inputmode="numeric" id="employees_count"></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="section-h">פרטי בעל העסק / איש קשר</div>
-      <div class="grid-2">
-        <div class="field"><label>שם מלא <span class="req">*</span></label><input type="text" id="owner_name" required></div>
-        <div class="field"><label>טלפון <span class="req">*</span></label><input type="tel" id="owner_phone" required></div>
+        <div class="field"><label>שם פרטי <span class="req">*</span></label><input type="text" id="first_name" required></div>
+        <div class="field"><label>שם משפחה</label><input type="text" id="last_name"></div>
       </div>
       <div class="grid-2">
-        <div class="field"><label>אימייל</label><input type="email" id="owner_email"></div>
-        <div class="field"><label>אתר אינטרנט</label><input type="text" id="website"></div>
+        <div class="field"><label>טלפון <span class="req">*</span></label><input type="tel" id="phone" required></div>
+        <div class="field"><label>אימייל</label><input type="email" id="email"></div>
       </div>
-      <div class="field"><label>ת.ז / ח.פ</label><input type="text" id="id_number"></div>
+      <div class="field"><label>עיר מגורים</label><input type="text" id="city"></div>
     </div>
 
     <div class="card">
-      <div class="section-h">פרטים תפעוליים</div>
-      <div class="grid-2">
-        <div class="field"><label>שטח המקום (מ"ר)</label><input type="text" inputmode="numeric" id="area_sqm"></div>
-        <div class="field"><label>שכירות חודשית (₪)</label><input type="text" inputmode="numeric" id="rent"></div>
+      <div class="section-h">אופי ההתקשרות המבוקשת</div>
+      <div class="field">
+        <label>יש עניין להיכנס כ...</label>
+        <select id="buyer_type">
+          <option value="">בחר</option>
+          <option value="שותף">שותף</option>
+          <option value="רכישה מלאה">רכישה מלאה</option>
+          <option value="טרם הוחלט">טרם הוחלט</option>
+        </select>
       </div>
-      <div class="field"><label>כמה זמן נשאר בחוזה השכירות</label><input type="text" id="lease_remaining" placeholder="לדוגמה: שנתיים, עם אופציה ל-5 שנים"></div>
+      <div class="field"><label>תחומי עניין (איזה סוג עסק מעניין אותו)</label><input type="text" id="requested_field" placeholder="לדוגמה: מזון ומסעדנות, קמעונאות, שירותים..."></div>
+      <div class="field" style="margin-bottom:0;"><label>תקציב משוער (₪)</label><input type="text" inputmode="numeric" id="budget"></div>
     </div>
 
     <div class="card">
-      <div class="section-h">מלאי</div>
-      <div class="field"><label>תיאור המלאי</label><textarea id="inventory_desc" placeholder="סוגי המלאי, כמויות, מצב, האם כלול במחיר..."></textarea></div>
-      <div class="field"><label>הערכת שווי המלאי (₪)</label><input type="text" inputmode="numeric" id="inventory_value"></div>
-    </div>
-
-    <div class="card">
-      <div class="section-h">ציוד</div>
-      <div class="field" style="margin-bottom:0;"><label>ציוד קיים בעסק</label><textarea id="equipment" placeholder="פירוט הציוד המרכזי, מצבו, האם כלול במחיר..."></textarea></div>
-    </div>
-
-    <div class="card">
-      <div class="section-h">לקוחות וספקים</div>
-      <div class="field"><label>לקוחות - אופי הלקוחות</label><textarea id="customers" placeholder="מי הלקוחות, קבועים/מזדמנים, תלות בלקוח מרכזי..."></textarea></div>
-      <div class="field" style="margin-bottom:0;"><label>ספקים</label><textarea id="suppliers" placeholder="ספקים מרכזיים, תנאי אשראי, בלעדיות, תלות בספק..."></textarea></div>
-    </div>
-
-    <div class="card">
-      <div class="section-h">נתונים כספיים משוערים</div>
-      <div class="grid-2">
-        <div class="field"><label>מחזור שנתי משוער (₪)</label><input type="text" inputmode="numeric" id="annual_revenue"></div>
-        <div class="field"><label>רווח תפעולי שנתי משוער (₪)</label><input type="text" inputmode="numeric" id="operating_profit"></div>
+      <div class="section-h">רקע עסקי</div>
+      <div class="field"><label>האם יש לו עסק כיום? באיזה תחום?</label><textarea id="current_business_info" placeholder="לדוגמה: לא / כן - מסעדה בתל אביב"></textarea></div>
+      <div class="field" style="margin-bottom:0;">
+        <label>האם היה עצמאי בעבר?</label>
+        <select id="was_self_employed">
+          <option value="">בחר</option>
+          <option value="yes">כן</option>
+          <option value="no">לא</option>
+        </select>
       </div>
-      <div class="field"><label>רווח נקי שנתי משוער (₪)</label><input type="text" inputmode="numeric" id="net_profit"></div>
     </div>
 
     <div class="card">
-      <div class="section-h">שאלות הבנה על העסק</div>
-      <div class="field"><label>למה מוכרים את העסק?</label><textarea id="sale_reason"></textarea></div>
-      <div class="field"><label>מה החוזקות הבולטות?</label><textarea id="strengths"></textarea></div>
-      <div class="field"><label>מה החולשות / האתגרים?</label><textarea id="weaknesses"></textarea></div>
-      <div class="field"><label>מי המתחרים המרכזיים באזור?</label><textarea id="competitors"></textarea></div>
-      <div class="field"><label>האם יש עונתיות בפעילות?</label><textarea id="seasonality"></textarea></div>
-      <div class="field"><label>עובדי מפתח - יישארו / ילכו עם המכירה?</label><textarea id="key_employees"></textarea></div>
-      <div class="field" style="margin-bottom:0;"><label>רשמים כלליים מהפגישה</label><textarea id="general_impressions"></textarea></div>
+      <div class="section-h">מעורבות מצופה</div>
+      <div class="field" style="margin-bottom:0;"><label>כמה מעורבות בעסק הוא מצפה לקחת</label><input type="text" id="involvement_level" placeholder="לדוגמה: ניהול מלא, חלקית, משקיע בלבד..."></div>
+    </div>
+
+    <div class="card">
+      <div class="section-h">סיכום השיחה</div>
+      <div class="field" style="margin-bottom:0;"><label>מלל חופשי - סיכום השיחה</label><textarea id="meeting_summary" style="min-height:120px;"></textarea></div>
     </div>
 
     <div class="card">
       <div class="section-h">הערות נוספות</div>
-      <div class="field" style="margin-bottom:0;"><label>הערות חופשיות (לא יוצגו לקונים)</label><textarea id="notes"></textarea></div>
+      <div class="field" style="margin-bottom:0;"><label>הערות חופשיות</label><textarea id="notes"></textarea></div>
     </div>
 
     <div class="actions-bar">
       <button type="button" class="btn btn-view" id="previewBtn">👁️ תצוגה מקדימה</button>
       <button type="button" class="btn btn-ghost" id="downloadOnlyBtn">⬇️ הורד PDF בלבד</button>
-      <button type="submit" class="btn btn-success" id="submitBtn">✅ הזן עסק למערכת + שמור טופס</button>
+      <button type="submit" class="btn btn-success" id="submitBtn">✅ הזן קונה למערכת + שמור טופס</button>
     </div>
   </form>
 
@@ -173,8 +153,8 @@
     <p id="successSub" style="color:#666;margin:0 0 18px;"></p>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
       <button class="btn btn-view" id="viewSavedBtn">📄 צפה / הורד את הטופס השמור</button>
-      <button class="btn btn-primary" onclick="location.reload()">➕ הזן עסק נוסף</button>
-      <a href="businesses.html" class="btn btn-ghost" style="text-decoration:none;display:inline-flex;align-items:center;">🏢 לעסקים למכירה</a>
+      <button class="btn btn-primary" onclick="location.reload()">➕ הזן קונה נוסף</button>
+      <a href="leads.html" class="btn btn-ghost" style="text-decoration:none;display:inline-flex;align-items:center;">👥 לקונים ומשקיעים</a>
     </div>
   </div>
 </div>
@@ -186,7 +166,7 @@
       <div style="width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #e8cf8a, #c9a24b 70%);display:flex;align-items:center;justify-content:center;font-weight:800;color:#1c2333;font-size:20px;">BSD</div>
       <div>
         <div style="font-size:20px;font-weight:800;">BSD Business Brokers Israel</div>
-        <div style="font-size:12px;color:#5c5648;">מסמך פנימי - סיכום פגישה ראשונה עם בעל עסק</div>
+        <div style="font-size:12px;color:#5c5648;">מסמך פנימי - סיכום פגישה עם קונה/משקיע</div>
       </div>
     </div>
     <h2 id="pt_title" style="font-size:22px;margin:0 0 4px;"></h2>
@@ -207,7 +187,7 @@
 <script>
 const BIZ_FILES_BUCKET = window.BSD_CONFIG.STORAGE_BUCKET;
 let CURRENT_PROFILE = null;
-const EXISTING_BUSINESS_ID = new URLSearchParams(location.search).get('business_id') || null;
+const EXISTING_LEAD_ID = new URLSearchParams(location.search).get('lead_id') || null;
 
 function toast(msg){
   let box = document.getElementById('toastBox');
@@ -236,45 +216,36 @@ function fillerLabel(){
   return CURRENT_PROFILE ? ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) : '';
 }
 
+function buyerFullName(){
+  return [g('first_name'), g('last_name')].filter(Boolean).join(' ') || 'קונה ללא שם';
+}
+
+function selfEmployedLabel(v){
+  if (v === 'yes') return 'כן';
+  if (v === 'no') return 'לא';
+  return '';
+}
+
 function buildPrintTemplate(){
-  const business_name = g('internal_name') || 'עסק ללא שם';
-  document.getElementById('pt_title').textContent = business_name + ' - סיכום פגישה ראשונה';
+  const buyer_name = buyerFullName();
+  document.getElementById('pt_title').textContent = buyer_name + ' - סיכום פגישה עם קונה';
   document.getElementById('pt_meta').textContent = 'מוזן על ידי: ' + fillerLabel() + ' · תאריך: ' + new Date().toLocaleDateString('he-IL');
 
   let body = '';
-  body += rowHtml('עיר', g('city'));
-  body += rowHtml('תחום פעילות', g('field'));
-  body += rowHtml('כתובת מלאה', g('address'));
-  body += rowHtml('כמה מילים על העסק', g('short_description'));
-  body += rowHtml('מחיר מבוקש (₪)', g('asking_price'));
-  body += rowHtml('מספר עובדים', g('employees_count'));
-  body += rowHtml('שם בעל העסק', g('owner_name'));
-  body += rowHtml('טלפון', g('owner_phone'));
-  body += rowHtml('אימייל', g('owner_email'));
-  body += rowHtml('אתר אינטרנט', g('website'));
-  body += rowHtml('ת.ז / ח.פ', g('id_number'));
-  body += rowHtml('שטח המקום (מ"ר)', g('area_sqm'));
-  body += rowHtml('שכירות חודשית (₪)', g('rent'));
-  body += rowHtml('זמן שנותר בחוזה השכירות', g('lease_remaining'));
-  body += rowHtml('תיאור המלאי', g('inventory_desc'));
-  body += rowHtml('הערכת שווי המלאי (₪)', g('inventory_value'));
-  body += rowHtml('ציוד קיים', g('equipment'));
-  body += rowHtml('לקוחות - אופי הלקוחות', g('customers'));
-  body += rowHtml('ספקים', g('suppliers'));
-  body += rowHtml('מחזור שנתי משוער (₪)', g('annual_revenue'));
-  body += rowHtml('רווח תפעולי שנתי משוער (₪)', g('operating_profit'));
-  body += rowHtml('רווח נקי שנתי משוער (₪)', g('net_profit'));
-  body += rowHtml('למה מוכרים את העסק', g('sale_reason'));
-  body += rowHtml('חוזקות בולטות', g('strengths'));
-  body += rowHtml('חולשות / אתגרים', g('weaknesses'));
-  body += rowHtml('מתחרים מרכזיים', g('competitors'));
-  body += rowHtml('עונתיות', g('seasonality'));
-  body += rowHtml('עובדי מפתח', g('key_employees'));
-  body += rowHtml('רשמים כלליים מהפגישה', g('general_impressions'));
+  body += rowHtml('טלפון', g('phone'));
+  body += rowHtml('אימייל', g('email'));
+  body += rowHtml('עיר מגורים', g('city'));
+  body += rowHtml('סוג ההתקשרות המבוקשת', g('buyer_type'));
+  body += rowHtml('תחומי עניין', g('requested_field'));
+  body += rowHtml('תקציב משוער (₪)', g('budget'));
+  body += rowHtml('האם יש לו עסק כיום ואיזה', g('current_business_info'));
+  body += rowHtml('האם היה עצמאי בעבר', selfEmployedLabel(g('was_self_employed')));
+  body += rowHtml('מעורבות מצופה', g('involvement_level'));
+  body += rowHtml('סיכום השיחה', g('meeting_summary'));
   body += rowHtml('הערות נוספות', g('notes'));
   document.getElementById('pt_body').innerHTML = body;
 
-  return business_name + ' - סיכום פגישה ראשונה.pdf';
+  return buyer_name + ' - סיכום פגישה עם קונה.pdf';
 }
 
 async function nextPaint(){
@@ -342,7 +313,7 @@ async function generatePdfBlob(){
 }
 
 document.getElementById('previewBtn').addEventListener('click', async function(){
-  if (!g('internal_name')){ toast('נא למלא לפחות שם עסק לפני תצוגה מקדימה'); return; }
+  if (!g('first_name')){ toast('נא למלא לפחות שם פרטי לפני תצוגה מקדימה'); return; }
   try{
     const { blob } = await generatePdfBlob();
     window.open(URL.createObjectURL(blob), '_blank');
@@ -353,7 +324,7 @@ document.getElementById('previewBtn').addEventListener('click', async function()
 });
 
 document.getElementById('downloadOnlyBtn').addEventListener('click', async function(){
-  if (!g('internal_name')){ toast('נא למלא לפחות שם עסק לפני הורדה'); return; }
+  if (!g('first_name')){ toast('נא למלא לפחות שם פרטי לפני הורדה'); return; }
   try{
     const { blob, filename } = await generatePdfBlob();
     const a = document.createElement('a');
@@ -370,79 +341,78 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
   e.preventDefault();
   if (!CURRENT_PROFILE){ toast('יש להתחבר מחדש'); return; }
 
-  const internal_name = g('internal_name');
-  const owner_name = g('owner_name');
-  const owner_phone = g('owner_phone');
-  if (!internal_name || !owner_name || !owner_phone){
-    toast('נא למלא את שדות החובה: שם עסק, שם בעל העסק, טלפון');
+  const first_name = g('first_name');
+  const phone = g('phone');
+  if (!first_name || !phone){
+    toast('נא למלא את שדות החובה: שם פרטי, טלפון');
     return;
   }
+  const buyer_name = buyerFullName();
 
   const submitBtn = document.getElementById('submitBtn');
   submitBtn.disabled = true;
-  submitBtn.textContent = EXISTING_BUSINESS_ID ? 'שומר עדכון...' : 'שומר עסק...';
+  submitBtn.textContent = EXISTING_LEAD_ID ? 'שומר עדכון...' : 'שומר קונה...';
 
   const payload = {
-    internal_name, owner_name, owner_phone,
+    type: 'buyer',
+    first_name, last_name: g('last_name') || null,
+    full_name: buyer_name,
+    phone,
+    email: g('email') || null,
     city: g('city') || null,
-    field: g('field') || null,
-    address: g('address') || null,
-    short_description: g('short_description') || null,
-    asking_price: num(g('asking_price')),
-    employees_count: num(g('employees_count')),
-    owner_email: g('owner_email') || null,
-    website: g('website') ? (/^https?:\/\//i.test(g('website')) ? g('website') : 'https://' + g('website')) : null,
-    id_number: g('id_number') || null,
-    annual_revenue: num(g('annual_revenue')),
-    operating_profit: num(g('operating_profit')),
-    net_profit: num(g('net_profit')),
-    sale_reason: g('sale_reason') || null,
+    buyer_type: g('buyer_type') || null,
+    requested_field: g('requested_field') || null,
+    budget: num(g('budget')),
+    current_business_info: g('current_business_info') || null,
+    was_self_employed: g('was_self_employed') === 'yes' ? true : (g('was_self_employed') === 'no' ? false : null),
+    involvement_level: g('involvement_level') || null,
+    meeting_summary: g('meeting_summary') || null,
     notes: g('notes') || null
   };
-  if (!EXISTING_BUSINESS_ID){
+  if (!EXISTING_LEAD_ID){
     payload.status = 'חדש';
-    payload.listing_status = 'active';
-    payload.source = 'הזנת שטח (טאבלט)';
+    payload.source = 'טופס שטח - קונה (טאבלט)';
+    payload.agreement_status = 'אין הסכם';
     payload.created_by = CURRENT_PROFILE.id;
   }
 
-  let bizId;
-  if (EXISTING_BUSINESS_ID){
-    const { error: updBizErr } = await window.supabaseClient.from('businesses').update(payload).eq('id', EXISTING_BUSINESS_ID);
-    if (updBizErr){
+  let leadId;
+  if (EXISTING_LEAD_ID){
+    const { error: updLeadErr } = await window.supabaseClient.from('leads').update(payload).eq('id', EXISTING_LEAD_ID);
+    if (updLeadErr){
       submitBtn.disabled = false;
-      submitBtn.textContent = '✅ שמור טופס לעסק הקיים';
-      toast('שגיאה בעדכון העסק: ' + updBizErr.message);
-      console.error(updBizErr);
+      submitBtn.textContent = '✅ שמור טופס לקונה הקיים';
+      toast('שגיאה בעדכון הקונה: ' + updLeadErr.message);
+      console.error(updLeadErr);
       return;
     }
-    bizId = EXISTING_BUSINESS_ID;
+    leadId = EXISTING_LEAD_ID;
   } else {
-    const { data: inserted, error } = await window.supabaseClient.from('businesses').insert(payload).select().single();
+    const { data: inserted, error } = await window.supabaseClient.from('leads').insert(payload).select().single();
     if (error){
       submitBtn.disabled = false;
-      submitBtn.textContent = '✅ הזן עסק למערכת + שמור טופס';
-      toast('שגיאה בשמירת העסק: ' + error.message);
+      submitBtn.textContent = '✅ הזן קונה למערכת + שמור טופס';
+      toast('שגיאה בשמירת הקונה: ' + error.message);
       console.error(error);
       return;
     }
-    bizId = inserted.id;
+    leadId = inserted.id;
   }
 
   submitBtn.textContent = 'יוצר ושומר קובץ סיכום...';
   try{
     const { blob, filename } = await generatePdfBlob();
-    const path = `${bizId}/intake-form.pdf`;
+    const path = `leads/${leadId}/buyer-form.pdf`;
     const { error: upErr } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).upload(path, blob, { upsert: true, contentType: 'application/pdf' });
     if (upErr) throw upErr;
 
-    const { error: updErr } = await window.supabaseClient.from('businesses').update({
-      intake_form_path: path,
-      intake_form_filled_by: CURRENT_PROFILE.id,
-      intake_form_filled_at: new Date().toISOString()
-    }).eq('id', bizId);
+    const { error: updErr } = await window.supabaseClient.from('leads').update({
+      buyer_form_path: path,
+      buyer_form_filled_by: CURRENT_PROFILE.id,
+      buyer_form_filled_at: new Date().toISOString()
+    }).eq('id', leadId);
 
-    // מוריד עותק גם למכשיר עצמו (טאבלט), בנוסף לשמירה בכרטיס העסק
+    // מוריד עותק גם למכשיר עצמו (טאבלט), בנוסף לשמירה בכרטיס הקונה
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = filename;
@@ -454,29 +424,29 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
       if (missingColumn){
         document.getElementById('schemaBanner').style.display = 'block';
       } else {
-        toast('העסק והקובץ נשמרו, אך עדכון קישור הכרטיס נכשל: ' + updErr.message);
+        toast('הקונה והקובץ נשמרו, אך עדכון קישור הכרטיס נכשל: ' + updErr.message);
       }
     }
 
-    document.getElementById('successTitle').textContent = EXISTING_BUSINESS_ID
-      ? 'טופס הפגישה נשמר לעסק ' + internal_name
-      : internal_name + ' נוסף בהצלחה לרשימת העסקים למכירה';
+    document.getElementById('successTitle').textContent = EXISTING_LEAD_ID
+      ? 'טופס הפגישה נשמר לקונה ' + buyer_name
+      : buyer_name + ' נוסף בהצלחה לרשימת הקונים והמשקיעים';
     document.getElementById('successSub').textContent = updErr
-      ? 'קובץ סיכום הפגישה נשמר בקבצי העסק (ראה הודעה למעלה), וירד גם למכשיר זה.'
-      : 'קובץ סיכום הפגישה נשמר בכרטיס העסק, וירד גם למכשיר זה.';
-    document.getElementById('viewSavedBtn').onclick = () => downloadIntakeForm(bizId, internal_name);
+      ? 'קובץ סיכום הפגישה נשמר (ראה הודעה למעלה), וירד גם למכשיר זה.'
+      : 'קובץ סיכום הפגישה נשמר בכרטיס הקונה, וירד גם למכשיר זה.';
+    document.getElementById('viewSavedBtn').onclick = () => downloadBuyerForm(leadId);
     document.getElementById('intakeForm').style.display = 'none';
     document.getElementById('successCard').style.display = 'block';
   } catch(pdfErr){
     console.error(pdfErr);
-    toast((EXISTING_BUSINESS_ID ? 'העדכון נשמר' : 'העסק נשמר') + ', אך שמירת קובץ הסיכום נכשלה: ' + (pdfErr.message || pdfErr));
+    toast((EXISTING_LEAD_ID ? 'העדכון נשמר' : 'הקונה נשמר') + ', אך שמירת קובץ הסיכום נכשלה: ' + (pdfErr.message || pdfErr));
     submitBtn.disabled = false;
-    submitBtn.textContent = EXISTING_BUSINESS_ID ? '✅ שמור טופס לעסק הקיים' : '✅ הזן עסק למערכת + שמור טופס';
+    submitBtn.textContent = EXISTING_LEAD_ID ? '✅ שמור טופס לקונה הקיים' : '✅ הזן קונה למערכת + שמור טופס';
   }
 });
 
-async function downloadIntakeForm(bizId, bizName){
-  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/intake-form.pdf`, 300);
+async function downloadBuyerForm(leadId){
+  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`leads/${leadId}/buyer-form.pdf`, 300);
   if (error){ toast('שגיאה: ' + error.message); return; }
   window.open(data.signedUrl, '_blank');
 }
@@ -492,32 +462,28 @@ function setVal(id, v){ const el = document.getElementById(id); if (el && (v !==
   document.getElementById('fillerDate').textContent = new Date().toLocaleDateString('he-IL');
   if (CURRENT_PROFILE.role !== 'admin'){ const navUsers = document.getElementById('navUsersLink'); if (navUsers) navUsers.style.display = 'none'; }
 
-  if (EXISTING_BUSINESS_ID){
-    const { data: biz, error: bizErr } = await window.supabaseClient.from('businesses').select('*').eq('id', EXISTING_BUSINESS_ID).single();
-    if (bizErr || !biz){
-      toast('שגיאה בטעינת העסק הקיים: ' + (bizErr ? bizErr.message : 'לא נמצא'));
+  if (EXISTING_LEAD_ID){
+    const { data: lead, error: leadErr } = await window.supabaseClient.from('leads').select('*').eq('id', EXISTING_LEAD_ID).eq('type', 'buyer').single();
+    if (leadErr || !lead){
+      toast('שגיאה בטעינת הקונה הקיים: ' + (leadErr ? leadErr.message : 'לא נמצא'));
     } else {
-      setVal('internal_name', biz.internal_name);
-      setVal('city', biz.city);
-      setVal('field', biz.field);
-      setVal('address', biz.address);
-      setVal('short_description', biz.short_description);
-      setVal('asking_price', biz.asking_price);
-      setVal('employees_count', biz.employees_count);
-      setVal('owner_name', biz.owner_name);
-      setVal('owner_phone', biz.owner_phone);
-      setVal('owner_email', biz.owner_email);
-      setVal('website', biz.website);
-      setVal('id_number', biz.id_number);
-      setVal('annual_revenue', biz.annual_revenue);
-      setVal('operating_profit', biz.operating_profit);
-      setVal('net_profit', biz.net_profit);
-      setVal('sale_reason', biz.sale_reason);
-      setVal('notes', biz.notes);
+      setVal('first_name', lead.first_name);
+      setVal('last_name', lead.last_name);
+      setVal('phone', lead.phone);
+      setVal('email', lead.email);
+      setVal('city', lead.city);
+      setVal('buyer_type', lead.buyer_type);
+      setVal('requested_field', lead.requested_field);
+      setVal('budget', lead.budget);
+      setVal('current_business_info', lead.current_business_info);
+      setVal('was_self_employed', lead.was_self_employed === true ? 'yes' : (lead.was_self_employed === false ? 'no' : ''));
+      setVal('involvement_level', lead.involvement_level);
+      setVal('meeting_summary', lead.meeting_summary);
+      setVal('notes', lead.notes);
 
-      document.querySelector('.filler-banner > div:first-child').innerHTML = '📋 <b>מילוי טופס פגישה לעסק קיים: ' + esc(biz.internal_name || '') + '</b> - הפרטים הוזנו מראש מכרטיס העסק, ניתן לערוך ולהשלים';
+      document.querySelector('.filler-banner > div:first-child').innerHTML = '🧍 <b>מילוי טופס פגישה לקונה קיים: ' + esc([lead.first_name, lead.last_name].filter(Boolean).join(' ')) + '</b> - הפרטים הוזנו מראש מכרטיס הקונה, ניתן לערוך ולהשלים';
       const submitBtn = document.getElementById('submitBtn');
-      submitBtn.textContent = '✅ שמור טופס לעסק הקיים';
+      submitBtn.textContent = '✅ שמור טופס לקונה הקיים';
     }
   }
 })();

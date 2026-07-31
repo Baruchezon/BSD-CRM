@@ -33,18 +33,24 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 13:37</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 15:10</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
     <a href="tasks.html" class="nav-tasks">✅ משימות</a>
     <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
-    <a href="intake-form.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">📋 טופס שטח</a>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">📋 טפסים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="intake-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🧾 טופס סיכום עסק</a>
+      <a href="buyer-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🧍 טופס סיכום קונה</a>
+      <a id="navFormsAllLink" href="intake-forms.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 כל הטפסים שהוגשו</a>
+    </div>
+  </div>
     <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
     <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
     <a href="stats.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">📊 סטטיסטיקה</a>
     <a id="navUsersLink" href="users.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משתמשים</a>
-    <a id="navFormsLink" href="intake-forms.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">📋 טפסי שטח (הכל)</a>
   </div>
   <button id="pushBellBtn" class="btn btn-ghost" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;margin-inline-end:8px;"></button>
   <a href="help.html" target="_blank" class="btn btn-ghost" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;text-decoration:none;display:inline-flex;align-items:center;margin-inline-end:8px;">❓ עזרה</a>
@@ -54,15 +60,26 @@
 <div class="wrap" id="mainWrap" style="display:none;">
   <div class="toolbar">
     <h2>📋 טפסי שטח - כל הרשומות</h2>
-    <a href="intake-form.html" class="btn btn-primary" style="text-decoration:none;display:inline-flex;align-items:center;">➕ טופס שטח חדש</a>
+    <div style="position:relative;display:inline-block;">
+      <button type="button" onclick="toggleFormsMenu(event)" class="btn" style="background:var(--success);color:#fff;">📋 טפסים ▾</button>
+      <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+        <a href="intake-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🧾 טופס סיכום עסק</a>
+        <a href="buyer-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🧍 טופס סיכום קונה</a>
+      </div>
+    </div>
   </div>
 
   <div class="filters">
-    <input type="text" id="fSearch" placeholder="חיפוש לפי שם עסק, עיר...">
+    <input type="text" id="fSearch" placeholder="חיפוש לפי שם, עיר...">
+    <select id="fType">
+      <option value="all">כל סוגי הטפסים</option>
+      <option value="business">🧾 טופס סיכום עסק</option>
+      <option value="buyer">🧍 טופס סיכום קונה</option>
+    </select>
     <select id="fFilledBy"><option value="all">כל מי שמילא</option></select>
     <select id="fSort">
       <option value="filled_desc">מולא לאחרונה</option>
-      <option value="name_asc">שם עסק (א-ת)</option>
+      <option value="name_asc">שם (א-ת)</option>
     </select>
   </div>
 
@@ -70,11 +87,11 @@
   <table>
     <thead>
       <tr>
-        <th>שם עסק</th><th>עיר</th><th>טלפון בעלים</th><th>מולא ע"י</th><th>תאריך מילוי</th><th>פעולות</th>
+        <th>סוג</th><th>שם</th><th>עיר</th><th>טלפון</th><th>מולא ע"י</th><th>תאריך מילוי</th><th>פעולות</th>
       </tr>
     </thead>
     <tbody id="formsBody">
-      <tr class="empty-row"><td colspan="6">טוען...</td></tr>
+      <tr class="empty-row"><td colspan="7">טוען...</td></tr>
     </tbody>
   </table>
   </div>
@@ -121,8 +138,9 @@ function toast(msg){
   setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
 }
 
-async function downloadIntakeForm(bizId, bizName){
-  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/intake-form.pdf`, 300);
+async function downloadForm(row){
+  const path = row.kind === 'buyer' ? `leads/${row.id}/buyer-form.pdf` : `${row.id}/intake-form.pdf`;
+  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(path, 300);
   if (error){ toast('שגיאה: ' + error.message); return; }
   window.open(data.signedUrl, '_blank');
 }
@@ -131,17 +149,33 @@ async function loadForms(){
   const { data: users } = await window.supabaseClient.from('profiles').select('id, full_name, email, role');
   ALL_USERS = users || [];
 
-  const { data, error } = await window.supabaseClient
-    .from('businesses')
-    .select('id, internal_name, city, owner_phone, intake_form_path, intake_form_filled_by, intake_form_filled_at')
-    .not('intake_form_path', 'is', null)
-    .order('intake_form_filled_at', { ascending: false });
+  const [{ data: bizData, error: bizErr }, { data: buyerData, error: buyerErr }] = await Promise.all([
+    window.supabaseClient
+      .from('businesses')
+      .select('id, internal_name, city, owner_phone, intake_form_path, intake_form_filled_by, intake_form_filled_at')
+      .not('intake_form_path', 'is', null),
+    window.supabaseClient
+      .from('leads')
+      .select('id, full_name, city, phone, buyer_form_path, buyer_form_filled_by, buyer_form_filled_at')
+      .eq('type', 'buyer')
+      .not('buyer_form_path', 'is', null)
+  ]);
 
-  if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
-  ALL_FORMS = data || [];
+  if (bizErr){ toast('שגיאה בטעינת טפסי עסקים: ' + bizErr.message); }
+  if (buyerErr){ toast('שגיאה בטעינת טפסי קונים: ' + buyerErr.message); }
+
+  const bizRows = (bizData || []).map(f => ({
+    kind: 'business', id: f.id, name: f.internal_name, city: f.city, phone: f.owner_phone,
+    filled_by: f.intake_form_filled_by, filled_at: f.intake_form_filled_at
+  }));
+  const buyerRows = (buyerData || []).map(f => ({
+    kind: 'buyer', id: f.id, name: f.full_name, city: f.city, phone: f.phone,
+    filled_by: f.buyer_form_filled_by, filled_at: f.buyer_form_filled_at
+  }));
+  ALL_FORMS = [...bizRows, ...buyerRows];
 
   const sel = document.getElementById('fFilledBy');
-  [...new Set(ALL_FORMS.map(f=>f.intake_form_filled_by).filter(Boolean))].forEach(uid=>{
+  [...new Set(ALL_FORMS.map(f=>f.filled_by).filter(Boolean))].forEach(uid=>{
     const o = document.createElement('option');
     o.value = uid; o.textContent = userName(uid);
     sel.appendChild(o);
@@ -152,43 +186,48 @@ async function loadForms(){
 
 function renderTable(){
   const search = document.getElementById('fSearch').value.trim().toLowerCase();
+  const type = document.getElementById('fType').value;
   const filledBy = document.getElementById('fFilledBy').value;
   const sort = document.getElementById('fSort').value;
 
   let rows = ALL_FORMS.filter(f=>{
-    if (filledBy !== 'all' && f.intake_form_filled_by !== filledBy) return false;
+    if (type !== 'all' && f.kind !== type) return false;
+    if (filledBy !== 'all' && f.filled_by !== filledBy) return false;
     if (search){
-      const hay = [f.internal_name, f.city].join(' ').toLowerCase();
+      const hay = [f.name, f.city].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
   });
 
   rows.sort((a,b)=>{
-    if (sort === 'name_asc') return (a.internal_name||'').localeCompare(b.internal_name||'', 'he');
-    return new Date(b.intake_form_filled_at) - new Date(a.intake_form_filled_at);
+    if (sort === 'name_asc') return (a.name||'').localeCompare(b.name||'', 'he');
+    return new Date(b.filled_at) - new Date(a.filled_at);
   });
 
   const body = document.getElementById('formsBody');
   if (rows.length === 0){
-    body.innerHTML = '<tr class="empty-row"><td colspan="6">לא נמצאו טפסים</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="7">לא נמצאו טפסים</td></tr>';
     return;
   }
-  body.innerHTML = rows.map(f => `
+  body.innerHTML = rows.map((f, i) => `
     <tr>
-      <td>${esc(f.internal_name || '—')}</td>
+      <td>${f.kind === 'buyer' ? '🧍 קונה' : '🧾 עסק'}</td>
+      <td>${esc(f.name || '—')}</td>
       <td>${esc(f.city || '—')}</td>
-      <td dir="ltr" style="text-align:right;">${f.owner_phone ? `<a href="tel:${esc(f.owner_phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(f.owner_phone)}</a>` : '—'}</td>
-      <td class="filler-name">${esc(userName(f.intake_form_filled_by))}</td>
-      <td>${fmtDateTime(f.intake_form_filled_at)}</td>
+      <td dir="ltr" style="text-align:right;">${f.phone ? `<a href="tel:${esc(f.phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(f.phone)}</a>` : '—'}</td>
+      <td class="filler-name">${esc(userName(f.filled_by))}</td>
+      <td>${fmtDateTime(f.filled_at)}</td>
       <td>
-        <button class="btn btn-primary" onclick="downloadIntakeForm('${f.id}', '${esc((f.internal_name||'עסק').replace(/'/g,''))}')">📄 צפה / הורד</button>
+        <button class="btn btn-primary" onclick="downloadForm(ALL_FORMS_RENDERED[${i}])">📄 צפה / הורד</button>
       </td>
     </tr>
   `).join('');
+  window.ALL_FORMS_RENDERED = rows;
 }
 
 document.getElementById('fSearch').addEventListener('input', renderTable);
+document.getElementById('fType').addEventListener('change', renderTable);
 document.getElementById('fFilledBy').addEventListener('change', renderTable);
 document.getElementById('fSort').addEventListener('change', renderTable);
 
