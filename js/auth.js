@@ -87,8 +87,37 @@ async function requireAuth() {
     window.location.href = 'login.html';
     return null;
   }
+
+  // Hide the "all submitted forms" item inside the 📋 טפסים dropdown for
+  // anyone who isn't admin/manager — centralized here so every page that
+  // calls requireAuth() gets this for free, instead of repeating the same
+  // check in each page's own init script.
+  const navFormsAll = document.getElementById('navFormsAllLink');
+  if (navFormsAll && profile.role !== 'admin' && profile.role !== 'manager') {
+    navFormsAll.style.display = 'none';
+  }
+
   return profile;
 }
+
+// ============================================================
+// 📋 טפסים DROPDOWN — one consolidated button (in the header nav,
+// and as the prominent action button on businesses.html/intake-forms.html)
+// that opens a small menu with the available field-forms instead of
+// separate scattered links. Shared here so the behavior is identical
+// wherever the menu appears.
+// ============================================================
+function toggleFormsMenu(e){
+  if (e) e.stopPropagation();
+  const menu = e && e.currentTarget ? e.currentTarget.parentElement.querySelector('.bsd-forms-menu') : document.querySelector('.bsd-forms-menu');
+  if (!menu) return;
+  const willOpen = menu.style.display !== 'block';
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
+  if (willOpen) menu.style.display = 'block';
+}
+document.addEventListener('click', function(){
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
+});
 
 function translateAuthError(error) {
   if (!error) return '';
