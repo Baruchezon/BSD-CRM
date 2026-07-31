@@ -79,16 +79,18 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 21:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 06:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
     <a href="tasks.html" class="nav-tasks">✅ משימות</a>
     <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="intake-form.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">📋 טופס שטח</a>
     <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
     <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
     <a href="stats.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">📊 סטטיסטיקה</a>
     <a id="navUsersLink" href="users.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משתמשים</a>
+    <a id="navFormsLink" href="intake-forms.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">📋 טפסי שטח (הכל)</a>
   </div>
     <button id="pushBellBtn" class="logout" style="margin-left:8px;"></button>
   <a href="help.html" target="_blank" class="logout" style="text-decoration:none;display:inline-flex;align-items:center;margin-left:8px;">❓ עזרה</a>
@@ -104,6 +106,9 @@
       <div id="welcomeBlessing" style="font-family:'Gveret Levin',cursive;color:#0e1b34;background:#fdf1cf;display:inline-block;padding:4px 14px;border-radius:8px;border:1px solid var(--gold);font-size:1.4rem;font-weight:400;margin-top:6px;"></div>
     </div>
     <div>
+      <a href="intake-form.html" style="background:var(--success);color:#fff;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;margin-left:10px;">
+        📋 הזנת עסק מהשטח
+      </a>
       <button id="aiMatchBtn" onclick="runAiMatchSuggestions()" style="background:var(--gold);color:#1c2333;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;margin-left:10px;">
         🧠 קבל הצעות התאמה חכמות
       </button>
@@ -912,6 +917,7 @@ function initTasksPopupWatcher(profile){
 
   document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email) + ' · ' + new Date().toLocaleDateString('he-IL');
   if (profile.role !== 'admin'){ const navUsers = document.getElementById('navUsersLink'); if (navUsers) navUsers.style.display = 'none'; }
+  if (profile.role !== 'admin' && profile.role !== 'manager'){ const navForms = document.getElementById('navFormsLink'); if (navForms) navForms.style.display = 'none'; }
   await loadAgentOwnIds();
 
   const { timeGreeting, blessing } = getGreeting();
