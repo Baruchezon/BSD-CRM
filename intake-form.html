@@ -40,7 +40,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 10:45</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 11:15</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -277,13 +277,50 @@ async function generatePdfBlob(){
   overlay.style.display = 'flex';
   await nextPaint();
   try{
-    const worker = window.html2pdf().set({
-      margin: 10,
-      filename: filename,
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    }).from(el);
-    const blob = await worker.outputPdf('blob');
+    if (typeof window.html2canvas !== 'function'){
+      throw new Error('html2canvas לא נטען - בדוק חסימת רשת ל-CDN');
+    }
+    const JsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+    if (!JsPDFCtor){
+      throw new Error('jsPDF לא נמצא בספרייה הטעונה');
+    }
+
+    const canvas = await window.html2canvas(el, { scale: 2, useCORS: true });
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+    const pdf = new JsPDFCtor({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const margin = 10;
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const usableWidth = pageWidth - margin * 2;
+    const usableHeight = pageHeight - margin * 2;
+    const imgWidthMm = usableWidth;
+    const imgHeightMm = (canvas.height * imgWidthMm) / canvas.width;
+
+    if (imgHeightMm <= usableHeight){
+      pdf.addImage(imgData, 'JPEG', margin, margin, imgWidthMm, imgHeightMm);
+    } else {
+      // תוכן ארוך מעמוד A4 אחד - פיצול לכמה עמודים
+      const pageHeightPx = (usableHeight * canvas.width) / imgWidthMm;
+      let renderedPx = 0;
+      let first = true;
+      while (renderedPx < canvas.height){
+        const sliceHeightPx = Math.min(pageHeightPx, canvas.height - renderedPx);
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = canvas.width;
+        sliceCanvas.height = sliceHeightPx;
+        const ctx = sliceCanvas.getContext('2d');
+        ctx.drawImage(canvas, 0, renderedPx, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+        const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.95);
+        const sliceHeightMm = (sliceHeightPx * imgWidthMm) / canvas.width;
+        if (!first) pdf.addPage();
+        pdf.addImage(sliceData, 'JPEG', margin, margin, imgWidthMm, sliceHeightMm);
+        renderedPx += sliceHeightPx;
+        first = false;
+      }
+    }
+
+    const blob = pdf.output('blob');
     return { blob, filename };
   } finally {
     overlay.style.display = 'none';
