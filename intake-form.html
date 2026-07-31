@@ -40,7 +40,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 11:15</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 11:45</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -267,7 +267,35 @@ function buildPrintTemplate(){
 }
 
 async function nextPaint(){
-  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  await new Promise(resolve => setTimeout(resolve, 350));
+}
+
+function isCanvasBlank(canvas){
+  try{
+    const ctx = canvas.getContext('2d');
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const r0 = data[0], g0 = data[1], b0 = data[2], a0 = data[3];
+    for (let i = 0; i < data.length; i += 4){
+      if (data[i] !== r0 || data[i+1] !== g0 || data[i+2] !== b0 || data[i+3] !== a0){
+        return false;
+      }
+    }
+    return true;
+  } catch(e){
+    return false;
+  }
+}
+
+async function captureTemplateCanvas(el){
+  let canvas = await window.html2canvas(el, { scale: 2, useCORS: true });
+  let attempt = 1;
+  while (isCanvasBlank(canvas) && attempt < 4){
+    attempt++;
+    await new Promise(r => setTimeout(r, 400 * attempt));
+    canvas = await window.html2canvas(el, { scale: 2, useCORS: true });
+  }
+  return { canvas, blank: isCanvasBlank(canvas), attempts: attempt };
 }
 
 async function generatePdfBlob(){
@@ -285,7 +313,10 @@ async function generatePdfBlob(){
       throw new Error('jsPDF לא נמצא בספרייה הטעונה');
     }
 
-    const canvas = await window.html2canvas(el, { scale: 2, useCORS: true });
+    const { canvas, blank, attempts } = await captureTemplateCanvas(el);
+    if (blank){
+      throw new Error('הצילום יצא ריק לאחר ' + attempts + ' ניסיונות - יש בעיה עמוקה יותר בדפדפן/במכשיר');
+    }
     const imgData = canvas.toDataURL('image/jpeg', 0.95);
 
     const pdf = new JsPDFCtor({ unit: 'mm', format: 'a4', orientation: 'portrait' });
@@ -350,16 +381,7 @@ document.getElementById('debugCanvasBtn').addEventListener('click', async functi
   await nextPaint();
 
   try{
-    let canvas;
-    if (typeof window.html2canvas === 'function'){
-      canvas = await window.html2canvas(el, { scale: 2 });
-    } else {
-      // גיבוי: משתמשים בשלב הפנימי של html2pdf עצמו כדי לקבל את ה-canvas
-      const worker = window.html2pdf().set({ html2canvas: { scale: 2 } }).from(el);
-      await worker.toCanvas();
-      canvas = worker.prop.canvas;
-    }
-
+    const { canvas, blank, attempts } = await captureTemplateCanvas(el);
     overlay.style.display = 'none';
 
     if (!canvas){
@@ -367,7 +389,7 @@ document.getElementById('debugCanvasBtn').addEventListener('click', async functi
       return;
     }
 
-    alert('בדיקה: התקבל canvas בגודל ' + canvas.width + 'x' + canvas.height + ' פיקסלים. מציג אותו מתחת לכפתורים.');
+    alert('בדיקה: canvas ' + canvas.width + 'x' + canvas.height + ' פיקסלים. ' + (blank ? ('⚠️ ריק לאחר ' + attempts + ' ניסיונות!') : ('תקין אחרי ' + attempts + ' ניסיון/ות.')));
 
     const wrap = document.createElement('div');
     wrap.id = 'debugResult';
