@@ -40,7 +40,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 12:31</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 12:47</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -168,19 +168,22 @@
   </div>
 </div>
 
-<div id="printTemplate" style="position:fixed;top:0;left:-100000px;width:760px;background:#fff;padding:36px;font-family:'Heebo','Rubik',sans-serif;color:#1c2333;direction:ltr;text-align:right;">
-  <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:14px;border-bottom:3px solid #c9a24b;padding-bottom:16px;margin-bottom:20px;">
-    <div style="width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #e8cf8a, #c9a24b 70%);display:flex;align-items:center;justify-content:center;font-weight:800;color:#1c2333;font-size:20px;">BSD</div>
-    <div>
-      <div style="font-size:20px;font-weight:800;">BSD Business Brokers Israel</div>
-      <div style="font-size:12px;color:#5c5648;">מסמך פנימי - סיכום פגישה ראשונה עם בעל עסק</div>
+<div id="captureOverlay" style="display:none;position:fixed;inset:0;background:#fff;z-index:99999;overflow:auto;">
+  <div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;color:#5c5648;font-size:13px;">⏳ יוצר קובץ סיכום...</div>
+  <div id="printTemplate" style="width:760px;max-width:92vw;margin:0 auto 40px;background:#fff;padding:36px;font-family:'Heebo','Rubik',sans-serif;color:#1c2333;direction:ltr;text-align:right;">
+    <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:14px;border-bottom:3px solid #c9a24b;padding-bottom:16px;margin-bottom:20px;">
+      <div style="width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #e8cf8a, #c9a24b 70%);display:flex;align-items:center;justify-content:center;font-weight:800;color:#1c2333;font-size:20px;">BSD</div>
+      <div>
+        <div style="font-size:20px;font-weight:800;">BSD Business Brokers Israel</div>
+        <div style="font-size:12px;color:#5c5648;">מסמך פנימי - סיכום פגישה ראשונה עם בעל עסק</div>
+      </div>
     </div>
-  </div>
-  <h2 id="pt_title" style="font-size:22px;margin:0 0 4px;"></h2>
-  <div id="pt_meta" style="font-size:12px;color:#5c5648;margin-bottom:22px;"></div>
-  <div id="pt_body" style="font-size:14px;line-height:1.7;"></div>
-  <div style="margin-top:30px;border-top:1px solid #e8dfc4;padding-top:12px;font-size:11px;color:#5c5648;text-align:center;">
-    Baruch Ezon · BSD Business Brokers Israel · 054-2424999 · baruch@bsd-bbi.co.il · bsd-bbi.co.il
+    <h2 id="pt_title" style="font-size:22px;margin:0 0 4px;"></h2>
+    <div id="pt_meta" style="font-size:12px;color:#5c5648;margin-bottom:22px;"></div>
+    <div id="pt_body" style="font-size:14px;line-height:1.7;"></div>
+    <div style="margin-top:30px;border-top:1px solid #e8dfc4;padding-top:12px;font-size:11px;color:#5c5648;text-align:center;">
+      Baruch Ezon · BSD Business Brokers Israel · 054-2424999 · baruch@bsd-bbi.co.il · bsd-bbi.co.il
+    </div>
   </div>
 </div>
 
@@ -285,35 +288,45 @@ function isCanvasBlank(canvas){
 async function generatePdfBlob(){
   const filename = buildPrintTemplate();
   const el = document.getElementById('printTemplate');
+  const overlay = document.getElementById('captureOverlay');
+  overlay.style.display = 'block';
+  window.scrollTo(0,0);
   await nextPaint();
-  if (typeof window.html2pdf !== 'function'){
-    throw new Error('html2pdf לא נטען - בדוק חסימת רשת ל-CDN');
-  }
-
-  let worker, canvas, attempt = 1;
-  while (true){
-    worker = window.html2pdf().set({
-      margin: 10,
-      filename: filename,
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    }).from(el);
-    await worker.toCanvas();
-    canvas = worker.prop.canvas;
-    if (isCanvasBlank(canvas) && attempt < 4){
-      attempt++;
-      await new Promise(r => setTimeout(r, 400 * attempt));
-      continue;
+  try{
+    if (typeof window.html2pdf !== 'function'){
+      throw new Error('html2pdf לא נטען - בדוק חסימת רשת ל-CDN');
     }
-    break;
-  }
 
-  if (isCanvasBlank(canvas)){
-    throw new Error('הצילום יצא ריק לאחר ' + attempt + ' ניסיונות - יש בעיה עמוקה יותר בדפדפן/במכשיר');
-  }
+    let worker, canvas, attempt = 1;
+    while (true){
+      worker = window.html2pdf().set({
+        margin: 10,
+        filename: filename,
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      }).from(el);
+      await worker.toCanvas();
+      canvas = worker.prop.canvas;
+      if ((isCanvasBlank(canvas) || canvas.width < 10 || canvas.height < 10) && attempt < 4){
+        attempt++;
+        await new Promise(r => setTimeout(r, 400 * attempt));
+        continue;
+      }
+      break;
+    }
 
-  const blob = await worker.outputPdf('blob');
-  return { blob, filename };
+    if (isCanvasBlank(canvas) || canvas.width < 10 || canvas.height < 10){
+      throw new Error('הצילום יצא ריק לאחר ' + attempt + ' ניסיונות - יש בעיה עמוקה יותר בדפדפן/במכשיר');
+    }
+
+    const blob = await worker.outputPdf('blob');
+    if (!blob || blob.size < 1000){
+      throw new Error('קובץ ה-PDF שנוצר קטן/פגום מדי (' + (blob ? blob.size : 0) + ' בייטים)');
+    }
+    return { blob, filename };
+  } finally {
+    overlay.style.display = 'none';
+  }
 }
 
 document.getElementById('previewBtn').addEventListener('click', async function(){
