@@ -64,7 +64,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 14:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 13:37</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
       <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -99,6 +99,8 @@
   <div class="filters">
     <input type="text" id="fSearch" placeholder="חיפוש לפי כותרת משימה..." style="min-width:220px;">
     <select id="fAssigned"><option value="all">כל המשתמשים</option></select>
+    <input type="date" id="fDateFrom" title="מתאריך יעד">
+    <input type="date" id="fDateTo" title="עד תאריך יעד">
   </div>
 
   <h3 style="margin:18px 0 8px;">📋 משימות לביצוע</h3>
@@ -224,11 +226,15 @@ async function checkSchemaBanner(){
 function renderTable(){
   const fSearch = document.getElementById('fSearch').value.trim().toLowerCase();
   const fAssigned = document.getElementById('fAssigned').value;
+  const fDateFrom = document.getElementById('fDateFrom').value;
+  const fDateTo = document.getElementById('fDateTo').value;
 
   let rows = ALL_TASKS.filter(t=>{
     if (t.status !== 'פתוחה') return false;
     if (fSearch && !(t.title||'').toLowerCase().includes(fSearch)) return false;
     if (fAssigned !== 'all' && t.assigned_to !== fAssigned) return false;
+    if (fDateFrom && (!t.due_date || t.due_date < fDateFrom)) return false;
+    if (fDateTo && (!t.due_date || t.due_date > fDateTo)) return false;
     return true;
   });
 
@@ -290,7 +296,7 @@ function renderHistoryTable(){
     </tr>`).join('');
 }
 
-['fAssigned'].forEach(id=>document.getElementById(id).addEventListener('change', renderTable));
+['fAssigned','fDateFrom','fDateTo'].forEach(id=>document.getElementById(id).addEventListener('change', renderTable));
 document.getElementById('fSearch').addEventListener('input', renderTable);
 ['fHistSearch'].forEach(id=>document.getElementById(id).addEventListener('input', renderHistoryTable));
 document.getElementById('fHistPeriod').addEventListener('change', renderHistoryTable);
