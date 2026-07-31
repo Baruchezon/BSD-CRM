@@ -79,7 +79,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 20:55</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 30.07.2026 21:30</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -696,15 +696,50 @@ async function runSurvey(){
   }
 }
 
+function renderSurveyMarkdown(md){
+  if (!md) return '<p style="color:#999;">לא נמצא מידע</p>';
+  const lines = md.split('\n');
+  let html = '';
+  let inList = false;
+  const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+
+  const inlineFormat = (line) => {
+    let out = esc(line);
+    out = out.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    out = out.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener" style="color:#1a5fb4;word-break:break-all;">$1</a>');
+    return out;
+  };
+
+  for (const raw of lines){
+    const line = raw.trim();
+    if (!line){ closeList(); continue; }
+    if (line.startsWith('## ')){
+      closeList();
+      html += `<div style="margin:18px 0 8px;font-weight:800;color:var(--navy);font-size:1.02rem;border-right:4px solid var(--gold);padding-right:10px;">${esc(line.slice(3))}</div>`;
+    } else if (line.startsWith('# ')){
+      closeList();
+      html += `<div style="margin:20px 0 10px;font-weight:900;color:var(--navy);font-size:1.15rem;">${esc(line.slice(2))}</div>`;
+    } else if (line.startsWith('- ') || line.startsWith('* ')){
+      if (!inList){ html += '<ul style="margin:4px 0 10px;padding-inline-start:20px;">'; inList = true; }
+      html += `<li style="margin-bottom:4px;">${inlineFormat(line.slice(2))}</li>`;
+    } else {
+      closeList();
+      html += `<p style="margin:4px 0;">${inlineFormat(line)}</p>`;
+    }
+  }
+  closeList();
+  return html;
+}
+
 function renderSurveyResultModal(data){
   closeSurveyModal();
   const overlay = document.createElement('div');
   overlay.id = 'surveyResultOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:90;padding:40px 20px;';
   overlay.innerHTML = `
-    <div style="background:#fff;border-radius:14px;max-width:680px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+    <div style="background:#fff;border-radius:14px;max-width:720px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
       <h3 style="margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">תוצאות הסקר - ${esc(data.subject_name || '')}</h3>
-      <div style="max-height:55vh;overflow-y:auto;font-size:.88rem;line-height:1.7;color:#333;white-space:pre-wrap;">${esc(data.report_text || 'לא נמצא מידע')}</div>
+      <div style="max-height:60vh;overflow-y:auto;font-size:.88rem;line-height:1.7;color:#333;padding-inline-end:6px;">${renderSurveyMarkdown(data.report_text)}</div>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;">
         <button onclick="document.getElementById('surveyResultOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
         <button onclick="toast('שליחה למייל תתאפשר לאחר חיבור מפתח ה-AI')" style="background:var(--navy);color:#fff;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">📧 שלח גם למייל</button>
