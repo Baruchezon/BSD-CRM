@@ -40,7 +40,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 08:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 08:45</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -168,24 +168,25 @@
   </div>
 </div>
 
-<div style="height:0;overflow:hidden;">
-<div id="printTemplate" style="width:760px;background:#fff;padding:36px;font-family:'Heebo','Rubik',sans-serif;color:#1c2333;direction:rtl;">
-  <div style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #c9a24b;padding-bottom:16px;margin-bottom:20px;">
-    <div style="width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #e8cf8a, #c9a24b 70%);display:flex;align-items:center;justify-content:center;font-weight:800;color:#1c2333;font-size:20px;">BSD</div>
-    <div>
-      <div style="font-size:20px;font-weight:800;">BSD Business Brokers Israel</div>
-      <div style="font-size:12px;color:#5c5648;">מסמך פנימי - סיכום פגישה ראשונה עם בעל עסק</div>
+<div id="pdfOverlay" style="display:none;position:fixed;inset:0;background:rgba(14,27,52,.75);z-index:9999;align-items:flex-start;justify-content:center;overflow-y:auto;padding:30px 16px;">
+  <div style="background:#fff;border-radius:4px;box-shadow:0 20px 60px rgba(0,0,0,.5);">
+    <div id="printTemplate" style="width:760px;background:#fff;padding:36px;font-family:'Heebo','Rubik',sans-serif;color:#1c2333;direction:rtl;">
+      <div style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #c9a24b;padding-bottom:16px;margin-bottom:20px;">
+        <div style="width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #e8cf8a, #c9a24b 70%);display:flex;align-items:center;justify-content:center;font-weight:800;color:#1c2333;font-size:20px;">BSD</div>
+        <div>
+          <div style="font-size:20px;font-weight:800;">BSD Business Brokers Israel</div>
+          <div style="font-size:12px;color:#5c5648;">מסמך פנימי - סיכום פגישה ראשונה עם בעל עסק</div>
+        </div>
+      </div>
+      <h2 id="pt_title" style="font-size:22px;margin:0 0 4px;"></h2>
+      <div id="pt_meta" style="font-size:12px;color:#5c5648;margin-bottom:22px;"></div>
+      <div id="pt_body" style="font-size:14px;line-height:1.7;"></div>
+      <div style="margin-top:30px;border-top:1px solid #e8dfc4;padding-top:12px;font-size:11px;color:#5c5648;text-align:center;">
+        Baruch Ezon · BSD Business Brokers Israel · 054-2424999 · baruch@bsd-bbi.co.il · bsd-bbi.co.il
+      </div>
     </div>
   </div>
-  <h2 id="pt_title" style="font-size:22px;margin:0 0 4px;"></h2>
-  <div id="pt_meta" style="font-size:12px;color:#5c5648;margin-bottom:22px;"></div>
-  <div id="pt_body" style="font-size:14px;line-height:1.7;"></div>
-  <div style="margin-top:30px;border-top:1px solid #e8dfc4;padding-top:12px;font-size:11px;color:#5c5648;text-align:center;">
-    Baruch Ezon · BSD Business Brokers Israel · 054-2424999 · baruch@bsd-bbi.co.il · bsd-bbi.co.il
-  </div>
 </div>
-</div>
-
 
 <div id="toastBox"></div>
 
@@ -264,17 +265,28 @@ function buildPrintTemplate(){
   return business_name + ' - סיכום פגישה ראשונה.pdf';
 }
 
+async function nextPaint(){
+  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
 async function generatePdfBlob(){
   const filename = buildPrintTemplate();
   const el = document.getElementById('printTemplate');
-  const worker = window.html2pdf().set({
-    margin: 10,
-    filename: filename,
-    html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0, windowWidth: 800 },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  }).from(el);
-  const blob = await worker.outputPdf('blob');
-  return { blob, filename };
+  const overlay = document.getElementById('pdfOverlay');
+  overlay.style.display = 'flex';
+  await nextPaint();
+  try{
+    const worker = window.html2pdf().set({
+      margin: 10,
+      filename: filename,
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    }).from(el);
+    const blob = await worker.outputPdf('blob');
+    return { blob, filename };
+  } finally {
+    overlay.style.display = 'none';
+  }
 }
 
 document.getElementById('previewBtn').addEventListener('click', async function(){
