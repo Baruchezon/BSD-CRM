@@ -40,7 +40,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 09:45</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 10:15</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -291,27 +291,61 @@ async function generatePdfBlob(){
 }
 
 document.getElementById('debugCanvasBtn').addEventListener('click', async function(){
-  if (!g('internal_name')){ toast('נא למלא לפחות שם עסק לפני הבדיקה'); return; }
+  if (!g('internal_name')){ alert('נא למלא לפחות שם עסק לפני הבדיקה'); return; }
+
+  const existing = document.getElementById('debugResult');
+  if (existing) existing.remove();
+
+  if (typeof window.html2pdf !== 'function'){
+    alert('בדיקה: window.html2pdf אינו קיים בכלל - ספריית ה-PDF לא נטענה (חסימת רשת?)');
+    return;
+  }
+  if (typeof window.html2canvas !== 'function'){
+    alert('בדיקה: window.html2canvas אינו קיים כמשתנה נפרד (יתכן וזה תקין אם html2pdf.bundle כולל אותו פנימית בלבד) - ממשיך בבדיקה חלופית דרך html2pdf עצמו');
+  }
+
   buildPrintTemplate();
   const el = document.getElementById('printTemplate');
   const overlay = document.getElementById('pdfOverlay');
   overlay.style.display = 'flex';
   await nextPaint();
+
   try{
-    if (typeof window.html2canvas !== 'function'){
-      toast('html2canvas לא נטען (window.html2canvas אינו קיים) - כנראה חסימת רשת ל-CDN');
+    let canvas;
+    if (typeof window.html2canvas === 'function'){
+      canvas = await window.html2canvas(el, { scale: 2 });
+    } else {
+      // גיבוי: משתמשים בשלב הפנימי של html2pdf עצמו כדי לקבל את ה-canvas
+      const worker = window.html2pdf().set({ html2canvas: { scale: 2 } }).from(el);
+      await worker.toCanvas();
+      canvas = worker.prop.canvas;
+    }
+
+    overlay.style.display = 'none';
+
+    if (!canvas){
+      alert('בדיקה: לא התקבל canvas בכלל מהספרייה');
       return;
     }
-    const canvas = await window.html2canvas(el, { scale: 2 });
-    const dataUrl = canvas.toDataURL('image/png');
-    const w = window.open();
-    if (w){ w.document.write('<img src="' + dataUrl + '" style="max-width:100%;">'); }
-    else { toast('הדפדפן חסם חלון קופץ - אשר פתיחת חלונות ונסה שוב'); }
+
+    alert('בדיקה: התקבל canvas בגודל ' + canvas.width + 'x' + canvas.height + ' פיקסלים. מציג אותו מתחת לכפתורים.');
+
+    const wrap = document.createElement('div');
+    wrap.id = 'debugResult';
+    wrap.style.cssText = 'border:3px solid #e0932e;border-radius:10px;padding:10px;margin-top:14px;background:#fff;overflow:auto;';
+    const label = document.createElement('div');
+    label.style.cssText = 'font-weight:700;color:#8a5a10;margin-bottom:8px;';
+    label.textContent = '🔧 תוצאת בדיקה (canvas ' + canvas.width + 'x' + canvas.height + '):';
+    wrap.appendChild(label);
+    canvas.style.maxWidth = '100%';
+    canvas.style.border = '1px solid #ccc';
+    wrap.appendChild(canvas);
+    document.querySelector('.actions-bar').insertAdjacentElement('afterend', wrap);
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
   } catch(e){
-    console.error(e);
-    toast('שגיאה בבדיקה: ' + (e.message || e));
-  } finally {
     overlay.style.display = 'none';
+    console.error(e);
+    alert('בדיקה: שגיאה - ' + (e.message || e));
   }
 });
 
