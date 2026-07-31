@@ -40,7 +40,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 12:47</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 13:05</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -196,6 +196,7 @@
 <script>
 const BIZ_FILES_BUCKET = window.BSD_CONFIG.STORAGE_BUCKET;
 let CURRENT_PROFILE = null;
+const EXISTING_BUSINESS_ID = new URLSearchParams(location.search).get('business_id') || null;
 
 function toast(msg){
   let box = document.getElementById('toastBox');
@@ -368,7 +369,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
 
   const submitBtn = document.getElementById('submitBtn');
   submitBtn.disabled = true;
-  submitBtn.textContent = 'שומר עסק...';
+  submitBtn.textContent = EXISTING_BUSINESS_ID ? 'שומר עדכון...' : 'שומר עסק...';
 
   const payload = {
     internal_name, owner_name, owner_phone,
@@ -385,26 +386,42 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
     operating_profit: num(g('operating_profit')),
     net_profit: num(g('net_profit')),
     sale_reason: g('sale_reason') || null,
-    notes: g('notes') || null,
-    status: 'חדש',
-    listing_status: 'active',
-    source: 'הזנת שטח (טאבלט)',
-    created_by: CURRENT_PROFILE.id
+    notes: g('notes') || null
   };
+  if (!EXISTING_BUSINESS_ID){
+    payload.status = 'חדש';
+    payload.listing_status = 'active';
+    payload.source = 'הזנת שטח (טאבלט)';
+    payload.created_by = CURRENT_PROFILE.id;
+  }
 
-  const { data: inserted, error } = await window.supabaseClient.from('businesses').insert(payload).select().single();
-  if (error){
-    submitBtn.disabled = false;
-    submitBtn.textContent = '✅ הזן עסק למערכת + שמור טופס';
-    toast('שגיאה בשמירת העסק: ' + error.message);
-    console.error(error);
-    return;
+  let bizId;
+  if (EXISTING_BUSINESS_ID){
+    const { error: updBizErr } = await window.supabaseClient.from('businesses').update(payload).eq('id', EXISTING_BUSINESS_ID);
+    if (updBizErr){
+      submitBtn.disabled = false;
+      submitBtn.textContent = '✅ שמור טופס לעסק הקיים';
+      toast('שגיאה בעדכון העסק: ' + updBizErr.message);
+      console.error(updBizErr);
+      return;
+    }
+    bizId = EXISTING_BUSINESS_ID;
+  } else {
+    const { data: inserted, error } = await window.supabaseClient.from('businesses').insert(payload).select().single();
+    if (error){
+      submitBtn.disabled = false;
+      submitBtn.textContent = '✅ הזן עסק למערכת + שמור טופס';
+      toast('שגיאה בשמירת העסק: ' + error.message);
+      console.error(error);
+      return;
+    }
+    bizId = inserted.id;
   }
 
   submitBtn.textContent = 'יוצר ושומר קובץ סיכום...';
   try{
     const { blob, filename } = await generatePdfBlob();
-    const path = `${inserted.id}/intake-form.pdf`;
+    const path = `${bizId}/intake-form.pdf`;
     const { error: upErr } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).upload(path, blob, { upsert: true, contentType: 'application/pdf' });
     if (upErr) throw upErr;
 
@@ -412,7 +429,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
       intake_form_path: path,
       intake_form_filled_by: CURRENT_PROFILE.id,
       intake_form_filled_at: new Date().toISOString()
-    }).eq('id', inserted.id);
+    }).eq('id', bizId);
 
     // מוריד עותק גם למכשיר עצמו (טאבלט), בנוסף לשמירה בכרטיס העסק
     const a = document.createElement('a');
@@ -430,18 +447,20 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
       }
     }
 
-    document.getElementById('successTitle').textContent = internal_name + ' נוסף בהצלחה לרשימת העסקים למכירה';
+    document.getElementById('successTitle').textContent = EXISTING_BUSINESS_ID
+      ? 'טופס הפגישה נשמר לעסק ' + internal_name
+      : internal_name + ' נוסף בהצלחה לרשימת העסקים למכירה';
     document.getElementById('successSub').textContent = updErr
       ? 'קובץ סיכום הפגישה נשמר בקבצי העסק (ראה הודעה למעלה), וירד גם למכשיר זה.'
       : 'קובץ סיכום הפגישה נשמר בכרטיס העסק, וירד גם למכשיר זה.';
-    document.getElementById('viewSavedBtn').onclick = () => downloadIntakeForm(inserted.id, internal_name);
+    document.getElementById('viewSavedBtn').onclick = () => downloadIntakeForm(bizId, internal_name);
     document.getElementById('intakeForm').style.display = 'none';
     document.getElementById('successCard').style.display = 'block';
   } catch(pdfErr){
     console.error(pdfErr);
-    toast('העסק נשמר, אך שמירת קובץ הסיכום נכשלה: ' + (pdfErr.message || pdfErr));
+    toast((EXISTING_BUSINESS_ID ? 'העדכון נשמר' : 'העסק נשמר') + ', אך שמירת קובץ הסיכום נכשלה: ' + (pdfErr.message || pdfErr));
     submitBtn.disabled = false;
-    submitBtn.textContent = '✅ הזן עסק למערכת + שמור טופס';
+    submitBtn.textContent = EXISTING_BUSINESS_ID ? '✅ שמור טופס לעסק הקיים' : '✅ הזן עסק למערכת + שמור טופס';
   }
 });
 
@@ -451,6 +470,8 @@ async function downloadIntakeForm(bizId, bizName){
   window.open(data.signedUrl, '_blank');
 }
 
+function setVal(id, v){ const el = document.getElementById(id); if (el && (v !== null && v !== undefined)) el.value = v; }
+
 (async function init(){
   CURRENT_PROFILE = await requireAuth();
   if (!CURRENT_PROFILE) return;
@@ -459,6 +480,35 @@ async function downloadIntakeForm(bizId, bizName){
   document.getElementById('fillerName').textContent = name;
   document.getElementById('fillerDate').textContent = new Date().toLocaleDateString('he-IL');
   if (CURRENT_PROFILE.role !== 'admin'){ const navUsers = document.getElementById('navUsersLink'); if (navUsers) navUsers.style.display = 'none'; }
+
+  if (EXISTING_BUSINESS_ID){
+    const { data: biz, error: bizErr } = await window.supabaseClient.from('businesses').select('*').eq('id', EXISTING_BUSINESS_ID).single();
+    if (bizErr || !biz){
+      toast('שגיאה בטעינת העסק הקיים: ' + (bizErr ? bizErr.message : 'לא נמצא'));
+    } else {
+      setVal('internal_name', biz.internal_name);
+      setVal('city', biz.city);
+      setVal('field', biz.field);
+      setVal('address', biz.address);
+      setVal('short_description', biz.short_description);
+      setVal('asking_price', biz.asking_price);
+      setVal('employees_count', biz.employees_count);
+      setVal('owner_name', biz.owner_name);
+      setVal('owner_phone', biz.owner_phone);
+      setVal('owner_email', biz.owner_email);
+      setVal('website', biz.website);
+      setVal('id_number', biz.id_number);
+      setVal('annual_revenue', biz.annual_revenue);
+      setVal('operating_profit', biz.operating_profit);
+      setVal('net_profit', biz.net_profit);
+      setVal('sale_reason', biz.sale_reason);
+      setVal('notes', biz.notes);
+
+      document.querySelector('.filler-banner > div:first-child').innerHTML = '📋 <b>מילוי טופס פגישה לעסק קיים: ' + esc(biz.internal_name || '') + '</b> - הפרטים הוזנו מראש מכרטיס העסק, ניתן לערוך ולהשלים';
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.textContent = '✅ שמור טופס לעסק הקיים';
+    }
+  }
 })();
 </script>
 </body>
