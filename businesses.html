@@ -73,7 +73,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 09:15</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 09:45</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -312,7 +312,7 @@ function renderTable(){
         ? `<span title="${esc(b.anon_presentation_name)}" style="display:inline-block;background:#e3f5e9;color:#1f7a45;font-weight:700;font-size:.75rem;padding:4px 10px;border-radius:20px;white-space:nowrap;">📄 יש מצגת</span>`
         : `<span style="display:inline-block;background:#f2f0e8;color:#999;font-weight:600;font-size:.75rem;padding:4px 10px;border-radius:20px;white-space:nowrap;">אין מצגת</span>`}</td>
       <td data-label="טופס פגישה" style="text-align:center;" onclick="event.stopPropagation()">${b.intake_form_path
-        ? `<button title="${esc('מולא ע"י ' + userName(b.intake_form_filled_by) + ' · ' + fmtDate(b.intake_form_filled_at))}" onclick="downloadIntakeForm('${b.id}')" style="background:#dff0e4;color:#1a5c38;border:1px solid #7fc79a;font-weight:700;font-size:.75rem;padding:5px 10px;border-radius:20px;white-space:nowrap;cursor:pointer;">📋 יש טופס</button>`
+        ? `<button title="${esc('מולא ע"י ' + userName(b.intake_form_filled_by) + ' · ' + fmtDate(b.intake_form_filled_at))}" onclick="downloadIntakeForm('${b.id}', '${esc((b.internal_name||'עסק').replace(/'/g,''))}')" style="background:#dff0e4;color:#1a5c38;border:1px solid #7fc79a;font-weight:700;font-size:.75rem;padding:5px 10px;border-radius:20px;white-space:nowrap;cursor:pointer;">📋 יש טופס</button>`
         : `<span style="display:inline-block;background:#f2f0e8;color:#999;font-weight:600;font-size:.75rem;padding:4px 10px;border-radius:20px;white-space:nowrap;">אין טופס</span>`}</td>
       <td data-label="נוצר">${fmtDate(b.created_at)}</td>
       <td data-label="עודכן">${fmtDate(b.updated_at)}</td>
@@ -473,7 +473,7 @@ function openBizForm(id){
       <div class="section-h" style="margin-top:14px;">📋 טופס פגישה ראשונה</div>
       <div class="field full" style="background:#eef8f1;border-radius:8px;padding:10px 12px;">
         <div style="font-size:.85rem;">מולא ע"י <b>${esc(userName(biz.intake_form_filled_by))}</b> בתאריך ${fmtDate(biz.intake_form_filled_at)}
-          &nbsp; <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="downloadIntakeForm('${biz.id}')">📂 פתח / הורד</button>
+          &nbsp; <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="downloadIntakeForm('${biz.id}', '${esc((biz.internal_name||'עסק').replace(/'/g,''))}')">📂 פתח / הורד</button>
         </div>
       </div>
       ` : ``}
@@ -644,8 +644,9 @@ async function downloadAnonPresentation(path){
   window.open(data.signedUrl, '_blank');
 }
 
-async function downloadIntakeForm(bizId){
-  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/intake-form.pdf`, 300);
+async function downloadIntakeForm(bizId, bizName){
+  const filename = (bizName || 'עסק') + ' - סיכום פגישה ראשונה.pdf';
+  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/intake-form.pdf`, 300, { download: filename });
   if (error){ toast('שגיאה: ' + error.message); return; }
   window.open(data.signedUrl, '_blank');
 }

@@ -40,7 +40,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 09:15</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 09:45</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -152,6 +152,7 @@
     <div class="actions-bar">
       <button type="button" class="btn btn-view" id="previewBtn">👁️ תצוגה מקדימה</button>
       <button type="button" class="btn btn-ghost" id="downloadOnlyBtn">⬇️ הורד PDF בלבד</button>
+      <button type="button" class="btn btn-ghost" id="debugCanvasBtn" style="background:#fdeccb;color:#8a5a10;">🔧 בדיקת תצוגה (זמני)</button>
       <button type="submit" class="btn btn-success" id="submitBtn">✅ הזן עסק למערכת + שמור טופס</button>
     </div>
   </form>
@@ -289,6 +290,31 @@ async function generatePdfBlob(){
   }
 }
 
+document.getElementById('debugCanvasBtn').addEventListener('click', async function(){
+  if (!g('internal_name')){ toast('נא למלא לפחות שם עסק לפני הבדיקה'); return; }
+  buildPrintTemplate();
+  const el = document.getElementById('printTemplate');
+  const overlay = document.getElementById('pdfOverlay');
+  overlay.style.display = 'flex';
+  await nextPaint();
+  try{
+    if (typeof window.html2canvas !== 'function'){
+      toast('html2canvas לא נטען (window.html2canvas אינו קיים) - כנראה חסימת רשת ל-CDN');
+      return;
+    }
+    const canvas = await window.html2canvas(el, { scale: 2 });
+    const dataUrl = canvas.toDataURL('image/png');
+    const w = window.open();
+    if (w){ w.document.write('<img src="' + dataUrl + '" style="max-width:100%;">'); }
+    else { toast('הדפדפן חסם חלון קופץ - אשר פתיחת חלונות ונסה שוב'); }
+  } catch(e){
+    console.error(e);
+    toast('שגיאה בבדיקה: ' + (e.message || e));
+  } finally {
+    overlay.style.display = 'none';
+  }
+});
+
 document.getElementById('previewBtn').addEventListener('click', async function(){
   if (!g('internal_name')){ toast('נא למלא לפחות שם עסק לפני תצוגה מקדימה'); return; }
   const { blob } = await generatePdfBlob();
@@ -384,7 +410,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
     document.getElementById('successSub').textContent = updErr
       ? 'קובץ סיכום הפגישה נשמר בקבצי העסק (ראה הודעה למעלה), וירד גם למכשיר זה.'
       : 'קובץ סיכום הפגישה נשמר בכרטיס העסק, וירד גם למכשיר זה.';
-    document.getElementById('viewSavedBtn').onclick = () => downloadIntakeForm(inserted.id);
+    document.getElementById('viewSavedBtn').onclick = () => downloadIntakeForm(inserted.id, internal_name);
     document.getElementById('intakeForm').style.display = 'none';
     document.getElementById('successCard').style.display = 'block';
   } catch(pdfErr){
@@ -395,8 +421,9 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
   }
 });
 
-async function downloadIntakeForm(bizId){
-  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/intake-form.pdf`, 300);
+async function downloadIntakeForm(bizId, bizName){
+  const filename = (bizName || 'עסק') + ' - סיכום פגישה ראשונה.pdf';
+  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/intake-form.pdf`, 300, { download: filename });
   if (error){ toast('שגיאה: ' + error.message); return; }
   window.open(data.signedUrl, '_blank');
 }
