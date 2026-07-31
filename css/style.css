@@ -369,8 +369,12 @@ button:disabled, .btn:disabled{
     font-size:.75rem;
     flex-shrink:0;
   }
-  table td.row-actions{ justify-content:flex-end; gap:14px; }
+  table td.row-actions{ justify-content:flex-start; flex-wrap:wrap; gap:10px; width:100%; box-sizing:border-box; }
   table td.row-actions::before{ content:''; }
+}
+@media (max-width: 400px){
+  table td.row-actions button,
+  .row-actions button{ width:34px !important; height:34px !important; padding:5px 6px !important; }
 }
 
 /* מניעת גלילה אופקית מיותרת של כל העמוד */
