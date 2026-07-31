@@ -40,7 +40,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 06:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 31.07.2026 07:15</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -56,6 +56,14 @@
 </div>
 
 <div class="wrap">
+  <div id="schemaBanner" style="display:none;background:#fdeccb;color:#8a5a10;border:1.5px solid #dba43f;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:.85rem;line-height:1.6;">
+    ⚠️ העסק נשמר בהצלחה, אך לא ניתן היה לקשר את קובץ הסיכום לכרטיס העסק (טור <code>intake_form_path</code> עדיין לא קיים בטבלה). הקובץ עצמו כן נשמר בקבצי העסק ואפשר לפתוח אותו משם ידנית. יש להריץ פעם אחת ב-Supabase SQL Editor:
+    <pre style="background:#fff;padding:10px 12px;border-radius:8px;margin:8px 0 0;white-space:pre-wrap;direction:ltr;text-align:left;">alter table businesses
+  add column if not exists intake_form_path text,
+  add column if not exists intake_form_filled_by uuid references profiles(id) on delete set null,
+  add column if not exists intake_form_filled_at timestamptz;</pre>
+  </div>
+
   <div class="filler-banner">
     <div>📋 <b>הזנת עסק מהשטח</b> - סיכום פגישה ראשונה עם בעל עסק</div>
     <div>מוזן על ידי: <b id="fillerName">טוען...</b> · <span id="fillerDate"></span></div>
@@ -160,7 +168,7 @@
   </div>
 </div>
 
-<div id="printTemplate" style="position:fixed;top:-9999px;left:-9999px;width:760px;background:#fff;padding:36px;font-family:'Heebo','Rubik',sans-serif;color:#1c2333;direction:rtl;">
+<div id="printTemplate" style="position:fixed;top:0;left:0;width:760px;background:#fff;padding:36px;font-family:'Heebo','Rubik',sans-serif;color:#1c2333;direction:rtl;z-index:-9999;pointer-events:none;">
   <div style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #c9a24b;padding-bottom:16px;margin-bottom:20px;">
     <div style="width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #e8cf8a, #c9a24b 70%);display:flex;align-items:center;justify-content:center;font-weight:800;color:#1c2333;font-size:20px;">BSD</div>
     <div>
@@ -259,7 +267,7 @@ async function generatePdfBlob(){
   const worker = window.html2pdf().set({
     margin: 10,
     filename: filename,
-    html2canvas: { scale: 2, useCORS: true },
+    html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0, windowWidth: 800 },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   }).from(el);
   const blob = await worker.outputPdf('blob');
@@ -340,7 +348,6 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
       intake_form_filled_by: CURRENT_PROFILE.id,
       intake_form_filled_at: new Date().toISOString()
     }).eq('id', inserted.id);
-    if (updErr) throw updErr;
 
     // מוריד עותק גם למכשיר עצמו (טאבלט), בנוסף לשמירה בכרטיס העסק
     const a = document.createElement('a');
@@ -348,8 +355,20 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
     a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
 
+    if (updErr){
+      console.error(updErr);
+      const missingColumn = /column .* does not exist/i.test(updErr.message || '') || updErr.code === '42703' || updErr.code === 'PGRST204';
+      if (missingColumn){
+        document.getElementById('schemaBanner').style.display = 'block';
+      } else {
+        toast('העסק והקובץ נשמרו, אך עדכון קישור הכרטיס נכשל: ' + updErr.message);
+      }
+    }
+
     document.getElementById('successTitle').textContent = internal_name + ' נוסף בהצלחה לרשימת העסקים למכירה';
-    document.getElementById('successSub').textContent = 'קובץ סיכום הפגישה נשמר בכרטיס העסק, וירד גם למכשיר זה.';
+    document.getElementById('successSub').textContent = updErr
+      ? 'קובץ סיכום הפגישה נשמר בקבצי העסק (ראה הודעה למעלה), וירד גם למכשיר זה.'
+      : 'קובץ סיכום הפגישה נשמר בכרטיס העסק, וירד גם למכשיר זה.';
     document.getElementById('viewSavedBtn').onclick = () => downloadIntakeForm(inserted.id);
     document.getElementById('intakeForm').style.display = 'none';
     document.getElementById('successCard').style.display = 'block';
