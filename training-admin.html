@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - הכשרות ומתעניינים</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=202608021505">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:1200px;margin:0 auto;}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+  .toolbar h2{margin:0;color:var(--navy);font-size:1.3rem;}
+  .kpi-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-bottom:20px;}
+  .kpi{background:#fff;border-radius:12px;padding:14px 10px;text-align:center;box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 4px 12px rgba(14,27,52,.08);}
+  .kpi .num{font-size:1.4rem;font-weight:800;color:var(--navy);}
+  .kpi .lbl{font-size:.68rem;color:#888;margin-top:2px;}
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .filters input, .filters select{padding:9px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .filters input[type=text]{min-width:200px;}
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 8px 20px rgba(14,27,52,.10), 0 2px 6px rgba(14,27,52,.06);}
+  thead th{background:var(--navy);color:#fff;padding:12px 14px;font-size:.8rem;text-align:right;white-space:nowrap;}
+  tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
+  tbody tr:hover{background:#faf8f2;}
+  .empty-row td{text-align:center;color:#999;padding:30px;}
+  .btn{border:none;border-radius:8px;padding:8px 14px;font-family:inherit;font-size:.8rem;cursor:pointer;font-weight:700;}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);}
+  .btn-success{background:var(--success);color:#fff;}
+  .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;white-space:nowrap;}
+  .row-menu-btn{border:1.5px solid #d8d3c4;background:#f7f5ee;color:#333;cursor:pointer;font-size:1.1rem;font-weight:700;padding:2px 8px;border-radius:8px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+  .row-menu-btn:hover{background:#eee8d8;}
+  .no-access{max-width:520px;margin:80px auto;text-align:center;background:#fff;border-radius:14px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,.15);}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:.8rem;color:#666;margin-bottom:4px;font-weight:600;}
+  .field input, .field select, .field textarea{width:100%;padding:9px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.88rem;box-sizing:border-box;}
+  .field textarea{min-height:80px;resize:vertical;}
+  .timeline{margin-top:6px;}
+  .timeline-item{padding:8px 12px;border-right:3px solid #c9a24b;background:#faf8f2;border-radius:6px;margin-bottom:6px;font-size:.82rem;}
+  .timeline-item .t-date{color:#999;font-size:.72rem;}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 16:00</span></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+  <div class="nav" style="display:flex;gap:6px;">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="tasks.html" class="nav-tasks">✅ משימות</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">📋 טפסים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="intake-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🧾 טופס סיכום עסק</a>
+      <a href="buyer-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🧍 טופס סיכום קונה</a>
+      <a id="navFormsAllLink" href="intake-forms.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 כל הטפסים שהוגשו</a>
+    </div>
+  </div>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+    <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
+    <a href="messages.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;position:relative;">💬 הודעות<span id="navMsgBadge" style="display:none;position:absolute;top:2px;left:2px;background:#b3402c;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;font-weight:700;"></span></a>
+    <div id="navToolsWrap" style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">🛠️ כלים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="training-admin.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🎓 הכשרות ומתעניינים</a>
+      <a href="messages.html?admin_view=1" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👁️ כל ההודעות במערכת</a>
+      <a href="stats.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 סטטיסטיקה</a>
+      <a href="users.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👥 משתמשים</a>
+    </div>
+  </div>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">⚙️ הגדרות ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="backup.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">💾 גיבוי נתונים</a>
+      <a href="javascript:void(0)" id="pushBellBtn" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔕 הפעל התראות</a>
+      <a href="help.html" target="_blank" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">❓ עזרה</a>
+      <a href="javascript:void(0)" onclick="openMyProfile()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👤 פרטים אישיים</a>
+      <a href="javascript:void(0)" onclick="openChangePassword()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔑 שנה סיסמה</a>
+    </div>
+  </div>
+  </div>
+  <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+</div>
+
+<div class="wrap" id="mainWrap" style="display:none;">
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <div class="toolbar">
+    <h2>🎓 הכשרות ומתעניינים</h2>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost" onclick="openTrainingSettings()">⚙️ הגדרות הכשרה</button>
+      <button class="btn btn-success" onclick="openSendFormModal()">📤 שליחת טופס רישום</button>
+    </div>
+  </div>
+
+  <div class="filters">
+    <input type="text" id="fSearch" placeholder="חיפוש לפי שם, טלפון, אימייל...">
+    <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
+    <select id="fPayStatus">
+      <option value="all">כל סטטוסי התשלום</option>
+      <option value="ממתין לתשלום">ממתין לתשלום</option>
+      <option value="שולם">שולם</option>
+    </select>
+    <input type="date" id="fDateFrom" title="מתאריך">
+    <input type="date" id="fDateTo" title="עד תאריך">
+  </div>
+
+  <div style="overflow-x:auto;">
+  <table>
+    <thead>
+      <tr><th>שם</th><th>טלפון</th><th>אימייל</th><th>מחיר כולל מע"מ</th><th>סטטוס</th><th>סטטוס תשלום</th><th>נוצר</th></tr>
+    </thead>
+    <tbody id="leadsBody">
+      <tr class="empty-row"><td colspan="7">טוען...</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="no-access" id="noAccess" style="display:none;">
+  <h2 style="color:var(--navy);">אין הרשאה</h2>
+  <p style="color:#666;">מסך זה זמין לאדמין בלבד.</p>
+  <a href="app.html" class="btn btn-primary" style="text-decoration:none;display:inline-block;">חזרה ללוח הבקרה</a>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
+<div id="toastBox"></div>
+
+<script src="js/config.js?v=202608021505"></script>
+<script src="js/supabaseClient.js?v=202608021505"></script>
+<script src="js/auth.js?v=202608021505"></script>
+<script>
+let CURRENT_PROFILE = null;
+let ALL_LEADS = [];
+let VAT_RATE = 18;
+let CURRICULUM = '';
+const STATUS_OPTIONS = ['מתעניין חדש','נשלח טופס רישום','פתח את הטופס','מילא פרטים','חתום','ממתין לתשלום','שולם','נרשם להכשרה','בוטל'];
+const BIZ_FILES_BUCKET = window.BSD_CONFIG.STORAGE_BUCKET;
+
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
+function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL', {hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit',year:'numeric'}); }catch(e){ return iso; } }
+function fmtMoney(n){ if(n===null||n===undefined) return '—'; return '₪' + Number(n).toLocaleString('he-IL'); }
+function fmtPhone(phone){
+  if (!phone) return '—';
+  let d = String(phone).replace(/\D/g,'');
+  if (d.startsWith('972')) d = '0' + d.slice(3);
+  if (d.length === 10 && d.startsWith('0')) return d.slice(0,3) + '-' + d.slice(3);
+  if (d.length === 9 && d.startsWith('0')) return d.slice(0,2) + '-' + d.slice(2);
+  return String(phone);
+}
+function toast(msg){
+  let box = document.getElementById('toastBox');
+  const isError = /שגיאה|error/i.test(msg);
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed;bottom:24px;left:24px;background:${isError ? '#b00020' : 'var(--navy,#0e1b34)'};color:#fff;padding:14px 18px;border-radius:10px;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.35);z-index:200;max-width:320px;`;
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
+}
+function closeModal(){
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('modalBox').innerHTML = '';
+}
+function statusColor(status){
+  const map = {
+    'מתעניין חדש': '#eef1f6', 'נשלח טופס רישום': '#fdeccb', 'פתח את הטופס': '#fdeccb',
+    'מילא פרטים': '#dbeafe', 'חתום': '#dff0e4', 'ממתין לתשלום': '#ffe9cc',
+    'שולם': '#dff0e4', 'נרשם להכשרה': '#d9f2e3', 'בוטל': '#ffe1e1'
+  };
+  const txt = {
+    'מתעניין חדש': '#333', 'נשלח טופס רישום': '#8a5a10', 'פתח את הטופס': '#8a5a10',
+    'מילא פרטים': '#1e40af', 'חתום': '#245c40', 'ממתין לתשלום': '#7a4a00',
+    'שולם': '#245c40', 'נרשם להכשרה': '#1a5c38', 'בוטל': '#832d1f'
+  };
+  return `background:${map[status]||'#eee'};color:${txt[status]||'#333'};`;
+}
+
+function randomToken(){
+  const arr = new Uint8Array(24);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => b.toString(16).padStart(2,'0')).join('');
+}
+function makeRegistrationNumber(){
+  return 'BSD-TR-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.floor(1000 + Math.random()*9000);
+}
+function trainingFormLink(token){
+  return location.origin + location.pathname.replace(/training-admin\.html$/, '') + 'training-form.html?token=' + token;
+}
+
+async function logEvent(leadId, text){
+  await window.supabaseClient.from('training_lead_events').insert({ lead_id: leadId, event_text: text });
+}
+
+async function loadSettings(){
+  const { data } = await window.supabaseClient.from('training_settings').select('*').eq('id', 1).single();
+  if (data){ VAT_RATE = Number(data.vat_rate) || 18; CURRICULUM = data.training_curriculum || ''; }
+}
+
+async function loadLeads(){
+  const { data, error } = await window.supabaseClient.from('training_leads').select('*').order('created_at', { ascending: false });
+  if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
+  ALL_LEADS = data || [];
+  renderKpis();
+  renderTable();
+}
+
+function renderKpis(){
+  const total = ALL_LEADS.length;
+  const sent = ALL_LEADS.filter(l => l.status !== 'מתעניין חדש').length;
+  const signed = ALL_LEADS.filter(l => l.signed_at).length;
+  const waitingPay = ALL_LEADS.filter(l => l.payment_status === 'ממתין לתשלום' && l.signed_at).length;
+  const paid = ALL_LEADS.filter(l => l.payment_status === 'שולם').length;
+  const enrolled = ALL_LEADS.filter(l => l.status === 'נרשם להכשרה').length;
+  const conversion = sent > 0 ? Math.round((signed / sent) * 100) : 0;
+  const kpis = [
+    { num: total, lbl: 'מתעניינים' },
+    { num: sent, lbl: 'טפסים שנשלחו' },
+    { num: signed, lbl: 'טפסים שנחתמו' },
+    { num: waitingPay, lbl: 'ממתינים לתשלום' },
+    { num: paid, lbl: 'שולמו' },
+    { num: enrolled, lbl: 'נרשמו להכשרה' },
+    { num: conversion + '%', lbl: 'יחס המרה (חתום/נשלח)' }
+  ];
+  document.getElementById('kpiGrid').innerHTML = kpis.map(k => `<div class="kpi"><div class="num">${k.num}</div><div class="lbl">${k.lbl}</div></div>`).join('');
+}
+
+function renderTable(){
+  const search = document.getElementById('fSearch').value.trim().toLowerCase();
+  const fStatus = document.getElementById('fStatus').value;
+  const fPayStatus = document.getElementById('fPayStatus').value;
+  const dFrom = document.getElementById('fDateFrom').value;
+  const dTo = document.getElementById('fDateTo').value;
+
+  let rows = ALL_LEADS.filter(l => {
+    if (fStatus !== 'all' && l.status !== fStatus) return false;
+    if (fPayStatus !== 'all' && l.payment_status !== fPayStatus) return false;
+    if (dFrom && l.created_at.slice(0,10) < dFrom) return false;
+    if (dTo && l.created_at.slice(0,10) > dTo) return false;
+    if (search){
+      const hay = [l.first_name, l.last_name, l.phone, l.email].join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const body = document.getElementById('leadsBody');
+  if (rows.length === 0){
+    body.innerHTML = '<tr class="empty-row"><td colspan="7">לא נמצאו מתעניינים</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(l => `
+    <tr>
+      <td>
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <div style="position:relative;flex-shrink:0;">
+            <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
+            <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:190px;z-index:70;overflow:hidden;">
+              <a href="javascript:void(0)" onclick="openLeadCard('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">📇 פתח כרטיס</a>
+              <a href="javascript:void(0)" onclick="resendWhatsapp('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📲 שלח שוב WhatsApp</a>
+              <a href="javascript:void(0)" onclick="copyLink('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔗 העתק קישור</a>
+              ${l.form_pdf_path ? `<a href="javascript:void(0)" onclick="downloadTrainingPdf('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 הורד PDF חתום</a>` : ''}
+              <a href="javascript:void(0)" onclick="markPaid('${l.id}')" style="display:block;color:#9be3ab;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">✅ סמן שולם</a>
+            </div>
+          </div>
+          <div>
+            <div style="font-weight:700;">${esc([l.first_name, l.last_name].filter(Boolean).join(' ') || 'ללא שם')}</div>
+            <div style="font-size:.72rem;color:#999;">${esc(l.registration_number||'')}</div>
+          </div>
+        </div>
+      </td>
+      <td dir="ltr" style="text-align:right;">${l.phone ? `<a href="tel:${esc(l.phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(l.phone)}</a>` : '—'}</td>
+      <td>${esc(l.email||'—')}</td>
+      <td>${fmtMoney(l.price_with_vat)}</td>
+      <td><span class="badge" style="${statusColor(l.status)}">${esc(l.status)}</span></td>
+      <td><span class="badge" style="${statusColor(l.payment_status)}">${esc(l.payment_status)}</span></td>
+      <td>${fmtDate(l.created_at)}</td>
+    </tr>
+  `).join('');
+}
+
+['fSearch'].forEach(id => document.getElementById(id).addEventListener('input', renderTable));
+['fStatus','fPayStatus','fDateFrom','fDateTo'].forEach(id => document.getElementById(id).addEventListener('change', renderTable));
+
+// ============================================================
+// SEND FORM MODAL
+// ============================================================
+function openSendFormModal(){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>📤 שליחת טופס רישום</h3>
+    <form id="sendForm">
+      <div class="field"><label>שם פרטי <span style="color:#b00020;">*</span></label><input type="text" id="sf_first" required></div>
+      <div class="field"><label>שם משפחה</label><input type="text" id="sf_last"></div>
+      <div class="field"><label>מספר טלפון <span style="color:#b00020;">*</span></label><input type="tel" id="sf_phone" required placeholder="05X-XXXXXXX"></div>
+      <div class="field"><label>מחיר ההכשרה לפני מע"מ (₪)</label><input type="number" id="sf_price" value="2500" min="0"></div>
+      <div class="field" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.85rem;" id="sf_calc"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+        <button type="submit" class="btn btn-success">📤 צור ושלח</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+  document.getElementById('sf_price').addEventListener('input', updateSfCalc);
+  updateSfCalc();
+  document.getElementById('sendForm').addEventListener('submit', submitSendForm);
+}
+
+function updateSfCalc(){
+  const price = Number(document.getElementById('sf_price').value) || 0;
+  const vat = Math.round(price * (VAT_RATE/100) * 100) / 100;
+  const total = price + vat;
+  document.getElementById('sf_calc').innerHTML = `מע"מ (${VAT_RATE}%): <b>${fmtMoney(vat)}</b> · סה"כ כולל מע"מ: <b>${fmtMoney(total)}</b>`;
+}
+
+async function submitSendForm(e){
+  e.preventDefault();
+  const first_name = document.getElementById('sf_first').value.trim();
+  const last_name = document.getElementById('sf_last').value.trim();
+  const phone = document.getElementById('sf_phone').value.trim();
+  const price_before_vat = Number(document.getElementById('sf_price').value) || 0;
+  if (!first_name || !phone){ toast('נא למלא שם פרטי וטלפון'); return; }
+
+  const vat_amount = Math.round(price_before_vat * (VAT_RATE/100) * 100) / 100;
+  const price_with_vat = price_before_vat + vat_amount;
+  const token = randomToken();
+  const registration_number = makeRegistrationNumber();
+
+  const { data, error } = await window.supabaseClient.from('training_leads').insert({
+    first_name, last_name, phone,
+    price_before_vat, vat_amount, price_with_vat,
+    status: 'נשלח טופס רישום', payment_status: 'ממתין לתשלום',
+    form_token: token, registration_number,
+    created_by: CURRENT_PROFILE.id
+  }).select().single();
+
+  if (error){ toast('שגיאה ביצירת הכרטיס: ' + error.message); return; }
+
+  await logEvent(data.id, 'נפתח כרטיס');
+  await logEvent(data.id, 'נשלח טופס רישום ב-WhatsApp');
+
+  const link = trainingFormLink(token);
+  const message = `שלום ${first_name},\n\nבהמשך להתעניינותך בהכשרת מתווכי העסקים של BSD Business Brokers Israel, מצורף קישור אישי לקבלת פרטי ההכשרה ולהשלמת טופס הרישום.\n\n${link}\n\nמחיר ההכשרה עבורך הוא ${price_before_vat} ₪ בתוספת מע"מ.\n\nלאחר מעבר על פרטי ההכשרה ניתן למלא את הפרטים, לאשר ולחתום ישירות בטופס.\n\nBSD Business Brokers Israel`;
+
+  let waPhone = phone.replace(/\D/g,'');
+  if (waPhone.startsWith('0')) waPhone = '972' + waPhone.slice(1);
+  window.open('https://wa.me/' + waPhone + '?text=' + encodeURIComponent(message), '_blank');
+
+  closeModal();
+  toast('הכרטיס נוצר וההודעה מוכנה לשליחה');
+  await loadLeads();
+}
+
+// ============================================================
+// LEAD CARD
+// ============================================================
+async function openLeadCard(id){
+  const lead = ALL_LEADS.find(l => l.id === id);
+  if (!lead) return;
+  const { data: events } = await window.supabaseClient.from('training_lead_events').select('*').eq('lead_id', id).order('created_at', { ascending: false });
+
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>📇 כרטיס מתעניין - ${esc([lead.first_name, lead.last_name].filter(Boolean).join(' '))}</h3>
+    <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;margin-bottom:14px;">
+      מספר רישום: <b>${esc(lead.registration_number||'—')}</b> · נוצר: ${fmtDateTime(lead.created_at)}
+    </div>
+    <form id="cardForm">
+      <div class="form-grid">
+        ${fieldRow('cf_first','שם פרטי', lead.first_name)}
+        ${fieldRow('cf_last','שם משפחה', lead.last_name)}
+        ${fieldRow('cf_phone','טלפון', lead.phone)}
+        ${fieldRow('cf_email','אימייל', lead.email, 'email')}
+        <div class="field full"><label>כתובת</label><input type="text" id="cf_address" value="${esc(lead.address||'')}"></div>
+        ${fieldRow('cf_price','מחיר לפני מע"מ (₪)', lead.price_before_vat, 'number')}
+        <div class="field"><label>סטטוס</label><select id="cf_status">${STATUS_OPTIONS.map(s=>`<option value="${s}" ${lead.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>אופן תשלום</label><input type="text" id="cf_paymethod" value="${esc(lead.payment_method||'')}"></div>
+        <div class="field"><label>סטטוס תשלום</label>
+          <select id="cf_paystatus">
+            <option value="ממתין לתשלום" ${lead.payment_status==='ממתין לתשלום'?'selected':''}>ממתין לתשלום</option>
+            <option value="שולם" ${lead.payment_status==='שולם'?'selected':''}>שולם</option>
+          </select>
+        </div>
+        <div class="field full"><label>הערות אדמין</label><textarea id="cf_notes">${esc(lead.admin_notes||'')}</textarea></div>
+      </div>
+
+      <div class="section-h">היסטוריית פעילות</div>
+      <div class="timeline">
+        ${(events||[]).map(ev => `<div class="timeline-item"><div class="t-date">${fmtDateTime(ev.created_at)}</div>${esc(ev.event_text)}</div>`).join('') || '<div style="color:#999;font-size:.82rem;">אין עדיין פעילות</div>'}
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;">
+        <button type="button" class="btn btn-ghost" onclick="resendWhatsapp('${lead.id}')">📲 שלח שוב WhatsApp</button>
+        <button type="button" class="btn btn-ghost" onclick="copyLink('${lead.id}')">🔗 העתק קישור</button>
+        ${lead.form_pdf_path ? `<button type="button" class="btn btn-ghost" onclick="downloadTrainingPdf('${lead.id}')">📄 הורד PDF חתום</button>` : ''}
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+        <button type="submit" class="btn btn-primary">שמירה</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+  document.getElementById('cardForm').dataset.leadId = id;
+  document.getElementById('cardForm').addEventListener('submit', saveLeadCard);
+}
+
+function fieldRow(id,label,value,type='text'){
+  return `<div class="field"><label>${label}</label><input type="${type}" id="${id}" value="${esc(value===null||value===undefined?'':value)}"></div>`;
+}
+
+async function saveLeadCard(e){
+  e.preventDefault();
+  const id = e.target.dataset.leadId;
+  const lead = ALL_LEADS.find(l => l.id === id);
+  const price_before_vat = Number(document.getElementById('cf_price').value) || 0;
+  const vat_amount = Math.round(price_before_vat * (VAT_RATE/100) * 100) / 100;
+  const price_with_vat = price_before_vat + vat_amount;
+  const newStatus = document.getElementById('cf_status').value;
+  const newPayStatus = document.getElementById('cf_paystatus').value;
+
+  const payload = {
+    first_name: document.getElementById('cf_first').value.trim(),
+    last_name: document.getElementById('cf_last').value.trim(),
+    phone: document.getElementById('cf_phone').value.trim(),
+    email: document.getElementById('cf_email').value.trim(),
+    address: document.getElementById('cf_address').value.trim(),
+    price_before_vat, vat_amount, price_with_vat,
+    status: newStatus,
+    payment_method: document.getElementById('cf_paymethod').value.trim(),
+    payment_status: newPayStatus,
+    admin_notes: document.getElementById('cf_notes').value.trim()
+  };
+
+  const { error } = await window.supabaseClient.from('training_leads').update(payload).eq('id', id);
+  if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+
+  if (lead.status !== newStatus) await logEvent(id, `הסטטוס עודכן ל-"${newStatus}"`);
+  if (lead.payment_status !== newPayStatus) await logEvent(id, `סטטוס התשלום עודכן ל-"${newPayStatus}"`);
+
+  toast('נשמר בהצלחה');
+  closeModal();
+  await loadLeads();
+}
+
+async function resendWhatsapp(id){
+  const lead = ALL_LEADS.find(l => l.id === id);
+  if (!lead) return;
+  const link = trainingFormLink(lead.form_token);
+  const message = `שלום ${lead.first_name},\n\nבהמשך להתעניינותך בהכשרת מתווכי העסקים של BSD Business Brokers Israel, מצורף קישור אישי לקבלת פרטי ההכשרה ולהשלמת טופס הרישום.\n\n${link}\n\nמחיר ההכשרה עבורך הוא ${lead.price_before_vat} ₪ בתוספת מע"מ.\n\nלאחר מעבר על פרטי ההכשרה ניתן למלא את הפרטים, לאשר ולחתום ישירות בטופס.\n\nBSD Business Brokers Israel`;
+  let waPhone = (lead.phone||'').replace(/\D/g,'');
+  if (waPhone.startsWith('0')) waPhone = '972' + waPhone.slice(1);
+  window.open('https://wa.me/' + waPhone + '?text=' + encodeURIComponent(message), '_blank');
+  await logEvent(id, 'נשלח שוב טופס רישום ב-WhatsApp');
+}
+
+function copyLink(id){
+  const lead = ALL_LEADS.find(l => l.id === id);
+  if (!lead) return;
+  const link = trainingFormLink(lead.form_token);
+  navigator.clipboard.writeText(link).then(() => toast('הקישור הועתק')).catch(() => toast('שגיאה בהעתקה'));
+}
+
+async function markPaid(id){
+  const { error } = await window.supabaseClient.from('training_leads').update({ payment_status: 'שולם' }).eq('id', id);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  await logEvent(id, 'התקבל תשלום');
+  toast('סומן כשולם');
+  await loadLeads();
+}
+
+async function downloadTrainingPdf(id){
+  const lead = ALL_LEADS.find(l => l.id === id);
+  if (!lead || !lead.form_pdf_path) return;
+  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(lead.form_pdf_path, 300);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
+// ============================================================
+// TRAINING SETTINGS (VAT rate + curriculum)
+// ============================================================
+function openTrainingSettings(){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>⚙️ הגדרות הכשרה</h3>
+    <form id="settingsForm">
+      <div class="field"><label>שיעור מע"מ (%)</label><input type="number" step="0.1" id="ts_vat" value="${VAT_RATE}"></div>
+      <div class="field"><label>תכולת ההכשרה (שורה לכל נושא)</label><textarea id="ts_curriculum" style="min-height:220px;">${esc(CURRICULUM)}</textarea></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+        <button type="submit" class="btn btn-primary">שמירה</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+  document.getElementById('settingsForm').addEventListener('submit', saveTrainingSettings);
+}
+
+async function saveTrainingSettings(e){
+  e.preventDefault();
+  const vat_rate = Number(document.getElementById('ts_vat').value) || 0;
+  const training_curriculum = document.getElementById('ts_curriculum').value;
+  const { error } = await window.supabaseClient.from('training_settings').update({ vat_rate, training_curriculum, updated_at: new Date().toISOString() }).eq('id', 1);
+  if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+  VAT_RATE = vat_rate; CURRICULUM = training_curriculum;
+  toast('ההגדרות נשמרו');
+  closeModal();
+}
+
+(async function init(){
+  const profile = await requireAuth();
+  if (!profile) return;
+  CURRENT_PROFILE = profile;
+  refreshNavMsgBadge();
+
+  if (profile.role !== 'admin'){
+    document.getElementById('noAccess').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email) + ' · ' + new Date().toLocaleDateString('he-IL');
+
+  const statusSelect = document.getElementById('fStatus');
+  STATUS_OPTIONS.forEach(s => {
+    const o = document.createElement('option'); o.value = s; o.textContent = s;
+    statusSelect.appendChild(o);
+  });
+
+  document.getElementById('mainWrap').style.display = 'block';
+  await loadSettings();
+  await loadLeads();
+})();
+</script>
+</body>
+</html>
