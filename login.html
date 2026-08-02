@@ -7,7 +7,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608021650">
+<link rel="stylesheet" href="css/style.css?v=202608021705">
 <style>
   /* גובר במפורש על .login-card button (שהופך כפתורים לרוחב מלא) - רק לכפתור הצגת/הסתרת הסיסמה */
   .login-card button.pwd-toggle-btn{
@@ -50,9 +50,9 @@
   </div>
 </div>
 
-<script src="js/config.js?v=202608021650"></script>
-<script src="js/supabaseClient.js?v=202608021650"></script>
-<script src="js/auth.js?v=202608021650"></script>
+<script src="js/config.js?v=202608021705"></script>
+<script src="js/supabaseClient.js?v=202608021705"></script>
+<script src="js/auth.js?v=202608021705"></script>
 <script>
 (async function checkExistingSession(){
   const { data: { session } } = await window.supabaseClient.auth.getSession();
@@ -87,7 +87,7 @@ function showQuickUnlockGate(){
     <button id="quickUnlockForgetBtn" style="background:none;border:none;color:#bbb;font-size:.75rem;cursor:pointer;text-decoration:underline;display:block;margin:0 auto;">בטל כניסה עם טביעת אצבע במכשיר זה</button>
     <div id="quickUnlockError" style="color:#b00020;font-size:.8rem;margin-top:12px;"></div>
   `;
-  document.getElementById('quickUnlockBtn').addEventListener('click', async function(){
+  async function attemptQuickUnlock(){
     const errEl = document.getElementById('quickUnlockError');
     errEl.textContent = '';
     try {
@@ -95,9 +95,10 @@ function showQuickUnlockGate(){
       if (ok) window.location.href = 'app.html';
       else errEl.textContent = 'האימות נכשל, נסה שוב';
     } catch(e){
-      errEl.textContent = 'האימות בוטל או נכשל';
+      errEl.textContent = 'האימות בוטל או נכשל, נסה שוב';
     }
-  });
+  }
+  document.getElementById('quickUnlockBtn').addEventListener('click', attemptQuickUnlock);
   document.getElementById('quickUnlockPwdBtn').addEventListener('click', function(){
     sessionStorage.setItem('bsd_skip_fp_gate', '1');
     location.reload();
@@ -106,6 +107,11 @@ function showQuickUnlockGate(){
     forgetFingerprint();
     await bsdFullLogout();
   });
+  // By request: don't make the user tap a button first just to trigger the
+  // fingerprint scan every single time - fire it automatically as soon as
+  // this gate screen appears. The button stays visible as a manual retry
+  // for when the auto-attempt fails or gets dismissed.
+  attemptQuickUnlock();
 }
 
 // זיכרון אימיילים קודמים (לא סיסמאות!) - מציג רשימת השלמה אוטומטית של הדפדפן
