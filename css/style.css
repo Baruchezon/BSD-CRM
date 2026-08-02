@@ -377,6 +377,25 @@ button:disabled, .btn:disabled{
   .row-actions button{ width:34px !important; height:34px !important; padding:5px 6px !important; }
 }
 
+/* עמודת הפעולות (הכפתורים הכי שמאליים - עריכה/מחיקה/הסכם) נשארת תמיד
+   נראית בקצה הגלילה האופקית, כדי שלא "תיעלם" כשיש הרבה עמודות בטבלה */
+@media (min-width: 701px){
+  table td.row-actions{
+    position: sticky;
+    left: 0;
+    z-index: 4;
+    background: #fff;
+    box-shadow: -6px 0 8px -6px rgba(0,0,0,.18);
+  }
+  table thead th:last-child{
+    position: sticky;
+    left: 0;
+    z-index: 5;
+  }
+  tbody tr.row-signed td.row-actions{ background:#d9f2e3; }
+  tbody tr.row-sent td.row-actions{ background:#ffe9cc; }
+}
+
 /* מניעת גלילה אופקית מיותרת של כל העמוד */
 html, body{ overflow-x:hidden; max-width:100%; }
 .wrap{ max-width:100%; }
