@@ -107,6 +107,78 @@ async function requireAuth() {
 // separate scattered links. Shared here so the behavior is identical
 // wherever the menu appears.
 // ============================================================
+// ============================================================
+// FINGERPRINT / BIOMETRIC QUICK-UNLOCK (WebAuthn)
+// ------------------------------------------------------------
+// Supabase itself has no native WebAuthn/passkey support, so this
+// is NOT a second real authentication factor verified by a server.
+// It's a LOCAL device gate: it stores a platform-authenticator
+// (fingerprint/face/PIN) credential ID in this browser's storage,
+// and later requires a fresh biometric scan before letting the
+// user continue with the session that's already persisted on this
+// device. It turns "silently already logged in" (with no gate at
+// all) or "forced to retype your password" into a real fingerprint
+// check, without inventing a fake crypto login of its own.
+// ============================================================
+const FP_STORAGE_KEY = 'bsd_fp_credential_id';
+
+function isFingerprintRegistered(){
+  return !!localStorage.getItem(FP_STORAGE_KEY);
+}
+
+async function isFingerprintAvailable(){
+  if (!window.PublicKeyCredential || !navigator.credentials) return false;
+  try {
+    return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  } catch(e){ return false; }
+}
+
+function randomChallenge(){
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return arr;
+}
+
+async function registerFingerprint(userLabel){
+  const cred = await navigator.credentials.create({
+    publicKey: {
+      challenge: randomChallenge(),
+      rp: { name: 'BSD CRM' },
+      user: {
+        id: randomChallenge(),
+        name: userLabel || 'bsd-user',
+        displayName: userLabel || 'BSD CRM'
+      },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
+      timeout: 60000
+    }
+  });
+  if (!cred) throw new Error('לא ניתן היה ליצור אימות טביעת אצבע');
+  const idB64 = btoa(String.fromCharCode.apply(null, new Uint8Array(cred.rawId)));
+  localStorage.setItem(FP_STORAGE_KEY, idB64);
+  return true;
+}
+
+async function verifyFingerprint(){
+  const idB64 = localStorage.getItem(FP_STORAGE_KEY);
+  if (!idB64) return false;
+  const rawId = Uint8Array.from(atob(idB64), c => c.charCodeAt(0));
+  const assertion = await navigator.credentials.get({
+    publicKey: {
+      challenge: randomChallenge(),
+      allowCredentials: [{ id: rawId, type: 'public-key' }],
+      userVerification: 'required',
+      timeout: 60000
+    }
+  });
+  return !!assertion;
+}
+
+function forgetFingerprint(){
+  localStorage.removeItem(FP_STORAGE_KEY);
+}
+
 function scrollTableBy(btn, amount){
   const wrap = btn.closest('.table-scroll-wrap');
   const inner = wrap && wrap.querySelector('.table-scroll-inner');
@@ -209,13 +281,47 @@ function translateAuthError(error) {
     }, 1000);
   }
 
+  function showLockScreen(){
+    if (document.getElementById('fpLockOverlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'fpLockOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:#0e1b34;display:flex;align-items:center;justify-content:center;z-index:10000;';
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:34px 30px;max-width:340px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5);font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
+        <div style="font-size:2.6rem;margin-bottom:10px;">🔒</div>
+        <div style="font-weight:700;color:#0e1b34;font-size:1.05rem;margin-bottom:6px;">המסך ננעל מטעמי אבטחה</div>
+        <div style="color:#6c7488;font-size:.85rem;margin-bottom:22px;">אמת עם טביעת אצבע כדי להמשיך</div>
+        <button id="fpUnlockBtn" style="background:#0e1b34;color:#fff;border:none;border-radius:8px;padding:12px 26px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;width:100%;margin-bottom:10px;">🔓 אמת עם טביעת אצבע</button>
+        <button id="fpLogoutBtn" style="background:none;border:none;color:#999;font-size:.8rem;cursor:pointer;text-decoration:underline;">התנתק לגמרי</button>
+        <div id="fpLockError" style="color:#b00020;font-size:.78rem;margin-top:10px;"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    document.getElementById('fpUnlockBtn').addEventListener('click', async function(){
+      const errEl = document.getElementById('fpLockError');
+      errEl.textContent = '';
+      try {
+        const ok = await verifyFingerprint();
+        if (ok){ overlay.remove(); lastActivity = Date.now(); }
+        else { errEl.textContent = 'האימות נכשל, נסה שוב'; }
+      } catch(e){
+        errEl.textContent = 'האימות בוטל או נכשל';
+      }
+    });
+    document.getElementById('fpLogoutBtn').addEventListener('click', bsdLogout);
+  }
+
   function checkIdle(){
     const idleFor = Date.now() - lastActivity;
     if (idleFor >= IDLE_LIMIT_MS){
       if (countdownInterval) clearInterval(countdownInterval);
       const overlay = document.getElementById('idleWarningOverlay');
       if (overlay) overlay.remove();
-      bsdLogout();
+      if (isFingerprintRegistered()){
+        showLockScreen();
+      } else {
+        bsdLogout();
+      }
       return;
     }
     if (!warningShown && idleFor >= (IDLE_LIMIT_MS - WARNING_MS)){
