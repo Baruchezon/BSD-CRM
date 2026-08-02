@@ -305,7 +305,8 @@ button:disabled, .btn:disabled{
   flex-direction:column;
   padding:20px 16px 0;
 }
-.modal > form, .modal > div:not(.modal-actions){ overflow-y:auto; flex:1; padding-bottom:16px; }
+.modal > form, .modal > div:not(.modal-actions):not(.agr-note):not(.type-toggle){ overflow-y:auto; flex:1; padding-bottom:16px; }
+.modal > .agr-note, .modal > .type-toggle{ flex:none; }
 .modal-actions{
   position:sticky;
   bottom:0;
