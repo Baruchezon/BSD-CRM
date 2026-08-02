@@ -145,7 +145,15 @@ function isFingerprintRegistered(){
   return !!localStorage.getItem(FP_STORAGE_KEY);
 }
 
+function isAndroidMobile(){
+  return /Android/i.test(navigator.userAgent);
+}
+
 async function isFingerprintAvailable(){
+  // By request: fingerprint quick-unlock is offered on Android mobile only -
+  // never on desktop (Windows Hello / Touch ID etc. would otherwise also
+  // qualify as a "platform authenticator" and trigger the same prompts there).
+  if (!isAndroidMobile()) return false;
   if (!window.PublicKeyCredential || !navigator.credentials) return false;
   try {
     // Some Android/Chrome configurations never resolve this call at all
