@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608021715">
+<link rel="stylesheet" href="css/style.css?v=202608030004">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:960px;margin:0 auto;}
@@ -98,8 +98,14 @@
 
   <div class="filters">
     <input type="text" id="fSearch" placeholder="חיפוש לפי שם...">
-    <input type="date" id="fDateFrom" title="מתאריך">
-    <input type="date" id="fDateTo" title="עד תאריך">
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <label for="fDateFrom" style="font-size:.72rem;color:#666;">מתאריך</label>
+      <input type="date" id="fDateFrom" title="מתאריך">
+    </div>
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <label for="fDateTo" style="font-size:.72rem;color:#666;">עד תאריך</label>
+      <input type="date" id="fDateTo" title="עד תאריך">
+    </div>
     <label id="adminToggleWrap" style="display:none;align-items:center;gap:6px;font-size:.85rem;color:#555;cursor:pointer;">
       <input type="checkbox" id="fAdminAll" style="width:auto;"> הצג את כל ההודעות במערכת
     </label>
@@ -112,9 +118,9 @@
 
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202608021715"></script>
-<script src="js/supabaseClient.js?v=202608021715"></script>
-<script src="js/auth.js?v=202608021715"></script>
+<script src="js/config.js?v=202608030004"></script>
+<script src="js/supabaseClient.js?v=202608030004"></script>
+<script src="js/auth.js?v=202608030004"></script>
 <script>
 let CURRENT_PROFILE = null;
 let ALL_USERS = [];
