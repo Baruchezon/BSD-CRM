@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608021700">
+<link rel="stylesheet" href="css/style.css?v=202608021730">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Gveret+Levin&display=swap" rel="stylesheet">
@@ -82,7 +82,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 17:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 17:30</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -127,7 +127,7 @@
     <div>
       <h2 id="welcomeName">טוען...</h2>
       <span id="welcomeRole"></span>
-      <div id="welcomeBlessing" style="font-family:'Gveret Levin',cursive;color:#0e1b34;background:#fdf1cf;display:inline-block;padding:4px 14px;border-radius:8px;border:1px solid var(--gold);font-size:1.4rem;font-weight:400;margin-top:6px;"></div>
+      <div id="welcomeBlessing" style="font-family:'Gveret Levin',cursive;color:#0e1b34;background:#fdf1cf;display:inline-block;padding:3px 11px;border-radius:7px;border:1px solid var(--gold);font-size:1rem;font-weight:400;margin-top:6px;"></div>
     </div>
     <div>
       <div style="position:relative;display:inline-block;margin-left:10px;">
@@ -216,10 +216,10 @@
   </div>
 </div>
 
-<script src="js/config.js?v=202608021700"></script>
-<script src="js/supabaseClient.js?v=202608021700"></script>
-<script src="js/auth.js?v=202608021700"></script>
-<script src="js/push.js?v=202608021700"></script>
+<script src="js/config.js?v=202608021730"></script>
+<script src="js/supabaseClient.js?v=202608021730"></script>
+<script src="js/auth.js?v=202608021730"></script>
+<script src="js/push.js?v=202608021730"></script>
 <script>
 let currentPeriod = 'week';
 let customFrom = null, customTo = null;
@@ -899,6 +899,33 @@ function showTasksPopup(tasks){
   document.getElementById('todayTasksCloseBtn').addEventListener('click', () => overlay.remove());
 }
 
+// ============================================================
+// VERSION UPDATE NOTICE — reads the version straight from the
+// header stamp (single source of truth, already bumped on every
+// deploy), and shows a small dismissible card once per version.
+// ============================================================
+function checkVersionNotice(){
+  const stampEl = document.querySelector('.brand span');
+  if (!stampEl) return;
+  const version = stampEl.textContent.trim();
+  if (!version) return;
+  if (localStorage.getItem('bsdSeenVersion') === version) return;
+
+  const isFirstEver = !localStorage.getItem('bsdSeenVersion');
+  localStorage.setItem('bsdSeenVersion', version);
+  if (isFirstEver) return; // don't nag on a brand-new device/browser
+
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;bottom:20px;left:20px;background:#0e1b34;color:#f3e7c4;border:1px solid #c9a24b;border-radius:12px;padding:14px 18px;box-shadow:0 10px 30px rgba(0,0,0,.35);z-index:250;max-width:280px;font-family:inherit;';
+  box.innerHTML = `
+    <div style="font-weight:700;font-size:.92rem;margin-bottom:3px;">✨ גרסה מעודכנת</div>
+    <div style="font-size:.78rem;color:#cfd6e6;margin-bottom:10px;">${esc(version)}</div>
+    <button id="verNoticeClose" style="background:#c9a24b;color:#1c2333;border:none;border-radius:7px;padding:6px 16px;font-family:inherit;font-size:.8rem;font-weight:700;cursor:pointer;">סגור</button>
+  `;
+  document.body.appendChild(box);
+  document.getElementById('verNoticeClose').addEventListener('click', () => box.remove());
+}
+
 function initTasksPopupWatcher(profile){
   TASKS_POPUP_PROFILE = profile;
   checkTasksPopup();
@@ -1017,6 +1044,7 @@ async function sendPopupReply(i, recipientId){
   await populateActivityUserFilter(profile);
   await Promise.all([loadGeneral(), loadPeriod(), loadGauges(), loadActivity()]);
   initTasksPopupWatcher(profile);
+  checkVersionNotice();
   checkNewMessagesPopup(profile);
   refreshNavMsgBadge();
   setInterval(refreshNavMsgBadge, 60 * 1000);
