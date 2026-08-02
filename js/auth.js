@@ -44,6 +44,20 @@ async function bsdLogin(email, password) {
 }
 
 async function bsdLogout() {
+  // The everyday "sign out" button: if this device has fingerprint
+  // quick-unlock enabled, the whole point is that a fingerprint scan is
+  // all that's needed to get back in - a real server-side sign-out here
+  // would force email+password again next time, defeating that. So this
+  // just leaves the login screen with the session still valid underneath,
+  // exactly like the 30-min idle lock screen already does.
+  if (isFingerprintRegistered()) {
+    window.location.href = 'login.html';
+    return;
+  }
+  await bsdFullLogout();
+}
+
+async function bsdFullLogout() {
   const user = (await window.supabaseClient.auth.getUser()).data.user;
   if (user) {
     await window.supabaseClient.from('activity_log').insert({
@@ -317,7 +331,7 @@ function translateAuthError(error) {
         errEl.textContent = 'האימות בוטל או נכשל';
       }
     });
-    document.getElementById('fpLogoutBtn').addEventListener('click', bsdLogout);
+    document.getElementById('fpLogoutBtn').addEventListener('click', bsdFullLogout);
   }
 
   function checkIdle(){
