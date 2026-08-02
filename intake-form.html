@@ -43,7 +43,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 13:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 14:15</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -59,8 +59,15 @@
   </div>
     <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
     <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
-    <a href="stats.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">📊 סטטיסטיקה</a>
-    <a id="navUsersLink" href="users.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משתמשים</a>
+    <a href="messages.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;position:relative;">💬 הודעות<span id="navMsgBadge" style="display:none;position:absolute;top:2px;left:2px;background:#b3402c;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;font-weight:700;"></span></a>
+    <div id="navToolsWrap" style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">🛠️ כלים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="messages.html?admin_view=1" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ כל ההודעות במערכת</a>
+      <a href="stats.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 סטטיסטיקה</a>
+      <a href="users.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👥 משתמשים</a>
+    </div>
+  </div>
     <div style="position:relative;display:inline-block;">
     <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">⚙️ הגדרות ▾</button>
     <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
@@ -498,9 +505,9 @@ function setVal(id, v){ const el = document.getElementById(id); if (el && (v !==
   if (!CURRENT_PROFILE) return;
   const name = (CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email;
   document.getElementById('headerUserInfo').textContent = name + ' · ' + new Date().toLocaleDateString('he-IL');
+  refreshNavMsgBadge();
   document.getElementById('fillerName').textContent = name;
   document.getElementById('fillerDate').textContent = new Date().toLocaleDateString('he-IL');
-  if (CURRENT_PROFILE.role !== 'admin'){ const navUsers = document.getElementById('navUsersLink'); if (navUsers) navUsers.style.display = 'none'; }
 
   if (EXISTING_BUSINESS_ID){
     const { data: biz, error: bizErr } = await window.supabaseClient.from('businesses').select('*').eq('id', EXISTING_BUSINESS_ID).single();

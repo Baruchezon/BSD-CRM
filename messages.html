@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - הודעות</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=20260802">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:960px;margin:0 auto;}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+  .toolbar h2{margin:0;color:var(--navy);font-size:1.3rem;}
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center;}
+  .filters input, .filters select{padding:9px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .filters input[type=text]{min-width:200px;}
+  .btn{border:none;border-radius:8px;padding:8px 14px;font-family:inherit;font-size:.8rem;cursor:pointer;font-weight:700;}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);}
+  .btn-success{background:var(--success);color:#fff;}
+  .conv-list{display:flex;flex-direction:column;gap:8px;}
+  .conv-row{background:#fff;border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 4px 12px rgba(14,27,52,.06);border:1px solid #f0ede4;transition:transform .1s ease, box-shadow .1s ease;}
+  .conv-row:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(14,27,52,.1);}
+  .conv-row.unread{border-color:#c9a24b;background:#fffdf6;}
+  .conv-avatar{width:42px;height:42px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;flex-shrink:0;}
+  .conv-main{flex:1;min-width:0;}
+  .conv-name{font-weight:700;color:#1c2333;font-size:.92rem;}
+  .conv-preview{font-size:.82rem;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
+  .conv-meta{text-align:left;flex-shrink:0;}
+  .conv-time{font-size:.72rem;color:#999;}
+  .unread-badge{display:inline-block;background:#b3402c;color:#fff;font-size:.7rem;font-weight:700;border-radius:10px;padding:2px 8px;margin-top:4px;}
+  .empty-msg{text-align:center;color:#999;padding:40px 20px;}
+  .bubble-row{display:flex;margin-bottom:10px;}
+  .bubble-row.mine{justify-content:flex-start;}
+  .bubble-row.theirs{justify-content:flex-end;}
+  .bubble{max-width:75%;padding:10px 14px;border-radius:14px;font-size:.88rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+  .bubble.mine{background:var(--navy);color:#fff;border-bottom-left-radius:4px;}
+  .bubble.theirs{background:#f0ede4;color:#1c2333;border-bottom-right-radius:4px;}
+  .bubble-time{font-size:.68rem;color:#999;margin-top:3px;}
+  .bubble-row.mine .bubble-time{text-align:left;}
+  .bubble-row.theirs .bubble-time{text-align:right;}
+  .thread-wrap{max-height:50vh;overflow-y:auto;padding:6px 4px;margin-bottom:14px;}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 14:15</span></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+  <div class="nav" style="display:flex;gap:6px;">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="tasks.html" class="nav-tasks">✅ משימות</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">📋 טפסים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="intake-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🧾 טופס סיכום עסק</a>
+      <a href="buyer-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🧍 טופס סיכום קונה</a>
+      <a id="navFormsAllLink" href="intake-forms.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 כל הטפסים שהוגשו</a>
+    </div>
+  </div>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+    <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
+    <a href="messages.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;position:relative;">💬 הודעות<span id="navMsgBadge" style="display:none;position:absolute;top:2px;left:2px;background:#b3402c;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;font-weight:700;"></span></a>
+    <div id="navToolsWrap" style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">🛠️ כלים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="messages.html?admin_view=1" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ כל ההודעות במערכת</a>
+      <a href="stats.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 סטטיסטיקה</a>
+      <a href="users.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👥 משתמשים</a>
+    </div>
+  </div>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">⚙️ הגדרות ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="backup.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">💾 גיבוי נתונים</a>
+      <a href="javascript:void(0)" id="pushBellBtn" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔕 הפעל התראות</a>
+      <a href="help.html" target="_blank" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">❓ עזרה</a>
+      <a href="javascript:void(0)" onclick="openMyProfile()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👤 פרטים אישיים</a>
+      <a href="javascript:void(0)" onclick="openChangePassword()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔑 שנה סיסמה</a>
+    </div>
+  </div>
+  </div>
+  <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+</div>
+
+<div class="wrap" id="mainWrap" style="display:none;">
+  <div class="toolbar">
+    <h2 id="pageTitle">💬 ההודעות שלי</h2>
+    <button class="btn btn-primary" onclick="openNewMessageModal()">✏️ הודעה חדשה</button>
+  </div>
+
+  <div class="filters">
+    <input type="text" id="fSearch" placeholder="חיפוש לפי שם...">
+    <input type="date" id="fDateFrom" title="מתאריך">
+    <input type="date" id="fDateTo" title="עד תאריך">
+    <label id="adminToggleWrap" style="display:none;align-items:center;gap:6px;font-size:.85rem;color:#555;cursor:pointer;">
+      <input type="checkbox" id="fAdminAll" style="width:auto;"> הצג את כל ההודעות במערכת
+    </label>
+  </div>
+
+  <div class="conv-list" id="convList">
+    <div class="empty-msg">טוען...</div>
+  </div>
+</div>
+
+<div id="toastBox"></div>
+
+<script src="js/config.js?v=20260802"></script>
+<script src="js/supabaseClient.js?v=20260802"></script>
+<script src="js/auth.js?v=20260802"></script>
+<script>
+let CURRENT_PROFILE = null;
+let ALL_USERS = [];
+let ALL_MESSAGES = [];
+let CONVERSATIONS = [];
+let VIEWING_KEY = null;
+const IS_ADMIN_VIEW_PARAM = new URLSearchParams(location.search).get('admin_view') === '1';
+
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
+function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL', {hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}); }catch(e){ return iso; } }
+function userName(id){
+  if (!id) return '—';
+  const u = ALL_USERS.find(x=>x.id===id);
+  return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : 'משתמש שהוסר';
+}
+function initials(name){
+  const parts = (name||'?').trim().split(/\s+/);
+  return ((parts[0]||'')[0] || '?') + ((parts[1]||'')[0] || '');
+}
+function isPrivileged(){
+  return !!(CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager'));
+}
+function toast(msg){
+  let box = document.getElementById('toastBox');
+  const isError = /שגיאה|error/i.test(msg);
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed;bottom:24px;left:24px;background:${isError ? '#b00020' : 'var(--navy,#0e1b34)'};color:#fff;padding:14px 18px;border-radius:10px;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.35);z-index:200;max-width:320px;`;
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
+}
+
+async function loadMessages(){
+  const adminAll = isPrivileged() && document.getElementById('fAdminAll').checked;
+  document.getElementById('pageTitle').textContent = adminAll ? '👁️ כל ההודעות במערכת' : '💬 ההודעות שלי';
+
+  let query = window.supabaseClient.from('messages').select('*').order('created_at', { ascending: true });
+  if (!adminAll){
+    query = query.or(`sender_id.eq.${CURRENT_PROFILE.id},recipient_id.eq.${CURRENT_PROFILE.id}`);
+  }
+  const { data, error } = await query;
+  if (error){ toast('שגיאה בטעינת הודעות: ' + error.message); return; }
+  ALL_MESSAGES = data || [];
+  buildConversations(adminAll);
+  renderConvList();
+}
+
+function buildConversations(adminAll){
+  const map = new Map();
+  ALL_MESSAGES.forEach(m => {
+    let key, partnerA, partnerB;
+    if (adminAll){
+      const ids = [m.sender_id, m.recipient_id].sort();
+      key = ids.join('_');
+      partnerA = ids[0]; partnerB = ids[1];
+    } else {
+      const otherId = m.sender_id === CURRENT_PROFILE.id ? m.recipient_id : m.sender_id;
+      key = otherId;
+      partnerA = CURRENT_PROFILE.id; partnerB = otherId;
+    }
+    if (!map.has(key)){
+      map.set(key, { key, partnerA, partnerB, messages: [], unread: 0 });
+    }
+    const conv = map.get(key);
+    conv.messages.push(m);
+    if (!adminAll && m.recipient_id === CURRENT_PROFILE.id && !m.read_at) conv.unread++;
+  });
+  CONVERSATIONS = [...map.values()].map(c => {
+    c.messages.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+    c.lastMessage = c.messages[c.messages.length - 1];
+    return c;
+  }).sort((a,b) => new Date(b.lastMessage.created_at) - new Date(a.lastMessage.created_at));
+}
+
+function conversationLabel(conv, adminAll){
+  if (adminAll){
+    return userName(conv.partnerA) + ' ↔ ' + userName(conv.partnerB);
+  }
+  return userName(conv.partnerB);
+}
+
+function renderConvList(){
+  const search = document.getElementById('fSearch').value.trim().toLowerCase();
+  const dFrom = document.getElementById('fDateFrom').value;
+  const dTo = document.getElementById('fDateTo').value;
+  const adminAll = isPrivileged() && document.getElementById('fAdminAll').checked;
+
+  let rows = CONVERSATIONS.filter(c => {
+    const label = conversationLabel(c, adminAll).toLowerCase();
+    if (search && !label.includes(search)) return false;
+    const lastDate = c.lastMessage.created_at.slice(0,10);
+    if (dFrom && lastDate < dFrom) return false;
+    if (dTo && lastDate > dTo) return false;
+    return true;
+  });
+
+  const list = document.getElementById('convList');
+  if (rows.length === 0){
+    list.innerHTML = '<div class="empty-msg">אין הודעות להצגה</div>';
+    return;
+  }
+
+  list.innerHTML = rows.map(c => {
+    const label = conversationLabel(c, adminAll);
+    const preview = (c.lastMessage.sender_id === CURRENT_PROFILE.id && !adminAll ? 'אתה: ' : (adminAll ? userName(c.lastMessage.sender_id) + ': ' : '')) + c.lastMessage.body;
+    return `
+      <div class="conv-row ${c.unread > 0 ? 'unread' : ''}" onclick="openThread('${c.key}', ${adminAll})">
+        <div class="conv-avatar">${esc(initials(label))}</div>
+        <div class="conv-main">
+          <div class="conv-name">${esc(label)}</div>
+          <div class="conv-preview">${esc(preview)}</div>
+        </div>
+        <div class="conv-meta">
+          <div class="conv-time">${fmtDateTime(c.lastMessage.created_at)}</div>
+          ${c.unread > 0 ? `<div class="unread-badge">${c.unread} חדשות</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function openThread(key, adminAll){
+  const conv = CONVERSATIONS.find(c => c.key === key);
+  if (!conv) return;
+  VIEWING_KEY = key;
+
+  const iAmParticipant = (conv.partnerA === CURRENT_PROFILE.id || conv.partnerB === CURRENT_PROFILE.id);
+  const otherId = conv.partnerA === CURRENT_PROFILE.id ? conv.partnerB : conv.partnerA;
+  const canReply = !adminAll || iAmParticipant;
+  const label = conversationLabel(conv, adminAll);
+
+  // סימון כנקרא (רק במצב אישי, כשההודעות מיועדות אלי)
+  if (!adminAll){
+    const unreadIds = conv.messages.filter(m => m.recipient_id === CURRENT_PROFILE.id && !m.read_at).map(m => m.id);
+    if (unreadIds.length){
+      await window.supabaseClient.from('messages').update({ read_at: new Date().toISOString() }).in('id', unreadIds);
+      unreadIds.forEach(id => { const m = ALL_MESSAGES.find(x=>x.id===id); if (m) m.read_at = new Date().toISOString(); });
+      conv.unread = 0;
+      renderConvList();
+      refreshNavBadge();
+    }
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'threadOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:24px 26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
+      <h3 style="margin:0 0 14px;color:#0e1b34;border-right:4px solid #c9a24b;padding-right:10px;">${esc(label)}</h3>
+      <div class="thread-wrap" id="threadBubbles"></div>
+      ${canReply ? `
+        <textarea id="replyText" placeholder="כתוב הודעה..." style="width:100%;min-height:70px;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;resize:vertical;"></textarea>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px;">
+          <button onclick="document.getElementById('threadOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
+          <button onclick="sendReply('${otherId}')" style="background:#0e1b34;color:#fff;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">📤 שלח</button>
+        </div>` : `
+        <div style="text-align:left;margin-top:10px;">
+          <button onclick="document.getElementById('threadOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
+        </div>`}
+    </div>`;
+  document.body.appendChild(overlay);
+  renderBubbles(conv, adminAll);
+}
+
+function renderBubbles(conv, adminAll){
+  const box = document.getElementById('threadBubbles');
+  if (!box) return;
+  box.innerHTML = conv.messages.map(m => {
+    const mine = m.sender_id === CURRENT_PROFILE.id;
+    const side = adminAll ? (m.sender_id === conv.partnerA ? 'mine' : 'theirs') : (mine ? 'mine' : 'theirs');
+    const senderLabel = adminAll ? userName(m.sender_id) + ' · ' : '';
+    return `
+      <div class="bubble-row ${side}">
+        <div>
+          <div class="bubble ${side}">${senderLabel ? `<b style="font-size:.75rem;opacity:.8;">${esc(senderLabel)}</b><br>` : ''}${esc(m.body)}</div>
+          <div class="bubble-time">${fmtDateTime(m.created_at)}</div>
+        </div>
+      </div>`;
+  }).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendReply(otherId){
+  const text = document.getElementById('replyText').value.trim();
+  if (!text) return;
+  const payload = { sender_id: CURRENT_PROFILE.id, recipient_id: otherId, body: text };
+  const { data, error } = await window.supabaseClient.from('messages').insert(payload).select().single();
+  if (error){ toast('שגיאה בשליחה: ' + error.message); return; }
+  ALL_MESSAGES.push(data);
+  const adminAll = isPrivileged() && document.getElementById('fAdminAll').checked;
+  buildConversations(adminAll);
+  renderConvList();
+  const conv = CONVERSATIONS.find(c => c.key === VIEWING_KEY) || CONVERSATIONS.find(c => (c.partnerA===CURRENT_PROFILE.id && c.partnerB===otherId) || (c.partnerB===CURRENT_PROFILE.id && c.partnerA===otherId));
+  document.getElementById('replyText').value = '';
+  if (conv) renderBubbles(conv, adminAll);
+}
+
+function openNewMessageModal(){
+  const others = ALL_USERS.filter(u => u.id !== CURRENT_PROFILE.id);
+  const overlay = document.createElement('div');
+  overlay.id = 'newMsgOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:440px;width:100%;padding:24px 26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
+      <h3 style="margin:0 0 14px;color:#0e1b34;border-right:4px solid #c9a24b;padding-right:10px;">הודעה חדשה</h3>
+      <label style="display:block;font-size:.8rem;color:#666;margin-bottom:4px;">אל</label>
+      <select id="newMsgTo" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;margin-bottom:12px;box-sizing:border-box;">
+        ${others.map(u => `<option value="${u.id}">${esc(u.full_name && u.full_name.trim() ? u.full_name : u.email)}${u.role==='admin' ? ' (אדמין)' : ''}</option>`).join('')}
+      </select>
+      <label style="display:block;font-size:.8rem;color:#666;margin-bottom:4px;">הודעה</label>
+      <textarea id="newMsgBody" style="width:100%;min-height:90px;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;resize:vertical;"></textarea>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+        <button onclick="document.getElementById('newMsgOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
+        <button onclick="sendNewMessage()" style="background:#0e1b34;color:#fff;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">📤 שלח</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function sendNewMessage(){
+  const to = document.getElementById('newMsgTo').value;
+  const text = document.getElementById('newMsgBody').value.trim();
+  if (!to || !text) return;
+  const { data, error } = await window.supabaseClient.from('messages').insert({ sender_id: CURRENT_PROFILE.id, recipient_id: to, body: text }).select().single();
+  if (error){ toast('שגיאה בשליחה: ' + error.message); return; }
+  ALL_MESSAGES.push(data);
+  document.getElementById('newMsgOverlay').remove();
+  buildConversations(false);
+  renderConvList();
+  toast('ההודעה נשלחה');
+}
+
+async function refreshNavBadge(){
+  const { data } = await window.supabaseClient.from('messages').select('id').eq('recipient_id', CURRENT_PROFILE.id).is('read_at', null);
+  const badge = document.getElementById('navMsgBadge');
+  const count = data ? data.length : 0;
+  if (badge){
+    badge.style.display = count > 0 ? 'inline-block' : 'none';
+    badge.textContent = count;
+  }
+}
+
+document.getElementById('fSearch').addEventListener('input', renderConvList);
+document.getElementById('fDateFrom').addEventListener('change', renderConvList);
+document.getElementById('fDateTo').addEventListener('change', renderConvList);
+document.getElementById('fAdminAll').addEventListener('change', loadMessages);
+
+(async function init(){
+  const profile = await requireAuth();
+  if (!profile) return;
+  CURRENT_PROFILE = profile;
+
+  const { data: users } = await window.supabaseClient.from('profiles').select('id, full_name, email, role');
+  ALL_USERS = users || [];
+
+  document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email) + ' · ' + new Date().toLocaleDateString('he-IL');
+
+  if (!isPrivileged()){
+    const toolsNav = document.getElementById('navToolsWrap');
+    if (toolsNav) toolsNav.style.display = 'none';
+  } else {
+    document.getElementById('adminToggleWrap').style.display = 'inline-flex';
+    if (IS_ADMIN_VIEW_PARAM) document.getElementById('fAdminAll').checked = true;
+  }
+
+  document.getElementById('mainWrap').style.display = 'block';
+  await loadMessages();
+  await refreshNavBadge();
+})();
+</script>
+</body>
+</html>

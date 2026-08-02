@@ -111,6 +111,11 @@ async function requireAuth() {
     navFormsAll.style.display = 'none';
   }
 
+  const navTools = document.getElementById('navToolsWrap');
+  if (navTools && profile.role !== 'admin' && profile.role !== 'manager') {
+    navTools.style.display = 'none';
+  }
+
   return profile;
 }
 
@@ -299,6 +304,23 @@ async function submitMyProfile(userId){
   if (headerEl && typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE){
     Object.assign(CURRENT_PROFILE, payload);
     headerEl.textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL');
+  }
+}
+
+// ============================================================
+// UNREAD MESSAGES NAV BADGE — self-contained (fetches its own
+// user), so it can be called identically from every page's init
+// right after requireAuth() resolves.
+// ============================================================
+async function refreshNavMsgBadge(){
+  const { data: { user } } = await window.supabaseClient.auth.getUser();
+  if (!user) return;
+  const { data } = await window.supabaseClient.from('messages').select('id').eq('recipient_id', user.id).is('read_at', null);
+  const badge = document.getElementById('navMsgBadge');
+  const count = data ? data.length : 0;
+  if (badge){
+    badge.style.display = count > 0 ? 'inline-block' : 'none';
+    badge.textContent = count;
   }
 }
 
