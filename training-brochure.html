@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>BSD - הכשרת מתווכי עסקים</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Heebo", "Rubik", "Arial Hebrew", sans-serif;
+    direction: rtl;
+    color: #1c2333;
+    background: #f4f2ec;
+  }
+  .page {
+    width: 210mm;
+    height: 297mm;
+    position: relative;
+    background: #fbfaf6;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    page-break-after: always;
+  }
+  .header {
+    height: 30mm;
+    background: linear-gradient(90deg, #0e1b34 0%, #16264a 55%, #0e1b34 100%);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14mm;
+    position: relative;
+    border-bottom: 2px solid #c9a24b;
+  }
+  .header .logo-block { display: flex; align-items: center; gap: 10px; }
+  .header .logo-block img { height: 20mm; width: 20mm; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35)); }
+  .header .brandname { color: #f3e7c4; line-height: 1.2; }
+  .header .brandname .main { font-size: 15pt; font-weight: 700; letter-spacing: 0.5px; color: #f3e7c4; }
+  .header .brandname .sub { font-size: 8pt; color: #b9c2d6; letter-spacing: 1.5px; }
+  .header .date-block { text-align: left; direction: ltr; color: #d9c791; font-size: 9.5pt; line-height: 1.5; border-inline-start: 1px solid rgba(255,255,255,0.2); padding-inline-start: 14px; }
+  .header .date-block .label { color: #8993ab; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 2px; }
+  .content { flex: 1; padding: 14mm 16mm 6mm 16mm; display: flex; flex-direction: column; overflow: hidden; }
+  .content h1 { font-size: 20pt; color: #0e1b34; margin: 0 0 4px 0; border-inline-start: 5px solid #c9a24b; padding-inline-start: 12px; }
+  .content .doc-subtitle { font-size: 10pt; color: #6c7488; margin: 0 0 6mm 15px; padding-inline-start: 12px; }
+  .footer { height: 26mm; background: #0e1b34; color: #e7e2d2; padding: 5mm 14mm 4mm 14mm; position: relative; border-top: 2px solid #c9a24b; }
+  .footer .tagline { text-align: center; font-size: 10.5pt; color: #f3e7c4; font-weight: 600; letter-spacing: 0.3px; margin-bottom: 3mm; }
+  .footer .cta-row { display: flex; justify-content: center; align-items: center; gap: 4px; font-size: 8.5pt; color: #c7cee2; flex-wrap: wrap; }
+  .footer .cta-row span { display: inline-flex; align-items: center; gap: 6px; }
+  .footer .cta-row .dot { width: 3px; height: 3px; border-radius: 50%; background: #c9a24b; display: inline-block; }
+  .footer .cta-row .num { direction: ltr; unicode-bidi: isolate; }
+  .footer .page-num { position: absolute; bottom: 3mm; left: 14mm; font-size: 8pt; color: #7d87a3; direction: ltr; }
+.content h2.section{font-size:13.5pt;color:#0e1b34;margin:5mm 0 3mm;border-inline-start:4px solid #c9a24b;padding-inline-start:10px;}
+.content .hero{background:linear-gradient(135deg,#0e1b34,#16264a);color:#f3e7c4;border-radius:10px;padding:8mm 10mm;text-align:center;margin-bottom:6mm;}
+.content .hero .big{font-size:15pt;font-weight:800;margin-bottom:3mm;}
+.content .hero .small{font-size:9.5pt;color:#cfd6e6;}
+.content ul.bullets{margin:0 0 4mm;padding-inline-start:5mm;font-size:9.8pt;line-height:1.55;}
+.content ul.bullets li{margin-bottom:2mm;}
+.content ul.bullets li b{color:#0e1b34;}
+.content .check{color:#2e9e5b;font-weight:800;}
+.content .two-col{display:flex;gap:6mm;}
+.content .two-col > div{flex:1;}
+.content .meeting-box{background:#f7f5ef;border-radius:8px;padding:5mm 6mm;margin-bottom:4mm;}
+.content .meeting-box .m-title{font-weight:800;color:#0e1b34;font-size:10.5pt;margin-bottom:2mm;}
+.content .meeting-box .m-goal{font-size:8.8pt;color:#6c7488;margin-top:2mm;font-style:italic;}
+.content .price-box{background:linear-gradient(135deg,#fdf1cf,#f7e6b8);border:1.5px solid #c9a24b;border-radius:10px;padding:6mm 8mm;text-align:center;margin:4mm 0;}
+.content .price-box .price{font-size:18pt;font-weight:800;color:#0e1b34;}
+.content .price-box .price-note{font-size:9pt;color:#5c5648;margin-top:1mm;}
+.content .cta-box{background:#0e1b34;color:#f3e7c4;border-radius:10px;padding:6mm 8mm;text-align:center;margin-top:4mm;}
+.content .cta-box .cta-title{font-size:12pt;font-weight:800;margin-bottom:2mm;}
+.content .cta-box .cta-text{font-size:9.3pt;color:#cfd6e6;line-height:1.6;}
+
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="header">
+    <div class="logo-block">
+      <img src="bsd_logo.png" alt="BSD Logo">
+      <div class="brandname">
+        <span class="main">BSD BUSINESS BROKERS ISRAEL</span><br>
+        <span class="sub">רשת התיווך העסקי המקצועית של ישראל</span>
+      </div>
+    </div>
+    <div class="date-block">
+      <span class="label">Date</span>
+      02/08/2026
+    </div>
+  </div>
+  <div class="content">
+    <h1>הכשרת מתווכי עסקים</h1>
+    <div class="doc-subtitle">מהכשרה לעסקה - המסלול המעשי היחיד מסוגו בישראל</div>
+
+    <div class="hero">
+      <div class="big">ההכשרה היחידה בארץ שמובילה אתכם צעד-צעד מהכשרה מקצועית מלאה ועד לעסקה אמיתית בשטח</div>
+      <div class="small">לא עוד קורס. לא עוד ידע תיאורטי. מסלול מעשי, מלווה אישית, מבוסס ניסיון שטח, עסקאות אמיתיות ותהליך עבודה מוכח של BSD.</div>
+    </div>
+
+    <h2 class="section">מהכשרה לעסקה</h2>
+    <ul class="bullets">
+      <li><span class="check">✓</span> <b>לא עוד קורס.</b> לא עוד ידע תיאורטי בלבד.</li>
+      <li><span class="check">✓</span> זהו מסלול מקצועי שמוביל אתכם שלב אחר שלב - מהבנה אמיתית של התחום ועד יציאה לעסקה בפועל, בליווי צמוד של צוות BSD.</li>
+      <li><span class="check">✓</span> שיטת BSD מבוססת ניסיון שטח, עסקאות אמיתיות ותהליך עבודה מוכח.</li>
+    </ul>
+
+    <h2 class="section">למי המסלול מתאים</h2>
+    <ul class="bullets">
+      <li><span class="check">✓</span> מתווכי נדל"ן שרוצים להיכנס לעולם רווחי ומאתגר יותר</li>
+      <li>עצמאים ואנשי מכירות שמחפשים מקור הכנסה נוסף ומשמעותי</li>
+      <li>יזמים שרוצים להבין עסקאות עומק</li>
+      <li>מי שמוכן לעבוד ברצינות, ולא רק "ללמוד"</li>
+      <li><span class="check">✓</span> המסלול אינו מתאים למי שמחפש ידע כללי בלבד - הוא מיועד למי שמוכן לצאת לשטח.</li>
+    </ul>
+
+    <div class="cta-box">
+      <div class="cta-title">הצטרפות לצוות BSD Business Brokers Israel</div>
+      <div class="cta-text">בוגרי המסלול המצטיינים מוזמנים להצטרף לצוות המתווכים של BSD - רשת התיווך העסקי המקצועית של ישראל, ולהתחיל לעבוד על עסקאות אמיתיות תחת ליווי ומותג מוביל בתחום.</div>
+    </div>
+  </div>
+  <div class="footer">
+    <div class="tagline">משביחים עסקים, מלווים בנאמנות, ומובילים לעסקה הנכונה</div>
+    <div class="cta-row">
+      <span>ברוך איזון</span>&nbsp;&nbsp;&nbsp;<span class="dot"></span>&nbsp;&nbsp;&nbsp;<span class="num">054-2424999</span>&nbsp;&nbsp;&nbsp;<span class="dot"></span>&nbsp;&nbsp;&nbsp;<span>baruch@bsd-bbi.co.il</span>&nbsp;&nbsp;&nbsp;<span class="dot"></span>&nbsp;&nbsp;&nbsp;<span>bsd-bbi.co.il</span>
+    </div>
+    <div class="page-num">1 / 3</div>
+  </div>
+</div>
+
+<div class="page">
+  <div class="header">
+    <div class="logo-block">
+      <img src="bsd_logo.png" alt="BSD Logo">
+      <div class="brandname">
+        <span class="main">BSD BUSINESS BROKERS ISRAEL</span><br>
+        <span class="sub">רשת התיווך העסקי המקצועית של ישראל</span>
+      </div>
+    </div>
+    <div class="date-block">
+      <span class="label">Date</span>
+      02/08/2026
+    </div>
+  </div>
+  <div class="content">
+    <h1 style="font-size:16pt;">תוכן ההכשרה</h1>
+    <div class="doc-subtitle">שני שלבים - מהבנת התחום ועד עבודה מעשית בשטח</div>
+
+    <h2 class="section">שלב ראשון - ההכשרה המקצועית · 3 מפגשי אונליין מרוכזים</h2>
+    <div style="font-size:9.3pt;color:#6c7488;margin-bottom:3mm;">המטרה בשלב זה: לתת לך תשתית מקצועית מלאה וביטחון אמיתי לפני יציאה לשוק.</div>
+
+    <div class="meeting-box">
+      <div class="m-title">מפגש 1 - יסודות תיווך העסקים ומבנה העסקה</div>
+      <ul class="bullets" style="margin-bottom:0;">
+        <li>מהו תיווך עסקים בפועל · סוגי עסקאות (מכירת עסק, הכנסת שותף, משקיע)</li>
+        <li>מבנה עמלה מקצועי · תפקיד המתווך בכל שלב</li>
+        <li>מבנה הסכם התקשרות עם מוכר · מהו NDA ומתי מחתימים</li>
+        <li>שיטת BSD - שלבי עבודה עם מוכר ועם קונה · מבנה שיחת פתיחה עם בעל עסק</li>
+      </ul>
+      <div class="m-goal">המטרה: לדעת להציג את עצמך ולנהל שיחה מקצועית עם מוכר אמיתי.</div>
+    </div>
+
+    <div class="meeting-box">
+      <div class="m-title">מפגש 2 - ניתוח עסק והערכת שווי</div>
+      <ul class="bullets" style="margin-bottom:0;">
+        <li>כיצד לקרוא דוח רווח והפסד · הבנת תזרים מזומנים</li>
+        <li>רווח גולמי, תפעולי ונטו · EBITDA בפשטות ולמה הוא קריטי</li>
+        <li>שיטות הערכת שווי בסיסיות · טעויות נפוצות בתמחור</li>
+        <li>זיהוי חוזקות וחולשות עסקיות · בניית טיזר מקצועי להצגת העסק</li>
+      </ul>
+      <div class="m-goal">המטרה: לדעת לנתח עסק ולדבר מספרים בלי פחד.</div>
+    </div>
+
+    <div class="meeting-box">
+      <div class="m-title">מפגש 3 - ניהול תהליך, קונים ומשא ומתן</div>
+      <ul class="bullets" style="margin-bottom:0;">
+        <li>ניהול חשיפה מדורגת של מידע רגיש · ניהול וסינון קונים</li>
+        <li>מבנה שיחת קונה ראשונה · איסוף נתונים ממוכר</li>
+        <li>התמודדות עם התנגדויות · מבנה שיחת משא ומתן</li>
+        <li>ניהול פערים בין הצדדים · טעויות קריטיות של מתחילים</li>
+      </ul>
+      <div class="m-goal">המטרה: לדעת להוביל את התהליך ולא להיגרר אחריו.</div>
+    </div>
+
+    <h2 class="section">שלב שני - יציאה לשטח בליווי אישי</h2>
+    <div style="font-size:9.3pt;color:#6c7488;margin-bottom:2mm;">כאן מתחיל החלק המשמעותי - לא נשארים לבד. ליווי אישי הכולל:</div>
+    <ul class="bullets">
+      <li><span class="check">✓</span> איתור עסקים פוטנציאליים · בניית רשימת פניות ממוקדת</li>
+      <li>ליווי שיחות עומק עם מוכרים · בדיקת נתונים ותמחור</li>
+      <li>בניית טיזר אמיתי · חתימת NDA · ליווי בשיחות קריטיות</li>
+    </ul>
+  </div>
+  <div class="footer">
+    <div class="tagline">משביחים עסקים, מלווים בנאמנות, ומובילים לעסקה הנכונה</div>
+    <div class="cta-row">
+      <span>ברוך איזון</span>&nbsp;&nbsp;&nbsp;<span class="dot"></span>&nbsp;&nbsp;&nbsp;<span class="num">054-2424999</span>&nbsp;&nbsp;&nbsp;<span class="dot"></span>&nbsp;&nbsp;&nbsp;<span>baruch@bsd-bbi.co.il</span>&nbsp;&nbsp;&nbsp;<span class="dot"></span>&nbsp;&nbsp;&nbsp;<span>bsd-bbi.co.il</span>
+    </div>
+    <div class="page-num">2 / 3</div>
+  </div>
+</div>
+
+<div class="page">
+  <div class="header">
+    <div class="logo-block">
+      <img src="bsd_logo.png" alt="BSD Logo">
+      <div class="brandname">
+        <span class="main">BSD BUSINESS BROKERS ISRAEL</span><br>
+        <span class="sub">רשת התיווך העסקי המקצועית של ישראל</span>
+      </div>
+    </div>
+    <div class="date-block">
+      <span class="label">Date</span>
+      02/08/2026
+    </div>
+  </div>
+  <div class="content">
+    <h1 style="font-size:16pt;">מה מקבלים במסלול</h1>
+    <div class="doc-subtitle">תשתית מקצועית מלאה, ליווי אישי, ומודל תמחור שקוף</div>
+
+    <ul class="bullets">
+      <li><span class="check">✓</span> תשתית מקצועית מלאה - כלי ניתוח עסק והערכת שווי</li>
+      <li>טיוטות NDA והסכמי התקשרות מוכנים לשימוש מיידי</li>
+      <li>תסריטי שיחה למוכר ולקונה · שיטת עבודה מסודרת לפי מודל BSD</li>
+    </ul>
+
+    <div class="price-box">
+      <div class="price">מסלול מלא</div>
+      <div class="price-note" style="font-size:12pt;font-weight:700;color:#0e1b34;margin-top:2mm;">כולל את ההכשרה המלאה והליווי האישי בשטח</div>
+    </div>
+
+    <h2 class="section">למה לבחור במסלול BSD</h2>
+    <ul class="bullets">
+      <li><span class="check">✓</span> ניסיון שטח מעסקאות אמיתיות - לא תיאוריה</li>
+      <li>תהליך ברור מהפגישה הראשונה ועד סגירת עסקה</li>
+      <li>ליווי אישי אמיתי - ולא רק לימוד בקבוצה</li>
+      <li>מסמכים מקצועיים מוכנים לשימוש מהיום הראשון</li>
+      <li><b>קבוצה מצומצמת בלבד</b> - מחזור ראשון מוגבל במספר משתתפים</li>
+    </ul>
+
+    <div class="cta-box">
+      <div class="cta-title">מי שמוכן לעבוד - יתקדם</div>
+      <div class="cta-text">זו ההכשרה היחידה בארץ שמובילה אתכם בפועל מהכשרה מקצועית ועד עסקה אמיתית, עם אפשרות אמיתית להצטרף לצוות המתווכים של BSD Business Brokers Israel בסיום המסלול.</div>
+    </div>
+
+    <div style="text-align:center;margin-top:6mm;font-size:10pt;color:#0e1b34;font-weight:700;">
+      לפרטים והרשמה: ברוך איזון · 054-2424999 · www.bsd-bbi.co.il
+    </div>
+  </div>
+  <div class="footer">
+    <div class="tagline">משביחים עסקים, מלווים בנאמנות, ומובילים לעסקה הנכונה</div>
+    <div class="cta-row">
+      <span>ברוך איזון</span>&nbsp;&nbsp;&nbsp;<span class="dot"></span>&nbsp;&nbsp;&nbsp;<span class="num">054-2424999</span>&nbsp;&nbsp;&nbsp;<span class="dot"></span>&nbsp;&nbsp;&nbsp;<span>baruch@bsd-bbi.co.il</span>&nbsp;&nbsp;&nbsp;<span class="dot"></span>&nbsp;&nbsp;&nbsp;<span>bsd-bbi.co.il</span>
+    </div>
+    <div class="page-num">3 / 3</div>
+  </div>
+</div>
+
+</body>
+</html>
