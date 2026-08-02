@@ -31,6 +31,8 @@
   tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
   tbody tr:hover{background:#faf8f2;}
   .empty-row td{text-align:center;color:#999;padding:30px;}
+  .row-menu-btn{border:1.5px solid #d8d3c4;background:#f7f5ee;color:#333;cursor:pointer;font-size:1.1rem;font-weight:700;padding:2px 8px;border-radius:8px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+  .row-menu-btn:hover{background:#eee8d8;}
   .row-actions button{border:none;cursor:pointer;font-size:1.05rem;padding:6px 8px;margin:0 2px;border-radius:50%;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s ease, box-shadow .12s ease;box-shadow:0 1px 3px rgba(0,0,0,.15);}
   .row-actions button:hover{transform:scale(1.12);box-shadow:0 3px 8px rgba(0,0,0,.25);}
   .row-actions button.act-edit{background:#e3f0ff;}
@@ -64,7 +66,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 09:45</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 10:20</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
       <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -114,8 +116,8 @@
   <div class="table-scroll-wrap" style="position:relative;">
   <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
   <table>
-    <thead><tr><th>נקרא</th><th>כותרת</th><th>קשור ל</th><th>תאריך יעד</th><th>סטטוס</th><th>עדיפות</th><th>אחראי</th><th>פעולות</th></tr></thead>
-    <tbody id="taskBody"><tr class="empty-row"><td colspan="8">טוען...</td></tr></tbody>
+    <thead><tr><th>נקרא</th><th>כותרת</th><th>קשור ל</th><th>תאריך יעד</th><th>סטטוס</th><th>עדיפות</th><th>אחראי</th></tr></thead>
+    <tbody id="taskBody"><tr class="empty-row"><td colspan="7">טוען...</td></tr></tbody>
   </table>
   </div>
   <div style="display:flex;justify-content:center;gap:10px;margin:8px 0 2px;">
@@ -262,7 +264,7 @@ function renderTable(){
   });
 
   const body = document.getElementById('taskBody');
-  if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="8">אין משימות פתוחות</td></tr>'; return; }
+  if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="7">אין משימות פתוחות</td></tr>'; return; }
 
   const relatedLabels = {lead:'ליד', business:'עסק', match:'התאמה'};
   body.innerHTML = rows.map(t=>{
@@ -270,20 +272,27 @@ function renderTable(){
     const isUnread = !t.read_at;
     return `<tr class="${isUnread?'task-unread':''}" style="cursor:pointer;" onclick="openTaskForm('${t.id}')">
       <td data-label="נקרא"><span class="pill ${isUnread?'pill-unread':'pill-read'}">${isUnread?'🔵 לא נקרא':'✓ נקרא'}</span></td>
-      <td data-label="כותרת">${esc(t.title)}</td>
+      <td data-label="כותרת">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
+            <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
+            <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
+              <a href="javascript:void(0)" onclick="openTaskForm('${t.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>
+              ${isUnread
+                ? `<a href="javascript:void(0)" onclick="toggleTaskRead('${t.id}', true)" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👁️ סמן כנקרא</a>`
+                : `<a href="javascript:void(0)" onclick="toggleTaskRead('${t.id}', false)" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">↺ סמן כלא נקרא</a>`}
+              <a href="javascript:void(0)" onclick="completeTask('${t.id}')" style="display:block;color:#9be3ab;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">✅ סמן כהושלם</a>
+              <a href="javascript:void(0)" onclick="deleteTask('${t.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>
+            </div>
+          </div>
+          <div>${esc(t.title)}</div>
+        </div>
+      </td>
       <td data-label="קשור ל">${t.related_type ? esc(relatedLabels[t.related_type]||t.related_type) : '—'}</td>
       <td data-label="תאריך יעד" class="${isOverdue?'overdue':''}">${fmtDate(t.due_date)}${t.due_time ? ' <span style="color:#8a93a8;font-size:.78rem;">' + esc(t.due_time.slice(0,5)) + '</span>' : ''}</td>
       <td data-label="סטטוס"><span class="pill pill-open">${esc(t.status)}</span></td>
       <td data-label="עדיפות" class="${t.priority==='גבוהה'?'pri-high':'pri-normal'}">${esc(t.priority)}</td>
       <td data-label="אחראי">${esc(userName(t.assigned_to))}</td>
-      <td class="row-actions" data-label="" onclick="event.stopPropagation()">
-        <button class="act-edit" title="ערוך" onclick="openTaskForm('${t.id}')">✏️</button>
-        ${isUnread
-          ? `<button class="act-read" title="סמן כנקרא" onclick="toggleTaskRead('${t.id}', true)">👁️</button>`
-          : `<button class="act-unread" title="סמן כלא נקרא" onclick="toggleTaskRead('${t.id}', false)">↺</button>`}
-        <button class="act-done" title="סמן כהושלם" onclick="completeTask('${t.id}')">✅</button>
-        <button class="act-delete" title="מחק" onclick="deleteTask('${t.id}')">🗑️</button>
-      </td>
     </tr>`;
   }).join('');
 }

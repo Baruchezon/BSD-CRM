@@ -50,6 +50,8 @@
   tbody tr.row-sold{background:#2563c9 !important;border-right:10px solid #143a72;}
   tbody tr.row-sold td{color:#fff !important;font-weight:700;}
   tbody tr.row-sold:hover{background:#1d54ac !important;}
+  .row-menu-btn{border:1.5px solid #d8d3c4;background:#f7f5ee;color:#333;cursor:pointer;font-size:1.1rem;font-weight:700;padding:2px 8px;border-radius:8px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+  .row-menu-btn:hover{background:#eee8d8;}
   .row-actions button{border:1.5px solid transparent;cursor:pointer;font-size:1.15rem;padding:6px 8px;margin:0 2px;border-radius:50%;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s ease, box-shadow .12s ease;box-shadow:0 2px 5px rgba(0,0,0,.22);}
   .row-actions button:hover{transform:scale(1.14);box-shadow:0 4px 10px rgba(0,0,0,.32);}
   .row-actions button.act-edit{background:#cfe3ff;border-color:#7fabe0;}
@@ -76,7 +78,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 09:45</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 10:20</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -141,11 +143,11 @@
   <table>
     <thead>
       <tr>
-        <th>שם פנימי</th><th>טלפון בעלים</th><th>תחום</th><th>עיר</th><th>מחיר מבוקש</th><th>סטטוס</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>📋 מצגת</th><th>📋 טופס פגישה</th><th>נוצר</th><th>עודכן</th><th>פעולות</th>
+        <th>שם פנימי</th><th>טלפון בעלים</th><th>תחום</th><th>עיר</th><th>מחיר מבוקש</th><th>סטטוס</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>📋 מצגת</th><th>📋 טופס פגישה</th><th>נוצר</th><th>עודכן</th>
       </tr>
     </thead>
     <tbody id="bizBody">
-      <tr class="empty-row"><td colspan="14">טוען...</td></tr>
+      <tr class="empty-row"><td colspan="13">טוען...</td></tr>
     </tbody>
   </table>
   </div>
@@ -309,7 +311,7 @@ function renderTable(){
 
   const body = document.getElementById('bizBody');
   if (rows.length === 0){
-    body.innerHTML = '<tr class="empty-row"><td colspan="14">לא נמצאו עסקים</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="13">לא נמצאו עסקים</td></tr>';
     return;
   }
   body.innerHTML = rows.map(b=>{
@@ -320,7 +322,24 @@ function renderTable(){
     const statusEmoji = rowCls === 'row-sold' ? '🔵 ' : rowCls === 'row-removed' ? '⛔ ' : rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
     return `
     <tr class="${rowCls}" style="cursor:pointer;" onclick="openBizForm('${b.id}')">
-      <td data-label="שם פנימי"><div class="primary-name" style="font-weight:700;">${statusEmoji}${esc(b.internal_name)}</div>${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}</td>
+      <td data-label="שם פנימי">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
+            <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
+            <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
+              <a href="javascript:void(0)" onclick="openBizForm('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>
+              <a href="javascript:void(0)" onclick="openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(b.id))}${notesIconStyle(b.id) ? ' 🔵' : ''}</a>
+              ${(canSendAgreement() && b.agreement_status !== 'יש הסכם חתום') ? `<a href="javascript:void(0)" onclick="sendAgreementForBiz('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
+              ${canEditRecord(b.created_by) ? `<a href="javascript:void(0)" onclick="deleteBiz('${b.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
+            </div>
+          </div>
+          <div>
+            <div class="primary-name" style="font-weight:700;">${statusEmoji}${esc(b.internal_name)}</div>
+            ${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}
+            ${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}
+          </div>
+        </div>
+      </td>
       <td data-label="טלפון בעלים" class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;white-space:nowrap;" onclick="event.stopPropagation()">${b.owner_phone ? `<a href="tel:${esc(b.owner_phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(b.owner_phone)}</a>` : '—'}</td>
       <td data-label="תחום">${esc(b.field||'—')}</td>
       <td data-label="עיר">${esc(b.city||'—')}</td>
@@ -337,12 +356,6 @@ function renderTable(){
         : `<a href="intake-form.html?business_id=${b.id}" title="מלא טופס פגישה לעסק זה" style="display:inline-block;background:#f2f0e8;color:#7a6a2a;font-weight:600;font-size:.75rem;padding:4px 10px;border-radius:20px;white-space:nowrap;text-decoration:none;border:1px dashed #c9a24b;">📋 אין טופס - מלא כעת</a>`}</td>
       <td data-label="נוצר">${fmtDate(b.created_at)}</td>
       <td data-label="עודכן">${fmtDate(b.updated_at)}</td>
-      <td class="row-actions" data-label="" onclick="event.stopPropagation()">
-        ${canEditRecord(b.created_by) ? `<button class="act-edit" title="ערוך" onclick="openBizForm('${b.id}')">✏️</button>` : ''}
-        <button class="act-notes" title="${notesTooltip(b.id)}" onclick="openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" style="${notesIconStyle(b.id)}">📝</button>
-        ${(canSendAgreement() && b.agreement_status !== 'יש הסכם חתום') ? `<button class="act-agreement" title="שלח הסכם" onclick="sendAgreementForBiz('${b.id}')">📄</button>` : ''}
-        ${canEditRecord(b.created_by) ? `<button class="act-delete" title="מחק" onclick="deleteBiz('${b.id}')">🗑️</button>` : ''}
-      </td>
     </tr>
   `;
   }).join('');
