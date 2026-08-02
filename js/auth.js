@@ -332,6 +332,34 @@ async function refreshNavMsgBadge(){
   }
 }
 
+// ============================================================
+// STALE PAGE SELF-HEALING
+// ------------------------------------------------------------
+// The ?v= query params only cache-bust css/js - the HTML pages
+// themselves were still served from cache, so deployed fixes
+// could sit invisible for a long time (this bit us repeatedly).
+// version.json is fetched with cache:'no-store' so it is always
+// fresh; if it doesn't match the version baked into this page,
+// we force one hard reload. The sessionStorage guard makes it
+// impossible to get stuck in a reload loop if something is off.
+// ============================================================
+window.BSD_BUILD = '202608021815';
+
+(async function checkStalePage(){
+  try {
+    const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const { version } = await res.json();
+    if (!version || version === window.BSD_BUILD) {
+      sessionStorage.removeItem('bsdReloadedFor');
+      return;
+    }
+    if (sessionStorage.getItem('bsdReloadedFor') === version) return; // already tried
+    sessionStorage.setItem('bsdReloadedFor', version);
+    location.reload(true);
+  } catch(e) { /* offline or blocked - carry on with what we have */ }
+})();
+
 function scrollTableBy(btn, amount){
   const wrap = btn.closest('.table-scroll-wrap');
   const inner = wrap && wrap.querySelector('.table-scroll-inner');
