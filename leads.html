@@ -55,6 +55,8 @@
   tbody tr.row-sent:hover{background:#ffdcae !important;}
   .primary-name{font-weight:700;color:var(--navy);}
   .sub-name{font-size:.75rem;color:#888;margin-top:2px;}
+  .row-menu-btn{border:1.5px solid #d8d3c4;background:#f7f5ee;color:#333;cursor:pointer;font-size:1.1rem;font-weight:700;padding:2px 8px;border-radius:8px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+  .row-menu-btn:hover{background:#eee8d8;}
   .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
   .notes-cell{white-space:normal;word-break:break-word;max-width:420px;line-height:1.4;}
   .email-cell{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help;}
@@ -86,7 +88,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 09:45</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 10:20</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav">
     <a href="app.html">לוח בקרה</a>
@@ -154,11 +156,11 @@
     </colgroup>
     <thead>
       <tr>
-        <th>שם / עסק</th><th>סוג</th><th>טלפון</th><th>עיר</th><th>אימייל</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>נוצר</th><th>עודכן</th><th>הערות</th><th>פעולות</th>
+        <th>שם / עסק</th><th>סוג</th><th>טלפון</th><th>עיר</th><th>אימייל</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>נוצר</th><th>עודכן</th><th>הערות</th>
       </tr>
     </thead>
     <tbody id="leadsBody">
-      <tr class="empty-row"><td colspan="12">טוען...</td></tr>
+      <tr class="empty-row"><td colspan="11">טוען...</td></tr>
     </tbody>
   </table>
   </div>
@@ -310,7 +312,7 @@ function renderTable(){
 
   const body = document.getElementById('leadsBody');
   if (rows.length === 0){
-    body.innerHTML = '<tr class="empty-row"><td colspan="12">לא נמצאו רשומות</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="11">לא נמצאו רשומות</td></tr>';
     return;
   }
   body.innerHTML = rows.map(l=>{
@@ -335,7 +337,20 @@ function renderTable(){
     nameCell = statusEmoji + nameCell;
 
     return `<tr class="${rowCls}" style="cursor:pointer;" onclick="openLeadForm('${l.id}')">
-      <td data-label="שם / עסק">${nameCell}</td>
+      <td data-label="שם / עסק">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
+            <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
+            <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
+              <a href="javascript:void(0)" onclick="openLeadForm('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>
+              <a href="javascript:void(0)" onclick="openNotesPanel('leads','${l.id}','${esc((l.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(l.id))}${notesIconStyle(l.id) ? ' 🔵' : ''}</a>
+              ${(canSendAgreement() && l.agreement_status !== 'יש הסכם חתום') ? `<a href="javascript:void(0)" onclick="sendAgreementForLead('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
+              ${canEditRecord(l.created_by) ? `<a href="javascript:void(0)" onclick="deleteLead('${l.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
+            </div>
+          </div>
+          <div>${nameCell}</div>
+        </div>
+      </td>
       <td data-label="סוג">${typeBadge}</td>
       <td data-label="טלפון" class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;" onclick="event.stopPropagation()">${l.phone ? `<a href="tel:${esc(l.phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(l.phone)}</a>` : '—'}</td>
       <td data-label="עיר">${cityCell}</td>
@@ -346,12 +361,6 @@ function renderTable(){
       <td data-label="נוצר">${fmtDate(l.created_at)}</td>
       <td data-label="עודכן">${fmtDate(l.updated_at)}</td>
       <td data-label="הערות" class="notes-cell">${esc(l.notes||'—')}</td>
-      <td class="row-actions" data-label="" onclick="event.stopPropagation()">
-        ${canEditRecord(l.created_by) ? `<button title="ערוך" onclick="openLeadForm('${l.id}')">✏️</button>` : ''}
-        <button title="${notesTooltip(l.id)}" onclick="openNotesPanel('leads','${l.id}','${esc((l.full_name||'רשומה').replace(/'/g,''))}')" style="${notesIconStyle(l.id)}">📝</button>
-        ${(canSendAgreement() && l.agreement_status !== 'יש הסכם חתום') ? `<button title="שלח הסכם" onclick="sendAgreementForLead('${l.id}')">📄</button>` : ''}
-        ${canEditRecord(l.created_by) ? `<button title="מחק" onclick="deleteLead('${l.id}')">🗑️</button>` : ''}
-      </td>
     </tr>`;
   }).join('');
 }

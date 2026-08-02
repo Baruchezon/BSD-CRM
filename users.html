@@ -31,6 +31,8 @@
   .badge-agent{background:#eef1f6;color:var(--navy);}
   .badge-active{background:#dff0e4;color:#245c40;}
   .badge-blocked{background:#fbe4e0;color:#832d1f;}
+  .row-menu-btn{border:1.5px solid #d8d3c4;background:#f7f5ee;color:#333;cursor:pointer;font-size:1.1rem;font-weight:700;padding:2px 8px;border-radius:8px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+  .row-menu-btn:hover{background:#eee8d8;}
   .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
   .denied{text-align:center;padding:60px;color:#999;}
 
@@ -50,7 +52,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 09:45</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 10:20</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
     <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -92,8 +94,8 @@
     <div class="table-scroll-wrap" style="position:relative;">
     <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
     <table>
-      <thead><tr><th>שם מלא</th><th>אימייל</th><th>תפקיד</th><th>הרשאות נוספות</th><th>סטטוס</th><th>כניסה אחרונה</th><th>מס' כניסות</th><th>פעולות</th></tr></thead>
-      <tbody id="usersBody"><tr><td colspan="8" style="text-align:center;padding:30px;color:#999;">טוען...</td></tr></tbody>
+      <thead><tr><th>שם מלא</th><th>אימייל</th><th>תפקיד</th><th>הרשאות נוספות</th><th>סטטוס</th><th>כניסה אחרונה</th><th>מס' כניסות</th></tr></thead>
+      <tbody id="usersBody"><tr><td colspan="7" style="text-align:center;padding:30px;color:#999;">טוען...</td></tr></tbody>
     </table>
     </div>
     <div style="display:flex;justify-content:center;gap:10px;margin:8px 0 2px;">
@@ -295,24 +297,31 @@ async function loadUsers(){
 
 function renderTable(){
   const body = document.getElementById('usersBody');
-  if (ALL_USERS.length === 0){ body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#999;">אין משתמשים</td></tr>'; return; }
+  if (ALL_USERS.length === 0){ body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#999;">אין משתמשים</td></tr>'; return; }
   body.innerHTML = ALL_USERS.map(u=>{
     const name = u.full_name && u.full_name.trim() ? u.full_name : '—';
     const perms = [u.can_use_survey ? '🔍 סקר' : null, u.can_use_ai_match ? '🧠 התאמות' : null, u.can_send_agreement ? '📄 הסכם' : null, u.can_send_presentations ? '📤 מצגות' : null].filter(Boolean).join(', ') || '—';
     return `<tr>
-      <td data-label="שם מלא">${esc(name)}</td>
+      <td data-label="שם מלא">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <div style="position:relative;flex-shrink:0;">
+            <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
+            <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
+              <a href="javascript:void(0)" onclick="openEditForm('${u.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>
+              ${u.role !== 'admin' ? `<a href="javascript:void(0)" onclick="toggleStatus('${u.id}','${u.status}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">${u.status==='active'?'🚫 חסום':'✅ הפעל'}</a>` : ''}
+              <a href="javascript:void(0)" onclick="openResetPasswordModal('${u.id}','${esc(name)}','${esc(u.email)}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔑 איפוס סיסמה</a>
+              ${u.role !== 'admin' ? `<a href="javascript:void(0)" onclick="deleteUser('${u.id}','${esc(name)}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחיקת משתמש</a>` : ''}
+            </div>
+          </div>
+          <div>${esc(name)}</div>
+        </div>
+      </td>
       <td data-label="אימייל">${esc(u.email)}</td>
       <td data-label="תפקיד"><span class="badge badge-${u.role}">${ROLE_LABELS[u.role]||u.role}</span></td>
       <td data-label="הרשאות נוספות" style="font-size:.75rem;color:#666;">${perms}</td>
       <td data-label="סטטוס"><span class="badge badge-${u.status}">${u.status==='active'?'פעיל':'חסום'}</span></td>
       <td data-label="כניסה אחרונה">${fmtDateTime(u.last_login_at)}</td>
       <td data-label="מס' כניסות">${u.login_count||0}</td>
-      <td class="row-actions" data-label="">
-        <button title="ערוך" onclick="openEditForm('${u.id}')">✏️</button>
-        ${u.role !== 'admin' ? `<button title="${u.status==='active'?'חסום':'הפעל'}" onclick="toggleStatus('${u.id}','${u.status}')">${u.status==='active'?'🚫':'✅'}</button>` : ''}
-        <button title="איפוס סיסמה" onclick="openResetPasswordModal('${u.id}','${esc(name)}','${esc(u.email)}')">🔑</button>
-        ${u.role !== 'admin' ? `<button title="מחיקת משתמש" onclick="deleteUser('${u.id}','${esc(name)}')">🗑️</button>` : ''}
-      </td>
     </tr>`;
   }).join('');
 }
