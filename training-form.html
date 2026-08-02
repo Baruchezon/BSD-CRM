@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>טופס רישום להכשרת מתווכי עסקים - BSD Business Brokers Israel</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  :root{ --navy:#0e1b34; --navy-light:#1a2a4a; --gold:#c9a24b; --gold-light:#e8cf8a; --success:#2e9e5b; }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Heebo','Rubik',sans-serif;background:#f5f3ec;color:#1c2333;}
+  .wrap{max-width:640px;margin:0 auto;padding:0 0 60px;}
+  .hero{background:linear-gradient(135deg,var(--navy),var(--navy-light));color:#fff;padding:28px 24px;text-align:center;}
+  .hero img{width:64px;height:64px;border-radius:50%;margin-bottom:10px;}
+  .hero h1{margin:0 0 4px;font-size:1.3rem;}
+  .hero p{margin:0;color:#cfd6e6;font-size:.85rem;}
+  .card{background:#fff;border-radius:14px;padding:22px 24px;margin:18px 16px;box-shadow:0 6px 20px rgba(14,27,52,.08);}
+  .card h2{margin:0 0 14px;color:var(--navy);font-size:1.05rem;border-right:4px solid var(--gold);padding-right:10px;}
+  .curriculum-list{margin:0;padding-right:20px;}
+  .curriculum-list li{margin-bottom:6px;font-size:.9rem;line-height:1.5;}
+  .disclaimer{font-size:.75rem;color:#999;margin-top:12px;line-height:1.6;}
+  .price-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0ede4;font-size:.92rem;}
+  .price-row.total{font-weight:800;color:var(--navy);font-size:1.1rem;border-bottom:none;padding-top:12px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:.85rem;color:#555;margin-bottom:5px;font-weight:600;}
+  .field input, .field select{width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.92rem;}
+  .field .err{color:#b00020;font-size:.75rem;margin-top:3px;display:none;}
+  .checkbox-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;}
+  .checkbox-row input{width:20px;height:20px;flex-shrink:0;margin-top:2px;}
+  .checkbox-row label{font-size:.85rem;line-height:1.5;color:#333;}
+  .pay-option{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #f0ede4;}
+  .bank-details{background:#f7f5ef;border-radius:8px;padding:12px 14px;font-size:.85rem;margin-top:10px;line-height:1.8;display:none;}
+  .sig-wrap{border:1.5px dashed #c9a24b;border-radius:10px;position:relative;background:#fffef8;}
+  .sig-wrap canvas{display:block;width:100%;height:160px;touch-action:none;border-radius:10px;}
+  .sig-ph{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#c9b98a;font-size:.85rem;pointer-events:none;}
+  .btn{border:none;border-radius:10px;padding:13px 20px;font-family:inherit;font-size:.95rem;font-weight:700;cursor:pointer;width:100%;}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);margin-top:8px;}
+  .top-err{background:#fdecea;color:#832d1f;border-radius:8px;padding:10px 14px;font-size:.85rem;margin-bottom:14px;display:none;}
+  .success-screen{text-align:center;padding:60px 24px;}
+  .success-screen .icon{font-size:3rem;margin-bottom:14px;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="hero">
+    <img src="icon-192.png" alt="BSD">
+    <h1>טופס רישום להכשרת מתווכי עסקים</h1>
+    <p>BSD Business Brokers Israel</p>
+  </div>
+
+  <div id="invalidLinkBox" class="card" style="display:none;text-align:center;">
+    <h2 style="border:none;padding:0;">הקישור אינו תקין</h2>
+    <p style="color:#666;">ייתכן שהקישור פג תוקף או שכבר נעשה בו שימוש. לפרטים נא ליצור קשר עם BSD.</p>
+  </div>
+
+  <div id="formArea" style="display:none;">
+    <div class="card">
+      <h2>תכולת ההכשרה</h2>
+      <ul class="curriculum-list" id="curriculumList"></ul>
+      <div class="disclaimer">תכולת ההכשרה, סדר הנושאים, היקף החומר והמערכות המוצגות עשויים להשתנות מעת לעת בהתאם להתפתחויות מקצועיות, טכנולוגיות וצרכי ההכשרה.</div>
+    </div>
+
+    <div class="card">
+      <h2>מחיר ההכשרה</h2>
+      <div class="price-row"><span>מחיר ההכשרה</span><span id="priceBase"></span></div>
+      <div class="price-row"><span>מע"מ</span><span id="priceVat"></span></div>
+      <div class="price-row total"><span>סה"כ לתשלום</span><span id="priceTotal"></span></div>
+    </div>
+
+    <div class="card">
+      <h2>פרטי המשתתף</h2>
+      <div class="field"><label>שם פרטי *</label><input type="text" id="p_first"><div class="err">שדה חובה</div></div>
+      <div class="field"><label>שם משפחה *</label><input type="text" id="p_last"><div class="err">שדה חובה</div></div>
+      <div class="field"><label>טלפון *</label><input type="tel" id="p_phone" placeholder="05X-XXXXXXX"><div class="err">מספר טלפון לא תקין</div></div>
+      <div class="field"><label>אימייל *</label><input type="email" id="p_email"><div class="err">כתובת אימייל לא תקינה</div></div>
+      <div class="field"><label>כתובת מלאה *</label><input type="text" id="p_address"><div class="err">שדה חובה</div></div>
+    </div>
+
+    <div class="card">
+      <h2>תנאי רישום</h2>
+      <div class="checkbox-row"><input type="checkbox" id="c1"><label for="c1">אני מאשר כי קראתי את פרטי ההכשרה, תכולתה ותנאי הרישום.</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="c2"><label for="c2">ידוע לי כי פתיחת ההכשרה וקיום מועדי המפגשים כפופים להודעות BSD.</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="c3"><label for="c3">ידוע לי כי לאחר השלמת הרישום יחולו תנאי הביטול וההחזר המפורטים בטופס, והכול בכפוף להוראות הדין המחייב.</label></div>
+      <div class="err" id="checksErr" style="display:none;">יש לאשר את כל התנאים לפני המשך</div>
+    </div>
+
+    <div class="card">
+      <h2>תשלום</h2>
+      <p style="font-size:.85rem;color:#555;margin-top:0;">התשלום עבור ההכשרה יבוצע לפני תחילת ההכשרה.</p>
+      <div class="pay-option"><input type="radio" name="pay" id="pay_bit" value="Bit"><label for="pay_bit">Bit</label></div>
+      <div class="pay-option"><input type="radio" name="pay" id="pay_paybox" value="PayBox"><label for="pay_paybox">PayBox</label></div>
+      <div class="pay-option"><input type="radio" name="pay" id="pay_bank" value="העברה בנקאית"><label for="pay_bank">העברה בנקאית</label></div>
+      <div class="pay-option"><input type="radio" name="pay" id="pay_later" value="אשלם בהמשך"><label for="pay_later">אשלם בהמשך לפני תחילת ההכשרה</label></div>
+      <div class="bank-details" id="bankDetails">
+        בנק הפועלים · סניף 681 · חשבון 690097<br>שם החשבון: ברוך איזון<br><br>
+        <b>לאחר ביצוע התשלום יש לשלוח אישור העברה.</b>
+      </div>
+      <div class="err" id="payErr" style="display:none;">נא לבחור אמצעי תשלום</div>
+    </div>
+
+    <div class="card">
+      <h2>חתימה</h2>
+      <div class="sig-wrap" id="sigWrap">
+        <canvas id="sigCanvas"></canvas>
+        <div class="sig-ph" id="sigPh">חתום כאן</div>
+      </div>
+      <button type="button" class="btn btn-ghost" onclick="clearSig()" style="margin-top:8px;">נקה חתימה</button>
+      <div class="err" id="sigErr" style="display:none;">נא לחתום לפני שליחה</div>
+      <div style="margin-top:14px;font-size:.85rem;color:#666;">
+        <span id="sigNameLabel"></span><br>
+        <span id="sigDateLabel"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="top-err" id="topErr"></div>
+      <button type="button" class="btn btn-primary" id="submitBtn" onclick="submitForm()">✅ אני מאשר, חותם ושולח</button>
+    </div>
+  </div>
+
+  <div id="successArea" class="success-screen" style="display:none;">
+    <div class="icon">✅</div>
+    <h2 style="color:var(--navy);">הרישום התקבל בהצלחה</h2>
+    <p style="color:#666;max-width:420px;margin:0 auto;">תודה על הרשמתך להכשרת מתווכי העסקים של BSD Business Brokers Israel. צוות BSD יצור איתך קשר להמשך התהליך.</p>
+  </div>
+</div>
+
+<script>
+const TOKEN = new URLSearchParams(location.search).get('token');
+let LEAD = null;
+let hasSigned = false;
+let sigDataUrl = null;
+
+const supabaseClient = window.supabase.createClient(
+  "https://zcdlegcvfirwzitfxjcs.supabase.co",
+  "sb_publishable_baq54BVGwvtjB8c7ZiegCQ_tAXevwfN"
+);
+
+function fmtMoney(n){ return '₪' + Number(n||0).toLocaleString('he-IL'); }
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+document.querySelectorAll('input[name="pay"]').forEach(r => {
+  r.addEventListener('change', () => {
+    document.getElementById('bankDetails').style.display = (r.value === 'העברה בנקאית' && r.checked) ? 'block' : (document.querySelector('input[name="pay"]:checked')?.value === 'העברה בנקאית' ? 'block' : 'none');
+  });
+});
+
+/* ─────────── SIGNATURE PAD ─────────── */
+function initSigPad(){
+  const canvas = document.getElementById('sigCanvas');
+  const wrap = document.getElementById('sigWrap');
+  const ph = document.getElementById('sigPh');
+  function resize(){
+    const dpr = window.devicePixelRatio || 1;
+    const r = wrap.getBoundingClientRect();
+    canvas.width = r.width * dpr;
+    canvas.height = 160 * dpr;
+    canvas.style.width = r.width + 'px';
+    canvas.style.height = '160px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.strokeStyle = '#1B2A4A';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  const ctx = canvas.getContext('2d');
+  let drawing = false, lx, ly;
+  function pos(e){
+    const r = canvas.getBoundingClientRect();
+    return e.touches ? {x:e.touches[0].clientX-r.left,y:e.touches[0].clientY-r.top} : {x:e.clientX-r.left,y:e.clientY-r.top};
+  }
+  function start(e){ e.preventDefault(); drawing=true; const p=pos(e); lx=p.x; ly=p.y; ctx.beginPath(); ctx.moveTo(lx,ly); ph.style.display='none'; }
+  function move(e){ if(!drawing) return; e.preventDefault(); const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); lx=p.x; ly=p.y; }
+  function end(){ if(!drawing) return; drawing=false; hasSigned=true; document.getElementById('sigErr').style.display='none'; }
+  canvas.addEventListener('mousedown',start); canvas.addEventListener('mousemove',move); canvas.addEventListener('mouseup',end); canvas.addEventListener('mouseleave',end);
+  canvas.addEventListener('touchstart',start,{passive:false}); canvas.addEventListener('touchmove',move,{passive:false}); canvas.addEventListener('touchend',end);
+}
+function clearSig(){
+  const canvas = document.getElementById('sigCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  canvas.getContext('2d').clearRect(0,0,canvas.width/dpr,canvas.height/dpr);
+  hasSigned = false;
+  document.getElementById('sigPh').style.display = 'block';
+}
+
+function updateSigLabels(){
+  const first = document.getElementById('p_first').value.trim();
+  const last = document.getElementById('p_last').value.trim();
+  const now = new Date();
+  document.getElementById('sigNameLabel').textContent = 'שם מלא: ' + ((first || last) ? (first + ' ' + last) : '—');
+  document.getElementById('sigDateLabel').textContent = 'תאריך: ' + now.toLocaleDateString('he-IL') + ' · שעה: ' + now.toLocaleTimeString('he-IL', {hour:'2-digit',minute:'2-digit'});
+}
+['p_first','p_last'].forEach(id => document.getElementById(id).addEventListener('input', updateSigLabels));
+
+/* ─────────── VALIDATION + SUBMIT ─────────── */
+function validEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+function validPhone(v){ return /^0\d{8,9}$/.test(v.replace(/\D/g,'')); }
+
+function showFieldErr(id, show){
+  const input = document.getElementById(id);
+  const err = input.parentElement.querySelector('.err');
+  if (err) err.style.display = show ? 'block' : 'none';
+  input.style.borderColor = show ? '#b00020' : '#d8d3c4';
+}
+
+async function submitForm(){
+  const topErr = document.getElementById('topErr');
+  topErr.style.display = 'none';
+
+  const first = document.getElementById('p_first').value.trim();
+  const last = document.getElementById('p_last').value.trim();
+  const phone = document.getElementById('p_phone').value.trim();
+  const email = document.getElementById('p_email').value.trim();
+  const address = document.getElementById('p_address').value.trim();
+
+  let ok = true;
+  showFieldErr('p_first', !first); if (!first) ok = false;
+  showFieldErr('p_last', !last); if (!last) ok = false;
+  showFieldErr('p_phone', !validPhone(phone)); if (!validPhone(phone)) ok = false;
+  showFieldErr('p_email', !validEmail(email)); if (!validEmail(email)) ok = false;
+  showFieldErr('p_address', !address); if (!address) ok = false;
+
+  const checksOk = document.getElementById('c1').checked && document.getElementById('c2').checked && document.getElementById('c3').checked;
+  document.getElementById('checksErr').style.display = checksOk ? 'none' : 'block';
+  if (!checksOk) ok = false;
+
+  const payMethod = document.querySelector('input[name="pay"]:checked');
+  document.getElementById('payErr').style.display = payMethod ? 'none' : 'block';
+  if (!payMethod) ok = false;
+
+  document.getElementById('sigErr').style.display = hasSigned ? 'none' : 'block';
+  if (!hasSigned) ok = false;
+
+  if (!ok){
+    topErr.textContent = 'נא להשלים את כל השדות המסומנים לפני שליחה';
+    topErr.style.display = 'block';
+    topErr.scrollIntoView({ behavior:'smooth', block:'center' });
+    return;
+  }
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = 'שולח...';
+
+  const signatureData = document.getElementById('sigCanvas').toDataURL('image/png');
+  const signedName = first + ' ' + last;
+
+  try{
+    const { data: success, error } = await supabaseClient.rpc('submit_training_registration', {
+      p_token: TOKEN, p_first_name: first, p_last_name: last, p_phone: phone,
+      p_email: email, p_address: address, p_payment_method: payMethod.value,
+      p_signature_data: signatureData, p_signed_name: signedName
+    });
+    if (error || !success){
+      throw new Error(error ? error.message : 'הטופס כבר נחתם או שהקישור אינו תקף');
+    }
+
+    await generateAndUploadPdf({ first, last, phone, email, address, payMethod: payMethod.value, signatureData, signedName });
+
+    document.getElementById('formArea').style.display = 'none';
+    document.getElementById('successArea').style.display = 'block';
+    window.scrollTo(0,0);
+  } catch(err){
+    topErr.textContent = 'שגיאה בשליחת הטופס: ' + (err.message || err);
+    topErr.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = '✅ אני מאשר, חותם ושולח';
+  }
+}
+
+async function generateAndUploadPdf(d){
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;left:-99999px;top:0;width:700px;background:#fff;padding:32px;font-family:Heebo,Rubik,sans-serif;direction:rtl;color:#1c2333;';
+  el.innerHTML = `
+    <div style="text-align:center;border-bottom:3px solid #c9a24b;padding-bottom:14px;margin-bottom:18px;">
+      <div style="font-size:18px;font-weight:800;">BSD Business Brokers Israel</div>
+      <div style="font-size:13px;color:#666;">טופס רישום להכשרת מתווכי עסקים</div>
+    </div>
+    <p><b>מספר רישום:</b> ${esc(LEAD.registration_number||'')}</p>
+    <p><b>שם מלא:</b> ${esc(d.first)} ${esc(d.last)}</p>
+    <p><b>טלפון:</b> ${esc(d.phone)} &nbsp; <b>אימייל:</b> ${esc(d.email)}</p>
+    <p><b>כתובת:</b> ${esc(d.address)}</p>
+    <p><b>מחיר לפני מע"מ:</b> ${fmtMoney(LEAD.price_before_vat)} &nbsp; <b>מע"מ:</b> ${fmtMoney(LEAD.vat_amount)} &nbsp; <b>סה"כ:</b> ${fmtMoney(LEAD.price_with_vat)}</p>
+    <p><b>אמצעי תשלום:</b> ${esc(d.payMethod)}</p>
+    <p style="margin-top:16px;"><b>תכולת ההכשרה:</b></p>
+    <ul>${(CURRICULUM_TEXT||'').split('\\n').filter(Boolean).map(l=>`<li style="font-size:12px;">${esc(l)}</li>`).join('')}</ul>
+    <p style="margin-top:16px;"><b>שם החותם:</b> ${esc(d.signedName)} &nbsp; <b>תאריך:</b> ${new Date().toLocaleString('he-IL')}</p>
+    <div style="margin-top:10px;"><img src="${d.signatureData}" style="max-width:300px;border:1px solid #eee;"></div>
+  `;
+  document.body.appendChild(el);
+
+  try{
+    const worker = window.html2pdf().set({
+      margin: 10, filename: 'training-form.pdf',
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    }).from(el);
+    await worker.toCanvas();
+    const blob = await worker.outputPdf('blob');
+    const path = 'training-forms/' + TOKEN + '.pdf';
+    const { error: upErr } = await supabaseClient.storage.from('business-files').upload(path, blob, { upsert: true, contentType: 'application/pdf' });
+    if (!upErr){
+      await supabaseClient.rpc('save_training_form_pdf_path', { p_token: TOKEN, p_path: path });
+    }
+  } catch(e){
+    console.error('PDF generation/upload failed (registration itself still succeeded):', e);
+  } finally {
+    el.remove();
+  }
+}
+
+let CURRICULUM_TEXT = '';
+
+(async function init(){
+  if (!TOKEN){
+    document.getElementById('invalidLinkBox').style.display = 'block';
+    return;
+  }
+  const { data, error } = await supabaseClient.rpc('get_training_lead_public', { p_token: TOKEN });
+  const lead = (data && data[0]) ? data[0] : null;
+  if (error || !lead){
+    document.getElementById('invalidLinkBox').style.display = 'block';
+    return;
+  }
+  LEAD = lead;
+
+  if (lead.status === 'חתום' || lead.status === 'נרשם להכשרה'){
+    document.getElementById('successArea').style.display = 'block';
+    document.getElementById('successArea').querySelector('p').textContent = 'הטופס כבר נחתם בעבר. תודה על הרשמתך - צוות BSD בקשר איתך.';
+    return;
+  }
+
+  supabaseClient.rpc('mark_training_form_opened', { p_token: TOKEN });
+
+  const { data: curriculum } = await supabaseClient.rpc('get_training_curriculum');
+  CURRICULUM_TEXT = curriculum || '';
+  document.getElementById('curriculumList').innerHTML = CURRICULUM_TEXT.split('\n').filter(Boolean).map(l => `<li>${esc(l)}</li>`).join('');
+
+  document.getElementById('priceBase').textContent = fmtMoney(lead.price_before_vat);
+  document.getElementById('priceVat').textContent = fmtMoney(lead.vat_amount);
+  document.getElementById('priceTotal').textContent = fmtMoney(lead.price_with_vat);
+
+  if (lead.first_name) document.getElementById('p_first').value = lead.first_name;
+  if (lead.last_name) document.getElementById('p_last').value = lead.last_name;
+
+  document.getElementById('formArea').style.display = 'block';
+  initSigPad();
+  updateSigLabels();
+})();
+</script>
+</body>
+</html>
