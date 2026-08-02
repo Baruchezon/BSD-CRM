@@ -109,11 +109,31 @@ async function requireAuth() {
 // ============================================================
 function toggleFormsMenu(e){
   if (e) e.stopPropagation();
-  const menu = e && e.currentTarget ? e.currentTarget.parentElement.querySelector('.bsd-forms-menu') : document.querySelector('.bsd-forms-menu');
+  const btn = e && e.currentTarget ? e.currentTarget : null;
+  const menu = btn ? btn.parentElement.querySelector('.bsd-forms-menu') : document.querySelector('.bsd-forms-menu');
   if (!menu) return;
   const willOpen = menu.style.display !== 'block';
   document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
-  if (willOpen) menu.style.display = 'block';
+  if (!willOpen) return;
+
+  // Position with `fixed` (computed from the button's own on-screen rect)
+  // instead of relying on `absolute` + an ancestor being a normal (non-
+  // scrolling) container. On mobile the header's .nav bar scrolls
+  // horizontally (overflow-x:auto), which silently clips any absolutely
+  // positioned child that pokes out below it — the menu was opening, just
+  // invisibly. `fixed` positioning escapes that clipping entirely.
+  if (btn){
+    const rect = btn.getBoundingClientRect();
+    const menuWidth = menu.getBoundingClientRect().width || 210;
+    let left = rect.right - menuWidth;
+    if (left < 8) left = 8;
+    if (left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
+    menu.style.position = 'fixed';
+    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.left = left + 'px';
+    menu.style.right = 'auto';
+  }
+  menu.style.display = 'block';
 }
 document.addEventListener('click', function(){
   document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
