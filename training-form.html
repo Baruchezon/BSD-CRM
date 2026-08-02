@@ -62,6 +62,9 @@
       <h2>תכולת ההכשרה</h2>
       <ul class="curriculum-list" id="curriculumList"></ul>
       <div class="disclaimer">תכולת ההכשרה, סדר הנושאים, היקף החומר והמערכות המוצגות עשויים להשתנות מעת לעת בהתאם להתפתחויות מקצועיות, טכנולוגיות וצרכי ההכשרה.</div>
+      <div style="margin-top:12px;">
+        <a href="training-brochure.html" target="_blank" style="color:#0e1b34;font-size:.85rem;font-weight:700;">📄 לצפייה בברושור המלא של ההכשרה</a>
+      </div>
     </div>
 
     <div class="card">
@@ -82,7 +85,7 @@
 
     <div class="card">
       <h2>תנאי רישום</h2>
-      <div class="checkbox-row"><input type="checkbox" id="c1"><label for="c1">אני מאשר כי קראתי את פרטי ההכשרה, תכולתה ותנאי הרישום.</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="c1"><label for="c1">קראתי את תכולת ההכשרה ואת פרטי ההכשרה, ואני מסכים לתנאי הרישום.</label></div>
       <div class="checkbox-row"><input type="checkbox" id="c2"><label for="c2">ידוע לי כי פתיחת ההכשרה וקיום מועדי המפגשים כפופים להודעות BSD.</label></div>
       <div class="checkbox-row"><input type="checkbox" id="c3"><label for="c3">ידוע לי כי לאחר השלמת הרישום יחולו תנאי הביטול וההחזר המפורטים בטופס, והכול בכפוף להוראות הדין המחייב.</label></div>
       <div class="err" id="checksErr" style="display:none;">יש לאשר את כל התנאים לפני המשך</div>
@@ -263,6 +266,7 @@ async function submitForm(){
     }
 
     await generateAndUploadPdf({ first, last, phone, email, address, payMethod: payMethod.value, signatureData, signedName });
+    notifyAdminByEmail({ first, last, phone, email, address, payMethod: payMethod.value });
 
     document.getElementById('formArea').style.display = 'none';
     document.getElementById('successArea').style.display = 'block';
@@ -273,6 +277,30 @@ async function submitForm(){
     btn.disabled = false;
     btn.textContent = '✅ אני מאשר, חותם ושולח';
   }
+}
+
+function notifyAdminByEmail(d){
+  const now = new Date().toLocaleString('he-IL');
+  fetch('https://formsubmit.co/ajax/baruch.ezon@gmail.com', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','Accept':'application/json'},
+    body: JSON.stringify({
+      _subject: 'טופס רישום חתום - הכשרת מתווכי עסקים | ' + d.first + ' ' + d.last,
+      _replyto: d.email,
+      _captcha: 'false',
+      'מספר רישום': LEAD.registration_number || '',
+      'שם מלא': d.first + ' ' + d.last,
+      'טלפון': d.phone,
+      'אימייל': d.email,
+      'כתובת': d.address,
+      'מחיר לפני מעמ': (LEAD.price_before_vat || 0) + ' ש"ח',
+      'מעמ': (LEAD.vat_amount || 0) + ' ש"ח',
+      'סהכ לתשלום': (LEAD.price_with_vat || 0) + ' ש"ח',
+      'אמצעי תשלום שנבחר': d.payMethod,
+      'תאריך ושעת חתימה': now,
+      'הערה': 'קובץ ה-PDF החתום המלא נשמר בכרטיס המתעניין במערכת BSD CRM (מסך הכשרות ומתעניינים) וניתן להורדה משם.'
+    })
+  }).catch(e => console.warn('FormSubmit:', e));
 }
 
 async function generateAndUploadPdf(d){

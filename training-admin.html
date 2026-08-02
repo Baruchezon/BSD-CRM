@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608021505">
+<link rel="stylesheet" href="css/style.css?v=202608021700">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1200px;margin:0 auto;}
@@ -48,7 +48,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 16:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 17:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -95,6 +95,7 @@
     <h2>🎓 הכשרות ומתעניינים</h2>
     <div style="display:flex;gap:8px;">
       <button class="btn btn-ghost" onclick="openTrainingSettings()">⚙️ הגדרות הכשרה</button>
+      <button class="btn btn-primary" onclick="openSendBrochureModal()">📄 שליחת ברושור להכשרה</button>
       <button class="btn btn-success" onclick="openSendFormModal()">📤 שליחת טופס רישום</button>
     </div>
   </div>
@@ -132,15 +133,15 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202608021505"></script>
-<script src="js/supabaseClient.js?v=202608021505"></script>
-<script src="js/auth.js?v=202608021505"></script>
+<script src="js/config.js?v=202608021700"></script>
+<script src="js/supabaseClient.js?v=202608021700"></script>
+<script src="js/auth.js?v=202608021700"></script>
 <script>
 let CURRENT_PROFILE = null;
 let ALL_LEADS = [];
 let VAT_RATE = 18;
 let CURRICULUM = '';
-const STATUS_OPTIONS = ['מתעניין חדש','נשלח טופס רישום','פתח את הטופס','מילא פרטים','חתום','ממתין לתשלום','שולם','נרשם להכשרה','בוטל'];
+const STATUS_OPTIONS = ['מתעניין חדש','נשלח ברושור','נשלח טופס רישום','פתח את הטופס','מילא פרטים','חתום','ממתין לתשלום','שולם','נרשם להכשרה','בוטל'];
 const BIZ_FILES_BUCKET = window.BSD_CONFIG.STORAGE_BUCKET;
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -170,13 +171,13 @@ function closeModal(){
 }
 function statusColor(status){
   const map = {
-    'מתעניין חדש': '#eef1f6', 'נשלח טופס רישום': '#fdeccb', 'פתח את הטופס': '#fdeccb',
-    'מילא פרטים': '#dbeafe', 'חתום': '#dff0e4', 'ממתין לתשלום': '#ffe9cc',
+    'מתעניין חדש': '#eef1f6', 'נשלח ברושור': '#e5e0f5', 'נשלח טופס רישום': '#fdeccb', 'פתח את הטופס': '#fdeccb',
+    'מילא פרטים': '#dbeafe', 'חתום': '#d9f2e3', 'ממתין לתשלום': '#ffe9cc',
     'שולם': '#dff0e4', 'נרשם להכשרה': '#d9f2e3', 'בוטל': '#ffe1e1'
   };
   const txt = {
-    'מתעניין חדש': '#333', 'נשלח טופס רישום': '#8a5a10', 'פתח את הטופס': '#8a5a10',
-    'מילא פרטים': '#1e40af', 'חתום': '#245c40', 'ממתין לתשלום': '#7a4a00',
+    'מתעניין חדש': '#333', 'נשלח ברושור': '#4a3b8a', 'נשלח טופס רישום': '#8a5a10', 'פתח את הטופס': '#8a5a10',
+    'מילא פרטים': '#1e40af', 'חתום': '#1a5c38', 'ממתין לתשלום': '#7a4a00',
     'שולם': '#245c40', 'נרשם להכשרה': '#1a5c38', 'בוטל': '#832d1f'
   };
   return `background:${map[status]||'#eee'};color:${txt[status]||'#333'};`;
@@ -255,63 +256,132 @@ function renderTable(){
     body.innerHTML = '<tr class="empty-row"><td colspan="7">לא נמצאו מתעניינים</td></tr>';
     return;
   }
-  body.innerHTML = rows.map(l => `
-    <tr>
+  body.innerHTML = rows.map(l => {
+    const isSigned = !!l.signed_at;
+    return `
+    <tr style="cursor:pointer;${isSigned ? 'background:#d9f2e3;' : ''}" onclick="openLeadCard('${l.id}')">
       <td>
         <div style="display:flex;align-items:flex-start;gap:8px;">
-          <div style="position:relative;flex-shrink:0;">
+          <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
             <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
-            <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:190px;z-index:70;overflow:hidden;">
+            <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:200px;z-index:70;overflow:hidden;">
               <a href="javascript:void(0)" onclick="openLeadCard('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">📇 פתח כרטיס</a>
-              <a href="javascript:void(0)" onclick="resendWhatsapp('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📲 שלח שוב WhatsApp</a>
+              <a href="javascript:void(0)" onclick="openSendFormModal('${l.id}')" style="display:block;color:#9be3ab;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📤 שלח טופס רישום</a>
+              <a href="javascript:void(0)" onclick="resendBrochure('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח שוב ברושור</a>
+              <a href="javascript:void(0)" onclick="resendWhatsapp('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📲 שלח שוב טופס</a>
               <a href="javascript:void(0)" onclick="copyLink('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔗 העתק קישור</a>
               ${l.form_pdf_path ? `<a href="javascript:void(0)" onclick="downloadTrainingPdf('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 הורד PDF חתום</a>` : ''}
               <a href="javascript:void(0)" onclick="markPaid('${l.id}')" style="display:block;color:#9be3ab;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">✅ סמן שולם</a>
             </div>
           </div>
           <div>
-            <div style="font-weight:700;">${esc([l.first_name, l.last_name].filter(Boolean).join(' ') || 'ללא שם')}</div>
+            <div style="font-weight:700;">${isSigned ? '✅ ' : ''}${esc([l.first_name, l.last_name].filter(Boolean).join(' ') || 'ללא שם')}</div>
             <div style="font-size:.72rem;color:#999;">${esc(l.registration_number||'')}</div>
           </div>
         </div>
       </td>
-      <td dir="ltr" style="text-align:right;">${l.phone ? `<a href="tel:${esc(l.phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(l.phone)}</a>` : '—'}</td>
+      <td dir="ltr" style="text-align:right;" onclick="event.stopPropagation()">${l.phone ? `<a href="tel:${esc(l.phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(l.phone)}</a>` : '—'}</td>
       <td>${esc(l.email||'—')}</td>
       <td>${fmtMoney(l.price_with_vat)}</td>
       <td><span class="badge" style="${statusColor(l.status)}">${esc(l.status)}</span></td>
       <td><span class="badge" style="${statusColor(l.payment_status)}">${esc(l.payment_status)}</span></td>
       <td>${fmtDate(l.created_at)}</td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
 ['fSearch'].forEach(id => document.getElementById(id).addEventListener('input', renderTable));
 ['fStatus','fPayStatus','fDateFrom','fDateTo'].forEach(id => document.getElementById(id).addEventListener('change', renderTable));
 
 // ============================================================
-// SEND FORM MODAL
+// SEND BROCHURE MODAL — first touch. Creates the lead card with
+// status "נשלח ברושור"; the registration form (with its price)
+// is sent later from the card itself.
 // ============================================================
-function openSendFormModal(){
+function brochureLink(){
+  return location.origin + location.pathname.replace(/training-admin\.html$/, '') + 'training-brochure.html';
+}
+
+function openSendBrochureModal(){
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
-    <h3>📤 שליחת טופס רישום</h3>
-    <form id="sendForm">
-      <div class="field"><label>שם פרטי <span style="color:#b00020;">*</span></label><input type="text" id="sf_first" required></div>
-      <div class="field"><label>שם משפחה</label><input type="text" id="sf_last"></div>
-      <div class="field"><label>מספר טלפון <span style="color:#b00020;">*</span></label><input type="tel" id="sf_phone" required placeholder="05X-XXXXXXX"></div>
-      <div class="field"><label>מחיר ההכשרה לפני מע"מ (₪)</label><input type="number" id="sf_price" value="2500" min="0"></div>
-      <div class="field" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.85rem;" id="sf_calc"></div>
+    <h3>📄 שליחת ברושור להכשרה</h3>
+    <form id="brochureForm">
+      <div class="field"><label>שם המתעניין <span style="color:#b00020;">*</span></label><input type="text" id="br_first" required></div>
+      <div class="field"><label>שם משפחה</label><input type="text" id="br_last"></div>
+      <div class="field"><label>מספר טלפון <span style="color:#b00020;">*</span></label><input type="tel" id="br_phone" required placeholder="05X-XXXXXXX"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-        <button type="submit" class="btn btn-success">📤 צור ושלח</button>
+        <button type="submit" class="btn btn-primary">📲 שלח ב-WhatsApp</button>
       </div>
     </form>
   `;
   document.getElementById('overlay').classList.add('open');
   document.getElementById('overlay').scrollTop = 0;
+  document.getElementById('brochureForm').addEventListener('submit', submitSendBrochure);
+}
+
+async function submitSendBrochure(e){
+  e.preventDefault();
+  const first_name = document.getElementById('br_first').value.trim();
+  const last_name = document.getElementById('br_last').value.trim();
+  const phone = document.getElementById('br_phone').value.trim();
+  if (!first_name || !phone){ toast('נא למלא שם וטלפון'); return; }
+
+  const { data, error } = await window.supabaseClient.from('training_leads').insert({
+    first_name, last_name, phone,
+    status: 'נשלח ברושור',
+    payment_status: 'ממתין לתשלום',
+    registration_number: makeRegistrationNumber(),
+    form_token: randomToken(),
+    brochure_sent_at: new Date().toISOString(),
+    created_by: CURRENT_PROFILE.id
+  }).select().single();
+
+  if (error){ toast('שגיאה ביצירת הכרטיס: ' + error.message); return; }
+
+  await logEvent(data.id, 'נפתח כרטיס');
+  await logEvent(data.id, 'נשלח ברושור ההכשרה ב-WhatsApp');
+
+  const message = `שלום ${first_name},\n\nבהמשך להתעניינותך, מצורף הברושור של הכשרת מתווכי העסקים של BSD Business Brokers Israel - ההכשרה המעשית היחידה בארץ שמלווה אותך מהכשרה מקצועית ועד עסקה אמיתית בשטח.\n\n${brochureLink()}\n\nלאחר עיון בברושור אשמח לעמוד לרשותך לכל שאלה, ולהמשיך בתהליך ההרשמה.\n\nברוך איזון\nBSD Business Brokers Israel\n054-2424999`;
+
+  let waPhone = phone.replace(/\D/g,'');
+  if (waPhone.startsWith('0')) waPhone = '972' + waPhone.slice(1);
+  window.open('https://wa.me/' + waPhone + '?text=' + encodeURIComponent(message), '_blank');
+
+  closeModal();
+  toast('הכרטיס נוצר והברושור מוכן לשליחה');
+  await loadLeads();
+}
+
+// ============================================================
+// SEND FORM MODAL
+// ============================================================
+function openSendFormModal(existingLeadId){
+  const lead = existingLeadId ? ALL_LEADS.find(l => l.id === existingLeadId) : null;
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>📤 שליחת טופס רישום</h3>
+    ${lead ? `<div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#665;margin-bottom:12px;">שליחה למתעניין קיים: <b>${esc([lead.first_name, lead.last_name].filter(Boolean).join(' '))}</b></div>` : ''}
+    <form id="sendForm">
+      <div class="field"><label>שם פרטי <span style="color:#b00020;">*</span></label><input type="text" id="sf_first" required value="${esc(lead ? (lead.first_name||'') : '')}"></div>
+      <div class="field"><label>שם משפחה</label><input type="text" id="sf_last" value="${esc(lead ? (lead.last_name||'') : '')}"></div>
+      <div class="field"><label>מספר טלפון <span style="color:#b00020;">*</span></label><input type="tel" id="sf_phone" required placeholder="05X-XXXXXXX" value="${esc(lead ? (lead.phone||'') : '')}"></div>
+      <div class="field"><label>מחיר ההכשרה לפני מע"מ (₪)</label><input type="number" id="sf_price" value="${lead && lead.price_before_vat ? lead.price_before_vat : 2500}" min="0"></div>
+      <div class="field" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.85rem;" id="sf_calc"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+        <button type="submit" class="btn btn-success">📤 ${lead ? 'שלח טופס' : 'צור ושלח'}</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+  const form = document.getElementById('sendForm');
+  if (existingLeadId) form.dataset.leadId = existingLeadId;
   document.getElementById('sf_price').addEventListener('input', updateSfCalc);
   updateSfCalc();
-  document.getElementById('sendForm').addEventListener('submit', submitSendForm);
+  form.addEventListener('submit', submitSendForm);
 }
 
 function updateSfCalc(){
@@ -323,6 +393,7 @@ function updateSfCalc(){
 
 async function submitSendForm(e){
   e.preventDefault();
+  const existingLeadId = e.target.dataset.leadId || null;
   const first_name = document.getElementById('sf_first').value.trim();
   const last_name = document.getElementById('sf_last').value.trim();
   const phone = document.getElementById('sf_phone').value.trim();
@@ -331,31 +402,46 @@ async function submitSendForm(e){
 
   const vat_amount = Math.round(price_before_vat * (VAT_RATE/100) * 100) / 100;
   const price_with_vat = price_before_vat + vat_amount;
-  const token = randomToken();
-  const registration_number = makeRegistrationNumber();
 
-  const { data, error } = await window.supabaseClient.from('training_leads').insert({
-    first_name, last_name, phone,
-    price_before_vat, vat_amount, price_with_vat,
-    status: 'נשלח טופס רישום', payment_status: 'ממתין לתשלום',
-    form_token: token, registration_number,
-    created_by: CURRENT_PROFILE.id
-  }).select().single();
+  let leadId, token;
 
-  if (error){ toast('שגיאה ביצירת הכרטיס: ' + error.message); return; }
-
-  await logEvent(data.id, 'נפתח כרטיס');
-  await logEvent(data.id, 'נשלח טופס רישום ב-WhatsApp');
+  if (existingLeadId){
+    const existing = ALL_LEADS.find(l => l.id === existingLeadId);
+    token = existing.form_token || randomToken();
+    const { error } = await window.supabaseClient.from('training_leads').update({
+      first_name, last_name, phone,
+      price_before_vat, vat_amount, price_with_vat,
+      status: 'נשלח טופס רישום',
+      form_token: token,
+      updated_at: new Date().toISOString()
+    }).eq('id', existingLeadId);
+    if (error){ toast('שגיאה בעדכון: ' + error.message); return; }
+    leadId = existingLeadId;
+    await logEvent(leadId, `נשלח טופס רישום ב-WhatsApp (מחיר: ${price_before_vat} ₪ + מע"מ)`);
+  } else {
+    token = randomToken();
+    const { data, error } = await window.supabaseClient.from('training_leads').insert({
+      first_name, last_name, phone,
+      price_before_vat, vat_amount, price_with_vat,
+      status: 'נשלח טופס רישום', payment_status: 'ממתין לתשלום',
+      form_token: token, registration_number: makeRegistrationNumber(),
+      created_by: CURRENT_PROFILE.id
+    }).select().single();
+    if (error){ toast('שגיאה ביצירת הכרטיס: ' + error.message); return; }
+    leadId = data.id;
+    await logEvent(leadId, 'נפתח כרטיס');
+    await logEvent(leadId, 'נשלח טופס רישום ב-WhatsApp');
+  }
 
   const link = trainingFormLink(token);
-  const message = `שלום ${first_name},\n\nבהמשך להתעניינותך בהכשרת מתווכי העסקים של BSD Business Brokers Israel, מצורף קישור אישי לקבלת פרטי ההכשרה ולהשלמת טופס הרישום.\n\n${link}\n\nמחיר ההכשרה עבורך הוא ${price_before_vat} ₪ בתוספת מע"מ.\n\nלאחר מעבר על פרטי ההכשרה ניתן למלא את הפרטים, לאשר ולחתום ישירות בטופס.\n\nBSD Business Brokers Israel`;
+  const message = `שלום ${first_name},\n\nבהמשך להתעניינותך בהכשרת מתווכי העסקים של BSD Business Brokers Israel, מצורף קישור אישי לקבלת פרטי ההכשרה ולהשלמת טופס הרישום.\n\n${link}\n\nמחיר ההכשרה עבורך הוא ${price_before_vat.toLocaleString('he-IL')} ₪ בתוספת מע"מ (סה"כ ${price_with_vat.toLocaleString('he-IL')} ₪ כולל מע"מ).\n\nלאחר מעבר על פרטי ההכשרה ניתן למלא את הפרטים, לאשר ולחתום ישירות בטופס.\n\nBSD Business Brokers Israel`;
 
   let waPhone = phone.replace(/\D/g,'');
   if (waPhone.startsWith('0')) waPhone = '972' + waPhone.slice(1);
   window.open('https://wa.me/' + waPhone + '?text=' + encodeURIComponent(message), '_blank');
 
   closeModal();
-  toast('הכרטיס נוצר וההודעה מוכנה לשליחה');
+  toast('טופס הרישום מוכן לשליחה');
   await loadLeads();
 }
 
@@ -373,6 +459,7 @@ async function openLeadCard(id){
     <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;margin-bottom:14px;">
       מספר רישום: <b>${esc(lead.registration_number||'—')}</b> · נוצר: ${fmtDateTime(lead.created_at)}
     </div>
+    ${lead.signed_at ? `<div style="background:#d9f2e3;color:#1a5c38;border-radius:8px;padding:10px 14px;font-size:.88rem;font-weight:700;margin-bottom:14px;">✅ הטופס נחתם בתאריך ${fmtDateTime(lead.signed_at)}${lead.signed_name ? ' על ידי ' + esc(lead.signed_name) : ''}</div>` : ''}
     <form id="cardForm">
       <div class="form-grid">
         ${fieldRow('cf_first','שם פרטי', lead.first_name)}
@@ -398,7 +485,9 @@ async function openLeadCard(id){
       </div>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;">
-        <button type="button" class="btn btn-ghost" onclick="resendWhatsapp('${lead.id}')">📲 שלח שוב WhatsApp</button>
+        <button type="button" class="btn btn-success" onclick="openSendFormModal('${lead.id}')">📤 שלח טופס רישום</button>
+        <button type="button" class="btn btn-ghost" onclick="resendBrochure('${lead.id}')">📄 שלח שוב ברושור</button>
+        <button type="button" class="btn btn-ghost" onclick="resendWhatsapp('${lead.id}')">📲 שלח שוב טופס</button>
         <button type="button" class="btn btn-ghost" onclick="copyLink('${lead.id}')">🔗 העתק קישור</button>
         ${lead.form_pdf_path ? `<button type="button" class="btn btn-ghost" onclick="downloadTrainingPdf('${lead.id}')">📄 הורד PDF חתום</button>` : ''}
       </div>
@@ -451,6 +540,16 @@ async function saveLeadCard(e){
   toast('נשמר בהצלחה');
   closeModal();
   await loadLeads();
+}
+
+async function resendBrochure(id){
+  const lead = ALL_LEADS.find(l => l.id === id);
+  if (!lead) return;
+  const message = `שלום ${lead.first_name},\n\nבהמשך להתעניינותך, מצורף הברושור של הכשרת מתווכי העסקים של BSD Business Brokers Israel - ההכשרה המעשית היחידה בארץ שמלווה אותך מהכשרה מקצועית ועד עסקה אמיתית בשטח.\n\n${brochureLink()}\n\nלאחר עיון בברושור אשמח לעמוד לרשותך לכל שאלה, ולהמשיך בתהליך ההרשמה.\n\nברוך איזון\nBSD Business Brokers Israel\n054-2424999`;
+  let waPhone = (lead.phone||'').replace(/\D/g,'');
+  if (waPhone.startsWith('0')) waPhone = '972' + waPhone.slice(1);
+  window.open('https://wa.me/' + waPhone + '?text=' + encodeURIComponent(message), '_blank');
+  await logEvent(id, 'נשלח שוב ברושור ההכשרה ב-WhatsApp');
 }
 
 async function resendWhatsapp(id){
