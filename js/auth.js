@@ -202,6 +202,106 @@ function forgetFingerprint(){
   localStorage.removeItem(FP_STORAGE_KEY);
 }
 
+// ============================================================
+// CHANGE PASSWORD (self-service, any logged-in user)
+// ============================================================
+function openChangePassword(){
+  const overlay = document.createElement('div');
+  overlay.id = 'changePwdOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:400px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
+      <h3 style="margin:0 0 16px;color:#0e1b34;border-right:4px solid #c9a24b;padding-right:10px;">שינוי סיסמה</h3>
+      <input type="password" id="changePwd1" placeholder="סיסמה חדשה" minlength="6" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;margin-bottom:10px;box-sizing:border-box;">
+      <input type="password" id="changePwd2" placeholder="אימות סיסמה" minlength="6" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;margin-bottom:10px;box-sizing:border-box;">
+      <div id="changePwdMsg" style="color:#b00020;font-size:.8rem;min-height:18px;margin-bottom:8px;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button onclick="document.getElementById('changePwdOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
+        <button onclick="submitChangePassword()" style="background:#c9a24b;color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שמור סיסמה</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function submitChangePassword(){
+  const p1 = document.getElementById('changePwd1').value;
+  const p2 = document.getElementById('changePwd2').value;
+  const msg = document.getElementById('changePwdMsg');
+  if (p1.length < 6){ msg.textContent = 'הסיסמה חייבת להכיל לפחות 6 תווים'; return; }
+  if (p1 !== p2){ msg.textContent = 'הסיסמאות אינן תואמות'; return; }
+  const { error } = await window.supabaseClient.auth.updateUser({ password: p1 });
+  if (error){ msg.textContent = 'שגיאה: ' + error.message; return; }
+  document.getElementById('changePwdOverlay').remove();
+  if (typeof toast === 'function') toast('הסיסמה עודכנה בהצלחה');
+}
+
+// ============================================================
+// MY PROFILE (self-service personal details editor). Fully
+// self-contained - fetches its own user/profile data rather than
+// relying on any page-specific global variable, so it works
+// identically from the Settings menu on every page. Username
+// (email) is shown but never editable here.
+// ============================================================
+function escHtml(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function openMyProfile(){
+  const { data: { user } } = await window.supabaseClient.auth.getUser();
+  if (!user){ return; }
+  const { data: p, error } = await window.supabaseClient.from('profiles').select('*').eq('id', user.id).single();
+  if (error || !p){ alert('שגיאה בטעינת הפרטים האישיים'); return; }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'myProfileOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;overflow:auto;';
+  const field = (id, label, val) => `<div style="margin-top:10px;"><label style="display:block;font-size:.8rem;color:#666;margin-bottom:4px;">${label}</label><input id="${id}" value="${escHtml(val)}" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;"></div>`;
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:460px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);max-height:90vh;overflow-y:auto;font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
+      <h3 style="margin:0 0 16px;color:#0e1b34;border-right:4px solid #c9a24b;padding-right:10px;">פרטים אישיים</h3>
+      <label style="display:block;font-size:.8rem;color:#666;margin-bottom:4px;">שם משתמש (אימייל) - לא ניתן לשינוי</label>
+      <input type="text" value="${escHtml(user.email)}" disabled style="width:100%;padding:10px 12px;border:1px solid #e5e1d5;border-radius:8px;font-family:inherit;background:#f5f3ec;color:#999;box-sizing:border-box;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        ${field('myFirstName','שם פרטי', p.first_name)}
+        ${field('myLastName','שם משפחה', p.last_name)}
+      </div>
+      ${field('myPhone','טלפון', p.phone)}
+      ${field('myCity','עיר', p.city)}
+      ${field('myCompany','חברה/משרד', p.company)}
+      ${field('myJobTitle','תפקיד בחברה', p.job_title)}
+      ${field('mySpecialization','תחום התמחות', p.specialization)}
+      ${field('myLicense','מספר רישיון', p.license_number)}
+      <div id="myProfileMsg" style="color:#b00020;font-size:.8rem;min-height:18px;margin-top:10px;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px;">
+        <button onclick="document.getElementById('myProfileOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
+        <button onclick="submitMyProfile('${user.id}')" style="background:#c9a24b;color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שמירה</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function submitMyProfile(userId){
+  const msg = document.getElementById('myProfileMsg');
+  const payload = {
+    first_name: document.getElementById('myFirstName').value.trim(),
+    last_name: document.getElementById('myLastName').value.trim(),
+    phone: document.getElementById('myPhone').value.trim(),
+    city: document.getElementById('myCity').value.trim(),
+    company: document.getElementById('myCompany').value.trim(),
+    job_title: document.getElementById('myJobTitle').value.trim(),
+    specialization: document.getElementById('mySpecialization').value.trim(),
+    license_number: document.getElementById('myLicense').value.trim()
+  };
+  const { error } = await window.supabaseClient.from('profiles').update(payload).eq('id', userId);
+  if (error){ msg.textContent = 'שגיאה בשמירה: ' + error.message; return; }
+  document.getElementById('myProfileOverlay').remove();
+  if (typeof toast === 'function') toast('הפרטים נשמרו בהצלחה');
+  // headerUserInfo may show the old name until next page load - refresh it if present
+  const headerEl = document.getElementById('headerUserInfo');
+  if (headerEl && typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE){
+    Object.assign(CURRENT_PROFILE, payload);
+    headerEl.textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL');
+  }
+}
+
 function scrollTableBy(btn, amount){
   const wrap = btn.closest('.table-scroll-wrap');
   const inner = wrap && wrap.querySelector('.table-scroll-inner');
