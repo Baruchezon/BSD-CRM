@@ -12,7 +12,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="css/style.css?v=20260802">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
   .nav{display:flex;gap:6px;}
@@ -88,7 +87,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 12:10</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 12:40</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav">
     <a href="app.html">לוח בקרה</a>
@@ -106,10 +105,15 @@
     <a href="matches.html">התאמות</a>
     <a href="stats.html">📊 סטטיסטיקה</a>
     <a id="navUsersLink" href="users.html">משתמשים</a>
-    <a href="backup.html">💾 גיבוי</a>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">⚙️ הגדרות ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="backup.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">💾 גיבוי נתונים</a>
+      <a href="javascript:void(0)" id="pushBellBtn" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔕 הפעל התראות</a>
+      <a href="help.html" target="_blank" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">❓ עזרה</a>
+    </div>
   </div>
-    <button id="pushBellBtn" class="btn btn-ghost" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;margin-inline-end:8px;"></button>
-  <a href="help.html" target="_blank" class="btn btn-ghost" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;text-decoration:none;display:inline-flex;align-items:center;margin-inline-end:8px;">❓ עזרה</a>
+  </div>
   <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
 </div>
 
@@ -118,7 +122,6 @@
     <h2>קונים ומשקיעים</h2>
     <div class="add-btns">
       <button class="btn btn-buyer" onclick="openLeadForm(null,'buyer')">+ קונה חדש</button>
-      <button class="btn btn-primary" id="csvImportBtn" style="display:none;" onclick="openCsvImport()">📂 טעינת קונים חדש מקובץ</button>
     </div>
   </div>
 
@@ -183,7 +186,6 @@
 let ALL_LEADS = [];
 let ALL_USERS = [];
 let CURRENT_PROFILE = null;
-let PENDING_IMPORT_CANDIDATES = [];
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
@@ -694,272 +696,11 @@ async function deleteLead(id){
   await loadLeads();
 }
 
-// ============================================================
-// ייבוא קונים/משקיעים מקובץ CSV (Admin בלבד)
-// ============================================================
-const BUSINESS_SEEKER_KEYWORDS = ['מחפש עסק','מחפשת עסק','מחפש לקנות עסק','מחפש לרכוש עסק','מעוניין לרכוש עסק','רוצה לקנות עסק','מחפש הזדמנות עסקית'];
-const INVESTOR_KEYWORDS = ['משקיע','משקיעה','מחפש השקעה','מחפשת השקעה','רוצה להשקיע'];
-const BUYER_KEYWORDS = [...BUSINESS_SEEKER_KEYWORDS, ...INVESTOR_KEYWORDS];
-const ISRAELI_CITIES = [
-  'תל אביב','ירושלים','חיפה','ראשון לציון','פתח תקווה','אשדוד','נתניה','באר שבע','חולון','בני ברק',
-  'רמת גן','אשקלון','רחובות','בת ים','כפר סבא','הרצליה','חדרה','מודיעין','נהריה','לוד','רמלה',
-  'רעננה','גבעתיים','הוד השרון','קריית אתא','קריית גת','קריית ים','קריית מוצקין','קריית ביאליק',
-  'נצרת','עפולה','טבריה','אילת','דימונה','ערד','שדרות','אופקים','נס ציונה','יבנה','אור יהודה',
-  'קרית שמונה','מעלה אדומים','ביתר עילית','אלעד','טירת כרמל','זכרון יעקב','כפר יונה','גבעת שמואל',
-  'רמת השרון','שוהם','מזכרת בתיה','גדרה','פרדס חנה','בית שמש','אריאל'
-];
-
-function normalizePhoneJS(raw){
-  if (!raw) return null;
-  let digits = String(raw).replace(/[^0-9]/g,'');
-  if (digits.startsWith('00972')) digits = '0' + digits.slice(5);
-  else if (digits.startsWith('972')) digits = '0' + digits.slice(3);
-  if (digits.length < 9) return null;
-  return digits;
-}
-
-function openCsvImport(){
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.csv';
-  input.onchange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => processCsvRows(results.data, results.meta.fields || [])
-    });
-  };
-  input.click();
-}
-
-// מוצא את שם העמודה המתאים לפי התאמת מילים חלקית (לא תלוי אותיות גדולות/קטנות)
-function findHeader(headers, patterns){
-  return headers.filter(h => patterns.some(p => h.toLowerCase().includes(p)));
-}
-
-// עמודות "רעש" מקבצי ייצוא אנשי קשר (Google/Outlook/iPhone) שאסור שיכנסו להערות
-const NOISE_VALUES = ['mobile','home','work','other','main','iphone','myContacts'.toLowerCase(),'* myContacts'.toLowerCase()];
-
-// מסיר תוויות רעש (Mobile / Home / Work / * myContacts וכו') רק כשהן מופיעות כמקטע שלם (בין "|"),
-// כדי לא לפגוע בטקסט אמיתי שבמקרה מכיל את אותה מילה (למשל "רחוב הראשי")
-function stripNoiseTokens(text){
-  if (!text) return text;
-  const segments = text.split('|').map(s=>s.trim());
-  const kept = segments.filter(seg=>{
-    if (seg === '') return false;
-    const cleaned = seg.toLowerCase().replace(/[*\s:]/g,'');
-    if (NOISE_VALUES.some(nv => nv.replace(/[*\s:]/g,'') === cleaned)) return false;
-    // מסיר קישורים (URL) ומזהים טכניים ארוכים בלי רווחים (כמו קישורי תמונת פרופיל / hash-ים)
-    if (/https?:\/\//i.test(seg)) return false;
-    if (/googleusercontent|gstatic|ggpht/i.test(seg)) return false;
-    if (!seg.includes(' ') && seg.length > 18 && /[a-zA-Z]/.test(seg) && /[0-9]/.test(seg)) return false;
-    return true;
-  });
-  return kept.join(' | ');
-}
-
-function processCsvRows(rows, headers){
-  const nameCol = headers.find(h => h.trim().toLowerCase() === 'name');
-  const givenCol = findHeader(headers, ['given name','first name','שם פרטי'])[0];
-  const familyCol = findHeader(headers, ['family name','last name','שם משפחה'])[0];
-  const notesCol = findHeader(headers, ['notes','note','הערות'])[0];
-  const orgCols = findHeader(headers, ['organization','company','חברה']);
-  const emailCols = findHeader(headers, ['e-mail','email','אימייל']).filter(h => !h.toLowerCase().includes('type') && !h.toLowerCase().includes('label'));
-  const phoneCols = findHeader(headers, ['phone']).filter(h => !h.toLowerCase().includes('type') && !h.toLowerCase().includes('label'));
-  const cityCols = findHeader(headers, ['city','עיר']);
-
-  const useStructured = !!(nameCol || givenCol || familyCol);
-  const candidates = [];
-
-  rows.forEach(row => {
-    const allValues = Object.values(row).map(v => (v||'').toString().trim()).filter(Boolean);
-    if (allValues.length === 0) return;
-    const fullText = allValues.join(' ');
-
-    const matchedKeyword = BUYER_KEYWORDS.find(k => fullText.includes(k));
-    if (!matchedKeyword) return; // לא רלוונטי - מדלגים
-    const category = BUSINESS_SEEKER_KEYWORDS.includes(matchedKeyword) ? 'business' : 'investor';
-
-    let first_name, last_name, phone = null, email = null, city = null, company = null, realNotes = '';
-
-    if (useStructured){
-      // ייבוא מובנה (יודע לזהות עמודות אמיתיות של קובץ אנשי קשר)
-      if (givenCol || familyCol){
-        first_name = (row[givenCol] || '').trim();
-        last_name = (row[familyCol] || '').trim();
-      } else {
-        const parts = (row[nameCol] || '').trim().split(/\s+/);
-        first_name = parts[0] || '';
-        last_name = parts.slice(1).join(' ');
-      }
-      if (!first_name && !last_name && nameCol){
-        const parts = (row[nameCol] || '').trim().split(/\s+/);
-        first_name = parts[0] || 'ללא שם';
-        last_name = parts.slice(1).join(' ');
-      }
-      for (const c of phoneCols){ const p = normalizePhoneJS(row[c]); if (p && /^\d{9,10}$/.test(p)){ phone = p; break; } }
-      for (const c of emailCols){ if (row[c] && row[c].includes('@')){ email = row[c].trim(); break; } }
-      for (const c of cityCols){ if (row[c] && row[c].trim()){ city = row[c].trim(); break; } }
-      for (const c of orgCols){ if (row[c] && row[c].trim()){ company = row[c].trim(); break; } }
-      realNotes = notesCol ? (row[notesCol]||'').trim() : '';
-    } else {
-      // גיבוי: קובץ ללא כותרות מוכרות - ניחוש לפי מיקום, עם סינון רעש ידוע
-      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
-      const remaining = [];
-      allValues.forEach(cell => {
-        if (!phone){ const p = normalizePhoneJS(cell); if (p && /^\d{9,10}$/.test(p)){ phone = p; return; } }
-        if (!email && emailRegex.test(cell)){ email = cell.match(emailRegex)[0]; return; }
-        if (!city){ const fc = ISRAELI_CITIES.find(c => cell.includes(c)); if (fc){ city = fc; return; } }
-        const cleanedCell = cell.toLowerCase().replace(/[*\s:]/g,'');
-        if (NOISE_VALUES.some(nv => nv.replace(/[*\s:]/g,'') === cleanedCell)) return; // מדלג על תוויות רעש כמו Mobile/Home/* myContacts
-        remaining.push(cell);
-      });
-      const nameParts = (remaining.length ? remaining[0] : 'ללא שם').split(/\s+/);
-      first_name = nameParts[0] || 'ללא שם';
-      last_name = nameParts.slice(1).join(' ');
-      company = remaining.length > 1 ? remaining[1] : null;
-      realNotes = remaining.slice(2).join(' | ');
-    }
-
-    candidates.push({
-      first_name: first_name || 'ללא שם', last_name: last_name || '',
-      full_name: [first_name,last_name].filter(Boolean).join(' ') || 'ללא שם',
-      phone, email, city, company: stripNoiseTokens(company), category,
-      notes: stripNoiseTokens(realNotes),
-      source: 'ייבוא CSV'
-    });
-  });
-
-  // מחפשי עסק קודם, משקיעים אחריהם
-  candidates.sort((a,b) => (a.category === b.category) ? 0 : (a.category === 'business' ? -1 : 1));
-
-  showImportPreview(candidates);
-}
-
-function showImportPreview(candidates){
-  // התאמה חכמה מול הרשימה הקיימת: חדש / יש עדכון (משלים פרטים חסרים) / ללא שינוי
-  let newCount = 0, updateCount = 0, unchangedCount = 0;
-
-  candidates.forEach(c => {
-    const existing = ALL_LEADS.find(l => (c.phone && l.phone === c.phone) || (c.email && l.email === c.email));
-    if (!existing){
-      c._status = 'new';
-      newCount++;
-      return;
-    }
-    c._existingId = existing.id;
-    const updates = {};
-    if (c.email && !existing.email) updates.email = c.email;
-    if (c.city && !existing.city) updates.city = c.city;
-    if (c.company && !existing.company) updates.company = c.company;
-    if (c.phone && !existing.phone) updates.phone = c.phone;
-    if (c.notes){
-      const existingNotes = existing.notes || '';
-      if (!existingNotes.includes(c.notes.split(' | ')[0])){ // רק אם יש מידע חדש שלא הופיע כבר
-        updates.notes = existingNotes ? existingNotes + ' | ' + c.notes : c.notes;
-      }
-    }
-    if (Object.keys(updates).length > 0){
-      c._status = 'update';
-      c._updates = updates;
-      updateCount++;
-    } else {
-      c._status = 'unchanged';
-      unchangedCount++;
-    }
-  });
-
-  PENDING_IMPORT_CANDIDATES = candidates;
-
-  const statusLabel = { new: 'חדש - יתווסף', update: 'קיים - יעודכן', unchanged: 'קיים - ללא שינוי' };
-  const statusColor = { new: 'color:#245c40;font-weight:700;', update: 'color:#8a5a10;font-weight:700;', unchanged: 'color:#aaa;' };
-
-  const modal = document.getElementById('modalBox');
-  modal.innerHTML = `
-    <h3>תצוגה מקדימה - ייבוא קונים/משקיעים</h3>
-    <p style="font-size:.85rem;color:#555;">
-      נמצאו <b>${candidates.length}</b> רשומות תואמות (מחפש עסק / משקיע) מתוך הקובץ.
-      <br>חדשים להוספה: <b style="color:#245c40;">${newCount}</b> ·
-      קיימים שיעודכנו: <b style="color:#8a5a10;">${updateCount}</b> ·
-      ללא שינוי: <b style="color:#aaa;">${unchangedCount}</b>
-    </p>
-    <div style="max-height:320px;overflow-y:auto;border:1px solid #eee;border-radius:8px;">
-      <table style="width:100%;font-size:.78rem;">
-        <thead><tr style="background:#f5f3ec;">
-          <th style="padding:6px;text-align:right;">שם</th>
-          <th style="padding:6px;text-align:right;">סוג</th>
-          <th style="padding:6px;text-align:right;">טלפון</th>
-          <th style="padding:6px;text-align:right;">עיר</th>
-          <th style="padding:6px;text-align:right;">אימייל</th>
-          <th style="padding:6px;text-align:right;">חברה</th>
-          <th style="padding:6px;text-align:right;">הערות</th>
-          <th style="padding:6px;text-align:right;">סטטוס</th>
-        </tr></thead>
-        <tbody>
-          ${candidates.map(c=>`<tr style="${c._status==='unchanged'?'color:#ccc;':''}">
-            <td style="padding:6px;">${esc(c.full_name)}</td>
-            <td style="padding:6px;">${c.category==='business'?'מחפש עסק':'משקיע'}</td>
-            <td style="padding:6px;">${esc(c.phone||'—')}</td>
-            <td style="padding:6px;">${esc(c.city||'—')}</td>
-            <td style="padding:6px;">${esc(c.email||'—')}</td>
-            <td style="padding:6px;">${esc(c.company||'—')}</td>
-            <td style="padding:6px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(c.notes||'')}">${esc(c.notes||'—')}</td>
-            <td style="padding:6px;${statusColor[c._status]}">${statusLabel[c._status]}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-      <button type="button" class="btn btn-primary" onclick="confirmImport()">יבא ${newCount} חדשים + עדכן ${updateCount}</button>
-    </div>
-  `;
-  document.getElementById('overlay').classList.add('open');
-  document.getElementById('overlay').scrollTop = 0;
-}
-
-async function confirmImport(){
-  const candidates = PENDING_IMPORT_CANDIDATES || [];
-  const toInsert = candidates.filter(c => c._status === 'new').map(c => ({
-    type: 'buyer',
-    first_name: c.first_name, last_name: c.last_name,
-    full_name: c.full_name,
-    phone: c.phone, email: c.email, city: c.city, company: c.company,
-    notes: c.notes, source: c.source
-  }));
-  const toUpdate = candidates.filter(c => c._status === 'update');
-
-  let insertedCount = 0, updatedCount = 0, errors = [];
-
-  if (toInsert.length > 0){
-    const { error, data } = await window.supabaseClient.from('leads').insert(toInsert).select('id');
-    if (error){ errors.push('הוספה: ' + error.message); }
-    else { insertedCount = data ? data.length : toInsert.length; }
-  }
-
-  for (const c of toUpdate){
-    const { error } = await window.supabaseClient.from('leads').update(c._updates).eq('id', c._existingId);
-    if (error){ errors.push(`עדכון ${c.full_name}: ` + error.message); }
-    else { updatedCount++; }
-  }
-
-  if (errors.length > 0){ toast('הושלם עם שגיאות: ' + errors[0]); }
-  else { toast(`נוספו ${insertedCount} חדשים, עודכנו ${updatedCount} קיימים`); }
-
-  closeModal();
-  await loadLeads();
-}
-
 (async function init(){
   CURRENT_PROFILE = await requireAuth();
   if (!CURRENT_PROFILE) return;
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL');
   if (CURRENT_PROFILE.role !== 'admin'){ const navUsers = document.getElementById('navUsersLink'); if (navUsers) navUsers.style.display = 'none'; }
-  if (CURRENT_PROFILE.role === 'admin'){
-    document.getElementById('csvImportBtn').style.display = 'inline-block';
-  }
   await loadUsers();
   await loadNotesSummary('leads');
   await loadLeads();
