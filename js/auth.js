@@ -129,7 +129,16 @@ function isFingerprintRegistered(){
 async function isFingerprintAvailable(){
   if (!window.PublicKeyCredential || !navigator.credentials) return false;
   try {
-    return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    // Some Android/Chrome configurations never resolve this call at all
+    // (missing/misbehaving Play Services WebAuthn integration). Since this
+    // runs silently right after a normal login, a hang here must never be
+    // allowed to block getting into the app - race it against a timeout
+    // and just treat "no answer" as "not available".
+    const result = await Promise.race([
+      PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(),
+      new Promise(resolve => setTimeout(() => resolve(false), 2500))
+    ]);
+    return !!result;
   } catch(e){ return false; }
 }
 

@@ -63,7 +63,12 @@
     return;
   }
 
-  if (isFingerprintRegistered() && await isFingerprintAvailable()){
+  let showGate = false;
+  try {
+    showGate = isFingerprintRegistered() && await isFingerprintAvailable();
+  } catch(e){ console.error('fingerprint gate check failed, continuing to app.html', e); }
+
+  if (showGate){
     showQuickUnlockGate();
   } else {
     window.location.href = 'app.html';
@@ -152,7 +157,12 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
 
   addToEmailHistory(email);
 
-  if (!isFingerprintRegistered() && await isFingerprintAvailable()){
+  let showFpOffer = false;
+  try {
+    showFpOffer = !isFingerprintRegistered() && await isFingerprintAvailable();
+  } catch(e){ console.error('fingerprint check failed, continuing to app.html', e); }
+
+  if (showFpOffer){
     showFingerprintOfferModal(email);
   } else {
     window.location.href = 'app.html';
