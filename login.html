@@ -56,8 +56,53 @@
 <script>
 (async function checkExistingSession(){
   const { data: { session } } = await window.supabaseClient.auth.getSession();
-  if (session) window.location.href = 'app.html';
+  if (!session) return;
+
+  if (sessionStorage.getItem('bsd_skip_fp_gate')){
+    sessionStorage.removeItem('bsd_skip_fp_gate');
+    return;
+  }
+
+  if (isFingerprintRegistered() && await isFingerprintAvailable()){
+    showQuickUnlockGate();
+  } else {
+    window.location.href = 'app.html';
+  }
 })();
+
+function showQuickUnlockGate(){
+  const card = document.querySelector('.login-card');
+  card.innerHTML = `
+    <h1>BSD CRM</h1>
+    <div style="font-size:2.6rem;margin:10px 0 4px;">🔓</div>
+    <p class="tagline" style="margin-bottom:6px;">אתה עדיין מחובר</p>
+    <p style="color:#6c7488;font-size:.85rem;margin-bottom:22px;">אמת עם טביעת אצבע כדי להיכנס</p>
+    <button id="quickUnlockBtn" style="background:#0e1b34;color:#fff;border:none;border-radius:8px;padding:12px 26px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;width:100%;margin-bottom:12px;">🔓 כניסה עם טביעת אצבע</button>
+    <button id="quickUnlockPwdBtn" style="background:none;border:none;color:#999;font-size:.82rem;cursor:pointer;text-decoration:underline;display:block;margin:0 auto 8px;">היכנס עם סיסמה במקום</button>
+    <button id="quickUnlockForgetBtn" style="background:none;border:none;color:#bbb;font-size:.75rem;cursor:pointer;text-decoration:underline;display:block;margin:0 auto;">בטל כניסה עם טביעת אצבע במכשיר זה</button>
+    <div id="quickUnlockError" style="color:#b00020;font-size:.8rem;margin-top:12px;"></div>
+  `;
+  document.getElementById('quickUnlockBtn').addEventListener('click', async function(){
+    const errEl = document.getElementById('quickUnlockError');
+    errEl.textContent = '';
+    try {
+      const ok = await verifyFingerprint();
+      if (ok) window.location.href = 'app.html';
+      else errEl.textContent = 'האימות נכשל, נסה שוב';
+    } catch(e){
+      errEl.textContent = 'האימות בוטל או נכשל';
+    }
+  });
+  document.getElementById('quickUnlockPwdBtn').addEventListener('click', function(){
+    sessionStorage.setItem('bsd_skip_fp_gate', '1');
+    location.reload();
+  });
+  document.getElementById('quickUnlockForgetBtn').addEventListener('click', function(){
+    forgetFingerprint();
+    sessionStorage.setItem('bsd_skip_fp_gate', '1');
+    location.reload();
+  });
+}
 
 // זיכרון אימיילים קודמים (לא סיסמאות!) - מציג רשימת השלמה אוטומטית של הדפדפן
 // כשלוחצים על שדה האימייל, מבוסס על עד 6 הכתובות האחרונות שהתחברת איתן בהצלחה.
@@ -106,8 +151,35 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
   }
 
   addToEmailHistory(email);
-  window.location.href = 'app.html';
+
+  if (!isFingerprintRegistered() && await isFingerprintAvailable()){
+    showFingerprintOfferModal(email);
+  } else {
+    window.location.href = 'app.html';
+  }
 });
+
+function showFingerprintOfferModal(email){
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;padding:28px 30px;max-width:360px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
+      <div style="font-size:2.2rem;margin-bottom:8px;">👆</div>
+      <div style="font-weight:700;color:#0e1b34;font-size:1.02rem;margin-bottom:8px;">להקל על הכניסה במכשיר הזה?</div>
+      <div style="color:#6c7488;font-size:.85rem;margin-bottom:20px;">בפעם הבאה תוכל להיכנס עם טביעת אצבע במקום להקליד סיסמה</div>
+      <button id="fpEnableBtn" style="background:#0e1b34;color:#fff;border:none;border-radius:8px;padding:12px 26px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;width:100%;margin-bottom:10px;">🔒 הפעל כניסה עם טביעת אצבע</button>
+      <button id="fpSkipBtn" style="background:none;border:none;color:#999;font-size:.82rem;cursor:pointer;text-decoration:underline;">לא עכשיו</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('fpEnableBtn').addEventListener('click', async function(){
+    try { await registerFingerprint(email); }
+    catch(e){ console.error(e); }
+    window.location.href = 'app.html';
+  });
+  document.getElementById('fpSkipBtn').addEventListener('click', function(){
+    window.location.href = 'app.html';
+  });
+}
 </script>
 </body>
 </html>
