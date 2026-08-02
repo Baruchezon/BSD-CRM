@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=20260802">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -60,7 +60,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 09:15</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 09:45</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
       <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -110,7 +110,8 @@
     </select>
   </div>
 
-  <div style="overflow-x:auto;">
+  <div class="table-scroll-wrap" style="position:relative;">
+  <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
   <table>
     <thead>
       <tr><th>קונה</th><th>עסק</th><th>אחוז התאמה</th><th>סטטוס</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>נוצר</th><th>עודכן</th><th>פעולות</th></tr>
@@ -118,16 +119,21 @@
     <tbody id="matchBody"><tr class="empty-row"><td colspan="9">טוען...</td></tr></tbody>
   </table>
   </div>
+  <div style="display:flex;justify-content:center;gap:10px;margin:8px 0 2px;">
+    <button type="button" class="btn btn-ghost" onclick="scrollTableBy(this,-260)">⬅ גלול לעוד עמודות</button>
+    <button type="button" class="btn btn-ghost" onclick="scrollTableBy(this,260)">➡ גלול חזרה</button>
+  </div>
+  </div>
 </div>
 
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js"></script>
-<script src="js/supabaseClient.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/push.js"></script>
-<script src="js/searchSelect.js"></script>
+<script src="js/config.js?v=20260802"></script>
+<script src="js/supabaseClient.js?v=20260802"></script>
+<script src="js/auth.js?v=20260802"></script>
+<script src="js/push.js?v=20260802"></script>
+<script src="js/searchSelect.js?v=20260802"></script>
 <script>
 const MATCH_STATUSES = ['התאמה חדשה','נשלח לקונה - ממתין לתגובה (אנונימי)','נשלחו מסמכים לאחר חתימת הסכם',
   'נקבעה פגישה','התקיימה פגישה','המשך מו"מ','לא מתאים לקונה','העסקה נסגרה','העסקה נעצרה'];

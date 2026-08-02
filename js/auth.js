@@ -107,6 +107,12 @@ async function requireAuth() {
 // separate scattered links. Shared here so the behavior is identical
 // wherever the menu appears.
 // ============================================================
+function scrollTableBy(btn, amount){
+  const wrap = btn.closest('.table-scroll-wrap');
+  const inner = wrap && wrap.querySelector('.table-scroll-inner');
+  if (inner) inner.scrollBy({ left: amount, behavior: 'smooth' });
+}
+
 function toggleFormsMenu(e){
   if (e) e.stopPropagation();
   const btn = e && e.currentTarget ? e.currentTarget : null;
