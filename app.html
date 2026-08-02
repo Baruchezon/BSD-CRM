@@ -82,7 +82,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 13:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 13:30</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -106,10 +106,11 @@
       <a href="backup.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">💾 גיבוי נתונים</a>
       <a href="javascript:void(0)" id="pushBellBtn" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔕 הפעל התראות</a>
       <a href="help.html" target="_blank" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">❓ עזרה</a>
+      <a href="javascript:void(0)" onclick="openMyProfile()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👤 פרטים אישיים</a>
+      <a href="javascript:void(0)" onclick="openChangePassword()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔑 שנה סיסמה</a>
     </div>
   </div>
   </div>
-    <button class="logout" onclick="openChangePassword()" style="margin-left:8px;">🔑 שנה סיסמה</button>
     <button class="logout" onclick="bsdLogout()">יציאה</button>
 </div>
 
@@ -803,35 +804,8 @@ function forceSetPassword(customTitle, customSubtitle){
   });
 }
 
-function openChangePassword(){
-  const overlay = document.createElement('div');
-  overlay.id = 'changePwdOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;';
-  overlay.innerHTML = `
-    <div style="background:#fff;border-radius:14px;max-width:400px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
-      <h3 style="margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">שינוי סיסמה</h3>
-      <input type="password" id="changePwd1" placeholder="סיסמה חדשה" minlength="6" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;margin-bottom:10px;">
-      <input type="password" id="changePwd2" placeholder="אימות סיסמה" minlength="6" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;margin-bottom:10px;">
-      <div id="changePwdMsg" style="color:#b00020;font-size:.8rem;min-height:18px;margin-bottom:8px;"></div>
-      <div style="display:flex;justify-content:flex-end;gap:10px;">
-        <button onclick="document.getElementById('changePwdOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
-        <button onclick="submitChangePassword()" style="background:var(--gold);color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שמור סיסמה</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-}
-
-async function submitChangePassword(){
-  const p1 = document.getElementById('changePwd1').value;
-  const p2 = document.getElementById('changePwd2').value;
-  const msg = document.getElementById('changePwdMsg');
-  if (p1.length < 6){ msg.textContent = 'הסיסמה חייבת להכיל לפחות 6 תווים'; return; }
-  if (p1 !== p2){ msg.textContent = 'הסיסמאות אינן תואמות'; return; }
-  const { error } = await window.supabaseClient.auth.updateUser({ password: p1 });
-  if (error){ msg.textContent = 'שגיאה: ' + error.message; return; }
-  document.getElementById('changePwdOverlay').remove();
-  toast('הסיסמה עודכנה בהצלחה');
-}
+// שינוי סיסמה עבר לפונקציה משותפת ב-js/auth.js (openChangePassword/submitChangePassword),
+// כדי שתהיה זמינה מתפריט ההגדרות בכל עמוד, לא רק בדשבורד.
 
 // ============================================================
 // TODAY'S TASKS POPUP — shows each user's own open tasks due
