@@ -102,10 +102,9 @@ function showQuickUnlockGate(){
     sessionStorage.setItem('bsd_skip_fp_gate', '1');
     location.reload();
   });
-  document.getElementById('quickUnlockForgetBtn').addEventListener('click', function(){
+  document.getElementById('quickUnlockForgetBtn').addEventListener('click', async function(){
     forgetFingerprint();
-    sessionStorage.setItem('bsd_skip_fp_gate', '1');
-    location.reload();
+    await bsdFullLogout();
   });
 }
 
