@@ -45,7 +45,7 @@
   .agr-none{background:#f1f1f1;color:#777;}
   .agr-sent{background:#fdeccb;color:#8a5a10;}
   .agr-signed{background:#dff0e4;color:#245c40;}
-  .agr-banner{width:100%;box-sizing:border-box;padding:10px 16px;border-radius:8px;font-size:.95rem;font-weight:700;margin-bottom:14px;text-align:center;}
+  .agr-note{width:100%;box-sizing:border-box;padding:2px 2px 12px;font-size:.8rem;font-weight:400;color:#8a8578;margin-bottom:4px;text-align:right;}
   tbody tr.row-signed{background:#16a34a !important;border-right:10px solid #0b5e29;}
   tbody tr.row-signed td{color:#fff !important;font-weight:700;}
   tbody tr.row-signed:hover{background:#128a3e !important;}
@@ -87,7 +87,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 12:40</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 13:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav">
     <a href="app.html">לוח בקרה</a>
@@ -380,16 +380,21 @@ function canSendAgreement(){
   return !!CURRENT_PROFILE.can_send_agreement;
 }
 
+// תצוגה מקוצרת בלבד (לא משפיע על הערך הנשמר בבסיס הנתונים)
+function agreementShortLabel(status){
+  const s = status || 'אין הסכם';
+  return s === 'נשלח הסכם לחתימה' ? 'נשלח לחתימה' : s;
+}
 function agreementBadge(status){
   const s = status || 'אין הסכם';
   const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
-  return `<span class="agr-badge ${cls}">${esc(s)}</span>`;
+  return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>`;
 }
+// שורת מידע פשוטה בלבד (לא באנר בולט) - השדה האמיתי הניתן לעריכה נמצא בטופס עצמו למטה
 function agreementBanner(status){
   const s = status || 'אין הסכם';
-  const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
   const icon = s === 'יש הסכם חתום' ? '✅' : (s === 'נשלח הסכם לחתימה' ? '📤' : '⭕');
-  return `<div class="agr-banner ${cls}">${icon} סטטוס הסכם: <b>${esc(s)}</b></div>`;
+  return `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(agreementShortLabel(s))}</div>`;
 }
 
 ['fSearch','fType','fStatus','fAgreement','fCreatedBy','fSort'].forEach(id=>{
