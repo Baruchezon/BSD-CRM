@@ -82,7 +82,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 14:15</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 14:40</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -922,6 +922,12 @@ async function checkNewMessagesPopup(profile){
   const toShow = data.filter(m => !shownIds.includes(m.id));
   if (toShow.length === 0) return;
 
+  const senderIds = [...new Set(toShow.map(m => m.sender_id))];
+  const { data: senders } = await window.supabaseClient.from('profiles').select('id, full_name, email').in('id', senderIds);
+  const nameMap = {};
+  (senders || []).forEach(s => { nameMap[s.id] = (s.full_name && s.full_name.trim()) ? s.full_name : s.email; });
+  toShow.forEach(m => { m.senderName = nameMap[m.sender_id] || 'משתמש'; });
+
   localStorage.setItem('bsdMsgPopupShown_' + profile.id, JSON.stringify(data.map(m => m.id)));
   showNewMessagesPopup(toShow);
 }
@@ -930,14 +936,22 @@ function showNewMessagesPopup(msgs){
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:center;justify-content:center;z-index:9998;padding:20px;';
   overlay.innerHTML = `
-    <div style="background:#fff;border-radius:14px;padding:26px 28px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
+    <div style="background:#fff;border-radius:14px;padding:26px 28px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
       <div style="font-size:1.8rem;margin-bottom:4px;">💬</div>
       <div style="font-weight:700;color:#0e1b34;font-size:1.1rem;margin-bottom:2px;">הודעות חדשות</div>
       <div style="color:#8a93a8;font-size:.82rem;margin-bottom:14px;">${msgs.length} הודעות שלא נקראו</div>
-      <div style="max-height:280px;overflow-y:auto;margin-bottom:16px;">
-        ${msgs.map(m=>`
-          <div style="padding:10px 12px;border-bottom:1px solid #f0ede4;">
-            <div style="font-size:.92rem;color:#1c2333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.body)}</div>
+      <div style="max-height:340px;overflow-y:auto;margin-bottom:16px;">
+        ${msgs.map((m,i)=>`
+          <div style="padding:10px 12px;border-bottom:1px solid #f0ede4;" id="popupMsg${i}">
+            <div style="font-size:.78rem;color:#8a93a8;margin-bottom:2px;">${esc(m.senderName)}</div>
+            <div style="font-size:.92rem;color:#1c2333;margin-bottom:6px;">${esc(m.body)}</div>
+            <button type="button" onclick="togglePopupReply(${i})" style="background:none;border:none;color:#2b6fc9;font-size:.78rem;font-weight:700;cursor:pointer;padding:0;">↩️ השב</button>
+            <div id="popupReplyBox${i}" style="display:none;margin-top:8px;">
+              <textarea id="popupReplyText${i}" style="width:100%;min-height:50px;padding:8px 10px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;resize:vertical;font-size:.85rem;"></textarea>
+              <div style="display:flex;justify-content:flex-end;margin-top:6px;">
+                <button type="button" onclick="sendPopupReply(${i}, '${m.sender_id}')" style="background:#0e1b34;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-family:inherit;font-size:.78rem;font-weight:700;cursor:pointer;">📤 שלח</button>
+              </div>
+            </div>
           </div>
         `).join('')}
       </div>
@@ -948,6 +962,26 @@ function showNewMessagesPopup(msgs){
     </div>`;
   document.body.appendChild(overlay);
   document.getElementById('newMsgPopupCloseBtn').addEventListener('click', () => overlay.remove());
+}
+
+function togglePopupReply(i){
+  const box = document.getElementById('popupReplyBox' + i);
+  if (box) box.style.display = (box.style.display === 'none' ? 'block' : 'none');
+}
+
+async function sendPopupReply(i, recipientId){
+  const textEl = document.getElementById('popupReplyText' + i);
+  const text = textEl.value.trim();
+  if (!text) return;
+  const { data: { user } } = await window.supabaseClient.auth.getUser();
+  if (!user) return;
+  const { error } = await window.supabaseClient.from('messages').insert({ sender_id: user.id, recipient_id: recipientId, body: text });
+  if (error){
+    toast('שגיאה בשליחה: ' + error.message);
+    return;
+  }
+  const boxEl = document.getElementById('popupReplyBox' + i);
+  if (boxEl) boxEl.innerHTML = '<div style="color:#245c40;font-size:.8rem;font-weight:700;">✓ נשלח</div>';
 }
 
 (async function init(){
