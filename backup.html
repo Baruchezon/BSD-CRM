@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - גיבוי נתונים</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=20260802">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:760px;margin:0 auto;}
+  .card{background:#fff;border-radius:14px;padding:26px 28px;box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 8px 20px rgba(14,27,52,.10), 0 2px 6px rgba(14,27,52,.06);margin-bottom:20px;}
+  .card h2{margin:0 0 6px;color:var(--navy);font-size:1.3rem;}
+  .scope-note{background:#f2f0e8;color:#5c5648;border-radius:10px;padding:12px 16px;font-size:.85rem;margin-bottom:18px;line-height:1.6;}
+  .opt-row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid #f0ede4;}
+  .opt-row:last-of-type{border-bottom:none;}
+  .opt-row input[type=checkbox]{width:20px;height:20px;cursor:pointer;flex-shrink:0;}
+  .opt-row label{font-size:.95rem;font-weight:600;color:#333;cursor:pointer;flex:1;}
+  .opt-row .opt-sub{font-size:.78rem;color:#999;font-weight:400;display:block;margin-top:2px;}
+  .btn{border:none;border-radius:8px;padding:8px 14px;font-family:inherit;font-size:.8rem;cursor:pointer;font-weight:700;}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-success{background:var(--success);color:#fff;}
+  .export-btn{width:100%;padding:16px;font-size:1rem;border-radius:12px;margin-top:8px;}
+  .export-btn:disabled{opacity:.6;cursor:not-allowed;}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 02.08.2026 11:00</span></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+  <div class="nav" style="display:flex;gap:6px;">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="tasks.html" class="nav-tasks">✅ משימות</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">📋 טפסים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="intake-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🧾 טופס סיכום עסק</a>
+      <a href="buyer-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🧍 טופס סיכום קונה</a>
+      <a id="navFormsAllLink" href="intake-forms.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 כל הטפסים שהוגשו</a>
+    </div>
+  </div>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+    <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
+    <a href="stats.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">📊 סטטיסטיקה</a>
+    <a id="navUsersLink" href="users.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">משתמשים</a>
+    <a href="backup.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">💾 גיבוי</a>
+  </div>
+  <button id="pushBellBtn" class="btn btn-ghost" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;margin-inline-end:8px;"></button>
+  <a href="help.html" target="_blank" class="btn btn-ghost" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;text-decoration:none;display:inline-flex;align-items:center;margin-inline-end:8px;">❓ עזרה</a>
+  <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+</div>
+
+<div class="wrap" id="mainWrap" style="display:none;">
+  <div class="card">
+    <h2>💾 גיבוי נתונים</h2>
+    <div class="scope-note" id="scopeNote">טוען...</div>
+
+    <div class="opt-row">
+      <input type="checkbox" id="optBiz" checked>
+      <label for="optBiz">🧾 עסקים
+        <span class="opt-sub">כל פרטי כרטיס העסק - מחיר, נתונים כספיים, סטטוס, בעלים ועוד</span>
+      </label>
+    </div>
+    <div class="opt-row">
+      <input type="checkbox" id="optBuyers" checked>
+      <label for="optBuyers">🧍 קונים ומשקיעים
+        <span class="opt-sub">כל פרטי כרטיס הקונה - תחומי עניין, תקציב, רקע עסקי ועוד</span>
+      </label>
+    </div>
+    <div class="opt-row">
+      <input type="checkbox" id="optTasks" checked>
+      <label for="optTasks">✅ משימות
+        <span class="opt-sub">כל המשימות הפתוחות וההיסטוריה</span>
+      </label>
+    </div>
+    <div class="opt-row" style="border-top:2px solid #f0ede4;padding-top:14px;">
+      <input type="checkbox" id="optAll">
+      <label for="optAll">בחר / בטל הכל</label>
+    </div>
+
+    <button class="btn btn-success export-btn" id="exportBtn">📥 ייצא לאקסל</button>
+    <div id="exportStatus" style="text-align:center;font-size:.8rem;color:#999;margin-top:10px;"></div>
+  </div>
+
+  <div class="card" style="font-size:.82rem;color:#777;line-height:1.7;">
+    <b style="color:var(--navy);">מה כולל הגיבוי:</b><br>
+    • כל השדות הרשומים בכרטיס העסק / הקונה (כולל שדה ה"הערות" הפנימי בכרטיס)<br>
+    • גיליון נפרד "הערות" עם כל ההערות שנוספו דרך פאנל ההערות (📝) על עסקים וקונים שנכללים בגיבוי<br>
+    • קובץ אקסל אחד (xlsx) מעוצב, עם חותמת שם וזמן, גיליון נפרד לכל קטגוריה
+  </div>
+</div>
+
+<div id="toastBox"></div>
+
+<script src="js/config.js?v=20260802"></script>
+<script src="js/supabaseClient.js?v=20260802"></script>
+<script src="js/auth.js?v=20260802"></script>
+<script>
+let CURRENT_PROFILE = null;
+let ALL_USERS = [];
+
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return ''; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
+function fmtDateTime(iso){ if(!iso) return ''; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
+function userName(id){
+  if (!id) return '—';
+  const u = ALL_USERS.find(x=>x.id===id);
+  return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
+}
+function isPrivileged(){
+  return !!(CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager'));
+}
+function toast(msg){
+  let box = document.getElementById('toastBox');
+  const isError = /שגיאה|error/i.test(msg);
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed;bottom:24px;left:24px;background:${isError ? '#b00020' : 'var(--navy,#0e1b34)'};color:#fff;padding:14px 18px;border-radius:10px;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.35);z-index:200;max-width:320px;`;
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
+}
+
+const BUSINESS_FIELDS = [
+  {key:'internal_name', label:'שם פנימי', width:22},
+  {key:'owner_name', label:'שם בעלים', width:18},
+  {key:'owner_phone', label:'טלפון בעלים', width:14},
+  {key:'owner_email', label:'אימייל בעלים', width:22},
+  {key:'website', label:'אתר אינטרנט', width:20},
+  {key:'id_number', label:'ת.ז / ח.פ', width:14},
+  {key:'field', label:'תחום', width:16},
+  {key:'category', label:'קטגוריה', width:14},
+  {key:'subcategory', label:'תת-קטגוריה', width:14},
+  {key:'city', label:'עיר', width:12},
+  {key:'region', label:'אזור', width:12},
+  {key:'address', label:'כתובת', width:22},
+  {key:'short_description', label:'תיאור קצר', width:34},
+  {key:'asking_price', label:'מחיר מבוקש', width:14},
+  {key:'annual_revenue', label:'מחזור שנתי', width:14},
+  {key:'operating_profit', label:'רווח תפעולי', width:14},
+  {key:'net_profit', label:'רווח נקי', width:12},
+  {key:'employees_count', label:"מס' עובדים", width:10},
+  {key:'years_active', label:'שנות פעילות', width:10},
+  {key:'sale_reason', label:'סיבת מכירה', width:24},
+  {key:'status', label:'סטטוס', width:12},
+  {key:'discretion_level', label:'רמת חשאיות', width:12},
+  {key:'source', label:'מקור', width:16},
+  {key:'agreement_status', label:'סטטוס הסכם', width:16},
+  {key:'listing_status', label:'סטטוס רישום', width:12},
+  {key:'removal_reason', label:'סיבת הסרה', width:18},
+  {key:'sold_to', label:'נמכר ל', width:16},
+  {key:'handled_by_name', label:'מטופל ע"י', width:14},
+  {key:'created_by_name', label:'הוזן ע"י', width:14},
+  {key:'notes', label:'הערות (שדה)', width:30},
+  {key:'created_at_fmt', label:'נוצר בתאריך', width:14},
+  {key:'updated_at_fmt', label:'עודכן בתאריך', width:14}
+];
+
+const LEAD_FIELDS = [
+  {key:'first_name', label:'שם פרטי', width:16},
+  {key:'last_name', label:'שם משפחה', width:16},
+  {key:'phone', label:'טלפון', width:14},
+  {key:'email', label:'אימייל', width:22},
+  {key:'city', label:'עיר', width:12},
+  {key:'company', label:'חברה', width:18},
+  {key:'buyer_type', label:'סוג התקשרות מבוקש', width:16},
+  {key:'requested_field', label:'תחומי עניין', width:24},
+  {key:'budget', label:'תקציב משוער', width:14},
+  {key:'current_business_info', label:'עסק קיים היום', width:28},
+  {key:'was_self_employed_label', label:'עצמאי בעבר', width:12},
+  {key:'involvement_level', label:'מעורבות מצופה', width:20},
+  {key:'meeting_summary', label:'סיכום שיחה', width:34},
+  {key:'status', label:'סטטוס', width:12},
+  {key:'source', label:'מקור', width:16},
+  {key:'agreement_status', label:'סטטוס הסכם', width:16},
+  {key:'handled_by_name', label:'מטופל ע"י', width:14},
+  {key:'created_by_name', label:'הוזן ע"י', width:14},
+  {key:'notes', label:'הערות (שדה)', width:30},
+  {key:'created_at_fmt', label:'נוצר בתאריך', width:14},
+  {key:'updated_at_fmt', label:'עודכן בתאריך', width:14}
+];
+
+const TASK_FIELDS = [
+  {key:'title', label:'כותרת', width:26},
+  {key:'related_type_label', label:'קשור ל', width:12},
+  {key:'due_date_fmt', label:'תאריך יעד', width:12},
+  {key:'status', label:'סטטוס', width:12},
+  {key:'priority', label:'עדיפות', width:10},
+  {key:'assigned_to_name', label:'אחראי', width:16},
+  {key:'description', label:'תיאור', width:34},
+  {key:'completed_at_fmt', label:'הושלם בתאריך', width:14},
+  {key:'created_at_fmt', label:'נוצר בתאריך', width:14}
+];
+
+const NOTES_FIELDS = [
+  {key:'source_label', label:'שייך ל', width:10},
+  {key:'record_name', label:'שם הרשומה', width:24},
+  {key:'note_text', label:'תוכן ההערה', width:44},
+  {key:'author_name', label:'נכתב ע"י', width:16},
+  {key:'created_at_fmt', label:'תאריך', width:16}
+];
+
+async function fetchBusinesses(){
+  let q = window.supabaseClient.from('businesses').select('*');
+  if (!isPrivileged()) q = q.eq('created_by', CURRENT_PROFILE.id);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data||[]).map(b => Object.assign({}, b, {
+    handled_by_name: userName(b.handled_by),
+    created_by_name: userName(b.created_by),
+    created_at_fmt: fmtDate(b.created_at),
+    updated_at_fmt: fmtDate(b.updated_at)
+  }));
+}
+
+async function fetchBuyers(){
+  let q = window.supabaseClient.from('leads').select('*').eq('type', 'buyer');
+  if (!isPrivileged()) q = q.eq('created_by', CURRENT_PROFILE.id);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data||[]).map(l => Object.assign({}, l, {
+    was_self_employed_label: l.was_self_employed === true ? 'כן' : (l.was_self_employed === false ? 'לא' : ''),
+    handled_by_name: userName(l.handled_by),
+    created_by_name: userName(l.created_by),
+    created_at_fmt: fmtDate(l.created_at),
+    updated_at_fmt: fmtDate(l.updated_at)
+  }));
+}
+
+async function fetchTasks(){
+  let q = window.supabaseClient.from('tasks').select('*');
+  if (!isPrivileged()) q = q.eq('assigned_to', CURRENT_PROFILE.id);
+  const { data, error } = await q;
+  if (error) throw error;
+  const relatedLabels = {lead:'ליד', business:'עסק', match:'התאמה'};
+  return (data||[]).map(t => Object.assign({}, t, {
+    related_type_label: t.related_type ? (relatedLabels[t.related_type] || t.related_type) : '',
+    assigned_to_name: userName(t.assigned_to),
+    due_date_fmt: fmtDate(t.due_date),
+    completed_at_fmt: fmtDate(t.completed_at),
+    created_at_fmt: fmtDate(t.created_at)
+  }));
+}
+
+async function fetchNotesFor(bizRows, buyerRows){
+  const results = [];
+  const bizIds = bizRows.map(b=>b.id);
+  const buyerIds = buyerRows.map(l=>l.id);
+
+  if (bizIds.length){
+    const { data, error } = await window.supabaseClient.from('record_notes').select('*').eq('table_name','businesses').in('record_id', bizIds);
+    if (error) throw error;
+    (data||[]).forEach(n => {
+      const rec = bizRows.find(b=>b.id===n.record_id);
+      results.push({
+        source_label: 'עסק',
+        record_name: rec ? rec.internal_name : '—',
+        note_text: n.note_text,
+        author_name: userName(n.author_id),
+        created_at_fmt: fmtDateTime(n.created_at),
+        _sortDate: n.created_at
+      });
+    });
+  }
+  if (buyerIds.length){
+    const { data, error } = await window.supabaseClient.from('record_notes').select('*').eq('table_name','leads').in('record_id', buyerIds);
+    if (error) throw error;
+    (data||[]).forEach(n => {
+      const rec = buyerRows.find(l=>l.id===n.record_id);
+      results.push({
+        source_label: 'קונה',
+        record_name: rec ? (rec.full_name || [rec.first_name, rec.last_name].filter(Boolean).join(' ')) : '—',
+        note_text: n.note_text,
+        author_name: userName(n.author_id),
+        created_at_fmt: fmtDateTime(n.created_at),
+        _sortDate: n.created_at
+      });
+    });
+  }
+  results.sort((a,b) => new Date(b._sortDate) - new Date(a._sortDate));
+  return results;
+}
+
+function addSheet(workbook, sheetName, titleText, userLabel, dateLabel, fields, rows){
+  const sheet = workbook.addWorksheet(sheetName.slice(0,31), { views: [{ rightToLeft: true, state: 'frozen', ySplit: 3 }] });
+  const colCount = fields.length;
+
+  sheet.mergeCells(1,1,1,colCount);
+  const titleCell = sheet.getCell(1,1);
+  titleCell.value = titleText;
+  titleCell.font = { bold:true, size:14, color:{argb:'FF0E1B34'} };
+  titleCell.alignment = { horizontal:'center', vertical:'middle' };
+  sheet.getRow(1).height = 26;
+
+  sheet.mergeCells(2,1,2,colCount);
+  const subCell = sheet.getCell(2,1);
+  subCell.value = 'הופק ע"י ' + userLabel + ' · ' + dateLabel;
+  subCell.font = { italic:true, size:10, color:{argb:'FF666666'} };
+  subCell.alignment = { horizontal:'center' };
+
+  const headerRow = sheet.getRow(3);
+  fields.forEach((f, idx) => { headerRow.getCell(idx+1).value = f.label; });
+  headerRow.eachCell(cell => {
+    cell.font = { bold:true, color:{argb:'FFFFFFFF'} };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF0E1B34'} };
+    cell.alignment = { horizontal:'center', vertical:'middle', wrapText:true };
+    cell.border = { bottom:{style:'medium', color:{argb:'FFC9A24B'}} };
+  });
+  headerRow.height = 22;
+
+  rows.forEach((row, i) => {
+    const r = sheet.getRow(4+i);
+    fields.forEach((f, idx) => { r.getCell(idx+1).value = (row[f.key] === undefined || row[f.key] === null) ? '' : row[f.key]; });
+    const isEven = i % 2 === 1;
+    r.eachCell({ includeEmpty:true }, cell => {
+      cell.alignment = { horizontal:'right', vertical:'top', wrapText:true };
+      cell.border = { bottom:{style:'hair', color:{argb:'FFEDEAE0'}} };
+      if (isEven) cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF7F5EE'} };
+    });
+  });
+
+  fields.forEach((f, idx) => { sheet.getColumn(idx+1).width = f.width || 16; });
+
+  if (rows.length === 0){
+    sheet.mergeCells(4,1,4,colCount);
+    const emptyCell = sheet.getCell(4,1);
+    emptyCell.value = 'אין נתונים בקטגוריה זו';
+    emptyCell.alignment = { horizontal:'center' };
+    emptyCell.font = { italic:true, color:{argb:'FF999999'} };
+  }
+}
+
+document.getElementById('optAll').addEventListener('change', function(){
+  document.getElementById('optBiz').checked = this.checked;
+  document.getElementById('optBuyers').checked = this.checked;
+  document.getElementById('optTasks').checked = this.checked;
+});
+
+document.getElementById('exportBtn').addEventListener('click', async function(){
+  const wantBiz = document.getElementById('optBiz').checked;
+  const wantBuyers = document.getElementById('optBuyers').checked;
+  const wantTasks = document.getElementById('optTasks').checked;
+  if (!wantBiz && !wantBuyers && !wantTasks){ toast('בחר לפחות קטגוריה אחת לגיבוי'); return; }
+
+  const btn = this;
+  const statusEl = document.getElementById('exportStatus');
+  btn.disabled = true;
+  btn.textContent = 'מייצא...';
+
+  try{
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'BSD CRM';
+    const userLabel = (CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email;
+    const now = new Date();
+    const dateLabel = now.toLocaleDateString('he-IL') + ' ' + now.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+    const scopeLabel = isPrivileged() ? 'כל הנתונים במערכת' : 'הנתונים שהוזנו על ידי ' + userLabel + ' בלבד';
+
+    let bizRows = [], buyerRows = [];
+
+    if (wantBiz){
+      statusEl.textContent = 'טוען עסקים...';
+      bizRows = await fetchBusinesses();
+      addSheet(workbook, 'עסקים', 'BSD CRM - גיבוי עסקים (' + scopeLabel + ')', userLabel, dateLabel, BUSINESS_FIELDS, bizRows);
+    }
+    if (wantBuyers){
+      statusEl.textContent = 'טוען קונים ומשקיעים...';
+      buyerRows = await fetchBuyers();
+      addSheet(workbook, 'קונים ומשקיעים', 'BSD CRM - גיבוי קונים ומשקיעים (' + scopeLabel + ')', userLabel, dateLabel, LEAD_FIELDS, buyerRows);
+    }
+    if (wantTasks){
+      statusEl.textContent = 'טוען משימות...';
+      const taskRows = await fetchTasks();
+      addSheet(workbook, 'משימות', 'BSD CRM - גיבוי משימות (' + scopeLabel + ')', userLabel, dateLabel, TASK_FIELDS, taskRows);
+    }
+    if (wantBiz || wantBuyers){
+      statusEl.textContent = 'טוען הערות...';
+      const notesRows = await fetchNotesFor(bizRows, buyerRows);
+      addSheet(workbook, 'הערות', 'BSD CRM - גיבוי הערות (' + scopeLabel + ')', userLabel, dateLabel, NOTES_FIELDS, notesRows);
+    }
+
+    statusEl.textContent = 'בונה קובץ אקסל...';
+    const buf = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+    const safeUser = userLabel.replace(/[\\/:*?"<>|]/g, '').trim() || 'משתמש';
+    const dateFile = now.toISOString().slice(0,10);
+    const fname = 'BSD-CRM-גיבוי-' + safeUser + '-' + dateFile + '.xlsx';
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    statusEl.textContent = '';
+    toast('הגיבוי הופק והורד בהצלחה');
+  } catch(err){
+    console.error(err);
+    statusEl.textContent = '';
+    toast('שגיאה בהפקת הגיבוי: ' + (err.message || err));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📥 ייצא לאקסל';
+  }
+});
+
+(async function init(){
+  const profile = await requireAuth();
+  if (!profile) return;
+  CURRENT_PROFILE = profile;
+
+  const { data: users } = await window.supabaseClient.from('profiles').select('id, full_name, email, role');
+  ALL_USERS = users || [];
+
+  document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email) + ' · ' + new Date().toLocaleDateString('he-IL');
+
+  const scopeNote = document.getElementById('scopeNote');
+  scopeNote.textContent = isPrivileged()
+    ? 'בתור ' + (profile.role === 'admin' ? 'מנהל מערכת' : 'מנהל') + ', הגיבוי שלך יכלול את כל הנתונים של כל המשתמשים במערכת.'
+    : 'הגיבוי שלך יכלול רק את הרשומות שהזנת בעצמך (עסקים, קונים ומשימות שהוקצו לך).';
+
+  document.getElementById('mainWrap').style.display = 'block';
+})();
+</script>
+</body>
+</html>
