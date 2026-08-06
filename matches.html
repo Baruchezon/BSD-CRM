@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608061200">
+<link rel="stylesheet" href="css/style.css?v=202608061330">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -62,7 +62,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 06.08.2026 12:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 06.08.2026 13:30</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
       <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -147,11 +147,11 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202608061200"></script>
-<script src="js/supabaseClient.js?v=202608061200"></script>
-<script src="js/auth.js?v=202608061200"></script>
-<script src="js/push.js?v=202608061200"></script>
-<script src="js/searchSelect.js?v=202608061200"></script>
+<script src="js/config.js?v=202608061330"></script>
+<script src="js/supabaseClient.js?v=202608061330"></script>
+<script src="js/auth.js?v=202608061330"></script>
+<script src="js/push.js?v=202608061330"></script>
+<script src="js/searchSelect.js?v=202608061330"></script>
 <script>
 const MATCH_STATUSES = ['התאמה חדשה','נשלח לקונה - ממתין לתגובה (אנונימי)','נשלחו מסמכים לאחר חתימת הסכם',
   'נקבעה פגישה','התקיימה פגישה','המשך מו"מ','לא מתאים לקונה','העסקה נסגרה','העסקה נעצרה'];
@@ -163,13 +163,15 @@ const STATUSES_WITH_MEETING_SUMMARY = ['התקיימה פגישה','המשך מ�
 // Status that needs the "reason stopped" field
 const STATUSES_WITH_STOP_REASON = ['העסקה נעצרה'];
 
-// Progressive color scale: white → light green → darker green → teal (closed) ; red variants for the two negative outcomes
+// Color scheme: white = untouched/new (needs attention), yellow = materials/interest
+// sent and awaiting a reply, green (progressively deeper) = things moving forward
+// (meeting scheduled → held → negotiating), red = negative outcomes, teal = closed/won.
 const STATUS_STYLES = {
   'התאמה חדשה':                              { bg:'#ffffff', color:'#4a5164', border:'1px solid #d8d3c4' },
-  'נשלח לקונה - ממתין לתגובה (אנונימי)':       { bg:'#eafaf1', color:'#1f7a4d' },
-  'נשלחו מסמכים לאחר חתימת הסכם':             { bg:'#d3f2df', color:'#1c6d46' },
-  'נקבעה פגישה':                              { bg:'#b7e8cb', color:'#186a41' },
-  'התקיימה פגישה':                            { bg:'#a3e0bd', color:'#155c38' },
+  'נשלח לקונה - ממתין לתגובה (אנונימי)':       { bg:'#fdeccb', color:'#8a5a10' },
+  'נשלחו מסמכים לאחר חתימת הסכם':             { bg:'#fbe1a8', color:'#7a4d0a' },
+  'נקבעה פגישה':                              { bg:'#dff0e4', color:'#245c40' },
+  'התקיימה פגישה':                            { bg:'#b7e8cb', color:'#186a41' },
   'המשך מו"מ':                                { bg:'#6fce97', color:'#0f4a2c' },
   'לא מתאים לקונה':                           { bg:'#f9d6d2', color:'#8a2e22' },
   'העסקה נסגרה':                              { bg:'linear-gradient(90deg,#2fae7a,#2f8fc9)', color:'#ffffff' },
@@ -178,6 +180,22 @@ const STATUS_STYLES = {
 function statusStyle(status){
   const st = STATUS_STYLES[status] || { bg:'#eef1f6', color:'var(--navy)' };
   return `background:${st.bg};color:${st.color};${st.border?('border:'+st.border+';'):''}`;
+}
+// A soft tint for the whole row, so anything past "new match" visibly stands out
+// in the list itself (not just in the small status badge).
+const ROW_TINTS = {
+  'התאמה חדשה':                              '',
+  'נשלח לקונה - ממתין לתגובה (אנונימי)':       '#fffaf0',
+  'נשלחו מסמכים לאחר חתימת הסכם':             '#fdf3dd',
+  'נקבעה פגישה':                              '#eef8f1',
+  'התקיימה פגישה':                            '#e2f5e9',
+  'המשך מו"מ':                                '#d3f0dd',
+  'לא מתאים לקונה':                           '#fdedeb',
+  'העסקה נסגרה':                              '#e7f6f2',
+  'העסקה נעצרה':                              '#fbe2df'
+};
+function rowTint(status){
+  return ROW_TINTS[status] || '';
 }
 
 let ALL_MATCHES = [], ALL_BUYERS = [], ALL_BIZ = [], ALL_USERS = [], CURRENT_PROFILE = null;
@@ -284,10 +302,10 @@ function renderTable(){
   if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="8">לא נמצאו התאמות</td></tr>'; return; }
 
   body.innerHTML = rows.map(m=>`
-    <tr>
+    <tr style="cursor:pointer;${rowTint(m.status) ? `background:${rowTint(m.status)};` : ''}" onclick="openMatchForm('${m.id}')">
       <td data-label="קונה">
         <div style="display:flex;align-items:flex-start;gap:8px;">
-          <div style="position:relative;flex-shrink:0;">
+          <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
             <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
             <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
               <a href="javascript:void(0)" onclick="openMatchForm('${m.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">📂 פתח / ערוך</a>
