@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608061300">
+<link rel="stylesheet" href="css/style.css?v=202608061400">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -66,7 +66,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 06.08.2026 13:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 06.08.2026 14:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
       <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -170,12 +170,56 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202608061300"></script>
-<script src="js/supabaseClient.js?v=202608061300"></script>
-<script src="js/auth.js?v=202608061300"></script>
-<script src="js/push.js?v=202608061300"></script>
+<script src="js/config.js?v=202608061400"></script>
+<script src="js/supabaseClient.js?v=202608061400"></script>
+<script src="js/auth.js?v=202608061400"></script>
+<script src="js/push.js?v=202608061400"></script>
 <script>
 let ALL_TASKS = [], ALL_USERS = [], CURRENT_PROFILE = null;
+let ALL_LEADS = [], ALL_BIZ = [], ALL_MATCHES = [];
+const relatedLabels = {lead:'ליד', business:'עסק', match:'התאמה'};
+const MATCH_STATUSES = ['התאמה חדשה','נשלח לקונה - ממתין לתגובה (אנונימי)','נשלחו מסמכים לאחר חתימת הסכם',
+  'נקבעה פגישה','התקיימה פגישה','המשך מו"מ','לא מתאים לקונה','העסקה נסגרה','העסקה נעצרה'];
+
+async function loadRelatedLookups(){
+  const [{data: leads}, {data: biz}, {data: matches}] = await Promise.all([
+    window.supabaseClient.from('leads').select('id, full_name, first_name, last_name, type'),
+    window.supabaseClient.from('businesses').select('id, internal_name'),
+    window.supabaseClient.from('matches').select('id, buyer_id, business_id, status')
+  ]);
+  ALL_LEADS = leads || []; ALL_BIZ = biz || []; ALL_MATCHES = matches || [];
+}
+function leadName(id){ const l = ALL_LEADS.find(x=>x.id===id); return l ? (l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || '—') : '—'; }
+function bizName(id){ const b = ALL_BIZ.find(x=>x.id===id); return b ? b.internal_name : '—'; }
+function matchLabel(id){ const m = ALL_MATCHES.find(x=>x.id===id); return m ? `${leadName(m.buyer_id)} × ${bizName(m.business_id)}` : '—'; }
+function relatedRecordOptions(type, selected){
+  if (type === 'lead') return ALL_LEADS.map(l=>`<option value="${l.id}" ${l.id===selected?'selected':''}>${esc(l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || '—')}</option>`).join('');
+  if (type === 'business') return ALL_BIZ.map(b=>`<option value="${b.id}" ${b.id===selected?'selected':''}>${esc(b.internal_name||'—')}</option>`).join('');
+  if (type === 'match') return ALL_MATCHES.map(m=>`<option value="${m.id}" ${m.id===selected?'selected':''}>${esc(matchLabel(m.id))}</option>`).join('');
+  return '';
+}
+function onTaskRelatedTypeChange(){
+  const type = document.getElementById('related_type').value;
+  const wrap = document.getElementById('relatedRecordWrap');
+  if (!type){ wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `<div class="field"><label>${relatedLabels[type]}</label><select id="related_id" onchange="onTaskRelatedRecordChange()">
+    <option value="">— בחר —</option>${relatedRecordOptions(type, '')}
+  </select></div>`;
+  onTaskRelatedRecordChange();
+}
+function onTaskRelatedRecordChange(){
+  const type = document.getElementById('related_type').value;
+  const id = document.getElementById('related_id') ? document.getElementById('related_id').value : '';
+  const statusWrap = document.getElementById('relatedMatchStatusWrap');
+  if (type === 'match' && id){
+    const m = ALL_MATCHES.find(x=>x.id===id);
+    statusWrap.innerHTML = `<div class="field"><label>סטטוס ההתאמה</label><select id="related_match_status">
+      ${MATCH_STATUSES.map(s=>`<option value="${s}" ${m && m.status===s?'selected':''}>${s}</option>`).join('')}
+    </select></div>`;
+  } else {
+    statusWrap.innerHTML = '';
+  }
+}
 
 window.addEventListener('error', (e) => {
   console.error('Uncaught error:', e.error || e.message);
@@ -282,7 +326,6 @@ function renderTable(){
   const body = document.getElementById('taskBody');
   if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="7">אין משימות פתוחות</td></tr>'; return; }
 
-  const relatedLabels = {lead:'ליד', business:'עסק', match:'התאמה'};
   body.innerHTML = rows.map(t=>{
     const isOverdue = t.due_date && t.due_date < todayISO() && t.status === 'פתוחה';
     const isUnread = !t.read_at;
@@ -329,7 +372,6 @@ function renderHistoryTable(){
   const body = document.getElementById('taskHistoryBody');
   if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="6">אין משימות שבוצעו בטווח הזה</td></tr>'; return; }
 
-  const relatedLabels = {lead:'ליד', business:'עסק', match:'התאמה'};
   body.innerHTML = rows.map(t => `
     <tr style="color:#999;">
       <td data-label="כותרת"><span style="text-decoration:line-through;">${esc(t.title)}</span></td>
@@ -379,6 +421,16 @@ function openTaskForm(id){
         </select>
       </div>
       <div class="field"><label>אחראי</label><select id="assigned_to">${userOptions(task ? task.assigned_to : CURRENT_PROFILE.id)}</select></div>
+      <div class="field"><label>קשור ל</label>
+        <select id="related_type" onchange="onTaskRelatedTypeChange()">
+          <option value="">— ללא —</option>
+          <option value="lead" ${task?.related_type==='lead'?'selected':''}>ליד</option>
+          <option value="business" ${task?.related_type==='business'?'selected':''}>עסק</option>
+          <option value="match" ${task?.related_type==='match'?'selected':''}>התאמה</option>
+        </select>
+      </div>
+      <div id="relatedRecordWrap"></div>
+      <div id="relatedMatchStatusWrap"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
         <button type="submit" class="btn btn-primary">שמירה</button>
@@ -388,6 +440,13 @@ function openTaskForm(id){
   document.getElementById('overlay').classList.add('open');
   document.getElementById('overlay').scrollTop = 0;
   document.getElementById('taskForm').dataset.taskId = task ? task.id : '';
+  if (task && task.related_type){
+    const wrap = document.getElementById('relatedRecordWrap');
+    wrap.innerHTML = `<div class="field"><label>${relatedLabels[task.related_type]}</label><select id="related_id" onchange="onTaskRelatedRecordChange()">
+      <option value="">— בחר —</option>${relatedRecordOptions(task.related_type, task.related_id)}
+    </select></div>`;
+    onTaskRelatedRecordChange();
+  }
   document.getElementById('taskForm').addEventListener('submit', saveTask);
 }
 
@@ -396,11 +455,16 @@ async function saveTask(e){
   const form = e.target;
   const taskId = form.dataset.taskId;
   const g = id => document.getElementById(id).value;
+  const relatedType = g('related_type') || null;
+  const relatedIdEl = document.getElementById('related_id');
+  const relatedId = relatedType && relatedIdEl ? (relatedIdEl.value || null) : null;
   const payload = {
     title: g('title'),
     due_date: g('due_date') || null,
     priority: g('priority'),
-    assigned_to: g('assigned_to') || null
+    assigned_to: g('assigned_to') || null,
+    related_type: relatedId ? relatedType : null,
+    related_id: relatedId
   };
   const dueTime = g('due_time') || null;
   const description = g('description') || null;
@@ -422,6 +486,17 @@ async function saveTask(e){
     }
   }
   if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+
+  // אם המשימה קשורה להתאמה וסטטוס ההתאמה שונה בטופס — לעדכן גם את רשומת ההתאמה עצמה
+  const matchStatusEl = document.getElementById('related_match_status');
+  if (relatedType === 'match' && relatedId && matchStatusEl){
+    const m = ALL_MATCHES.find(x=>x.id===relatedId);
+    if (m && m.status !== matchStatusEl.value){
+      const { error: matchErr } = await window.supabaseClient.from('matches').update({ status: matchStatusEl.value }).eq('id', relatedId);
+      if (matchErr) toast('המשימה נשמרה, אך עדכון סטטוס ההתאמה נכשל: ' + matchErr.message);
+    }
+  }
+
   toast('נשמר בהצלחה');
   closeModal();
   await loadTasks();
@@ -474,6 +549,7 @@ async function deleteTask(id){
   CURRENT_PROFILE = await requireAuth();
   if (!CURRENT_PROFILE) return;
   await loadUsers();
+  await loadRelatedLookups();
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL');
   refreshNavMsgBadge();
   await loadTasks();
