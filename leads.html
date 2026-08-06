@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608041454">
+<link rel="stylesheet" href="css/style.css?v=202608061200">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -88,7 +88,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 04.08.2026 14:54</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 06.08.2026 12:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav">
     <a href="app.html">לוח בקרה</a>
@@ -189,10 +189,10 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202608041454"></script>
-<script src="js/supabaseClient.js?v=202608041454"></script>
-<script src="js/auth.js?v=202608041454"></script>
-<script src="js/push.js?v=202608041454"></script>
+<script src="js/config.js?v=202608061200"></script>
+<script src="js/supabaseClient.js?v=202608061200"></script>
+<script src="js/auth.js?v=202608061200"></script>
+<script src="js/push.js?v=202608061200"></script>
 <script>
 let ALL_LEADS = [];
 let ALL_USERS = [];
@@ -578,7 +578,7 @@ async function saveLead(e){
   await loadLeads();
 }
 
-function sendAgreementForLead(id){
+async function sendAgreementForLead(id){
   const l = ALL_LEADS.find(x=>x.id===id);
   if (!l){ toast('רשומה לא נמצאה'); return; }
   const personName = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || '';
@@ -590,6 +590,16 @@ function sendAgreementForLead(id){
     biz: bizField
   });
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
+
+  // סימון הרשומה כ"נשלח הסכם לחתימה" (אלא אם כבר חתום)
+  if (l.agreement_status !== 'יש הסכם חתום'){
+    const { error } = await window.supabaseClient.from('leads')
+      .update({ agreement_status: 'נשלח הסכם לחתימה' }).eq('id', id);
+    if (!error){
+      l.agreement_status = 'נשלח הסכם לחתימה';
+      renderTable();
+    }
+  }
 }
 
 function closeNotesPanel(){
