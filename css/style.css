@@ -325,8 +325,16 @@ button:disabled, .btn:disabled{
     max-height:calc(100vh - 80px);
     border-radius:14px;
     padding:28px;
+    overflow-y:auto;
   }
-  .modal > form, .modal > div:not(.modal-actions){ padding-bottom:0; }
+  /* On desktop the modal itself is the single scroll container (fixed max-height,
+     overflow-y:auto above) — so its children shouldn't also compete for flex-grow
+     space the way they need to on mobile (height:100%). Letting a flex:1 + its own
+     overflow-y:auto child sit inside an auto-sized flex parent is exactly the classic
+     flexbox trap that can collapse it to a sliver — this sidesteps that entirely by
+     giving every child (form, and any extra info panels like the match's participants/
+     history) its natural content height instead. */
+  .modal > form, .modal > div:not(.modal-actions){ padding-bottom:0; flex:none; overflow-y:visible; }
 }
 
 /* טפסים - עמודה אחת בסלולרי */
