@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608061500">
+<link rel="stylesheet" href="css/style.css?v=202608080905">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
@@ -85,7 +85,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 06.08.2026 15:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 08.08.2026 09:05</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -201,6 +201,28 @@
       </table>
     </div>
   </div>
+
+  <div class="panel" id="landingPanel" style="display:none;">
+    <h3>👁️ דף נחיתה — הכשרת מתווכים</h3>
+    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);">
+      <div class="kpi-card" style="cursor:default;">
+        <div class="ico">👁️</div>
+        <div class="num" id="lpTotal">–</div>
+        <div class="lbl">סה״כ צפיות</div>
+      </div>
+      <div class="kpi-card" style="cursor:default;">
+        <div class="ico">📅</div>
+        <div class="num" id="lpWeek">–</div>
+        <div class="lbl">7 ימים אחרונים</div>
+      </div>
+      <div class="kpi-card" style="cursor:default;">
+        <div class="ico">🕐</div>
+        <div class="num" id="lpToday">–</div>
+        <div class="lbl">היום</div>
+      </div>
+    </div>
+    <div class="hint">נראה למנהל המערכת בלבד. סופר כל טעינה של דף broker-training.html.</div>
+  </div>
 </div>
 
 <div class="overlay" id="dOverlay">
@@ -212,10 +234,10 @@
   </div>
 </div>
 
-<script src="js/config.js?v=202608061500"></script>
-<script src="js/supabaseClient.js?v=202608061500"></script>
-<script src="js/auth.js?v=202608061500"></script>
-<script src="js/push.js?v=202608061500"></script>
+<script src="js/config.js?v=202608080905"></script>
+<script src="js/supabaseClient.js?v=202608080905"></script>
+<script src="js/auth.js?v=202608080905"></script>
+<script src="js/push.js?v=202608080905"></script>
 <script>
 const STATUS_ORDER = ['התאמה חדשה','נשלח לקונה - ממתין לתגובה (אנונימי)','נשלחו מסמכים לאחר חתימת הסכם',
   'נקבעה פגישה','התקיימה פגישה','המשך מו"מ','לא מתאים לקונה','העסקה נסגרה','העסקה נעצרה'];
@@ -756,6 +778,29 @@ document.getElementById('dOverlay').addEventListener('click', e=>{
   if (e.target.id === 'dOverlay') closeDrilldown();
 });
 
+async function loadLandingPageStats(){
+  if (!CURRENT_PROFILE || CURRENT_PROFILE.role !== 'admin') return;
+  const panel = document.getElementById('landingPanel');
+  panel.style.display = 'block';
+  try {
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7*24*60*60*1000).toISOString();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
+    const [{count: total}, {count: week}, {count: today}] = await Promise.all([
+      window.supabaseClient.from('page_views').select('*', {count:'exact', head:true}).eq('page','broker-training'),
+      window.supabaseClient.from('page_views').select('*', {count:'exact', head:true}).eq('page','broker-training').gte('created_at', weekAgo),
+      window.supabaseClient.from('page_views').select('*', {count:'exact', head:true}).eq('page','broker-training').gte('created_at', todayStart)
+    ]);
+
+    document.getElementById('lpTotal').textContent = total ?? '–';
+    document.getElementById('lpWeek').textContent = week ?? '–';
+    document.getElementById('lpToday').textContent = today ?? '–';
+  } catch(e) {
+    document.getElementById('lpTotal').textContent = 'שגיאה';
+  }
+}
+
 (async function init(){
   CURRENT_PROFILE = await requireAuth();
   if (!CURRENT_PROFILE) return;
@@ -763,6 +808,7 @@ document.getElementById('dOverlay').addEventListener('click', e=>{
   refreshNavMsgBadge();
   await loadLookups();
   await refreshAll();
+  await loadLandingPageStats();
 
   // Auto-refresh every 5 minutes so the screen always reflects the latest data,
   // without the user needing to click "רענון" manually. Skips a tick if a
