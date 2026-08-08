@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608081311">
+<link rel="stylesheet" href="css/style.css?v=202608081348">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
@@ -85,7 +85,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 08.08.2026 13:11</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 08.08.2026 13:48</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -172,21 +172,9 @@
   </div>
 
   <div class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-      <h3 style="margin:0;border-right:4px solid var(--gold);padding-right:10px;color:var(--navy);font-size:1rem;">👤 כניסות, יציאות ופעולות משתמשים</h3>
-      <button class="btn btn-ghost" id="toggleActivityBtn" onclick="toggleActivityPanel()">📋 הצג פעילות מפורטת</button>
-    </div>
-    <div id="activityContent" style="display:none;margin-top:14px;">
-      <div class="filter-row" style="margin-bottom:14px;">
-        <input type="date" id="actFrom" style="padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.82rem;">
-        <span style="color:#8a93a8;font-size:.8rem;">עד</span>
-        <input type="date" id="actTo" style="padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.82rem;">
-        <select id="actUserFilter" style="padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.82rem;">
-          <option value="all">כל המשתמשים</option>
-        </select>
-        <button class="btn btn-ghost" onclick="applyActivityFilter()">סינון</button>
-        <button class="btn btn-ghost" onclick="resetActivityFilter()">איפוס</button>
-      </div>
+    <h3 style="margin:0 0 12px;border-right:4px solid var(--gold);padding-right:10px;color:var(--navy);font-size:1rem;">👤 כניסות, יציאות ופעולות משתמשים</h3>
+    <div id="activityHint" class="hint" style="text-align:right;color:#8a93a8;font-size:.85rem;">בחר סוכן למעלה (באזור הסינון) כדי לראות את הפעילות שלו</div>
+    <div id="activityContent" style="display:none;">
       <div style="overflow-x:auto;">
         <table id="activityTable">
           <thead>
@@ -260,10 +248,10 @@
   <div class="dmodal" id="activityModalBox"></div>
 </div>
 
-<script src="js/config.js?v=202608081311"></script>
-<script src="js/supabaseClient.js?v=202608081311"></script>
-<script src="js/auth.js?v=202608081311"></script>
-<script src="js/push.js?v=202608081311"></script>
+<script src="js/config.js?v=202608081348"></script>
+<script src="js/supabaseClient.js?v=202608081348"></script>
+<script src="js/auth.js?v=202608081348"></script>
+<script src="js/push.js?v=202608081348"></script>
 <script>
 const AGENT_COLORS = ['#2f8fc9','#c9a24b','#2fae7a','#c0392b','#8e44ad','#16a085','#d35400','#2c3e50','#e67e22','#27ae60'];
 const METRIC_COLORS = { biz: '#2f8fc9', buyers: '#2fae7a' };
@@ -358,16 +346,6 @@ async function loadLookups(){
       wrap.appendChild(chip);
     });
     document.getElementById('agentChipsWrap').style.display = 'block';
-
-    const uf = document.getElementById('actUserFilter');
-    ALL_PROFILES.forEach(p=>{
-      const o = document.createElement('option');
-      o.value = p.id;
-      o.textContent = (p.full_name && p.full_name.trim()) ? p.full_name : p.email;
-      uf.appendChild(o);
-    });
-  } else {
-    document.getElementById('actUserFilter').style.display = 'none';
   }
 }
 
@@ -394,19 +372,26 @@ function syncAgentChips(){
   document.querySelectorAll('.agent-chip[data-id]').forEach(chip=>{
     chip.classList.toggle('active', SELECTED_AGENTS.has(chip.dataset.id));
   });
+  refreshActivityForSelection();
 }
 
-function toggleActivityPanel(){
+function refreshActivityForSelection(){
+  const hint = document.getElementById('activityHint');
   const content = document.getElementById('activityContent');
-  const btn = document.getElementById('toggleActivityBtn');
-  const showing = content.style.display !== 'none';
-  if (showing){
-    content.style.display = 'none';
-    btn.textContent = '📋 הצג פעילות מפורטת';
-  } else {
+  if (!isAdminOrManager()){
+    hint.style.display = 'none';
     content.style.display = 'block';
-    btn.textContent = '📋 הסתר פעילות מפורטת';
-    resetActivityFilter();
+    loadActivityLog(true);
+    return;
+  }
+  if (SELECTED_AGENTS.size === 1){
+    hint.style.display = 'none';
+    content.style.display = 'block';
+    loadActivityLog(true);
+  } else {
+    hint.style.display = 'block';
+    hint.textContent = 'בחר סוכן למעלה (באזור הסינון) כדי לראות את הפעילות שלו';
+    content.style.display = 'none';
   }
 }
 
@@ -564,22 +549,17 @@ async function loadActivityLog(reset){
   const from = ACTIVITY_OFFSET;
   const to = ACTIVITY_OFFSET + ACTIVITY_PAGE_SIZE - 1;
 
-  const fromDate = document.getElementById('actFrom').value;
-  const toDate = document.getElementById('actTo').value;
-  const userFilter = document.getElementById('actUserFilter').value;
-
   let q = window.supabaseClient
     .from('activity_log')
     .select('id, user_id, action_type, entity_type, entity_id, old_value, new_value, created_at')
     .order('created_at', { ascending: false });
 
-  if (fromDate) q = q.gte('created_at', new Date(fromDate + 'T00:00:00').toISOString());
-  if (toDate) q = q.lte('created_at', new Date(toDate + 'T23:59:59').toISOString());
-
   if (!isAdminOrManager()){
     q = q.eq('user_id', CURRENT_PROFILE.id);
-  } else if (userFilter && userFilter !== 'all'){
-    q = q.eq('user_id', userFilter);
+  } else if (SELECTED_AGENTS.size === 1){
+    q = q.eq('user_id', [...SELECTED_AGENTS][0]);
+  } else {
+    return; // no single agent selected — nothing to show (see refreshActivityForSelection)
   }
 
   q = q.range(from, to);
@@ -592,7 +572,7 @@ async function loadActivityLog(reset){
   ACTIVITY_OFFSET += (data || []).length;
 
   if (ACTIVITY_ITEMS.length === 0){
-    body.innerHTML = '<tr class="empty-row"><td colspan="4">אין פעילות בטווח שנבחר</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="4">אין פעילות רשומה</td></tr>';
   } else {
     body.innerHTML = ACTIVITY_ITEMS.map(a => `
       <tr style="cursor:pointer;" onclick="showActivityDetail('${a.id}')">
@@ -605,16 +585,6 @@ async function loadActivityLog(reset){
 
   const loadMoreBtn = document.getElementById('loadMoreActivityBtn');
   if (loadMoreBtn) loadMoreBtn.style.display = (data || []).length < ACTIVITY_PAGE_SIZE ? 'none' : 'inline-block';
-}
-
-function applyActivityFilter(){ loadActivityLog(true); }
-function resetActivityFilter(){
-  const threeDaysAgo = new Date(Date.now() - 3*24*60*60*1000);
-  document.getElementById('actFrom').value = threeDaysAgo.toISOString().slice(0,10);
-  document.getElementById('actTo').value = '';
-  const uf = document.getElementById('actUserFilter');
-  if (uf) uf.value = 'all';
-  loadActivityLog(true);
 }
 
 function showActivityDetail(id){
@@ -697,6 +667,7 @@ document.getElementById('metricSeg').addEventListener('click', e=>{
   refreshNavMsgBadge();
   await loadLookups();
   await refreshAll();
+  if (!isAdminOrManager()) refreshActivityForSelection(); // agents see their own activity immediately, no chip to click
 
   // Auto-refresh every 5 minutes so the screen always reflects the latest data,
   // without the user needing to click "רענון" manually. Skips a tick if a
