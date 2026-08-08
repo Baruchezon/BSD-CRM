@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608081200">
+<link rel="stylesheet" href="css/style.css?v=202608081307">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
@@ -85,7 +85,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 08.08.2026 12:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 08.08.2026 13:07</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -147,16 +147,10 @@
         <button data-r="90">90 יום</button>
         <button data-r="365">שנה</button>
       </div>
-      <div class="filters" id="scopeFilters" style="display:none;">
-        <select id="fScope">
-          <option value="mine">הנתונים שלי</option>
-          <option value="team">כל הצוות</option>
-        </select>
-      </div>
       <button class="btn btn-ghost" onclick="refreshAll()">🔄 רענון</button>
     </div>
     <div id="agentChipsWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #f0ede4;">
-      <div style="font-size:.75rem;color:#8a93a8;margin-bottom:6px;">הצג נתונים עבור (ניתן לבחור כמה):</div>
+      <div style="font-size:.75rem;color:#8a93a8;margin-bottom:6px;">הצג נתונים עבור (בררת מחדל: כל הצוות; לחיצה על שם מסננת לאותו סוכן בלבד):</div>
       <div id="agentChips" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
     </div>
   </div>
@@ -178,32 +172,37 @@
   </div>
 
   <div class="panel">
-    <h3 style="border-right:4px solid var(--gold);padding-right:10px;color:var(--navy);font-size:1rem;">👤 כניסות, יציאות ופעולות משתמשים</h3>
-    <div class="filter-row" style="margin-bottom:14px;">
-      <input type="date" id="actFrom" style="padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.82rem;">
-      <span style="color:#8a93a8;font-size:.8rem;">עד</span>
-      <input type="date" id="actTo" style="padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.82rem;">
-      <select id="actUserFilter" style="padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.82rem;">
-        <option value="all">כל המשתמשים</option>
-      </select>
-      <button class="btn btn-ghost" onclick="applyActivityFilter()">סינון</button>
-      <button class="btn btn-ghost" onclick="resetActivityFilter()">איפוס</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <h3 style="margin:0;border-right:4px solid var(--gold);padding-right:10px;color:var(--navy);font-size:1rem;">👤 כניסות, יציאות ופעולות משתמשים</h3>
+      <button class="btn btn-ghost" id="toggleActivityBtn" onclick="toggleActivityPanel()">📋 הצג פעילות מפורטת</button>
     </div>
-    <div style="overflow-x:auto;">
-      <table id="activityTable">
-        <thead>
-          <tr>
-            <th>משתמש</th>
-            <th>פעולה</th>
-            <th>סוג ישות</th>
-            <th>תאריך ושעה</th>
-          </tr>
-        </thead>
-        <tbody id="activityBody"><tr class="empty-row"><td colspan="4">טוען...</td></tr></tbody>
-      </table>
-    </div>
-    <div style="text-align:center;margin-top:14px;">
-      <button class="btn btn-ghost" id="loadMoreActivityBtn" onclick="loadActivityLog(false)" style="display:none;">טען עוד</button>
+    <div id="activityContent" style="display:none;margin-top:14px;">
+      <div class="filter-row" style="margin-bottom:14px;">
+        <input type="date" id="actFrom" style="padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.82rem;">
+        <span style="color:#8a93a8;font-size:.8rem;">עד</span>
+        <input type="date" id="actTo" style="padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.82rem;">
+        <select id="actUserFilter" style="padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.82rem;">
+          <option value="all">כל המשתמשים</option>
+        </select>
+        <button class="btn btn-ghost" onclick="applyActivityFilter()">סינון</button>
+        <button class="btn btn-ghost" onclick="resetActivityFilter()">איפוס</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="activityTable">
+          <thead>
+            <tr>
+              <th>משתמש</th>
+              <th>פעולה</th>
+              <th>סוג ישות</th>
+              <th>תאריך ושעה</th>
+            </tr>
+          </thead>
+          <tbody id="activityBody"><tr class="empty-row"><td colspan="4">טוען...</td></tr></tbody>
+        </table>
+      </div>
+      <div style="text-align:center;margin-top:14px;">
+        <button class="btn btn-ghost" id="loadMoreActivityBtn" onclick="loadActivityLog(false)" style="display:none;">טען עוד</button>
+      </div>
     </div>
   </div>
 
@@ -251,10 +250,10 @@
   <div class="dmodal" id="activityModalBox"></div>
 </div>
 
-<script src="js/config.js?v=202608081200"></script>
-<script src="js/supabaseClient.js?v=202608081200"></script>
-<script src="js/auth.js?v=202608081200"></script>
-<script src="js/push.js?v=202608081200"></script>
+<script src="js/config.js?v=202608081307"></script>
+<script src="js/supabaseClient.js?v=202608081307"></script>
+<script src="js/auth.js?v=202608081307"></script>
+<script src="js/push.js?v=202608081307"></script>
 <script>
 const AGENT_COLORS = ['#2f8fc9','#c9a24b','#2fae7a','#c0392b','#8e44ad','#16a085','#d35400','#2c3e50','#e67e22','#27ae60'];
 const METRIC_COLORS = { biz: '#2f8fc9', buyers: '#2fae7a' };
@@ -263,7 +262,7 @@ const ENTITY_LABELS = { leads: 'קונה/מוכר', businesses: 'עסק', matche
 
 let CURRENT_PROFILE = null;
 let ALL_PROFILES = [];
-let GRAN = 'day', RANGE_DAYS = 30, SCOPE = 'mine', METRIC = 'biz';
+let GRAN = 'day', RANGE_DAYS = 30, METRIC = 'biz';
 let SELECTED_AGENTS = new Set(); // empty = all agents
 let timeChart = null;
 let TIME_BUCKETS = [];
@@ -331,8 +330,7 @@ async function loadLookups(){
   ALL_PROFILES = profiles || [];
 
   const isAdmin = isAdminOrManager();
-  document.getElementById('scopeFilters').style.display = isAdmin ? 'flex' : 'none';
-  document.getElementById('scopeBadge').textContent = isAdmin ? 'מנהל · יכול לצפות בכל הצוות' : 'מציג את הנתונים שלך בלבד';
+  document.getElementById('scopeBadge').textContent = isAdmin ? 'מנהל · כל הצוות (לחיצה על שם מסננת לסוכן בודד)' : 'מציג את הנתונים שלך בלבד';
 
   if (isAdmin){
     const wrap = document.getElementById('agentChips');
@@ -369,7 +367,15 @@ function selectAllAgents(){
   refreshAll();
 }
 function toggleAgentChip(id){
-  if (SELECTED_AGENTS.has(id)) SELECTED_AGENTS.delete(id); else SELECTED_AGENTS.add(id);
+  // Selecting a specific agent is exclusive — clicking one agent shows only
+  // that agent's data, matching what people expect from "click a name, see
+  // their numbers" rather than an additive multi-select.
+  if (SELECTED_AGENTS.has(id) && SELECTED_AGENTS.size === 1){
+    SELECTED_AGENTS.clear(); // clicking the already-selected agent again returns to "כל הצוות"
+  } else {
+    SELECTED_AGENTS.clear();
+    SELECTED_AGENTS.add(id);
+  }
   syncAgentChips();
   refreshAll();
 }
@@ -380,6 +386,20 @@ function syncAgentChips(){
   });
 }
 
+function toggleActivityPanel(){
+  const content = document.getElementById('activityContent');
+  const btn = document.getElementById('toggleActivityBtn');
+  const showing = content.style.display !== 'none';
+  if (showing){
+    content.style.display = 'none';
+    btn.textContent = '📋 הצג פעילות מפורטת';
+  } else {
+    content.style.display = 'block';
+    btn.textContent = '📋 הסתר פעילות מפורטת';
+    resetActivityFilter();
+  }
+}
+
 async function fetchData(){
   const from = rangeStart();
   const fromIso = from.toISOString();
@@ -388,9 +408,8 @@ async function fetchData(){
   let leadsQ = window.supabaseClient.from('leads').select('id, full_name, created_at, created_by, type').eq('type','buyer').gte('created_at', fromIso);
 
   const isAdmin = isAdminOrManager();
-  const effectiveScope = isAdmin ? SCOPE : 'mine';
 
-  if (effectiveScope === 'mine'){
+  if (!isAdmin){
     bizQ = bizQ.eq('created_by', CURRENT_PROFILE.id);
     leadsQ = leadsQ.eq('created_by', CURRENT_PROFILE.id);
   } else if (SELECTED_AGENTS.size > 0){
@@ -398,6 +417,7 @@ async function fetchData(){
     bizQ = bizQ.in('created_by', ids);
     leadsQ = leadsQ.in('created_by', ids);
   }
+  // else: admin with no agent selected — "כל הצוות" — no filter, full team aggregate
 
   const [{data:biz}, {data:leads}] = await Promise.all([bizQ, leadsQ]);
   return { biz: biz||[], leads: leads||[] };
@@ -416,8 +436,8 @@ function openDrilldown(title, sub, rows){
 function closeDrilldown(){ document.getElementById('dOverlay').classList.remove('open'); }
 document.getElementById('dOverlay').addEventListener('click', e=>{ if (e.target.id === 'dOverlay') closeDrilldown(); });
 
-function bizRow(b){ return { primary: b.internal_name || 'עסק ללא שם', secondary: fmtDate(b.created_at) + (SCOPE==='team' ? ' · ' + userName(b.created_by) : '') }; }
-function leadRow(l){ return { primary: l.full_name || 'קונה ללא שם', secondary: fmtDate(l.created_at) + (SCOPE==='team' ? ' · ' + userName(l.created_by) : '') }; }
+function bizRow(b){ return { primary: b.internal_name || 'עסק ללא שם', secondary: fmtDate(b.created_at) + (isAdminOrManager() ? ' · ' + userName(b.created_by) : '') }; }
+function leadRow(l){ return { primary: l.full_name || 'קונה ללא שם', secondary: fmtDate(l.created_at) + (isAdminOrManager() ? ' · ' + userName(l.created_by) : '') }; }
 
 function renderKPIs(d){
   const grid = document.getElementById('kpiGrid');
@@ -498,7 +518,7 @@ async function refreshAll(){
   let loginQ = window.supabaseClient.from('activity_log').select('user_id, action_type, created_at')
     .in('action_type', ['login','logout']).gte('created_at', rangeStart().toISOString());
   const isAdmin = isAdminOrManager();
-  if (!isAdmin || SCOPE === 'mine') loginQ = loginQ.eq('user_id', CURRENT_PROFILE.id);
+  if (!isAdmin) loginQ = loginQ.eq('user_id', CURRENT_PROFILE.id);
   else if (SELECTED_AGENTS.size > 0) loginQ = loginQ.in('user_id', [...SELECTED_AGENTS]);
   const { data: logins } = await loginQ;
   d.logins = logins || [];
@@ -644,18 +664,12 @@ document.getElementById('metricSeg').addEventListener('click', e=>{
   METRIC = btn.dataset.m;
   renderTimeChart(LAST_D);
 });
-document.getElementById('fScope').addEventListener('change', e=>{
-  SCOPE = e.target.value;
-  refreshAll();
-});
-
 (async function init(){
   CURRENT_PROFILE = await requireAuth();
   if (!CURRENT_PROFILE) return;
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL');
   refreshNavMsgBadge();
   await loadLookups();
-  resetActivityFilter();
   await refreshAll();
 
   // Auto-refresh every 5 minutes so the screen always reflects the latest data,
