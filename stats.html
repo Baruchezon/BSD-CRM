@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608080905">
+<link rel="stylesheet" href="css/style.css?v=202608081015">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
@@ -85,7 +85,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 08.08.2026 09:05</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 08.08.2026 10:15</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav" style="display:flex;gap:6px;">
     <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
@@ -127,7 +127,7 @@
 
 <div class="wrap">
   <div class="toolbar">
-    <h2>📊 סטטיסטיקה</h2>
+    <h2>📊 סטטיסטיקה ופעילות מערכת</h2>
     <div>
       <span class="scope-badge" id="scopeBadge">טוען...</span>
       <span class="scope-badge" id="lastUpdated" style="margin-inline-start:8px;"></span>
@@ -165,45 +165,50 @@
     <div class="loading">טוען נתונים...</div>
   </div>
 
-  <div class="charts-grid">
-    <div class="panel">
-      <h3 id="timeChartTitle">פעילות לאורך זמן</h3>
-      <div class="chart-wrap"><canvas id="timeChart"></canvas></div>
-      <div class="hint">לחיצה על נקודה בגרף מציגה את הרשימה המלאה</div>
+  <div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+      <h3 style="margin:0;border-right:4px solid var(--gold);padding-right:10px;color:var(--navy);font-size:1rem;">עסקים וקונים חדשים לאורך זמן</h3>
+      <div class="seg" id="metricSeg">
+        <button data-m="biz" class="active">🏢 עסקים</button>
+        <button data-m="buyers">🧍 קונים</button>
+      </div>
     </div>
-    <div class="panel">
-      <h3>התאמות לפי שלב (התקדמות)</h3>
-      <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
-      <div class="hint">לחיצה על שלב מציגה את ההתאמות שבו</div>
-    </div>
+    <div class="chart-wrap"><canvas id="timeChart"></canvas></div>
+    <div class="hint">לחיצה על עמודה בגרף מציגה את הרשימה המלאה</div>
   </div>
 
-  <div class="panel" id="teamPanel" style="display:none;">
-    <h3>השוואת ביצועים בין סוכנים</h3>
-    <div class="chart-wrap" style="height:260px;margin-bottom:20px;"><canvas id="leaderChart"></canvas></div>
+  <div class="panel">
+    <h3 style="border-right:4px solid var(--gold);padding-right:10px;color:var(--navy);font-size:1rem;">👤 כניסות, יציאות ופעולות משתמשים</h3>
+    <div class="filter-row" style="margin-bottom:14px;">
+      <input type="date" id="actFrom" style="padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.82rem;">
+      <span style="color:#8a93a8;font-size:.8rem;">עד</span>
+      <input type="date" id="actTo" style="padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.82rem;">
+      <select id="actUserFilter" style="padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.82rem;">
+        <option value="all">כל המשתמשים</option>
+      </select>
+      <button class="btn btn-ghost" onclick="applyActivityFilter()">סינון</button>
+      <button class="btn btn-ghost" onclick="resetActivityFilter()">איפוס</button>
+    </div>
     <div style="overflow-x:auto;">
-      <table id="leaderTable">
+      <table id="activityTable">
         <thead>
           <tr>
-            <th data-sort="name">סוכן</th>
-            <th data-sort="businesses">עסקים שהכניס</th>
-            <th data-sort="buyers">קונים שהכניס</th>
-            <th data-sort="matches">התאמות שביצע</th>
-            <th data-sort="closed">עסקאות שנסגרו</th>
-            <th data-sort="stopped">עסקאות שנעצרו</th>
-            <th data-sort="logins">כניסות למערכת</th>
-            <th data-sort="last_login">כניסה אחרונה</th>
-            <th data-sort="tenure_days">ותק במערכת</th>
-            <th data-sort="time_spent_ms">זמן שהייה בטווח</th>
+            <th>משתמש</th>
+            <th>פעולה</th>
+            <th>סוג ישות</th>
+            <th>תאריך ושעה</th>
           </tr>
         </thead>
-        <tbody id="leaderBody"><tr class="empty-row"><td colspan="10">טוען...</td></tr></tbody>
+        <tbody id="activityBody"><tr class="empty-row"><td colspan="4">טוען...</td></tr></tbody>
       </table>
+    </div>
+    <div style="text-align:center;margin-top:14px;">
+      <button class="btn btn-ghost" id="loadMoreActivityBtn" onclick="loadActivityLog(false)" style="display:none;">טען עוד</button>
     </div>
   </div>
 
   <div class="panel" id="landingPanel" style="display:none;">
-    <h3>👁️ דף נחיתה — הכשרת מתווכים</h3>
+    <h3>👁️ נתוני האתר — דף הכשרת מתווכים</h3>
     <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);">
       <div class="kpi-card" style="cursor:default;">
         <div class="ico">👁️</div>
@@ -221,7 +226,7 @@
         <div class="lbl">היום</div>
       </div>
     </div>
-    <div class="hint">נראה למנהל המערכת בלבד. סופר כל טעינה של דף broker-training.html.</div>
+    <div class="hint">נראה למנהל המערכת בלבד. מבוסס על מונה כניסות פרטי לדף; נתוני מקורות תנועה/מכשיר/משך שהייה יתווספו לאחר חיבור Google Analytics.</div>
   </div>
 </div>
 
@@ -234,40 +239,32 @@
   </div>
 </div>
 
-<script src="js/config.js?v=202608080905"></script>
-<script src="js/supabaseClient.js?v=202608080905"></script>
-<script src="js/auth.js?v=202608080905"></script>
-<script src="js/push.js?v=202608080905"></script>
+<div class="overlay" id="activityOverlay">
+  <div class="dmodal" id="activityModalBox"></div>
+</div>
+
+<script src="js/config.js?v=202608081015"></script>
+<script src="js/supabaseClient.js?v=202608081015"></script>
+<script src="js/auth.js?v=202608081015"></script>
+<script src="js/push.js?v=202608081015"></script>
 <script>
-const STATUS_ORDER = ['התאמה חדשה','נשלח לקונה - ממתין לתגובה (אנונימי)','נשלחו מסמכים לאחר חתימת הסכם',
-  'נקבעה פגישה','התקיימה פגישה','המשך מו"מ','לא מתאים לקונה','העסקה נסגרה','העסקה נעצרה'];
-const OTHER_STATUS = 'סטטוס ישן / אחר';
-const STATUS_STYLES = {
-  'התאמה חדשה':                              '#c7cbd6',
-  'נשלח לקונה - ממתין לתגובה (אנונימי)':       '#7fd9a8',
-  'נשלחו מסמכים לאחר חתימת הסכם':             '#4fc189',
-  'נקבעה פגישה':                              '#2fae7a',
-  'התקיימה פגישה':                            '#1f9468',
-  'המשך מו"מ':                                '#0f4a2c',
-  'לא מתאים לקונה':                           '#e8756a',
-  'העסקה נסגרה':                              '#2f8fc9',
-  'העסקה נעצרה':                              '#c0392b',
-  [OTHER_STATUS]:                             '#b7bcc8'
-};
 const AGENT_COLORS = ['#2f8fc9','#c9a24b','#2fae7a','#c0392b','#8e44ad','#16a085','#d35400','#2c3e50','#e67e22','#27ae60'];
+const METRIC_COLORS = { biz: '#2f8fc9', buyers: '#2fae7a' };
+const ACTION_LABELS = { create: 'יצירה', update: 'עדכון', delete: 'מחיקה', insert: 'יצירה', login: '🟢 כניסה', logout: '🔴 יציאה' };
+const ENTITY_LABELS = { leads: 'קונה/מוכר', businesses: 'עסק', matches: 'התאמה', tasks: 'משימה', profiles: 'משתמש', session: 'התחברות' };
 
 let CURRENT_PROFILE = null;
 let ALL_PROFILES = [];
-let ALL_BUYERS = {}, ALL_BIZ = {};
-let GRAN = 'day', RANGE_DAYS = 30, SCOPE = 'mine';
+let GRAN = 'day', RANGE_DAYS = 30, SCOPE = 'mine', METRIC = 'biz';
 let SELECTED_AGENTS = new Set(); // empty = all agents
-let timeChart = null, statusChart = null, leaderChart = null;
-let LEADER_ROWS = [];
-let LEADER_SORT = { key:'closed', dir:'desc' };
+let timeChart = null;
 let TIME_BUCKETS = [];
-let TIME_ITEM_MAP = { biz:{}, buyer:{}, matches:{} };
-let STATUS_ITEM_MAP = {};
-let LAST_D = null;
+let TIME_ITEM_MAP = { biz:{}, buyers:{} };
+let LAST_D = { biz:[], leads:[] };
+
+let ACTIVITY_ITEMS = [];
+let ACTIVITY_OFFSET = 0;
+const ACTIVITY_PAGE_SIZE = 30;
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return '—'; } }
@@ -276,6 +273,8 @@ function userName(id){
   const u = ALL_PROFILES.find(x=>x.id===id);
   return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
 }
+function actionLabel(t){ return ACTION_LABELS[(t||'').toLowerCase()] || t || '—'; }
+function entityLabelText(t){ return ENTITY_LABELS[(t||'').toLowerCase()] || t || '—'; }
 
 function rangeStart(){
   const d = new Date();
@@ -285,9 +284,7 @@ function rangeStart(){
 }
 
 // All bucketing uses LOCAL calendar-date components only — never toISOString/UTC —
-// so "today" always means today in the user's own timezone, and item keys always
-// agree with the bucket list keys (this was the bug: mixing UTC and local dates
-// silently dropped same-day entries).
+// so "today" always means today in the user's own timezone.
 function localDateKey(d){
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
@@ -319,19 +316,16 @@ function generateBuckets(from, to, gran){
   return buckets;
 }
 
-async function loadLookups(){
-  const [{data:profiles}, {data:buyers}, {data:biz}] = await Promise.all([
-    window.supabaseClient.from('profiles').select('id, full_name, email, role, login_count, last_login_at, created_at, status'),
-    window.supabaseClient.from('leads').select('id, full_name'),
-    window.supabaseClient.from('businesses').select('id, internal_name')
-  ]);
-  ALL_PROFILES = profiles || [];
-  (buyers||[]).forEach(b=>ALL_BUYERS[b.id]=b.full_name);
-  (biz||[]).forEach(b=>ALL_BIZ[b.id]=b.internal_name);
+function isAdminOrManager(){ return CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager'); }
 
-  const isAdmin = CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager';
+async function loadLookups(){
+  const { data: profiles } = await window.supabaseClient.from('profiles').select('id, full_name, email, role, login_count, last_login_at, created_at, status');
+  ALL_PROFILES = profiles || [];
+
+  const isAdmin = isAdminOrManager();
   document.getElementById('scopeFilters').style.display = isAdmin ? 'flex' : 'none';
   document.getElementById('scopeBadge').textContent = isAdmin ? 'מנהל · יכול לצפות בכל הצוות' : 'מציג את הנתונים שלך בלבד';
+
   if (isAdmin){
     const wrap = document.getElementById('agentChips');
     const allChip = document.createElement('button');
@@ -347,6 +341,17 @@ async function loadLookups(){
       chip.onclick = () => toggleAgentChip(p.id);
       wrap.appendChild(chip);
     });
+    document.getElementById('agentChipsWrap').style.display = 'block';
+
+    const uf = document.getElementById('actUserFilter');
+    ALL_PROFILES.forEach(p=>{
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = (p.full_name && p.full_name.trim()) ? p.full_name : p.email;
+      uf.appendChild(o);
+    });
+  } else {
+    document.getElementById('actUserFilter').style.display = 'none';
   }
 }
 
@@ -372,25 +377,22 @@ async function fetchData(){
   const fromIso = from.toISOString();
 
   let bizQ = window.supabaseClient.from('businesses').select('id, internal_name, created_at, created_by').gte('created_at', fromIso);
-  let leadsQ = window.supabaseClient.from('leads').select('id, full_name, created_at, created_by, type').gte('created_at', fromIso);
-  let matchesQ = window.supabaseClient.from('matches').select('id, created_at, created_by, current_handler, status, buyer_id, business_id').gte('created_at', fromIso);
+  let leadsQ = window.supabaseClient.from('leads').select('id, full_name, created_at, created_by, type').eq('type','buyer').gte('created_at', fromIso);
 
-  const isAdmin = CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager';
+  const isAdmin = isAdminOrManager();
   const effectiveScope = isAdmin ? SCOPE : 'mine';
 
   if (effectiveScope === 'mine'){
     bizQ = bizQ.eq('created_by', CURRENT_PROFILE.id);
     leadsQ = leadsQ.eq('created_by', CURRENT_PROFILE.id);
-    matchesQ = matchesQ.eq('created_by', CURRENT_PROFILE.id);
   } else if (SELECTED_AGENTS.size > 0){
     const ids = [...SELECTED_AGENTS];
     bizQ = bizQ.in('created_by', ids);
     leadsQ = leadsQ.in('created_by', ids);
-    matchesQ = matchesQ.in('created_by', ids);
   }
 
-  const [{data:biz}, {data:leads}, {data:matches}] = await Promise.all([bizQ, leadsQ, matchesQ]);
-  return { biz: biz||[], leads: leads||[], matches: matches||[] };
+  const [{data:biz}, {data:leads}] = await Promise.all([bizQ, leadsQ]);
+  return { biz: biz||[], leads: leads||[] };
 }
 
 // ---- Drilldown modal ----
@@ -399,385 +401,195 @@ function openDrilldown(title, sub, rows){
   document.getElementById('dSub').textContent = sub || '';
   document.getElementById('dList').innerHTML = rows.length ? rows.map(r=>`
     <div class="drow">
-      <div><div class="dprimary">${esc(r.primary)}</div>${r.secondary?`<div class="dsecondary">${esc(r.secondary)}</div>`:''}</div>
-      ${r.pill?`<span class="dpill" style="background:${r.pillColor||'#eef1f6'};color:${r.pillTextColor||'#333'};">${esc(r.pill)}</span>`:''}
-    </div>
-  `).join('') : '<div class="drow"><span class="dsecondary">אין רשומות</span></div>';
+      <div><div class="dprimary">${esc(r.primary)}</div><div class="dsecondary">${esc(r.secondary||'')}</div></div>
+    </div>`).join('') : '<div class="empty-row" style="padding:20px;">אין רשומות</div>';
   document.getElementById('dOverlay').classList.add('open');
 }
 function closeDrilldown(){ document.getElementById('dOverlay').classList.remove('open'); }
+document.getElementById('dOverlay').addEventListener('click', e=>{ if (e.target.id === 'dOverlay') closeDrilldown(); });
 
 function bizRow(b){ return { primary: b.internal_name || 'עסק ללא שם', secondary: fmtDate(b.created_at) + (SCOPE==='team' ? ' · ' + userName(b.created_by) : '') }; }
-function leadRow(l){ return { primary: l.full_name || 'ליד ללא שם', secondary: fmtDate(l.created_at) + (SCOPE==='team' ? ' · ' + userName(l.created_by) : '') }; }
-function matchRow(m){
-  const label = (ALL_BUYERS[m.buyer_id]||'קונה') + ' ↔ ' + (ALL_BIZ[m.business_id]||'עסק');
-  const st = STATUS_STYLES[m.status] || STATUS_STYLES[OTHER_STATUS];
-  return {
-    primary: label,
-    secondary: fmtDate(m.created_at) + (SCOPE==='team' ? ' · ' + userName(m.created_by) : ''),
-    pill: m.status || OTHER_STATUS, pillColor: st, pillTextColor:'#fff'
-  };
-}
+function leadRow(l){ return { primary: l.full_name || 'קונה ללא שם', secondary: fmtDate(l.created_at) + (SCOPE==='team' ? ' · ' + userName(l.created_by) : '') }; }
 
 function renderKPIs(d){
-  const buyers = d.leads.filter(l=>l.type==='buyer');
-  const sellers = d.leads.filter(l=>l.type==='seller');
-  const closed = d.matches.filter(m=>m.status==='העסקה נסגרה');
-  const stopped = d.matches.filter(m=>m.status==='העסקה נעצרה');
+  const grid = document.getElementById('kpiGrid');
+  const totalBiz = d.biz.length;
+  const totalBuyers = d.leads.length;
+  const logins = (d.logins||[]).filter(a=>a.action_type==='login').length;
+  const avgMs = d.avgSessionMs || 0;
+  const avgLabel = avgMs > 0 ? Math.round(avgMs/60000) + ' דק׳' : '—';
 
-  const cards = [
-    { ico:'🏢', num:d.biz.length, lbl:'עסקים חדשים', key:'biz' },
-    { ico:'🧑‍💼', num:buyers.length, lbl:'קונים חדשים', key:'buyers' },
-    { ico:'🤝', num:sellers.length, lbl:'מוכרים חדשים (לידים)', key:'sellers' },
-    { ico:'🔗', num:d.matches.length, lbl:'התאמות שבוצעו', key:'matches' },
-    { ico:'✅', num:closed.length, lbl:'עסקאות שנסגרו', key:'closed' },
-    { ico:'⛔', num:stopped.length, lbl:'עסקאות שנעצרו', key:'stopped' }
-  ];
-  document.getElementById('kpiGrid').innerHTML = cards.map(c=>`
-    <div class="kpi-card" onclick="onKpiClick('${c.key}')"><div class="ico">${c.ico}</div><div class="num">${c.num}</div><div class="lbl">${c.lbl}</div></div>
-  `).join('');
+  grid.innerHTML = `
+    <div class="kpi-card" style="cursor:default;"><div class="ico">🏢</div><div class="num">${totalBiz}</div><div class="lbl">עסקים חדשים</div></div>
+    <div class="kpi-card" style="cursor:default;"><div class="ico">🧍</div><div class="num">${totalBuyers}</div><div class="lbl">קונים חדשים</div></div>
+    <div class="kpi-card" style="cursor:default;"><div class="ico">🟢</div><div class="num">${logins}</div><div class="lbl">כניסות למערכת</div></div>
+    <div class="kpi-card" style="cursor:default;"><div class="ico">⏱️</div><div class="num">${avgLabel}</div><div class="lbl">משך שהייה ממוצע</div></div>
+  `;
 }
-function onKpiClick(key){
-  const d = LAST_D; if (!d) return;
-  const map = {
-    biz: { title:'עסקים חדשים', rows: d.biz.map(bizRow) },
-    buyers: { title:'קונים חדשים', rows: d.leads.filter(l=>l.type==='buyer').map(leadRow) },
-    sellers: { title:'מוכרים חדשים (לידים)', rows: d.leads.filter(l=>l.type==='seller').map(leadRow) },
-    matches: { title:'התאמות שבוצעו', rows: d.matches.map(matchRow) },
-    closed: { title:'עסקאות שנסגרו', rows: d.matches.filter(m=>m.status==='העסקה נסגרה').map(matchRow) },
-    stopped: { title:'עסקאות שנעצרו', rows: d.matches.filter(m=>m.status==='העסקה נעצרה').map(matchRow) }
-  };
-  const c = map[key];
-  openDrilldown(c.title, c.rows.length + ' רשומות בטווח שנבחר', c.rows);
+
+function computeAvgSession(loginEvents){
+  // pairs consecutive login->logout per user to estimate session length
+  const byUser = {};
+  loginEvents.forEach(e=>{ (byUser[e.user_id] = byUser[e.user_id]||[]).push(e); });
+  let totalMs = 0, count = 0;
+  Object.values(byUser).forEach(events=>{
+    events.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+    let openLogin = null;
+    events.forEach(e=>{
+      if (e.action_type === 'login') openLogin = new Date(e.created_at).getTime();
+      else if (e.action_type === 'logout' && openLogin){
+        totalMs += Math.max(0, new Date(e.created_at).getTime() - openLogin);
+        count++;
+        openLogin = null;
+      }
+    });
+  });
+  return count > 0 ? totalMs / count : 0;
 }
 
 function renderTimeChart(d){
   const from = rangeStart();
   const to = new Date();
-  const buckets = generateBuckets(from, to, GRAN);
-  TIME_BUCKETS = buckets;
-  const labels = buckets.map(b=>bucketLabel(b, GRAN));
+  TIME_BUCKETS = generateBuckets(from, to, GRAN);
+  TIME_ITEM_MAP = { biz:{}, buyers:{} };
+  TIME_BUCKETS.forEach(k=>{ TIME_ITEM_MAP.biz[k]=[]; TIME_ITEM_MAP.buyers[k]=[]; });
 
-  const bucketItems = (arr) => {
-    const m = {}; buckets.forEach(b=>m[b]=[]);
-    arr.forEach(item=>{ const k = bucketKey(item.created_at, GRAN); if (k in m) m[k].push(item); });
-    return m;
-  };
+  d.biz.forEach(item=>{ const k = bucketKey(item.created_at, GRAN); if (k in TIME_ITEM_MAP.biz) TIME_ITEM_MAP.biz[k].push(item); });
+  d.leads.forEach(item=>{ const k = bucketKey(item.created_at, GRAN); if (k in TIME_ITEM_MAP.buyers) TIME_ITEM_MAP.buyers[k].push(item); });
 
-  const showPerAgent = SCOPE === 'team' && SELECTED_AGENTS.size !== 1;
+  const labels = TIME_BUCKETS.map(k=>bucketLabel(k, GRAN));
+  const values = TIME_BUCKETS.map(k=>TIME_ITEM_MAP[METRIC][k].length);
+  const color = METRIC_COLORS[METRIC];
 
+  const ctx = document.getElementById('timeChart').getContext('2d');
   if (timeChart) timeChart.destroy();
-  document.getElementById('timeChartTitle').textContent = showPerAgent ? 'פעילות לאורך זמן — לפי סוכן' : 'פעילות לאורך זמן';
-
-  if (!showPerAgent){
-    const bizMap = bucketItems(d.biz);
-    const buyerMap = bucketItems(d.leads.filter(l=>l.type==='buyer'));
-    const matchMap = bucketItems(d.matches);
-    TIME_ITEM_MAP = { biz:bizMap, buyer:buyerMap, matches:matchMap };
-
-    timeChart = new Chart(document.getElementById('timeChart'), {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [
-          { key:'biz', label:'עסקים', data:buckets.map(b=>bizMap[b].length), borderColor:'#c9a24b', backgroundColor:'rgba(201,162,75,.15)', tension:.3, fill:true },
-          { key:'buyer', label:'קונים', data:buckets.map(b=>buyerMap[b].length), borderColor:'#2f8fc9', backgroundColor:'rgba(47,143,201,.15)', tension:.3, fill:true },
-          { key:'matches', label:'התאמות', data:buckets.map(b=>matchMap[b].length), borderColor:'#2fae7a', backgroundColor:'rgba(47,174,122,.15)', tension:.3, fill:true }
-        ]
-      },
-      options: {
-        responsive:true, maintainAspectRatio:false,
-        interaction:{ mode:'index', intersect:false },
-        scales: { y:{ beginAtZero:true, ticks:{ precision:0 } } },
-        plugins: { legend:{ position:'bottom' } },
-        onClick: (evt, els, chart) => {
-          if (!els.length) return;
-          const el = els[0];
-          const dsKey = chart.data.datasets[el.datasetIndex].key;
-          const bucket = buckets[el.index];
-          const items = TIME_ITEM_MAP[dsKey][bucket] || [];
-          const titles = { biz:'עסקים', buyer:'קונים', matches:'התאמות' };
-          const rowFns = { biz:bizRow, buyer:leadRow, matches:matchRow };
-          openDrilldown(titles[dsKey] + ' · ' + bucketLabel(bucket, GRAN), items.length + ' רשומות', items.map(rowFns[dsKey]));
-        }
-      }
-    });
-  } else {
-    // one line per agent — total activity (businesses+buyers+matches) per bucket
-    const agents = ALL_PROFILES.filter(p=>p.role!=='admin' && (SELECTED_AGENTS.size===0 || SELECTED_AGENTS.has(p.id)));
-    const perAgentItems = {}; // agentId -> {bucket: [{type,item}]}
-    agents.forEach(p=>{ perAgentItems[p.id] = {}; buckets.forEach(b=>perAgentItems[p.id][b]=[]); });
-    const addAll = (arr, type) => arr.forEach(item=>{
-      const k = bucketKey(item.created_at, GRAN);
-      if (perAgentItems[item.created_by] && k in perAgentItems[item.created_by]) perAgentItems[item.created_by][k].push({type,item});
-    });
-    addAll(d.biz, 'biz');
-    addAll(d.leads.filter(l=>l.type==='buyer'), 'buyer');
-    addAll(d.matches, 'matches');
-    TIME_ITEM_MAP = { perAgent: perAgentItems };
-
-    const datasets = agents
-      .map((p,i)=>{
-        const name = (p.full_name && p.full_name.trim()) ? p.full_name : p.email;
-        const data = buckets.map(b=>perAgentItems[p.id][b].length);
-        return { key:p.id, name, label:name, data, borderColor:AGENT_COLORS[i%AGENT_COLORS.length], backgroundColor:'transparent', tension:.3 };
-      })
-      .filter(ds => ds.data.some(v=>v>0)); // hide agents with zero activity in range, keeps legend readable
-
-    timeChart = new Chart(document.getElementById('timeChart'), {
-      type: 'line',
-      data: { labels, datasets },
-      options: {
-        responsive:true, maintainAspectRatio:false,
-        interaction:{ mode:'index', intersect:false },
-        scales: { y:{ beginAtZero:true, ticks:{ precision:0 } } },
-        plugins: { legend:{ position:'bottom' } },
-        onClick: (evt, els, chart) => {
-          if (!els.length) return;
-          const el = els[0];
-          const ds = chart.data.datasets[el.datasetIndex];
-          const bucket = buckets[el.index];
-          const entries = perAgentItems[ds.key][bucket] || [];
-          const titles = { biz:'עסק', buyer:'קונה', matches:'התאמה' };
-          const rowFns = { biz:bizRow, buyer:leadRow, matches:matchRow };
-          const rows = entries.map(e=>({ ...rowFns[e.type](e.item), pill: rowFns[e.type](e.item).pill || titles[e.type], pillColor: rowFns[e.type](e.item).pillColor || '#eef1f6', pillTextColor: rowFns[e.type](e.item).pillTextColor || '#333' }));
-          openDrilldown(ds.name + ' · ' + bucketLabel(bucket, GRAN), rows.length + ' פעולות', rows);
-        }
-      }
-    });
-  }
-}
-
-function renderStatusChart(d){
-  const labels = [...STATUS_ORDER, OTHER_STATUS];
-  STATUS_ITEM_MAP = {};
-  labels.forEach(s=>STATUS_ITEM_MAP[s]=[]);
-  d.matches.forEach(m=>{
-    const key = STATUS_ORDER.includes(m.status) ? m.status : OTHER_STATUS;
-    STATUS_ITEM_MAP[key].push(m);
-  });
-  const counts = labels.map(s => STATUS_ITEM_MAP[s].length);
-  if (statusChart) statusChart.destroy();
-  statusChart = new Chart(document.getElementById('statusChart'), {
+  timeChart = new Chart(ctx, {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [{ data: counts, backgroundColor: labels.map(s=>STATUS_STYLES[s]) }]
-    },
+    data: { labels, datasets: [{ label: METRIC==='biz' ? 'עסקים חדשים' : 'קונים חדשים', data: values, backgroundColor: color, borderRadius: 6 }] },
     options: {
-      indexAxis: 'y',
-      responsive:true, maintainAspectRatio:false,
-      plugins: { legend:{ display:false } },
-      scales: { x:{ beginAtZero:true, ticks:{ precision:0 } } },
-      onClick: (evt, els) => {
-        if (!els.length) return;
-        const status = labels[els[0].index];
-        const items = STATUS_ITEM_MAP[status] || [];
-        openDrilldown('התאמות · ' + status, items.length + ' התאמות', items.map(matchRow));
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const idx = elements[0].index;
+        const key = TIME_BUCKETS[idx];
+        const items = TIME_ITEM_MAP[METRIC][key] || [];
+        const rows = items.map(METRIC==='biz' ? bizRow : leadRow);
+        openDrilldown((METRIC==='biz'?'עסקים':'קונים') + ' — ' + bucketLabel(key, GRAN), rows.length + ' רשומות', rows);
       }
     }
   });
-}
-
-async function renderLeaderboard(){
-  const isAdmin = CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager';
-  document.getElementById('teamPanel').style.display = (isAdmin && SCOPE==='team') ? 'block' : 'none';
-  if (!isAdmin || SCOPE !== 'team') return;
-
-  const from = rangeStart().toISOString();
-  const agents = ALL_PROFILES.filter(p=>p.role !== 'admin' && (SELECTED_AGENTS.size===0 || SELECTED_AGENTS.has(p.id)));
-  const agentIds = agents.map(p=>p.id);
-
-  const [{data:biz}, {data:leads}, {data:matches}, {data:sessions}] = await Promise.all([
-    window.supabaseClient.from('businesses').select('created_by').gte('created_at', from),
-    window.supabaseClient.from('leads').select('created_by, type').gte('created_at', from),
-    window.supabaseClient.from('matches').select('created_by, current_handler, status').gte('created_at', from),
-    agentIds.length ? window.supabaseClient.from('activity_log').select('user_id, action_type, created_at').in('user_id', agentIds).in('action_type', ['login','logout']).gte('created_at', from).order('created_at', { ascending:true }) : Promise.resolve({data:[]})
-  ]);
-
-  const sessionTotals = computeSessionTotals(sessions || []);
-
-  LEADER_ROWS = agents.map(p=>{
-    const owner = (m) => (m.current_handler || m.created_by);
-    const tenureDays = p.created_at ? Math.max(0, Math.floor((Date.now() - new Date(p.created_at).getTime()) / 86400000)) : null;
-    const st = sessionTotals[p.id] || { totalMs:0, sessionCount:0 };
-    return {
-      id: p.id,
-      name: (p.full_name && p.full_name.trim()) ? p.full_name : p.email,
-      businesses: (biz||[]).filter(b=>b.created_by===p.id).length,
-      buyers: (leads||[]).filter(l=>l.type==='buyer' && l.created_by===p.id).length,
-      matches: (matches||[]).filter(m=>m.created_by===p.id).length,
-      closed: (matches||[]).filter(m=>m.status==='העסקה נסגרה' && owner(m)===p.id).length,
-      stopped: (matches||[]).filter(m=>m.status==='העסקה נעצרה' && owner(m)===p.id).length,
-      logins: p.login_count || 0,
-      last_login: p.last_login_at,
-      tenure_days: tenureDays,
-      status: p.status,
-      time_spent_ms: st.totalMs,
-      session_count: st.sessionCount
-    };
-  });
-  sortAndRenderLeaderboard();
-}
-
-// Pairs chronological login→logout events per user into sessions and sums their duration.
-// An unclosed session (login with no matching logout yet, e.g. still logged in) counts
-// up to "now" so today's active session isn't invisible.
-function computeSessionTotals(events){
-  const byUser = {};
-  events.forEach(e=>{ (byUser[e.user_id] = byUser[e.user_id]||[]).push(e); });
-  const totals = {};
-  Object.keys(byUser).forEach(uid=>{
-    let openLogin = null, totalMs = 0, sessionCount = 0;
-    byUser[uid].forEach(e=>{
-      if (e.action_type === 'login') openLogin = new Date(e.created_at).getTime();
-      else if (e.action_type === 'logout' && openLogin){
-        totalMs += Math.max(0, new Date(e.created_at).getTime() - openLogin);
-        sessionCount++;
-        openLogin = null;
-      }
-    });
-    if (openLogin){ totalMs += Math.max(0, Date.now() - openLogin); sessionCount++; }
-    totals[uid] = { totalMs, sessionCount };
-  });
-  return totals;
-}
-function fmtDuration(ms){
-  if (!ms) return '—';
-  const mins = Math.round(ms / 60000);
-  if (mins < 60) return mins + ' דק\'';
-  const hrs = Math.floor(mins / 60);
-  const remMins = mins % 60;
-  if (hrs < 24) return hrs + ' שע\'' + (remMins ? ' ' + remMins + ' דק\'' : '');
-  const days = Math.floor(hrs / 24);
-  return days + ' ימים ' + (hrs % 24) + ' שע\'';
-}
-
-function tenureLabel(days){
-  if (days === null || days === undefined) return '—';
-  if (days < 1) return 'הצטרף היום';
-  if (days < 30) return days + ' ימים';
-  if (days < 365) return Math.round(days/30) + ' חודשים';
-  return Math.round(days/365*10)/10 + ' שנים';
-}
-
-async function showLoginHistory(agentId, agentName){
-  const from = rangeStart().toISOString();
-  const { data, error } = await window.supabaseClient
-    .from('activity_log')
-    .select('action_type, created_at')
-    .eq('user_id', agentId)
-    .in('action_type', ['login','logout'])
-    .gte('created_at', from)
-    .order('created_at', { ascending:false });
-  if (error){ toast('שגיאה בטעינת היסטוריית כניסות: ' + error.message); return; }
-  const rows = (data||[]).map(r=>({
-    primary: (r.action_type==='login' ? '🟢 כניסה' : '🔴 יציאה') + ' · ' + fmtDateTime(r.created_at)
-  }));
-  const totals = computeSessionTotals((data||[]).map(r=>({ user_id:agentId, action_type:r.action_type, created_at:r.created_at })));
-  const st = totals[agentId] || { totalMs:0, sessionCount:0 };
-  openDrilldown('היסטוריית כניסות · ' + agentName, `${rows.length} אירועים · סה"כ זמן שהייה בטווח: ${fmtDuration(st.totalMs)} (${st.sessionCount} כניסות)`, rows);
-}
-
-function sortAndRenderLeaderboard(){
-  const { key, dir } = LEADER_SORT;
-  const rows = [...LEADER_ROWS].sort((a,b)=>{
-    let av = a[key], bv = b[key];
-    if (key === 'name'){ av = av||''; bv = bv||''; return dir==='asc' ? av.localeCompare(bv,'he') : bv.localeCompare(av,'he'); }
-    if (key === 'last_login'){ av = av?new Date(av).getTime():0; bv = bv?new Date(bv).getTime():0; return dir==='asc' ? av-bv : bv-av; }
-    av = (av===null||av===undefined) ? -1 : av; bv = (bv===null||bv===undefined) ? -1 : bv;
-    return dir==='asc' ? (av-bv) : (bv-av);
-  });
-
-  const maxClosed = Math.max(1, ...rows.map(r=>r.closed));
-  document.getElementById('leaderBody').innerHTML = rows.length ? rows.map((r,i)=>`
-    <tr class="${i===0 && r.closed>0 ? 'rank-1':''}" style="cursor:pointer;" onclick="drillIntoAgent('${r.id}')" title="לחיצה תציג את הנתונים של ${esc(r.name)} בלבד">
-      <td>${i===0 && r.closed>0 ? '🏆 ' : ''}${esc(r.name)}${r.status && r.status!=='active' ? ' <span style=\"color:#c0392b;font-size:.7rem;\">(חסום)</span>' : ''}</td>
-      <td>${r.businesses}</td>
-      <td>${r.buyers}</td>
-      <td>${r.matches}</td>
-      <td><div class="bar-cell"><span>${r.closed}</span><div class="mini-bar" style="width:${Math.round((r.closed/maxClosed)*60)}px;"></div></div></td>
-      <td>${r.stopped}</td>
-      <td><span style="text-decoration:underline;" onclick="event.stopPropagation(); showLoginHistory('${r.id}','${esc(r.name)}')">${r.logins}</span></td>
-      <td>${fmtDateTime(r.last_login)}</td>
-      <td>${tenureLabel(r.tenure_days)}</td>
-      <td>${fmtDuration(r.time_spent_ms)}${r.session_count ? ` <span style="color:#999;font-size:.72rem;">(${r.session_count})</span>` : ''}</td>
-    </tr>
-  `).join('') : '<tr class="empty-row"><td colspan="10">אין נתונים בטווח שנבחר</td></tr>';
-
-  if (leaderChart) leaderChart.destroy();
-  leaderChart = new Chart(document.getElementById('leaderChart'), {
-    type: 'bar',
-    data: {
-      labels: rows.map(r=>r.name),
-      datasets: [
-        { label:'עסקאות שנסגרו', data: rows.map(r=>r.closed), backgroundColor:'#2f8fc9' },
-        { label:'עסקאות שנעצרו', data: rows.map(r=>r.stopped), backgroundColor:'#c0392b' }
-      ]
-    },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ position:'bottom' } },
-      scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } },
-      onClick: (evt, els) => {
-        if (!els.length) return;
-        const idx = els[0].index;
-        if (rows[idx]) drillIntoAgent(rows[idx].id);
-      }
-    }
-  });
-}
-function drillIntoAgent(agentId){
-  SELECTED_AGENTS = new Set([agentId]);
-  document.getElementById('fScope').value = 'team';
-  SCOPE = 'team';
-  document.getElementById('agentChipsWrap').style.display = 'block';
-  syncAgentChips();
-  refreshAll();
 }
 
 async function refreshAll(){
   document.getElementById('kpiGrid').innerHTML = '<div class="loading">טוען נתונים...</div>';
   const d = await fetchData();
+
+  // logins for KPI + avg session (admin/team scope aware)
+  let loginQ = window.supabaseClient.from('activity_log').select('user_id, action_type, created_at')
+    .in('action_type', ['login','logout']).gte('created_at', rangeStart().toISOString());
+  const isAdmin = isAdminOrManager();
+  if (!isAdmin || SCOPE === 'mine') loginQ = loginQ.eq('user_id', CURRENT_PROFILE.id);
+  else if (SELECTED_AGENTS.size > 0) loginQ = loginQ.in('user_id', [...SELECTED_AGENTS]);
+  const { data: logins } = await loginQ;
+  d.logins = logins || [];
+  d.avgSessionMs = computeAvgSession(d.logins);
+
   LAST_D = d;
   renderKPIs(d);
   renderTimeChart(d);
-  renderStatusChart(d);
-  await renderLeaderboard();
-  document.getElementById('lastUpdated').textContent = 'עודכן לאחרונה: ' + new Date().toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('lastUpdated').textContent = 'עודכן ' + new Date().toLocaleTimeString('he-IL');
+
+  await loadLandingPageStats();
 }
 
-document.getElementById('granSeg').addEventListener('click', e=>{
-  const btn = e.target.closest('button'); if (!btn) return;
-  document.querySelectorAll('#granSeg button').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  GRAN = btn.dataset.g;
-  refreshAll();
-});
-document.getElementById('rangeSeg').addEventListener('click', e=>{
-  const btn = e.target.closest('button'); if (!btn) return;
-  document.querySelectorAll('#rangeSeg button').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  RANGE_DAYS = Number(btn.dataset.r);
-  refreshAll();
-});
-document.getElementById('fScope').addEventListener('change', e=>{
-  SCOPE = e.target.value;
-  document.getElementById('agentChipsWrap').style.display = SCOPE === 'team' ? 'block' : 'none';
-  refreshAll();
-});
-document.getElementById('leaderTable').querySelector('thead').addEventListener('click', e=>{
-  const th = e.target.closest('th'); if (!th) return;
-  const key = th.dataset.sort;
-  if (LEADER_SORT.key === key){ LEADER_SORT.dir = LEADER_SORT.dir === 'asc' ? 'desc' : 'asc'; }
-  else { LEADER_SORT = { key, dir: 'desc' }; }
-  sortAndRenderLeaderboard();
-});
+// ---- Activity log (logins/logouts + record actions) ----
+async function loadActivityLog(reset){
+  if (reset){ ACTIVITY_OFFSET = 0; ACTIVITY_ITEMS = []; }
+  const from = ACTIVITY_OFFSET;
+  const to = ACTIVITY_OFFSET + ACTIVITY_PAGE_SIZE - 1;
 
-document.getElementById('dOverlay').addEventListener('click', e=>{
-  if (e.target.id === 'dOverlay') closeDrilldown();
-});
+  const fromDate = document.getElementById('actFrom').value;
+  const toDate = document.getElementById('actTo').value;
+  const userFilter = document.getElementById('actUserFilter').value;
 
+  let q = window.supabaseClient
+    .from('activity_log')
+    .select('id, user_id, action_type, entity_type, entity_id, old_value, new_value, created_at')
+    .order('created_at', { ascending: false });
+
+  if (fromDate) q = q.gte('created_at', new Date(fromDate + 'T00:00:00').toISOString());
+  if (toDate) q = q.lte('created_at', new Date(toDate + 'T23:59:59').toISOString());
+
+  if (!isAdminOrManager()){
+    q = q.eq('user_id', CURRENT_PROFILE.id);
+  } else if (userFilter && userFilter !== 'all'){
+    q = q.eq('user_id', userFilter);
+  }
+
+  q = q.range(from, to);
+  const { data, error } = await q;
+
+  const body = document.getElementById('activityBody');
+  if (error){ if (reset) body.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:#b00;">שגיאה: ${esc(error.message)}</td></tr>`; return; }
+
+  ACTIVITY_ITEMS = reset ? (data || []) : ACTIVITY_ITEMS.concat(data || []);
+  ACTIVITY_OFFSET += (data || []).length;
+
+  if (ACTIVITY_ITEMS.length === 0){
+    body.innerHTML = '<tr class="empty-row"><td colspan="4">אין פעילות בטווח שנבחר</td></tr>';
+  } else {
+    body.innerHTML = ACTIVITY_ITEMS.map(a => `
+      <tr style="cursor:pointer;" onclick="showActivityDetail('${a.id}')">
+        <td>${esc(userName(a.user_id))}</td>
+        <td>${esc(actionLabel(a.action_type))}</td>
+        <td>${esc(entityLabelText(a.entity_type))}</td>
+        <td>${fmtDateTime(a.created_at)}</td>
+      </tr>`).join('');
+  }
+
+  const loadMoreBtn = document.getElementById('loadMoreActivityBtn');
+  if (loadMoreBtn) loadMoreBtn.style.display = (data || []).length < ACTIVITY_PAGE_SIZE ? 'none' : 'inline-block';
+}
+
+function applyActivityFilter(){ loadActivityLog(true); }
+function resetActivityFilter(){
+  const threeDaysAgo = new Date(Date.now() - 3*24*60*60*1000);
+  document.getElementById('actFrom').value = threeDaysAgo.toISOString().slice(0,10);
+  document.getElementById('actTo').value = '';
+  const uf = document.getElementById('actUserFilter');
+  if (uf) uf.value = 'all';
+  loadActivityLog(true);
+}
+
+function showActivityDetail(id){
+  const a = ACTIVITY_ITEMS.find(x => x.id === id);
+  if (!a) return;
+  const hasValues = a.old_value || a.new_value;
+  document.getElementById('activityModalBox').innerHTML = `
+    <h3>פרטי פעילות</h3>
+    <div style="font-size:.9rem;line-height:1.8;color:#333;">
+      <div><b>משתמש:</b> ${esc(userName(a.user_id))}</div>
+      <div><b>פעולה:</b> ${esc(actionLabel(a.action_type))}</div>
+      <div><b>סוג ישות:</b> ${esc(entityLabelText(a.entity_type))}</div>
+      <div><b>מזהה רשומה:</b> ${esc(a.entity_id || '—')}</div>
+      <div><b>תאריך ושעה:</b> ${fmtDateTime(a.created_at)}</div>
+    </div>
+    ${hasValues ? `
+      <div style="margin-top:16px;">
+        ${a.old_value ? `<div style="margin-bottom:10px;"><b>ערך קודם:</b><pre style="background:#f7f5ef;border-radius:8px;padding:10px;font-size:.78rem;white-space:pre-wrap;max-height:180px;overflow-y:auto;">${esc(JSON.stringify(a.old_value, null, 2))}</pre></div>` : ''}
+        ${a.new_value ? `<div><b>ערך חדש:</b><pre style="background:#f7f5ef;border-radius:8px;padding:10px;font-size:.78rem;white-space:pre-wrap;max-height:180px;overflow-y:auto;">${esc(JSON.stringify(a.new_value, null, 2))}</pre></div>` : ''}
+      </div>` : '<div style="margin-top:14px;color:#999;">אין פרטים נוספים לפעולה זו</div>'}
+    <div style="text-align:left;margin-top:18px;">
+      <button class="btn btn-ghost" onclick="closeActivityModal()">סגירה</button>
+    </div>`;
+  document.getElementById('activityOverlay').classList.add('open');
+}
+function closeActivityModal(){ document.getElementById('activityOverlay').classList.remove('open'); }
+document.getElementById('activityOverlay').addEventListener('click', e=>{ if (e.target.id === 'activityOverlay') closeActivityModal(); });
+
+// ---- Landing page (public site) views — admin only ----
 async function loadLandingPageStats(){
   if (!CURRENT_PROFILE || CURRENT_PROFILE.role !== 'admin') return;
   const panel = document.getElementById('landingPanel');
@@ -801,21 +613,47 @@ async function loadLandingPageStats(){
   }
 }
 
+// ---- Filter wiring ----
+document.getElementById('granSeg').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn) return;
+  document.querySelectorAll('#granSeg button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  GRAN = btn.dataset.g;
+  renderTimeChart(LAST_D);
+});
+document.getElementById('rangeSeg').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn) return;
+  document.querySelectorAll('#rangeSeg button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  RANGE_DAYS = parseInt(btn.dataset.r, 10);
+  refreshAll();
+});
+document.getElementById('metricSeg').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn) return;
+  document.querySelectorAll('#metricSeg button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  METRIC = btn.dataset.m;
+  renderTimeChart(LAST_D);
+});
+document.getElementById('fScope').addEventListener('change', e=>{
+  SCOPE = e.target.value;
+  refreshAll();
+});
+
 (async function init(){
   CURRENT_PROFILE = await requireAuth();
   if (!CURRENT_PROFILE) return;
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL');
   refreshNavMsgBadge();
   await loadLookups();
+  resetActivityFilter();
   await refreshAll();
-  await loadLandingPageStats();
 
   // Auto-refresh every 5 minutes so the screen always reflects the latest data,
   // without the user needing to click "רענון" manually. Skips a tick if a
-  // drilldown list is open (so it doesn't yank the list away mid-read) or the
-  // tab isn't visible (no point refreshing in the background).
+  // drilldown/activity modal is open, or the tab isn't visible.
   setInterval(() => {
-    const modalOpen = document.getElementById('dOverlay').classList.contains('open');
+    const modalOpen = document.getElementById('dOverlay').classList.contains('open') || document.getElementById('activityOverlay').classList.contains('open');
     if (!modalOpen && document.visibilityState === 'visible') refreshAll();
   }, 5 * 60 * 1000);
 })();
