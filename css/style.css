@@ -203,9 +203,12 @@ input, select, textarea, button{
   box-shadow:0 2px 8px rgba(0,0,0,.4) inset, 0 1px 0 rgba(255,255,255,.5) !important;
 }
 
-/* יציאה — sits outside .nav (sibling in .bsd-header) but matches
-   the same bar-button treatment for visual consistency. */
-.bsd-header > .btn-ghost{
+/* יציאה — now a direct child of the second .nav row, styled to
+   match every other bar button exactly. */
+.nav > button.btn-ghost{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
   height:40px;
   padding:0 16px !important;
   font-size:.86rem !important;
@@ -216,11 +219,26 @@ input, select, textarea, button{
   border:none !important;
   box-shadow:0 2px 0 rgba(0,0,0,.3), 0 3px 8px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.5) inset !important;
 }
-.bsd-header > .btn-ghost:hover{
+.nav > button.btn-ghost:hover{
   background:#fffdf7 !important;
   box-shadow:0 3px 0 rgba(0,0,0,.3), 0 8px 16px rgba(0,0,0,.32), 0 1px 0 rgba(255,255,255,.6) inset !important;
 }
 
+
+/* ============================================================
+   אנימציית לחיצה עדינה ומשעשעת - מופעלת (ע"י auth.js) על כל כפתור
+   בכל מקום באפליקציה, לאחר שהלחיצה כבר נרשמה בהצלחה (ולא דרך
+   :active/:hover עם transform, כדי לא לחזור על באג הקליקים בדסקטופ).
+   ============================================================ */
+@keyframes bsdBtnPop{
+  0%{ transform:scale(1); }
+  35%{ transform:scale(.93); }
+  65%{ transform:scale(1.035); }
+  100%{ transform:scale(1); }
+}
+.bsd-btn-pop{
+  animation:bsdBtnPop .32s cubic-bezier(.34,1.56,.64,1);
+}
 
 /* כפתורי פעולה - גודל נוח ללחיצה (מינימום 44px גובה) */
 .btn, .login-card button, .period-btn{
