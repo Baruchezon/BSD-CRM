@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608111120">
+<link rel="stylesheet" href="css/style.css?v=202608111205">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -62,7 +62,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 11.08.2026 11:20</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 11.08.2026 12:05</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav">
     <a href="app.html">לוח בקרה</a>
@@ -138,10 +138,10 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202608111120"></script>
-<script src="js/supabaseClient.js?v=202608111120"></script>
-<script src="js/auth.js?v=202608111120"></script>
-<script src="js/push.js?v=202608111120"></script>
+<script src="js/config.js?v=202608111205"></script>
+<script src="js/supabaseClient.js?v=202608111205"></script>
+<script src="js/auth.js?v=202608111205"></script>
+<script src="js/push.js?v=202608111205"></script>
 <script>
 let ALL_BUSINESSES = [];
 let ALL_BUYERS = [];
@@ -321,9 +321,9 @@ function canSendAgreement(){
 // (רק למי שמורשה לערוך את הליד הזה - ראה canEditRecord)
 function openEdit(id){
   if (CURRENT_TAB === 'business'){
-    location.href = 'businesses.html?open=' + encodeURIComponent(id);
+    location.href = 'businesses.html?open=' + encodeURIComponent(id) + '&from=leads-hub';
   } else {
-    location.href = 'leads.html?open=' + encodeURIComponent(id);
+    location.href = 'leads.html?open=' + encodeURIComponent(id) + '&from=leads-hub';
   }
 }
 
@@ -363,9 +363,9 @@ function openAddChoice(){
   modal.innerHTML = `
     <h3>הוספת ליד</h3>
     <div class="choice-btns">
-      <button type="button" onclick="location.href='businesses.html?new=1'">🏢 עסק</button>
-      <button type="button" onclick="location.href='leads.html?new=1&type=buyer'">🧍 קונה</button>
-      <button type="button" onclick="location.href='leads.html?new=1&type=partner'">🤝 שותפות/השקעה</button>
+      <button type="button" onclick="location.href='businesses.html?new=1&from=leads-hub'">🏢 עסק</button>
+      <button type="button" onclick="location.href='leads.html?new=1&type=buyer&from=leads-hub'">🧍 קונה</button>
+      <button type="button" onclick="location.href='leads.html?new=1&type=partner&from=leads-hub'">🤝 שותפות/השקעה</button>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
