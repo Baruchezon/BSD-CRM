@@ -76,13 +76,17 @@ async function requireAuth() {
   let { data: { session } } = await window.supabaseClient.auth.getSession();
 
   // On a cold app-launch (e.g. opening from an installed home-screen/desktop
-  // icon) Supabase can occasionally still be restoring the session from
-  // storage at this point, making getSession() briefly report "no session"
-  // even though the user is actually logged in. Give it one short grace
-  // check before giving up and bouncing to login — this is what caused the
-  // login->app->login flicker some users saw only from the installed icon.
-  if (!session) {
-    await new Promise(resolve => setTimeout(resolve, 400));
+  // icon), or when a page has enough inline script that it competes with the
+  // Supabase client for the event loop, getSession() can briefly report "no
+  // session" even though the user is actually logged in (the client hasn't
+  // finished rehydrating it from storage yet). Retry a few times with a
+  // growing delay before giving up — a single 400ms grace check wasn't
+  // always enough and caused an occasional false bounce to login.html
+  // (which then auto-forwards straight back to app.html, looking like the
+  // page "jumped and returned to the dashboard").
+  for (const delay of [200, 400, 800]) {
+    if (session) break;
+    await new Promise(resolve => setTimeout(resolve, delay));
     ({ data: { session } } = await window.supabaseClient.auth.getSession());
   }
 
@@ -343,7 +347,7 @@ async function refreshNavMsgBadge(){
 // we force one hard reload. The sessionStorage guard makes it
 // impossible to get stuck in a reload loop if something is off.
 // ============================================================
-window.BSD_BUILD = '202608021815';
+window.BSD_BUILD = '202608110715';
 
 (async function checkStalePage(){
   try {
