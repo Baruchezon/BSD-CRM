@@ -381,7 +381,7 @@ async function refreshNavMsgBadge(){
 // we force one hard reload. The sessionStorage guard makes it
 // impossible to get stuck in a reload loop if something is off.
 // ============================================================
-window.BSD_BUILD = '202608111305';
+window.BSD_BUILD = '202608111350';
 
 (async function checkStalePage(){
   try {
@@ -397,6 +397,23 @@ window.BSD_BUILD = '202608111305';
     location.reload(true);
   } catch(e) { /* offline or blocked - carry on with what we have */ }
 })();
+
+// ============================================================
+// אנימציית לחיצה עדינה - לכל כפתור בכל מקום באפליקציה. מופעלת על
+// אירוע 'click' עצמו (שקורה רק אחרי שהלחיצה כבר נרשמה בהצלחה),
+// ולא על CSS :active/:hover עם transform - כדי לא לחזור על הבאג
+// הקודם שבו אלמנט שזז תחת העכבר גרם ללחיצות "ליפול" בדסקטופ.
+document.addEventListener('click', function(e){
+  const el = e.target.closest(
+    'button, .btn, .nav > a, .nav > div > button, .row-menu-btn, ' +
+    '.lead-tab, .lead-type-tab, .choice-btns button, a.badge, ' +
+    '[onclick]:not(a[href]):not(tr):not(td)'
+  );
+  if (!el) return;
+  el.classList.remove('bsd-btn-pop');
+  void el.offsetWidth; // מאלץ reflow כדי שהאנימציה תופעל מחדש גם בלחיצות רצופות
+  el.classList.add('bsd-btn-pop');
+});
 
 function scrollTableBy(btn, amount){
   const wrap = btn.closest('.table-scroll-wrap');
