@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608111350">
+<link rel="stylesheet" href="css/style.css?v=202608111420">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Gveret+Levin&display=swap" rel="stylesheet">
@@ -82,7 +82,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 11.08.2026 13:50</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 11.08.2026 14:20</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -222,10 +222,10 @@
   </div>
 </div>
 
-<script src="js/config.js?v=202608111350"></script>
-<script src="js/supabaseClient.js?v=202608111350"></script>
-<script src="js/auth.js?v=202608111350"></script>
-<script src="js/push.js?v=202608111350"></script>
+<script src="js/config.js?v=202608111420"></script>
+<script src="js/supabaseClient.js?v=202608111420"></script>
+<script src="js/auth.js?v=202608111420"></script>
+<script src="js/push.js?v=202608111420"></script>
 <script>
 let currentPeriod = 'week';
 let customFrom = null, customTo = null;
@@ -294,6 +294,15 @@ function matchesOwnFilter(q){
   return q.or(`business_id.in.(${bizList}),lead_id.in.(${leadList})`);
 }
 
+// עבור משימות - תואם בדיוק את ההיגיון של tasks.html: רק אדמין רואה את כל המשימות הפתוחות,
+// כל שאר התפקידים (כולל agent_authorized) רואים רק משימות שהוקצו אליהם אישית
+function tasksOwnFilter(q){
+  if (CURRENT_PROFILE && CURRENT_PROFILE.role !== 'admin') {
+    return q.eq('assigned_to', CURRENT_PROFILE.id);
+  }
+  return q;
+}
+
 const BLESSINGS_BY_TIME = {
   morning: [
     'שיהיה לך יום שמביא איתו רק חדשות טובות',
@@ -343,11 +352,19 @@ function getGreeting(){
 }
 
 async function loadGeneral(){
+  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
+    // "סוכן" = לקוח חיצוני שמקבל שירות מהמערכת, לא איש צוות BSD - אין לו עניין
+    // או הרשאה לראות נתוני ניהול צוות כמו משתמשים פעילים/לא פעילים
+    const usersTile = document.getElementById('k_activeUsers')?.closest('.kpi-link');
+    if (usersTile) usersTile.style.display = 'none';
+    const inactiveTile = document.getElementById('k_inactive')?.closest('.kpi-link');
+    if (inactiveTile) inactiveTile.style.display = 'none';
+  }
   document.getElementById('k_buyers').textContent = await count('leads', q=>ownFilter(q.eq('type','buyer')));
   document.getElementById('k_businesses').textContent = await count('businesses', q=>ownFilter(q));
   document.getElementById('k_matches').textContent = await count('matches', q=>matchesOwnFilter(q.not('status','in','("העסקה נסגרה","העסקה נעצרה")')));
   document.getElementById('k_activeUsers').textContent = await count('profiles', q=>q.eq('status','active'));
-  document.getElementById('k_tasks').textContent = await count('tasks', q=>q.eq('status','פתוחה'));
+  document.getElementById('k_tasks').textContent = await count('tasks', q=>tasksOwnFilter(q.eq('status','פתוחה')));
   document.getElementById('k_awaiting').textContent = await count('matches', q=>matchesOwnFilter(q.eq('status','ממתין לתגובה')));
   document.getElementById('k_negotiation').textContent = await count('matches', q=>matchesOwnFilter(q.eq('status','במשא ומתן')));
   document.getElementById('k_closed').textContent = await count('matches', q=>matchesOwnFilter(q.eq('status','העסקה נסגרה')));
