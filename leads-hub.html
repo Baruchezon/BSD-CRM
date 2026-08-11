@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - לידים</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=202608110600">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
+  .nav{display:flex;gap:6px;}
+  .nav a{color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;}
+  .nav a.active{background:rgba(255,255,255,.12);color:#fff;font-weight:700;}
+  .nav a:hover{color:#fff;}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+  .toolbar h2{margin:0;color:var(--navy);font-size:1.3rem;}
+  .btn{border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-size:.85rem;cursor:pointer;font-weight:700;}
+  .btn-navy{background:var(--navy);color:#fff;}
+  .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);}
+
+  .lead-tabs{display:flex;gap:8px;margin-bottom:18px;border-bottom:2px solid #eee6d4;}
+  .lead-tab{padding:12px 20px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:.95rem;font-weight:700;color:#8a8578;border-bottom:3px solid transparent;margin-bottom:-2px;}
+  .lead-tab.active{color:var(--navy);border-bottom-color:var(--gold);}
+  .lead-tab .count{display:inline-block;background:#eee6d4;color:#665;border-radius:10px;padding:1px 8px;font-size:.75rem;margin-right:6px;}
+  .lead-tab.active .count{background:var(--gold);color:#1c2333;}
+
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .filters input, .filters select{padding:9px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .filters input[type=text]{min-width:220px;}
+
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 8px 20px rgba(14,27,52,.10), 0 2px 6px rgba(14,27,52,.06);}
+  thead th{background:var(--navy);color:#fff;padding:12px 14px;font-size:.8rem;text-align:right;white-space:nowrap;}
+  tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
+  tbody tr:hover{background:#faf8f2;}
+  .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
+  .primary-name{font-weight:700;color:var(--navy);}
+  .sub-name{font-size:.75rem;color:#888;margin-top:2px;}
+  .row-menu-btn{border:1.5px solid #d8d3c4;background:#f7f5ee;color:#333;cursor:pointer;font-size:1.1rem;font-weight:700;padding:2px 8px;border-radius:8px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+  .row-menu-btn:hover{background:#eee8d8;}
+  .notes-cell{white-space:normal;word-break:break-word;max-width:320px;line-height:1.4;}
+  .phone-cell{white-space:nowrap;min-width:100px;}
+  .empty-row td{text-align:center;color:#999;padding:30px;}
+
+  .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:60;padding:40px 20px;}
+  .overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:14px;max-width:420px;width:100%;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  .modal h3{margin:0 0 18px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;}
+  .choice-btns{display:flex;flex-direction:column;gap:12px;}
+  .choice-btns button{padding:16px;border-radius:10px;border:1px solid #d8d3c4;background:#fff;cursor:pointer;font-family:inherit;font-size:.95rem;font-weight:700;text-align:right;}
+  .choice-btns button:hover{background:#faf8f2;border-color:var(--gold);}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+  .toast{position:fixed;bottom:24px;left:24px;background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.3);}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 11.08.2026 06:00</span></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+        <div class="nav">
+    <a href="app.html">לוח בקרה</a>
+    <a href="tasks.html" class="nav-tasks">✅ משימות</a>
+    <a href="businesses.html">עסקים למכירה</a>
+    <a href="leads-hub.html" class="active">לידים</a>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">📋 טפסים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="intake-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🧾 טופס סיכום עסק</a>
+      <a href="buyer-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🧍 טופס סיכום קונה</a>
+      <a id="navFormsAllLink" href="intake-forms.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 כל הטפסים שהוגשו</a>
+    </div>
+  </div>
+    <a href="leads.html">קונים ומשקיעים</a>
+    <a href="matches.html">התאמות</a>
+    <a href="messages.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;position:relative;">💬 הודעות<span id="navMsgBadge" style="display:none;position:absolute;top:2px;left:2px;background:#b3402c;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;font-weight:700;"></span></a>
+    <div id="navToolsWrap" style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">🛠️ כלים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="training-admin.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🎓 הכשרות ומתעניינים</a>
+      <a href="messages.html?admin_view=1" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ כל ההודעות במערכת</a>
+      <a href="stats.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 סטטיסטיקה</a>
+      <a href="users.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👥 משתמשים</a>
+    </div>
+  </div>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">⚙️ הגדרות ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="backup.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">💾 גיבוי נתונים</a>
+      <a href="javascript:void(0)" id="pushBellBtn" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔕 הפעל התראות</a>
+      <a href="help.html" target="_blank" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">❓ עזרה</a>
+      <a href="javascript:void(0)" onclick="openMyProfile()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👤 פרטים אישיים</a>
+      <a href="javascript:void(0)" onclick="openChangePassword()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔑 שנה סיסמה</a>
+    </div>
+  </div>
+  </div>
+  <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+</div>
+
+<div class="wrap">
+  <div class="toolbar">
+    <h2>לידים <span style="font-size:.8rem;color:#8a8578;font-weight:400;">— רשומות שטרם נשלח אליהן הסכם</span></h2>
+    <button class="btn btn-navy" onclick="openAddChoice()">+ הוספת ליד</button>
+  </div>
+
+  <div class="lead-tabs">
+    <button type="button" class="lead-tab active" data-tab="business" onclick="switchTab('business')">עסקים <span class="count" id="countBusiness">0</span></button>
+    <button type="button" class="lead-tab" data-tab="buyer" onclick="switchTab('buyer')">קונים <span class="count" id="countBuyer">0</span></button>
+    <button type="button" class="lead-tab" data-tab="partner" onclick="switchTab('partner')">שותפות/השקעה <span class="count" id="countPartner">0</span></button>
+  </div>
+
+  <div class="filters">
+    <input type="text" id="fSearch" oninput="renderTable()" placeholder="חיפוש לפי שם, טלפון, עיר, תחום, הערות...">
+  </div>
+
+  <div class="table-scroll-wrap" style="position:relative;">
+  <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+  <table>
+    <thead>
+      <tr id="tableHead">
+        <th>שם / עסק</th><th>טלפון</th><th>עיר</th><th>הוזן ע"י</th><th>נוצר</th><th>הערות</th>
+      </tr>
+    </thead>
+    <tbody id="leadsBody">
+      <tr class="empty-row"><td colspan="6">טוען...</td></tr>
+    </tbody>
+  </table>
+  </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
+<div id="toastBox"></div>
+
+<script src="js/config.js?v=202608110600"></script>
+<script src="js/supabaseClient.js?v=202608110600"></script>
+<script src="js/auth.js?v=202608110600"></script>
+<script src="js/push.js?v=202608110600"></script>
+<script>
+let ALL_BUSINESSES = [];
+let ALL_BUYERS = [];
+let ALL_PARTNERS = [];
+let ALL_USERS = [];
+let CURRENT_PROFILE = null;
+let CURRENT_TAB = 'business';
+
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
+function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
+function fmtPhone(p){ if(!p) return ''; return p; }
+function toast(msg){
+  let box = document.getElementById('toastBox');
+  if (!box){
+    box = document.createElement('div');
+    box.id = 'toastBox';
+    box.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:200;display:flex;flex-direction:column;gap:8px;max-width:380px;';
+    document.body.appendChild(box);
+  }
+  const isError = /שגיאה|error/i.test(msg);
+  const el = document.createElement('div');
+  el.style.cssText = `background:${isError ? '#b00020' : 'var(--navy,#0e1b34)'};color:#fff;padding:14px 18px;border-radius:10px;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.35);display:flex;align-items:flex-start;gap:10px;line-height:1.5;`;
+  const textSpan = document.createElement('span');
+  textSpan.style.flex = '1';
+  textSpan.textContent = msg;
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '×';
+  closeBtn.style.cssText = 'background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;line-height:1;padding:0;';
+  closeBtn.onclick = () => el.remove();
+  el.appendChild(textSpan);
+  el.appendChild(closeBtn);
+  box.appendChild(el);
+  setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
+}
+function closeModal(){
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('modalBox').innerHTML = '';
+}
+
+async function loadUsers(){
+  const { data } = await window.supabaseClient.from('profiles').select('id, full_name, email, role').eq('status','active');
+  ALL_USERS = data || [];
+}
+function userName(id){
+  const u = ALL_USERS.find(x=>x.id===id);
+  return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
+}
+function creatorColor(id){
+  const u = ALL_USERS.find(x=>x.id===id);
+  if (!u) return null;
+  if (u.role === 'agent') return '#e6c200';
+  if (u.role === 'agent_authorized') return '#2ecc40';
+  return null;
+}
+
+async function loadAll(){
+  let bizQ = window.supabaseClient.from('businesses').select('*').order('updated_at', { ascending: false });
+  let leadQ = window.supabaseClient.from('leads').select('*').order('updated_at', { ascending: false });
+  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
+    bizQ = bizQ.eq('created_by', CURRENT_PROFILE.id);
+    leadQ = leadQ.eq('created_by', CURRENT_PROFILE.id);
+  }
+  const [{ data: bizData, error: bizErr }, { data: leadData, error: leadErr }] = await Promise.all([bizQ, leadQ]);
+  if (bizErr){ toast('שגיאה בטעינת עסקים: ' + bizErr.message); }
+  if (leadErr){ toast('שגיאה בטעינת לידים: ' + leadErr.message); }
+
+  const noAgreement = r => !r.agreement_status || r.agreement_status === 'אין הסכם';
+  ALL_BUSINESSES = (bizData || []).filter(noAgreement);
+  ALL_BUYERS = (leadData || []).filter(l => l.type === 'buyer' && noAgreement(l));
+  ALL_PARTNERS = (leadData || []).filter(l => l.type === 'partner' && noAgreement(l));
+
+  document.getElementById('countBusiness').textContent = ALL_BUSINESSES.length;
+  document.getElementById('countBuyer').textContent = ALL_BUYERS.length;
+  document.getElementById('countPartner').textContent = ALL_PARTNERS.length;
+
+  await loadNotesSummary();
+  renderTable();
+}
+
+function switchTab(tab){
+  CURRENT_TAB = tab;
+  document.querySelectorAll('.lead-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  renderTable();
+}
+
+function currentRows(){
+  if (CURRENT_TAB === 'business') return ALL_BUSINESSES;
+  if (CURRENT_TAB === 'buyer') return ALL_BUYERS;
+  return ALL_PARTNERS;
+}
+
+function tableName(){
+  return CURRENT_TAB === 'business' ? 'businesses' : 'leads';
+}
+
+function rowNameCell(r){
+  if (CURRENT_TAB === 'business'){
+    const bizName = r.internal_name && r.internal_name.trim() ? r.internal_name : '(ללא שם עסק)';
+    return `<div class="primary-name">${esc(bizName)}</div><div class="sub-name">${esc(r.owner_name||'—')}</div>`;
+  }
+  const personName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || '—';
+  return `<div class="primary-name">${esc(personName)}</div>`;
+}
+function rowCityCell(r){
+  if (CURRENT_TAB === 'business') return esc(r.city || '—');
+  return esc(r.requested_area || r.city || '—');
+}
+function rowPhoneCell(r){
+  const phone = CURRENT_TAB === 'business' ? r.owner_phone : r.phone;
+  return phone ? `<a href="tel:${esc(phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(phone)}</a>` : '—';
+}
+function rowNotesCell(r){
+  return esc(r.notes || '—');
+}
+
+function renderTable(){
+  const search = document.getElementById('fSearch').value.trim().toLowerCase();
+  let rows = currentRows().filter(r=>{
+    if (!search) return true;
+    const hay = [r.full_name, r.first_name, r.last_name, r.phone, r.city, r.internal_name, r.owner_name,
+      r.owner_phone, r.requested_field, r.requested_area, r.notes].join(' ').toLowerCase();
+    return hay.includes(search);
+  });
+
+  const body = document.getElementById('leadsBody');
+  if (rows.length === 0){
+    body.innerHTML = '<tr class="empty-row"><td colspan="6">אין רשומות בקטגוריה זו</td></tr>';
+    return;
+  }
+  const tn = tableName();
+  body.innerHTML = rows.map(r => `
+    <tr style="cursor:pointer;" onclick="openEdit('${r.id}')">
+      <td>
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
+            <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
+            <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
+              <a href="javascript:void(0)" onclick="openEdit('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>
+              <a href="javascript:void(0)" onclick="openNotesPanel('${tn}','${r.id}','${esc((r.internal_name||r.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(r.id))}</a>
+              ${canSendAgreement() ? `<a href="javascript:void(0)" onclick="sendAgreement('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
+              ${canEditRecord(r.created_by) ? `<a href="javascript:void(0)" onclick="deleteRecord('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
+            </div>
+          </div>
+          <div>${rowNameCell(r)}</div>
+        </div>
+      </td>
+      <td class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;" onclick="event.stopPropagation()">${rowPhoneCell(r)}</td>
+      <td>${rowCityCell(r)}</td>
+      <td>${r.created_by ? `<b style="color:${creatorColor(r.created_by) || '#333'};">${esc(userName(r.created_by))}</b>` : 'לא ידוע'}</td>
+      <td>${fmtDate(r.created_at)}</td>
+      <td class="notes-cell">${rowNotesCell(r)}</td>
+    </tr>`).join('');
+}
+
+function canEditRecord(createdBy){
+  if (!CURRENT_PROFILE) return false;
+  if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
+  return createdBy === CURRENT_PROFILE.id;
+}
+function canSendAgreement(){
+  if (!CURRENT_PROFILE) return false;
+  if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
+  return !!CURRENT_PROFILE.can_send_agreement;
+}
+
+// עריכה מלאה — נעשית דרך אותו טופס מלא כמו במסכי עסקים/קונים הראשיים,
+// כדי לא לשכפל את כל הלוגיקה. פותחים את העמוד המתאים עם ?open=<id>
+function openEdit(id){
+  if (CURRENT_TAB === 'business'){
+    location.href = 'businesses.html?open=' + encodeURIComponent(id);
+  } else {
+    location.href = 'leads.html?open=' + encodeURIComponent(id);
+  }
+}
+
+function openAddChoice(){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>הוספת ליד</h3>
+    <div class="choice-btns">
+      <button type="button" onclick="location.href='businesses.html?new=1'">🏢 עסק</button>
+      <button type="button" onclick="location.href='leads.html?new=1&type=buyer'">🧍 קונה</button>
+      <button type="button" onclick="location.href='leads.html?new=1&type=partner'">🤝 שותפות/השקעה</button>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('open');
+}
+
+async function sendAgreement(id){
+  const tn = tableName();
+  const r = currentRows().find(x=>x.id===id);
+  if (!r){ toast('רשומה לא נמצאה'); return; }
+  const personName = CURRENT_TAB === 'business' ? (r.owner_name || '') : (r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || '');
+  const phone = CURRENT_TAB === 'business' ? r.owner_phone : r.phone;
+  const bizField = CURRENT_TAB === 'business' ? (r.internal_name || '') : (r.requested_field || '');
+  const params = new URLSearchParams({
+    type: CURRENT_TAB === 'business' ? 'seller' : 'buyer',
+    name: personName, phone: phone || '', biz: bizField
+  });
+  window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
+
+  const { error } = await window.supabaseClient.from(tn)
+    .update({ agreement_status: 'נשלח הסכם לחתימה' }).eq('id', id);
+  if (error){ toast('שגיאה בעדכון: ' + error.message); return; }
+  toast('נשלח הסכם — הרשומה עברה לרשימה הראשית');
+  await loadAll();
+}
+
+async function deleteRecord(id){
+  if (!confirm('למחוק את הרשומה?')) return;
+  const tn = tableName();
+  const { error } = await window.supabaseClient.from(tn).delete().eq('id', id);
+  if (error){ toast('אין הרשאה למחוק, או שגיאה: ' + error.message); return; }
+  toast('נמחק בהצלחה');
+  await loadAll();
+}
+
+let NOTES_SUMMARY = {};
+let NOTES_READS = {};
+
+async function loadNotesSummary(){
+  const [{ data: bizNotes }, { data: leadNotes }] = await Promise.all([
+    window.supabaseClient.from('record_notes').select('record_id, created_at').eq('table_name','businesses'),
+    window.supabaseClient.from('record_notes').select('record_id, created_at').eq('table_name','leads')
+  ]);
+  NOTES_SUMMARY = {};
+  [...(bizNotes||[]), ...(leadNotes||[])].forEach(n => {
+    const cur = NOTES_SUMMARY[n.record_id];
+    if (!cur || n.created_at > cur.maxCreatedAt) {
+      NOTES_SUMMARY[n.record_id] = { count: (cur ? cur.count : 0) + 1, maxCreatedAt: n.created_at };
+    } else {
+      cur.count += 1;
+    }
+  });
+  if (CURRENT_PROFILE) {
+    const { data: readsData } = await window.supabaseClient
+      .from('record_notes_reads').select('record_id, last_read_at')
+      .eq('user_id', CURRENT_PROFILE.id);
+    NOTES_READS = {};
+    (readsData || []).forEach(r => { NOTES_READS[r.record_id] = r.last_read_at; });
+  }
+}
+function notesTooltip(recordId){
+  const summary = NOTES_SUMMARY[recordId];
+  if (!summary || !summary.count) return 'הערות (אין הערות עדיין)';
+  return summary.count === 1 ? 'הערה אחת' : `${summary.count} הערות`;
+}
+async function markNotesRead(tableName, recordId){
+  if (!CURRENT_PROFILE) return;
+  await window.supabaseClient.from('record_notes_reads').upsert({
+    user_id: CURRENT_PROFILE.id, table_name: tableName, record_id: recordId,
+    last_read_at: new Date().toISOString()
+  }, { onConflict: 'user_id,table_name,record_id' });
+  NOTES_READS[recordId] = new Date().toISOString();
+  renderTable();
+}
+function closeNotesPanel(){
+  const ov = document.getElementById('notesOverlay');
+  if (ov) ov.remove();
+}
+async function openNotesPanel(tableName, recordId, recordLabel){
+  closeNotesPanel();
+  const overlay = document.createElement('div');
+  overlay.id = 'notesOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:95;padding:40px 20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:560px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">הערות - ${esc(recordLabel)}</h3>
+      <div id="notesList" style="max-height:200px;overflow-y:scroll;margin-bottom:16px;scrollbar-width:thin;"></div>
+      <textarea id="newNoteText" placeholder="הוסף הערה..." style="width:100%;min-height:70px;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;margin-bottom:10px;"></textarea>
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button onclick="closeNotesPanel()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
+        <button onclick="addNote('${tableName}','${recordId}')" style="background:var(--gold);color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">הוסף הערה</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  await loadNotes(tableName, recordId);
+  await markNotesRead(tableName, recordId);
+}
+async function loadNotes(tableName, recordId){
+  const { data } = await window.supabaseClient
+    .from('record_notes')
+    .select('id, note_text, created_at, author_id')
+    .eq('table_name', tableName).eq('record_id', recordId)
+    .order('created_at', { ascending: false });
+  const list = document.getElementById('notesList');
+  if (!list) return;
+  if (!data || data.length === 0){
+    list.innerHTML = '<div style="color:#999;text-align:center;padding:14px;">אין הערות עדיין</div>';
+    return;
+  }
+  list.innerHTML = data.map(n => `
+    <div style="border-bottom:1px solid #f0ede4;padding:10px 0;">
+      <div style="font-size:.78rem;color:#999;margin-bottom:3px;">
+        <b style="color:${creatorColor(n.author_id) || 'var(--navy)'};">${esc(userName(n.author_id))}</b> · ${fmtDateTime(n.created_at)}
+      </div>
+      <div style="font-size:.85rem;white-space:pre-wrap;">${esc(n.note_text)}</div>
+    </div>`).join('');
+}
+async function addNote(tableName, recordId){
+  const text = document.getElementById('newNoteText').value.trim();
+  if (!text) return;
+  const { error } = await window.supabaseClient.from('record_notes').insert({
+    table_name: tableName, record_id: recordId, note_text: text,
+    author_id: CURRENT_PROFILE ? CURRENT_PROFILE.id : null
+  });
+  if (error){ toast('שגיאה בהוספת הערה: ' + error.message); return; }
+  document.getElementById('newNoteText').value = '';
+  await loadNotesSummary();
+  await loadNotes(tableName, recordId);
+  renderTable();
+}
+
+(async function init(){
+  CURRENT_PROFILE = await requireAuth();
+  if (!CURRENT_PROFILE) return;
+  document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL');
+  refreshNavMsgBadge();
+  await loadUsers();
+  await loadAll();
+})();
+</script>
+</body>
+</html>
