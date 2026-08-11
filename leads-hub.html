@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608110910">
+<link rel="stylesheet" href="css/style.css?v=202608111040">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -62,7 +62,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 11.08.2026 09:10</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 11.08.2026 10:40</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav">
     <a href="app.html">לוח בקרה</a>
@@ -138,10 +138,10 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202608110910"></script>
-<script src="js/supabaseClient.js?v=202608110910"></script>
-<script src="js/auth.js?v=202608110910"></script>
-<script src="js/push.js?v=202608110910"></script>
+<script src="js/config.js?v=202608111040"></script>
+<script src="js/supabaseClient.js?v=202608111040"></script>
+<script src="js/auth.js?v=202608111040"></script>
+<script src="js/push.js?v=202608111040"></script>
 <script>
 let ALL_BUSINESSES = [];
 let ALL_BUYERS = [];
@@ -199,12 +199,10 @@ function creatorColor(id){
 }
 
 async function loadAll(){
-  let bizQ = window.supabaseClient.from('businesses').select('*').order('updated_at', { ascending: false });
-  let leadQ = window.supabaseClient.from('leads').select('*').order('updated_at', { ascending: false });
-  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
-    bizQ = bizQ.eq('created_by', CURRENT_PROFILE.id);
-    leadQ = leadQ.eq('created_by', CURRENT_PROFILE.id);
-  }
+  // כל משתמש רואה את כל הלידים (לא רק את אלה שהוא הכניס) - עריכה עדיין
+  // מוגבלת לפי canEditRecord() בהמשך (אדמין/מנהל או מי שהכניס את הליד).
+  const bizQ = window.supabaseClient.from('businesses').select('*').order('updated_at', { ascending: false });
+  const leadQ = window.supabaseClient.from('leads').select('*').order('updated_at', { ascending: false });
   const [{ data: bizData, error: bizErr }, { data: leadData, error: leadErr }] = await Promise.all([bizQ, leadQ]);
   if (bizErr){ toast('שגיאה בטעינת עסקים: ' + bizErr.message); }
   if (leadErr){ toast('שגיאה בטעינת לידים: ' + leadErr.message); }
@@ -273,17 +271,21 @@ function renderTable(){
     return;
   }
   const tn = tableName();
-  body.innerHTML = rows.map(r => `
-    <tr style="cursor:pointer;" onclick="openEdit('${r.id}')">
+  body.innerHTML = rows.map(r => {
+    const editable = canEditRecord(r.created_by);
+    return `
+    <tr style="cursor:pointer;" onclick="${editable ? `openEdit('${r.id}')` : `openReadOnly('${r.id}')`}">
       <td>
         <div style="display:flex;align-items:flex-start;gap:8px;">
           <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
             <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
             <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
-              <a href="javascript:void(0)" onclick="openEdit('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>
+              ${editable
+                ? `<a href="javascript:void(0)" onclick="openEdit('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>`
+                : `<a href="javascript:void(0)" onclick="openReadOnly('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ צפייה (ליד של ${esc(userName(r.created_by))})</a>`}
               <a href="javascript:void(0)" onclick="openNotesPanel('${tn}','${r.id}','${esc((r.internal_name||r.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(r.id))}</a>
-              ${canSendAgreement() ? `<a href="javascript:void(0)" onclick="sendAgreement('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
-              ${canEditRecord(r.created_by) ? `<a href="javascript:void(0)" onclick="deleteRecord('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
+              ${(editable && canSendAgreement()) ? `<a href="javascript:void(0)" onclick="sendAgreement('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
+              ${editable ? `<a href="javascript:void(0)" onclick="deleteRecord('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
             </div>
           </div>
           <div>${rowNameCell(r)}</div>
@@ -294,7 +296,8 @@ function renderTable(){
       <td>${r.created_by ? `<b style="color:${creatorColor(r.created_by) || '#333'};">${esc(userName(r.created_by))}</b>` : 'לא ידוע'}</td>
       <td>${fmtDate(r.created_at)}</td>
       <td class="notes-cell">${rowNotesCell(r)}</td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
 
 function canEditRecord(createdBy){
@@ -310,12 +313,44 @@ function canSendAgreement(){
 
 // עריכה מלאה — נעשית דרך אותו טופס מלא כמו במסכי עסקים/קונים הראשיים,
 // כדי לא לשכפל את כל הלוגיקה. פותחים את העמוד המתאים עם ?open=<id>
+// (רק למי שמורשה לערוך את הליד הזה - ראה canEditRecord)
 function openEdit(id){
   if (CURRENT_TAB === 'business'){
     location.href = 'businesses.html?open=' + encodeURIComponent(id);
   } else {
     location.href = 'leads.html?open=' + encodeURIComponent(id);
   }
+}
+
+// תצוגה בלבד - למי שרואה ליד שלא הוא הכניס: פרטים בלי אפשרות עריכה/שמירה
+function openReadOnly(id){
+  const r = currentRows().find(x => x.id === id);
+  if (!r){ toast('רשומה לא נמצאה'); return; }
+  const rows = [];
+  if (CURRENT_TAB === 'business'){
+    rows.push(['שם עסק', r.internal_name], ['בעלים', r.owner_name], ['טלפון', r.owner_phone],
+      ['עיר', r.city], ['תחום', r.field], ['הערות', r.notes]);
+  } else {
+    const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
+    rows.push(['שם', personName], ['טלפון', r.phone], ['אזור מבוקש', r.requested_area || r.city],
+      ['תחום מבוקש', r.requested_field], ['הערות', r.notes]);
+  }
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>צפייה בליד — לא ניתן לערוך</h3>
+    <div style="background:#f7f5ee;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;margin-bottom:14px;">
+      הליד הוזן ע"י <b>${esc(userName(r.created_by))}</b> — רק הוא, מנהל, או אדמין יכולים לערוך אותו.
+    </div>
+    ${rows.filter(([,v])=>v).map(([label,v]) => `
+      <div style="margin-bottom:10px;">
+        <div style="font-size:.75rem;color:#999;margin-bottom:2px;">${esc(label)}</div>
+        <div style="font-size:.9rem;">${esc(v)}</div>
+      </div>`).join('')}
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">סגירה</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('open');
 }
 
 function openAddChoice(){
