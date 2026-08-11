@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608111040">
+<link rel="stylesheet" href="css/style.css?v=202608111120">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -90,7 +90,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 11.08.2026 10:40</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 11.08.2026 11:20</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav">
     <a href="app.html">לוח בקרה</a>
@@ -138,6 +138,11 @@
       <button class="btn btn-buyer" onclick="openLeadForm(null,'buyer')">+ קונה חדש</button>
       <button class="btn" style="background:#7a3fd1;color:#fff;" onclick="openLeadForm(null,'partner')">+ שותפות/השקעה</button>
     </div>
+  </div>
+
+  <div class="lead-type-tabs" style="display:flex;gap:8px;margin-bottom:16px;border-bottom:2px solid #eee6d4;">
+    <button type="button" id="tabBuyerBtn" class="lead-type-tab active" onclick="switchLeadTypeTab('buyer')" style="padding:12px 22px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:.95rem;font-weight:700;color:#8a8578;border-bottom:3px solid var(--gold);margin-bottom:-2px;">🧍 קונים</button>
+    <button type="button" id="tabPartnerBtn" class="lead-type-tab" onclick="switchLeadTypeTab('partner')" style="padding:12px 22px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:.95rem;font-weight:700;color:#8a8578;border-bottom:3px solid transparent;margin-bottom:-2px;">🤝 משקיעים/שותפות</button>
   </div>
 
   <div class="filters">
@@ -194,10 +199,10 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202608111040"></script>
-<script src="js/supabaseClient.js?v=202608111040"></script>
-<script src="js/auth.js?v=202608111040"></script>
-<script src="js/push.js?v=202608111040"></script>
+<script src="js/config.js?v=202608111120"></script>
+<script src="js/supabaseClient.js?v=202608111120"></script>
+<script src="js/auth.js?v=202608111120"></script>
+<script src="js/push.js?v=202608111120"></script>
 <script>
 let ALL_LEADS = [];
 let ALL_USERS = [];
@@ -315,6 +320,15 @@ function populateCreatedByFilter(){
       sel.appendChild(opt);
     }
   });
+}
+
+function switchLeadTypeTab(type){
+  document.getElementById('fType').value = type;
+  document.getElementById('tabBuyerBtn').style.borderBottomColor = type === 'buyer' ? 'var(--gold)' : 'transparent';
+  document.getElementById('tabBuyerBtn').style.color = type === 'buyer' ? 'var(--navy)' : '#8a8578';
+  document.getElementById('tabPartnerBtn').style.borderBottomColor = type === 'partner' ? 'var(--gold)' : 'transparent';
+  document.getElementById('tabPartnerBtn').style.color = type === 'partner' ? 'var(--navy)' : '#8a8578';
+  renderTable();
 }
 
 function renderTable(){
@@ -758,6 +772,7 @@ async function deleteLead(id){
   await loadUsers();
   await loadNotesSummary('leads');
   await loadLeads();
+  switchLeadTypeTab('buyer');
 })();
 </script>
 </body>
