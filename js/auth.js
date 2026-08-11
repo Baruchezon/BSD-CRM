@@ -94,13 +94,42 @@ async function requireAuth() {
     window.location.href = 'login.html';
     return null;
   }
-  const { data: profile, error } = await window.supabaseClient
-    .from('profiles')
-    .select('*')
-    .eq('id', session.user.id)
-    .single();
+  let profile, error;
+  for (const delay of [0, 500, 1000]) {
+    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+    ({ data: profile, error } = await window.supabaseClient
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .single());
+    // הצלחה, או שגיאה אמיתית (אין פרופיל בכלל) - אין טעם לנסות שוב
+    if (!error || (error.code && error.code !== 'PGRST116' && !/network|fetch/i.test(error.message || ''))) break;
+  }
 
-  if (error || !profile || profile.status === 'blocked') {
+  if (error && error.code === 'PGRST116') {
+    // השאילתה הצליחה להגיע לשרת אבל אין שורת פרופיל תואמת - זו באמת התנתקות
+    await window.supabaseClient.auth.signOut();
+    window.location.href = 'login.html';
+    return null;
+  }
+  if (error || !profile) {
+    // כשל בטעינת הפרופיל (לרוב תקלת רשת) - לא מתנתקים בכוח מהחשבון, כי ה-session
+    // עצמו עדיין תקף; מציגים שגיאה ברורה במקום לזרוק בחזרה למסך כניסה בלי הסבר.
+    document.body.innerHTML = `
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f6f4ee;font-family:'Heebo','Rubik',sans-serif;direction:rtl;padding:20px;">
+        <div style="background:#fff;border-radius:14px;padding:32px;max-width:420px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.15);">
+          <div style="font-size:2.4rem;margin-bottom:10px;">⚠️</div>
+          <div style="font-weight:700;color:#0e1b34;font-size:1.05rem;margin-bottom:10px;">בעיית תקשורת עם השרת</div>
+          <div style="color:#6c7488;font-size:.9rem;margin-bottom:20px;line-height:1.5;">
+            ההתחברות שלך תקינה, אך הדפדפן לא הצליח לטעון את פרטי המשתמש מהשרת (${error ? esc_(error.message) : 'שגיאה לא ידועה'}).<br>
+            זה קורה בדרך כלל כשרשת/VPN/חומת אש חוסמים גישה ל-supabase.co.
+          </div>
+          <button onclick="location.reload()" style="background:#0e1b34;color:#fff;border:none;border-radius:8px;padding:12px 26px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;">נסה שוב</button>
+        </div>
+      </div>`;
+    return null;
+  }
+  if (profile.status === 'blocked') {
     await window.supabaseClient.auth.signOut();
     window.location.href = 'login.html';
     return null;
@@ -147,6 +176,11 @@ const FP_STORAGE_KEY = 'bsd_fp_credential_id';
 
 function isFingerprintRegistered(){
   return !!localStorage.getItem(FP_STORAGE_KEY);
+}
+
+function esc_(s){
+  if (s === undefined || s === null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 function isAndroidMobile(){
@@ -347,7 +381,7 @@ async function refreshNavMsgBadge(){
 // we force one hard reload. The sessionStorage guard makes it
 // impossible to get stuck in a reload loop if something is off.
 // ============================================================
-window.BSD_BUILD = '202608110715';
+window.BSD_BUILD = '202608110830';
 
 (async function checkStalePage(){
   try {
