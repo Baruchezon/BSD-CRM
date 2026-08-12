@@ -49,7 +49,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 11.08.2026 15:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 05:20</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -102,6 +102,7 @@
     <h2>🎓 הכשרות ומתעניינים</h2>
     <div style="display:flex;gap:8px;">
       <button class="btn btn-ghost" onclick="openTrainingSettings()">⚙️ הגדרות הכשרה</button>
+      <button class="btn btn-primary" onclick="openAddLeadModal()">➕ הוסף מתעניין</button>
       <button class="btn btn-primary" onclick="openSendBrochureModal()">📄 שליחת ברושור להכשרה</button>
       <button class="btn btn-success" onclick="openSendFormModal()">📤 שליחת טופס רישום</button>
     </div>
@@ -117,6 +118,13 @@
     </select>
     <input type="date" id="fDateFrom" title="מתאריך">
     <input type="date" id="fDateTo" title="עד תאריך">
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:.78rem;color:#665;margin-bottom:8px;">
+    <span style="display:flex;align-items:center;gap:5px;"><span style="width:14px;height:14px;border-radius:4px;border:1px solid #ddd;background:#ffffff;display:inline-block;"></span>מתעניין בלבד</span>
+    <span style="display:flex;align-items:center;gap:5px;"><span style="width:14px;height:14px;border-radius:4px;background:#fff2c2;display:inline-block;"></span>נשלח ברושור</span>
+    <span style="display:flex;align-items:center;gap:5px;"><span style="width:14px;height:14px;border-radius:4px;background:#d7f5e3;display:inline-block;"></span>נשלח טופס רישום</span>
+    <span style="display:flex;align-items:center;gap:5px;"><span style="width:14px;height:14px;border-radius:4px;background:#8fd6ab;display:inline-block;"></span>שולם</span>
   </div>
 
   <div style="overflow-x:auto;">
@@ -188,6 +196,18 @@ function statusColor(status){
     'שולם': '#245c40', 'נרשם להכשרה': '#1a5c38', 'בוטל': '#832d1f'
   };
   return `background:${map[status]||'#eee'};color:${txt[status]||'#333'};`;
+}
+
+// Row background tiers (his request): white = candidate only,
+// yellow = brochure sent, light green = registration form sent,
+// darker green = paid. Cancelled always shown in red regardless
+// of stage. Paid/enrolled wins over everything else.
+function rowBg(lead){
+  if (lead.status === 'בוטל') return '#ffe3e3';
+  if (lead.payment_status === 'שולם' || lead.status === 'נרשם להכשרה') return '#8fd6ab';
+  if (lead.status === 'מתעניין חדש') return '#ffffff';
+  if (lead.status === 'נשלח ברושור') return '#fff2c2';
+  return '#d7f5e3';
 }
 
 function randomToken(){
@@ -266,7 +286,7 @@ function renderTable(){
   body.innerHTML = rows.map(l => {
     const isSigned = !!l.signed_at;
     return `
-    <tr style="cursor:pointer;${isSigned ? 'background:#d9f2e3;' : ''}" onclick="openLeadCard('${l.id}')">
+    <tr style="cursor:pointer;background:${rowBg(l)};" onclick="openLeadCard('${l.id}')">
       <td>
         <div style="display:flex;align-items:flex-start;gap:8px;">
           <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
@@ -279,6 +299,7 @@ function renderTable(){
               <a href="javascript:void(0)" onclick="copyLink('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔗 העתק קישור</a>
               ${l.form_pdf_path ? `<a href="javascript:void(0)" onclick="downloadTrainingPdf('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 הורד PDF חתום</a>` : ''}
               <a href="javascript:void(0)" onclick="markPaid('${l.id}')" style="display:block;color:#9be3ab;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">✅ סמן שולם</a>
+              <a href="javascript:void(0)" onclick="deleteLead('${l.id}')" style="display:block;color:#ff8f7a;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק מתעניין</a>
             </div>
           </div>
           <div>
@@ -358,6 +379,73 @@ async function submitSendBrochure(e){
 
   closeModal();
   toast('הכרטיס נוצר והברושור מוכן לשליחה');
+  await loadLeads();
+}
+
+// ============================================================
+// ADD LEAD MANUALLY — quick registration, similar in spirit to the
+// עסקים/קונים forms but with fewer fields. Creates the candidate
+// at the earliest stage ("מתעניין חדש" / white row) with no message
+// sent — just a card, ready for a brochure/form to be sent later.
+// ============================================================
+function openAddLeadModal(){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>➕ הוספת מתעניין</h3>
+    <form id="addLeadForm">
+      <div class="form-grid">
+        <div class="field"><label>שם פרטי <span style="color:#b00020;">*</span></label><input type="text" id="al_first" required></div>
+        <div class="field"><label>שם משפחה</label><input type="text" id="al_last"></div>
+        <div class="field"><label>מספר טלפון <span style="color:#b00020;">*</span></label><input type="tel" id="al_phone" required placeholder="05X-XXXXXXX"></div>
+        <div class="field"><label>אימייל</label><input type="email" id="al_email"></div>
+        <div class="field full"><label>כתובת</label><input type="text" id="al_address"></div>
+        <div class="field"><label>מספר תעודת זהות</label><input type="text" id="al_idnum" inputmode="numeric"></div>
+        <div class="field"><label>מורשה</label>
+          <select id="al_authorized">
+            <option value="">לא צוין</option>
+            <option value="כן">כן</option>
+            <option value="לא">לא</option>
+          </select>
+        </div>
+        <div class="field full"><label>הערות</label><textarea id="al_notes"></textarea></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+        <button type="submit" class="btn btn-primary">שמירה</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+  document.getElementById('addLeadForm').addEventListener('submit', submitAddLead);
+}
+
+async function submitAddLead(e){
+  e.preventDefault();
+  const first_name = document.getElementById('al_first').value.trim();
+  const last_name = document.getElementById('al_last').value.trim();
+  const phone = document.getElementById('al_phone').value.trim();
+  if (!first_name || !phone){ toast('נא למלא שם פרטי וטלפון'); return; }
+
+  const { data, error } = await window.supabaseClient.from('training_leads').insert({
+    first_name, last_name, phone,
+    email: document.getElementById('al_email').value.trim(),
+    address: document.getElementById('al_address').value.trim(),
+    id_number: document.getElementById('al_idnum').value.trim(),
+    authorized_dealer: document.getElementById('al_authorized').value || null,
+    admin_notes: document.getElementById('al_notes').value.trim(),
+    status: 'מתעניין חדש',
+    payment_status: 'ממתין לתשלום',
+    registration_number: makeRegistrationNumber(),
+    form_token: randomToken(),
+    created_by: CURRENT_PROFILE.id
+  }).select().single();
+
+  if (error){ toast('שגיאה בהוספת המתעניין: ' + error.message); return; }
+  await logEvent(data.id, 'מתעניין נוסף ידנית');
+
+  closeModal();
+  toast('המתעניין נוסף בהצלחה');
   await loadLeads();
 }
 
@@ -474,6 +562,14 @@ async function openLeadCard(id){
         ${fieldRow('cf_phone','טלפון', lead.phone)}
         ${fieldRow('cf_email','אימייל', lead.email, 'email')}
         <div class="field full"><label>כתובת</label><input type="text" id="cf_address" value="${esc(lead.address||'')}"></div>
+        ${fieldRow('cf_idnum','מספר תעודת זהות', lead.id_number)}
+        <div class="field"><label>מורשה</label>
+          <select id="cf_authorized">
+            <option value="" ${!lead.authorized_dealer?'selected':''}>לא צוין</option>
+            <option value="כן" ${lead.authorized_dealer==='כן'?'selected':''}>כן</option>
+            <option value="לא" ${lead.authorized_dealer==='לא'?'selected':''}>לא</option>
+          </select>
+        </div>
         ${fieldRow('cf_price','מחיר לפני מע"מ (₪)', lead.price_before_vat, 'number')}
         <div class="field"><label>סטטוס</label><select id="cf_status">${STATUS_OPTIONS.map(s=>`<option value="${s}" ${lead.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="field"><label>אופן תשלום</label><input type="text" id="cf_paymethod" value="${esc(lead.payment_method||'')}"></div>
@@ -532,6 +628,8 @@ async function saveLeadCard(e){
     phone: document.getElementById('cf_phone').value.trim(),
     email: document.getElementById('cf_email').value.trim(),
     address: document.getElementById('cf_address').value.trim(),
+    id_number: document.getElementById('cf_idnum').value.trim(),
+    authorized_dealer: document.getElementById('cf_authorized').value || null,
     price_before_vat, vat_amount, price_with_vat,
     status: newStatus,
     payment_method: document.getElementById('cf_paymethod').value.trim(),
