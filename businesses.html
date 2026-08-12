@@ -34,7 +34,7 @@
   tbody tr:hover{background:#faf8f2;}
   .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;background:#eef1f6;color:var(--navy);}
   .agr-badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;white-space:nowrap;}
-  .agr-num{display:block;font-size:.68rem;color:#666;margin-top:3px;white-space:nowrap;}
+  .agr-num{display:inline-block;font-size:.72rem;font-weight:600;color:#555;white-space:nowrap;margin-right:6px;}
   .agr-none{background:#f1f1f1;color:#777;}
   .agr-sent{background:#fdeccb;color:#8a5a10;}
   .agr-signed{background:#dff0e4;color:#245c40;}
@@ -79,7 +79,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 15:50</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 16:20</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -333,8 +333,8 @@ function agreementBadge(status, agreementNumber){
 function agreementBanner(status, agreementNumber){
   const s = status || 'אין הסכם';
   const icon = s === 'יש הסכם חתום' ? '✅' : (s === 'נשלח הסכם לחתימה' ? '📤' : '⭕');
-  const numLine = (s === 'יש הסכם חתום' && agreementNumber) ? `<div class="agr-note" style="margin-top:2px;">מס' הסכם: ${esc(agreementNumber)}</div>` : '';
-  return `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(agreementShortLabel(s))}</div>${numLine}`;
+  const numPart = (s === 'יש הסכם חתום' && agreementNumber) ? ` &nbsp;·&nbsp; מס' הסכם: ${esc(agreementNumber)}` : '';
+  return `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(agreementShortLabel(s))}${numPart}</div>`;
 }
 
 function renderTable(){
