@@ -1,6 +1,6 @@
 // BSD CRM - Push notification subscription (client side)
 
-const BSD_VAPID_PUBLIC_KEY = 'BGB0lawBBDkmgRxGttGqaVnERBxr8YrKk-OGIGryGwo57IEKDKXNCekJqkI2caANJGJ3CfmanP5qiXwQDBNF41s';
+const BSD_VAPID_PUBLIC_KEY = 'BKKuGWOeY3OCA3aMcyTCdLgX5x3j4qARJKzYHyhwy6RQx-n-zs3UI_Vu86MJGWIKkOet6VpV2-6mPlBCL7mqRKE';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
