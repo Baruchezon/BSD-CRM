@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>תזכורת משימה - BSD CRM</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{ --navy:#0e1b34; --gold:#d4af6a; }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; font-family:'Segoe UI',Arial,sans-serif;
+    background:linear-gradient(160deg,#0e1b34 0%,#1c2f4d 100%);
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .card{
+    width:100%; max-width:480px; background:#fff; border-radius:20px;
+    box-shadow:0 20px 60px rgba(0,0,0,.4); overflow:hidden;
+    animation:pop .35s ease;
+  }
+  @keyframes pop{ from{transform:scale(.92);opacity:0;} to{transform:scale(1);opacity:1;} }
+  .card-top{ background:var(--navy); color:#fff; padding:22px 24px 18px; text-align:center; }
+  .card-top .icon{ font-size:2.6rem; margin-bottom:6px; }
+  .card-top .kicker{ font-size:.8rem; color:var(--gold); font-weight:700; letter-spacing:.5px; }
+  .card-body{ padding:26px 24px 10px; text-align:center; }
+  .task-title{ font-size:1.35rem; font-weight:800; color:var(--navy); margin:0 0 10px; line-height:1.4; }
+  .task-meta{ font-size:.9rem; color:#6b7385; margin-bottom:6px; }
+  .task-desc{ font-size:.92rem; color:#40485c; background:#f7f5ee; border-radius:10px; padding:12px 14px; margin:14px 0; text-align:right; white-space:pre-wrap; }
+  .overdue-badge{ display:inline-block; background:#ffe1e1; color:#c0392b; font-size:.78rem; font-weight:700; padding:4px 12px; border-radius:20px; margin-top:8px; }
+  .actions{ padding:22px 24px 26px; display:flex; flex-direction:column; gap:10px; }
+  button.action{
+    border:none; border-radius:12px; padding:15px 16px; font-family:inherit;
+    font-size:1rem; font-weight:700; cursor:pointer; transition:transform .1s;
+  }
+  button.action:active{ transform:scale(.97); }
+  .btn-done{ background:linear-gradient(180deg,#3fa96b,#2e7d4f); color:#fff; }
+  .btn-snooze{ background:#fff3d6; color:#8a6d1f; border:1.5px solid #e8cf8a !important; }
+  .btn-open{ background:#eef1f6; color:var(--navy); }
+  .loading, .error-state{ padding:60px 24px; text-align:center; color:#fff; }
+  .spinner{ width:34px;height:34px;border:3px solid rgba(255,255,255,.25); border-top-color:#fff; border-radius:50%; margin:0 auto 14px; animation:spin .8s linear infinite; }
+  @keyframes spin{ to{transform:rotate(360deg);} }
+  .done-state{ padding:50px 24px; text-align:center; }
+  .done-state .icon{ font-size:3rem; }
+  .done-state p{ color:var(--navy); font-weight:700; font-size:1.1rem; margin-top:10px; }
+</style>
+</head>
+<body>
+
+<div id="root" class="card">
+  <div class="loading">
+    <div class="spinner"></div>
+    טוען משימה...
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const taskId = params.get('id');
+const kind = params.get('kind') || 'nudnik';
+const root = document.getElementById('root');
+
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function fmtDate(d){
+  if(!d) return '';
+  const parts = d.split('-');
+  return parts.length===3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : d;
+}
+
+async function requireLogin(){
+  const { data: { user } } = await window.supabaseClient.auth.getUser();
+  if (!user){
+    location.href = `login.html?redirect=${encodeURIComponent(location.pathname + location.search)}`;
+    return null;
+  }
+  return user;
+}
+
+async function loadTask(){
+  if (!taskId){
+    root.innerHTML = `<div class="error-state">
+      <div style="font-size:2.5rem;">⚠️</div>
+      <p style="color:#40485c;margin-top:10px;">לא סופק מזהה משימה.</p>
+      <button class="action btn-open" style="margin-top:16px;" onclick="location.href='tasks.html'">לרשימת המשימות</button>
+    </div>`;
+    return;
+  }
+
+  const user = await requireLogin();
+  if (!user) return;
+
+  const { data: task, error } = await window.supabaseClient.from('tasks').select('*').eq('id', taskId).maybeSingle();
+
+  if (error || !task){
+    root.innerHTML = `<div class="error-state">
+      <div style="font-size:2.5rem;">❓</div>
+      <p style="color:#40485c;margin-top:10px;">המשימה לא נמצאה (אולי כבר נמחקה).</p>
+      <button class="action btn-open" style="margin-top:16px;" onclick="location.href='tasks.html'">לרשימת המשימות</button>
+    </div>`;
+    return;
+  }
+
+  if (task.status === 'הושלמה'){
+    renderAlreadyDone(task);
+    return;
+  }
+
+  renderTask(task);
+}
+
+function renderTask(task){
+  const isOverdue = task.due_date && task.due_date < new Date().toISOString().slice(0,10);
+  const timeStr = task.due_time ? task.due_time.slice(0,5) : null;
+  const iconIntro = kind === 'morning' ? '📋' : '⏰';
+  const kickerText = kind === 'morning' ? 'משימה להיום' : 'תזכורת משימה';
+
+  root.innerHTML = `
+    <div class="card-top">
+      <div class="icon">${iconIntro}</div>
+      <div class="kicker">${kickerText}</div>
+    </div>
+    <div class="card-body">
+      <p class="task-title">${esc(task.title)}</p>
+      <p class="task-meta">📅 ${fmtDate(task.due_date)}${timeStr ? ' &nbsp;•&nbsp; ⏰ ' + esc(timeStr) : ''}</p>
+      ${isOverdue ? '<span class="overdue-badge">באיחור</span>' : ''}
+      ${task.description ? `<div class="task-desc">${esc(task.description)}</div>` : ''}
+    </div>
+    <div class="actions">
+      <button class="action btn-done" onclick="markDone()">✅ סיימתי - סמן כהושלם</button>
+      <button class="action btn-snooze" onclick="snooze()">⏰ תזכיר לי שוב בעוד 10 דקות</button>
+      <button class="action btn-open" onclick="openFull()">📂 פתח את כל פרטי המשימה</button>
+    </div>
+  `;
+}
+
+function renderAlreadyDone(task){
+  root.innerHTML = `
+    <div class="done-state">
+      <div class="icon">✅</div>
+      <p>המשימה "${esc(task.title)}" כבר סומנה כהושלמה.</p>
+      <button class="action btn-open" style="margin-top:16px;" onclick="location.href='tasks.html'">לרשימת המשימות</button>
+    </div>
+  `;
+}
+
+async function markDone(){
+  root.innerHTML = `<div class="loading" style="color:var(--navy);"><div class="spinner" style="border-color:rgba(14,27,52,.2);border-top-color:var(--navy);"></div>שומר...</div>`;
+  let { error } = await window.supabaseClient.from('tasks').update({ status: 'הושלמה', completed_at: new Date().toISOString() }).eq('id', taskId);
+  if (error){
+    // completed_at column might not exist yet on some setups - fall back
+    ({ error } = await window.supabaseClient.from('tasks').update({ status: 'הושלמה' }).eq('id', taskId));
+  }
+  root.innerHTML = `
+    <div class="done-state">
+      <div class="icon">🎉</div>
+      <p>המשימה סומנה כהושלמה!</p>
+      <button class="action btn-open" style="margin-top:16px;" onclick="location.href='tasks.html'">לרשימת המשימות</button>
+    </div>
+  `;
+}
+
+async function snooze(){
+  root.innerHTML = `<div class="loading" style="color:var(--navy);"><div class="spinner" style="border-color:rgba(14,27,52,.2);border-top-color:var(--navy);"></div>מעדכן תזכורת...</div>`;
+  // Setting last_notified_at to "now" makes the reminder engine wait its normal interval
+  // before nudging again, which naturally delays the next push by ~10 minutes.
+  await window.supabaseClient.from('tasks').update({ last_notified_at: new Date().toISOString() }).eq('id', taskId);
+  root.innerHTML = `
+    <div class="done-state">
+      <div class="icon">⏰</div>
+      <p>בסדר, נזכיר לך שוב בעוד כ-10 דקות.</p>
+      <button class="action btn-open" style="margin-top:16px;" onclick="location.href='tasks.html'">לרשימת המשימות</button>
+    </div>
+  `;
+}
+
+function openFull(){
+  location.href = `tasks.html?open=${encodeURIComponent(taskId)}`;
+}
+
+loadTask();
+</script>
+</body>
+</html>

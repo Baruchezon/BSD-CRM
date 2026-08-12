@@ -132,6 +132,14 @@ if ('serviceWorker' in navigator) {
         const audio = new Audio(file);
         audio.play().catch(() => {});
       } catch (e) { /* ignore */ }
+
+      // If the app is open in the foreground when the reminder arrives, jump straight
+      // to the full-screen task-alert page instead of leaving it buried behind a tap on
+      // the OS notification — this is what makes the reminder impossible to miss/ignore.
+      const targetUrl = event.data.url;
+      if (targetUrl && !location.pathname.endsWith('task-alert.html') && document.visibilityState === 'visible') {
+        location.href = targetUrl;
+      }
     }
   });
 }

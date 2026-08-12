@@ -12,6 +12,7 @@ self.addEventListener('push', event => {
 
   const title = data.title || 'BSD CRM';
   const kind = data.kind === 'nudnik' ? 'nudnik' : 'morning'; // 'morning' = date-only task, 'nudnik' = date+time task (repeats)
+  const targetUrl = data.url || 'tasks.html';
   const options = {
     body: data.body || '',
     icon: 'icon-192.png',
@@ -20,13 +21,13 @@ self.addEventListener('push', event => {
     lang: 'he',
     tag: data.tag || undefined, // same tag replaces the previous nudnik notification instead of stacking
     renotify: kind === 'nudnik',
-    data: { url: data.url || 'tasks.html' }
+    data: { url: targetUrl }
   };
   event.waitUntil(
     Promise.all([
       self.registration.showNotification(title, options),
       self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
-        clientList.forEach(client => client.postMessage({ type: 'BSD_PUSH_SOUND', kind }));
+        clientList.forEach(client => client.postMessage({ type: 'BSD_PUSH_SOUND', kind, url: targetUrl }));
       })
     ])
   );
