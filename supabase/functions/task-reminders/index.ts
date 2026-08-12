@@ -97,7 +97,7 @@ Deno.serve(async () => {
         title: '📋 משימה להיום',
         body: t.title,
         kind: 'morning',
-        url: 'tasks.html',
+        url: `task-alert.html?id=${t.id}&kind=morning`,
         tag: `bsd-task-${t.id}`
       });
       await supabase.from('tasks').update({ last_notified_at: new Date().toISOString() }).eq('id', t.id);
@@ -125,7 +125,7 @@ Deno.serve(async () => {
       title: '⏰ תזכורת: משימה ממתינה',
       body: t.title,
       kind: 'nudnik',
-      url: 'tasks.html',
+      url: `task-alert.html?id=${t.id}&kind=nudnik`,
       tag: `bsd-task-${t.id}` // same tag = replaces the previous nudge instead of piling up
     });
     await supabase.from('tasks').update({
