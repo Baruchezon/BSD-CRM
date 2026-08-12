@@ -91,7 +91,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 16:20</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 16:25</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -425,7 +425,7 @@ function renderTable(){
       <td data-label="אימייל" class="email-cell" title="${esc(l.email||'')}">${esc(l.email||'—')}</td>
       <td data-label="הוזן ע&quot;י">${l.created_by ? `<b style="color:${creatorColor(l.created_by) || '#333'};">${esc(userName(l.created_by))}</b>` : 'לא ידוע'}</td>
       <td data-label="מטופל ע&quot;י">${l.handled_by ? esc(userName(l.handled_by)) : '—'}</td>
-      <td data-label="סטטוס הסכם">${agreementBadge(l.agreement_status, l.agreement_number)}</td>
+      <td data-label="סטטוס הסכם">${agreementBadge(l.agreement_status)}</td>
       <td data-label="נוצר">${fmtDate(l.created_at)}</td>
       <td data-label="עודכן">${fmtDate(l.updated_at)}</td>
       <td data-label="הערות" class="notes-cell">${esc(l.notes||'—')}</td>
@@ -450,11 +450,10 @@ function agreementShortLabel(status){
   const s = status || 'אין הסכם';
   return s === 'נשלח הסכם לחתימה' ? 'נשלח לחתימה' : s;
 }
-function agreementBadge(status, agreementNumber){
+function agreementBadge(status){
   const s = status || 'אין הסכם';
   const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
-  const numLine = (s === 'יש הסכם חתום' && agreementNumber) ? `<span class="agr-num">מס' הסכם: ${esc(agreementNumber)}</span>` : '';
-  return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>${numLine}`;
+  return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>`;
 }
 // שורת מידע פשוטה בלבד (לא באנר בולט) - השדה האמיתי הניתן לעריכה נמצא בטופס עצמו למטה
 function agreementBanner(status, agreementNumber){
