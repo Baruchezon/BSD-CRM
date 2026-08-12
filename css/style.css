@@ -149,10 +149,41 @@ input, select, textarea, button{
   width:100%;
   min-width:0;
   scrollbar-width:thin;
-  /* subtle fade at both edges hints there's more to scroll to */
-  -webkit-mask-image:linear-gradient(to left, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
-  mask-image:linear-gradient(to left, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
 }
+.nav > div{ flex:0 0 auto; }
+
+/* Tap-to-scroll arrows for the nav bar on mobile. Dragging a
+   horizontally-scrolling flex row with a finger is unreliable on
+   many Android devices — a tap that moves even slightly gets
+   read as a scroll gesture and the click is swallowed. These give
+   a static, always-reliable way to reach cut-off buttons (like
+   כלים/הגדרות) instead of depending on a clean drag gesture. */
+.nav-row-wrap{ position:relative; min-width:0; flex:1 1 auto; }
+.nav-scroll-btn{
+  position:absolute;
+  top:50%;
+  transform:translateY(-50%);
+  width:26px;
+  height:26px;
+  border-radius:50%;
+  background:rgba(21,38,69,.95);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.3);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:13px;
+  font-weight:700;
+  line-height:1;
+  cursor:pointer;
+  z-index:65;
+  padding:0;
+  box-shadow:0 2px 8px rgba(0,0,0,.45);
+  touch-action:manipulation;
+}
+.nav-scroll-btn.nav-scroll-left{ left:0; }
+.nav-scroll-btn.nav-scroll-right{ right:0; }
+.nav-scroll-btn[hidden]{ display:none; }
 .nav > a,
 .nav > div > button{
   display:inline-flex;

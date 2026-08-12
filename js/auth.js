@@ -421,6 +421,65 @@ function scrollTableBy(btn, amount){
   if (inner) inner.scrollBy({ left: amount, behavior: 'smooth' });
 }
 
+// ============================================================
+// NAV BAR TAP-SCROLL ARROWS (mobile) — see css comment on
+// .nav-scroll-btn for why: dragging to reveal cut-off nav buttons
+// (like כלים/הגדרות) is unreliable with a finger on many Android
+// browsers, since a tap that drifts even a couple px gets read as
+// a scroll and the click never fires. These give a small, static,
+// always-tappable ‹ › pair per nav row instead.
+function setupNavScrollArrows(){
+  document.querySelectorAll('.nav-rows > .nav').forEach(nav => {
+    if (nav.dataset.scrollArrowsInit) return;
+    nav.dataset.scrollArrowsInit = '1';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'nav-row-wrap';
+    nav.parentNode.insertBefore(wrap, nav);
+    wrap.appendChild(nav);
+
+    const left = document.createElement('button');
+    left.type = 'button';
+    left.className = 'nav-scroll-btn nav-scroll-left';
+    left.textContent = '‹';
+    left.setAttribute('aria-label', 'גלול בתפריט');
+    left.hidden = true;
+
+    const right = document.createElement('button');
+    right.type = 'button';
+    right.className = 'nav-scroll-btn nav-scroll-right';
+    right.textContent = '›';
+    right.setAttribute('aria-label', 'גלול בתפריט');
+    right.hidden = true;
+
+    left.addEventListener('click', function(e){ e.stopPropagation(); nav.scrollBy({ left: -110, behavior: 'smooth' }); });
+    right.addEventListener('click', function(e){ e.stopPropagation(); nav.scrollBy({ left: 110, behavior: 'smooth' }); });
+
+    wrap.appendChild(left);
+    wrap.appendChild(right);
+
+    function update(){
+      const max = nav.scrollWidth - nav.clientWidth;
+      if (max <= 4){ left.hidden = true; right.hidden = true; return; }
+      // scrollLeft's sign/zero-point for RTL varies by browser, so
+      // just check both physical extremes rather than assuming a sign.
+      const atStart = Math.abs(nav.scrollLeft) <= 4;
+      const atEnd = Math.abs(Math.abs(nav.scrollLeft) - max) <= 4;
+      left.hidden = atEnd;
+      right.hidden = atStart;
+      if (!atStart && !atEnd){ left.hidden = false; right.hidden = false; }
+    }
+    nav.addEventListener('scroll', update);
+    window.addEventListener('resize', update);
+    setTimeout(update, 50);
+    update();
+  });
+}
+document.addEventListener('DOMContentLoaded', setupNavScrollArrows);
+// Some pages toggle mainWrap display after auth resolves, which can
+// change nav content width later — re-check shortly after load too.
+window.addEventListener('load', function(){ setTimeout(setupNavScrollArrows, 400); });
+
 function toggleFormsMenu(e){
   if (e) e.stopPropagation();
   const btn = e && e.currentTarget ? e.currentTarget : null;
