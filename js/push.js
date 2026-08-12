@@ -86,8 +86,10 @@ document.addEventListener('DOMContentLoaded', bsdInitPushBell);
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', event => {
     if (event.data && event.data.type === 'BSD_PUSH_SOUND') {
+      // 'morning' = task with date only (plays once, gentle). 'nudnik' = task with date+time (repeats until read/dismissed).
+      const file = event.data.kind === 'nudnik' ? 'sounds/nudnik-reminder.wav' : 'sounds/morning-reminder.wav';
       try {
-        const audio = new Audio('sounds/task-notification.mp3');
+        const audio = new Audio(file);
         audio.play().catch(() => {});
       } catch (e) { /* ignore */ }
     }
