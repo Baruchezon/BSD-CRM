@@ -59,16 +59,32 @@ async function bsdEnablePush() {
   return true;
 }
 
+async function bsdDisablePush() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration('sw.js');
+      if (reg) {
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await window.supabaseClient.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+          await sub.unsubscribe();
+        }
+      }
+    }
+  } catch (e) { console.error('push disable error', e); }
+  localStorage.removeItem('bsd_push_enabled');
+}
+
 function bsdRefreshPushBellLabel() {
   const btn = document.getElementById('pushBellBtn');
   if (!btn) return;
   const enabled = (typeof Notification !== 'undefined') &&
     Notification.permission === 'granted' &&
     localStorage.getItem('bsd_push_enabled') === '1';
-  btn.textContent = enabled ? '✅ התראות מופעלות' : '🔕 הפעל התראות';
+  btn.textContent = enabled ? '✅ התראות מופעלות (לחץ לביטול)' : '🔕 הפעל התראות';
   btn.style.background = enabled ? '#2e7d4f' : '';
   btn.style.color = enabled ? '#fff' : '';
-  btn.title = enabled ? 'התראות Push פעילות במכשיר הזה — לחץ כדי לבדוק את הסטטוס' : 'לחץ כדי לקבל התראות על משימות גם כשהמערכת סגורה';
+  btn.title = enabled ? 'התראות Push פעילות במכשיר הזה — לחץ כדי לבטל' : 'לחץ כדי לקבל התראות על משימות גם כשהמערכת סגורה';
 }
 
 function bsdInitPushBell() {
@@ -78,10 +94,15 @@ function bsdInitPushBell() {
   bsdRefreshPushBellLabel();
 
   btn.addEventListener('click', async () => {
-    // Already enabled -> clicking again just confirms status clearly, no re-subscribing needed
+    // Already enabled -> offer to disable
     const alreadyEnabled = Notification.permission === 'granted' && localStorage.getItem('bsd_push_enabled') === '1';
     if (alreadyEnabled) {
-      alert('✅ ההתראות כבר מופעלות במכשיר הזה.\nאין צורך לעשות שום דבר נוסף — המערכת תשלח התראות אוטומטית על משימות.');
+      const wantsOff = confirm('ההתראות מופעלות במכשיר הזה.\nלבטל אותן?');
+      if (wantsOff) {
+        await bsdDisablePush();
+        bsdRefreshPushBellLabel();
+        alert('🔕 ההתראות בוטלו במכשיר הזה.');
+      }
       return;
     }
 
