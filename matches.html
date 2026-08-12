@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608120545">
+<link rel="stylesheet" href="css/style.css?v=202608120610">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -62,7 +62,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 05:45</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 06:10</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
       <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -397,6 +397,7 @@ async function openMatchForm(id){
         })}</div>
         <div class="field"><label>אחוז התאמה</label><input type="number" id="match_percent" min="0" max="100" value="${match?.match_percent??''}"></div>
         <div class="field"><label>סטטוס</label><select id="status" onchange="onMatchStatusChange()">${statusOptions(match?.status||'התאמה חדשה')}</select></div>
+        <div class="field"><label>תאריך/שעה לסטטוס זה</label><input type="datetime-local" id="status_changed_at" value="${nowLocalDatetime()}"></div>
         <div class="field"><label>מטפל כרגע</label><select id="current_handler">${userOptions(match?.current_handler)}</select></div>
         <div class="field"><label>תגובת הקונה</label><input type="text" id="buyer_response" value="${esc(match?.buyer_response)}"></div>
         <div class="field" id="meetingDateField" style="display:none;"><label>תאריך הפגישה</label><input type="date" id="meeting_date" value="${match?.meeting_date||''}"></div>
@@ -441,6 +442,15 @@ async function openMatchForm(id){
     loadParticipants(match.id);
     loadHistory(match.id);
   }
+}
+
+// Local (not UTC) "now" formatted for an <input type="datetime-local">,
+// so the default status-change timestamp shown to him matches his
+// own clock; editable in case he wants to backdate/correct it.
+function nowLocalDatetime(){
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0,16);
 }
 
 function onMatchStatusChange(){
@@ -492,6 +502,8 @@ async function saveMatch(e){
   const g = id => document.getElementById(id) ? document.getElementById(id).value : null;
   const num = v => v === '' || v === null ? null : Number(v);
   const status = g('status');
+  const statusChangedAtRaw = g('status_changed_at');
+  const statusChangedAt = statusChangedAtRaw ? new Date(statusChangedAtRaw).toISOString() : new Date().toISOString();
 
   if (STATUSES_WITH_STOP_REASON.includes(status) && !(g('stopped_reason')||'').trim()){
     toast('יש למלא סיבה לעצירת העסקה'); return;
@@ -506,6 +518,7 @@ async function saveMatch(e){
   const schemaMissing = (err) => err && /column|schema cache/i.test(err.message || '');
 
   if (matchId){
+    const prevMatch = ALL_MATCHES.find(m => m.id === matchId);
     const basePayload = {
       match_percent: num(g('match_percent')),
       status: status,
@@ -520,6 +533,11 @@ async function saveMatch(e){
       ({ error } = await window.supabaseClient.from('matches').update(basePayload).eq('id', matchId));
     }
     if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+    if (!prevMatch || prevMatch.status !== status){
+      await window.supabaseClient.from('match_status_history').insert({
+        match_id: matchId, status, changed_at: statusChangedAt, changed_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null
+      });
+    }
   } else {
     const buyerId = g('buyer_id'), bizId = g('business_id');
     if (!buyerId || !bizId){ toast('יש לבחור קונה ועסק'); return; }
@@ -535,12 +553,17 @@ async function saveMatch(e){
       match_reason: g('match_reason'),
       notes: g('notes')
     };
-    let { error } = await window.supabaseClient.from('matches').insert({ ...basePayload, ...extraFields });
+    let { data: newMatch, error } = await window.supabaseClient.from('matches').insert({ ...basePayload, ...extraFields }).select().single();
     if (error && schemaMissing(error)){
       toast('שים לב: שדות תאריך/סיכום פגישה עדיין לא נשמרים — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף אותם לטבלת ההתאמות. ההתאמה עצמה נשמרה.');
-      ({ error } = await window.supabaseClient.from('matches').insert(basePayload));
+      ({ data: newMatch, error } = await window.supabaseClient.from('matches').insert(basePayload).select().single());
     }
     if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+    if (newMatch){
+      await window.supabaseClient.from('match_status_history').insert({
+        match_id: newMatch.id, status, changed_at: statusChangedAt, changed_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null
+      });
+    }
   }
 
 
