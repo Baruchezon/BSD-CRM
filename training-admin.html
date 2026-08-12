@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608120545">
+<link rel="stylesheet" href="css/style.css?v=202608120610">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1200px;margin:0 auto;}
@@ -49,7 +49,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 05:45</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 06:10</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -111,17 +111,12 @@
   <div class="filters">
     <input type="text" id="fSearch" placeholder="חיפוש לפי שם, טלפון, אימייל...">
     <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
-    <select id="fPayStatus">
-      <option value="all">כל סטטוסי התשלום</option>
-      <option value="ממתין לתשלום">ממתין לתשלום</option>
-      <option value="שולם">שולם</option>
-    </select>
     <input type="date" id="fDateFrom" title="מתאריך">
     <input type="date" id="fDateTo" title="עד תאריך">
   </div>
 
   <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:.78rem;color:#665;margin-bottom:8px;">
-    <span style="display:flex;align-items:center;gap:5px;"><span style="width:14px;height:14px;border-radius:4px;border:1px solid #ddd;background:#ffffff;display:inline-block;"></span>מתעניין בלבד</span>
+    <span style="display:flex;align-items:center;gap:5px;"><span style="width:14px;height:14px;border-radius:4px;border:1px solid #ddd;background:#ffffff;display:inline-block;"></span>שיחה טלפונית</span>
     <span style="display:flex;align-items:center;gap:5px;"><span style="width:14px;height:14px;border-radius:4px;background:#fff2c2;display:inline-block;"></span>נשלח ברושור</span>
     <span style="display:flex;align-items:center;gap:5px;"><span style="width:14px;height:14px;border-radius:4px;background:#d7f5e3;display:inline-block;"></span>נשלח טופס רישום</span>
     <span style="display:flex;align-items:center;gap:5px;"><span style="width:14px;height:14px;border-radius:4px;background:#8fd6ab;display:inline-block;"></span>שולם</span>
@@ -130,10 +125,10 @@
   <div style="overflow-x:auto;">
   <table>
     <thead>
-      <tr><th>שם</th><th>טלפון</th><th>אימייל</th><th>מחיר כולל מע"מ</th><th>סטטוס</th><th>סטטוס תשלום</th><th>נוצר</th></tr>
+      <tr><th>שם</th><th>טלפון</th><th>אימייל</th><th>מחיר כולל מע"מ</th><th>סטטוס</th><th>נוצר</th></tr>
     </thead>
     <tbody id="leadsBody">
-      <tr class="empty-row"><td colspan="7">טוען...</td></tr>
+      <tr class="empty-row"><td colspan="6">טוען...</td></tr>
     </tbody>
   </table>
   </div>
@@ -156,7 +151,7 @@ let CURRENT_PROFILE = null;
 let ALL_LEADS = [];
 let VAT_RATE = 18;
 let CURRICULUM = '';
-const STATUS_OPTIONS = ['מתעניין חדש','נשלח ברושור','נשלח טופס רישום','פתח את הטופס','מילא פרטים','חתום','ממתין לתשלום','שולם','נרשם להכשרה','בוטל'];
+const STATUS_OPTIONS = ['שיחה טלפונית','נשלח ברושור','נשלח טופס רישום','שולם','בוטל'];
 const BIZ_FILES_BUCKET = window.BSD_CONFIG.STORAGE_BUCKET;
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -186,28 +181,28 @@ function closeModal(){
 }
 function statusColor(status){
   const map = {
-    'מתעניין חדש': '#eef1f6', 'נשלח ברושור': '#e5e0f5', 'נשלח טופס רישום': '#fdeccb', 'פתח את הטופס': '#fdeccb',
-    'מילא פרטים': '#dbeafe', 'חתום': '#d9f2e3', 'ממתין לתשלום': '#ffe9cc',
-    'שולם': '#dff0e4', 'נרשם להכשרה': '#d9f2e3', 'בוטל': '#ffe1e1'
+    'שיחה טלפונית': '#eef1f6', 'נשלח ברושור': '#fff2c2', 'נשלח טופס רישום': '#d7f5e3',
+    'שולם': '#8fd6ab', 'בוטל': '#ffe3e3'
   };
   const txt = {
-    'מתעניין חדש': '#333', 'נשלח ברושור': '#4a3b8a', 'נשלח טופס רישום': '#8a5a10', 'פתח את הטופס': '#8a5a10',
-    'מילא פרטים': '#1e40af', 'חתום': '#1a5c38', 'ממתין לתשלום': '#7a4a00',
-    'שולם': '#245c40', 'נרשם להכשרה': '#1a5c38', 'בוטל': '#832d1f'
+    'שיחה טלפונית': '#333', 'נשלח ברושור': '#8a5a10', 'נשלח טופס רישום': '#1a5c38',
+    'שולם': '#0f3d24', 'בוטל': '#832d1f'
   };
   return `background:${map[status]||'#eee'};color:${txt[status]||'#333'};`;
 }
 
-// Row background tiers (his request): white = candidate only,
+// Row background tiers (his request): white = phone call only,
 // yellow = brochure sent, light green = registration form sent,
 // darker green = paid. Cancelled always shown in red regardless
-// of stage. Paid/enrolled wins over everything else.
+// of stage. Status is now the ONLY field driving this — the
+// separate payment_status field was removed per his explicit
+// request ("no need for a payment status, just status").
 function rowBg(lead){
   if (lead.status === 'בוטל') return '#ffe3e3';
-  if (lead.payment_status === 'שולם' || lead.status === 'נרשם להכשרה') return '#8fd6ab';
-  if (lead.status === 'מתעניין חדש') return '#ffffff';
+  if (lead.status === 'שולם') return '#8fd6ab';
+  if (lead.status === 'נשלח טופס רישום') return '#d7f5e3';
   if (lead.status === 'נשלח ברושור') return '#fff2c2';
-  return '#d7f5e3';
+  return '#ffffff';
 }
 
 function randomToken(){
@@ -241,20 +236,18 @@ async function loadLeads(){
 
 function renderKpis(){
   const total = ALL_LEADS.length;
-  const sent = ALL_LEADS.filter(l => l.status !== 'מתעניין חדש').length;
-  const signed = ALL_LEADS.filter(l => l.signed_at).length;
-  const waitingPay = ALL_LEADS.filter(l => l.payment_status === 'ממתין לתשלום' && l.signed_at).length;
-  const paid = ALL_LEADS.filter(l => l.payment_status === 'שולם').length;
-  const enrolled = ALL_LEADS.filter(l => l.status === 'נרשם להכשרה').length;
-  const conversion = sent > 0 ? Math.round((signed / sent) * 100) : 0;
+  const phoneOnly = ALL_LEADS.filter(l => l.status === 'שיחה טלפונית').length;
+  const brochureSent = ALL_LEADS.filter(l => l.status === 'נשלח ברושור').length;
+  const formSent = ALL_LEADS.filter(l => l.status === 'נשלח טופס רישום').length;
+  const paid = ALL_LEADS.filter(l => l.status === 'שולם').length;
+  const conversion = total > 0 ? Math.round((paid / total) * 100) : 0;
   const kpis = [
     { num: total, lbl: 'מתעניינים' },
-    { num: sent, lbl: 'טפסים שנשלחו' },
-    { num: signed, lbl: 'טפסים שנחתמו' },
-    { num: waitingPay, lbl: 'ממתינים לתשלום' },
+    { num: phoneOnly, lbl: 'שיחה טלפונית' },
+    { num: brochureSent, lbl: 'נשלח ברושור' },
+    { num: formSent, lbl: 'נשלח טופס רישום' },
     { num: paid, lbl: 'שולמו' },
-    { num: enrolled, lbl: 'נרשמו להכשרה' },
-    { num: conversion + '%', lbl: 'יחס המרה (חתום/נשלח)' }
+    { num: conversion + '%', lbl: 'יחס המרה (שולם/סה"כ)' }
   ];
   document.getElementById('kpiGrid').innerHTML = kpis.map(k => `<div class="kpi"><div class="num">${k.num}</div><div class="lbl">${k.lbl}</div></div>`).join('');
 }
@@ -262,13 +255,11 @@ function renderKpis(){
 function renderTable(){
   const search = document.getElementById('fSearch').value.trim().toLowerCase();
   const fStatus = document.getElementById('fStatus').value;
-  const fPayStatus = document.getElementById('fPayStatus').value;
   const dFrom = document.getElementById('fDateFrom').value;
   const dTo = document.getElementById('fDateTo').value;
 
   let rows = ALL_LEADS.filter(l => {
     if (fStatus !== 'all' && l.status !== fStatus) return false;
-    if (fPayStatus !== 'all' && l.payment_status !== fPayStatus) return false;
     if (dFrom && l.created_at.slice(0,10) < dFrom) return false;
     if (dTo && l.created_at.slice(0,10) > dTo) return false;
     if (search){
@@ -280,7 +271,7 @@ function renderTable(){
 
   const body = document.getElementById('leadsBody');
   if (rows.length === 0){
-    body.innerHTML = '<tr class="empty-row"><td colspan="7">לא נמצאו מתעניינים</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="6">לא נמצאו מתעניינים</td></tr>';
     return;
   }
   body.innerHTML = rows.map(l => {
@@ -312,14 +303,13 @@ function renderTable(){
       <td>${esc(l.email||'—')}</td>
       <td>${fmtMoney(l.price_with_vat)}</td>
       <td><span class="badge" style="${statusColor(l.status)}">${esc(l.status)}</span></td>
-      <td><span class="badge" style="${statusColor(l.payment_status)}">${esc(l.payment_status)}</span></td>
       <td>${fmtDate(l.created_at)}</td>
     </tr>`;
   }).join('');
 }
 
 ['fSearch'].forEach(id => document.getElementById(id).addEventListener('input', renderTable));
-['fStatus','fPayStatus','fDateFrom','fDateTo'].forEach(id => document.getElementById(id).addEventListener('change', renderTable));
+['fStatus','fDateFrom','fDateTo'].forEach(id => document.getElementById(id).addEventListener('change', renderTable));
 
 // ============================================================
 // SEND BROCHURE MODAL — first touch. Creates the lead card with
@@ -359,7 +349,6 @@ async function submitSendBrochure(e){
   const { data, error } = await window.supabaseClient.from('training_leads').insert({
     first_name, last_name, phone,
     status: 'נשלח ברושור',
-    payment_status: 'ממתין לתשלום',
     registration_number: makeRegistrationNumber(),
     form_token: randomToken(),
     brochure_sent_at: new Date().toISOString(),
@@ -434,8 +423,7 @@ async function submitAddLead(e){
     id_number: document.getElementById('al_idnum').value.trim(),
     authorized_dealer: document.getElementById('al_authorized').value || null,
     admin_notes: document.getElementById('al_notes').value.trim(),
-    status: 'מתעניין חדש',
-    payment_status: 'ממתין לתשלום',
+    status: 'שיחה טלפונית',
     registration_number: makeRegistrationNumber(),
     form_token: randomToken(),
     created_by: CURRENT_PROFILE.id
@@ -518,7 +506,7 @@ async function submitSendForm(e){
     const { data, error } = await window.supabaseClient.from('training_leads').insert({
       first_name, last_name, phone,
       price_before_vat, vat_amount, price_with_vat,
-      status: 'נשלח טופס רישום', payment_status: 'ממתין לתשלום',
+      status: 'נשלח טופס רישום',
       form_token: token, registration_number: makeRegistrationNumber(),
       created_by: CURRENT_PROFILE.id
     }).select().single();
@@ -573,12 +561,6 @@ async function openLeadCard(id){
         ${fieldRow('cf_price','מחיר לפני מע"מ (₪)', lead.price_before_vat, 'number')}
         <div class="field"><label>סטטוס</label><select id="cf_status">${STATUS_OPTIONS.map(s=>`<option value="${s}" ${lead.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="field"><label>אופן תשלום</label><input type="text" id="cf_paymethod" value="${esc(lead.payment_method||'')}"></div>
-        <div class="field"><label>סטטוס תשלום</label>
-          <select id="cf_paystatus">
-            <option value="ממתין לתשלום" ${lead.payment_status==='ממתין לתשלום'?'selected':''}>ממתין לתשלום</option>
-            <option value="שולם" ${lead.payment_status==='שולם'?'selected':''}>שולם</option>
-          </select>
-        </div>
         <div class="field full"><label>הערות אדמין</label><textarea id="cf_notes">${esc(lead.admin_notes||'')}</textarea></div>
       </div>
 
@@ -620,7 +602,6 @@ async function saveLeadCard(e){
   const vat_amount = Math.round(price_before_vat * (VAT_RATE/100) * 100) / 100;
   const price_with_vat = price_before_vat + vat_amount;
   const newStatus = document.getElementById('cf_status').value;
-  const newPayStatus = document.getElementById('cf_paystatus').value;
 
   const payload = {
     first_name: document.getElementById('cf_first').value.trim(),
@@ -633,7 +614,6 @@ async function saveLeadCard(e){
     price_before_vat, vat_amount, price_with_vat,
     status: newStatus,
     payment_method: document.getElementById('cf_paymethod').value.trim(),
-    payment_status: newPayStatus,
     admin_notes: document.getElementById('cf_notes').value.trim()
   };
 
@@ -641,7 +621,6 @@ async function saveLeadCard(e){
   if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
 
   if (lead.status !== newStatus) await logEvent(id, `הסטטוס עודכן ל-"${newStatus}"`);
-  if (lead.payment_status !== newPayStatus) await logEvent(id, `סטטוס התשלום עודכן ל-"${newPayStatus}"`);
 
   toast('נשמר בהצלחה');
   closeModal();
@@ -691,7 +670,7 @@ function copyLink(id){
 }
 
 async function markPaid(id){
-  const { error } = await window.supabaseClient.from('training_leads').update({ payment_status: 'שולם' }).eq('id', id);
+  const { error } = await window.supabaseClient.from('training_leads').update({ status: 'שולם' }).eq('id', id);
   if (error){ toast('שגיאה: ' + error.message); return; }
   await logEvent(id, 'התקבל תשלום');
   toast('סומן כשולם');

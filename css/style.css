@@ -460,7 +460,7 @@ button:disabled, .btn:disabled{
     gap:10px;
     padding:8px 14px;
     border-bottom:1px solid #f5f3ec;
-    text-align:left;
+    text-align:right;
   }
   table td:last-child{ border-bottom:none; }
   table td::before{
