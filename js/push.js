@@ -47,6 +47,14 @@ async function bsdEnablePush() {
 
   if (error) { console.error('push subscribe save error', error); return false; }
 
+  // Confirm the row actually landed in the DB (not just "no error") before trusting it
+  const { data: verifyRow, error: verifyErr } = await window.supabaseClient
+    .from('push_subscriptions')
+    .select('id')
+    .eq('endpoint', subJson.endpoint)
+    .maybeSingle();
+  if (verifyErr || !verifyRow) { console.error('push subscribe verify failed', verifyErr); return false; }
+
   localStorage.setItem('bsd_push_enabled', '1');
   return true;
 }
@@ -57,8 +65,10 @@ function bsdRefreshPushBellLabel() {
   const enabled = (typeof Notification !== 'undefined') &&
     Notification.permission === 'granted' &&
     localStorage.getItem('bsd_push_enabled') === '1';
-  btn.textContent = enabled ? '🔔 התראות פעילות' : '🔕 הפעל התראות';
-  btn.title = enabled ? 'התראות Push פעילות במכשיר הזה' : 'לחץ כדי לקבל התראות על משימות גם כשהמערכת סגורה';
+  btn.textContent = enabled ? '✅ התראות מופעלות' : '🔕 הפעל התראות';
+  btn.style.background = enabled ? '#2e7d4f' : '';
+  btn.style.color = enabled ? '#fff' : '';
+  btn.title = enabled ? 'התראות Push פעילות במכשיר הזה — לחץ כדי לבדוק את הסטטוס' : 'לחץ כדי לקבל התראות על משימות גם כשהמערכת סגורה';
 }
 
 function bsdInitPushBell() {
@@ -68,15 +78,24 @@ function bsdInitPushBell() {
   bsdRefreshPushBellLabel();
 
   btn.addEventListener('click', async () => {
-    if (Notification.permission === 'denied') {
-      alert('ההתראות חסומות בדפדפן הזה. כדי להפעיל, יש לאשר התראות דרך הגדרות האתר בדפדפן (סמל המנעול ליד שורת הכתובת).');
+    // Already enabled -> clicking again just confirms status clearly, no re-subscribing needed
+    const alreadyEnabled = Notification.permission === 'granted' && localStorage.getItem('bsd_push_enabled') === '1';
+    if (alreadyEnabled) {
+      alert('✅ ההתראות כבר מופעלות במכשיר הזה.\nאין צורך לעשות שום דבר נוסף — המערכת תשלח התראות אוטומטית על משימות.');
       return;
     }
+
+    if (Notification.permission === 'denied') {
+      alert('❌ ההתראות חסומות בדפדפן הזה.\nכדי להפעיל: לחץ על סמל המנעול/ה-⋮ ליד שורת הכתובת בדפדפן, מצא "התראות" ואשר.');
+      return;
+    }
+
     const ok = await bsdEnablePush();
     bsdRefreshPushBellLabel();
     if (ok) {
-      btn.textContent = '✅ הופעל!';
-      setTimeout(bsdRefreshPushBellLabel, 2500);
+      alert('✅ ההתראות הופעלו בהצלחה במכשיר הזה!\nמעכשיו תקבל התראות על משימות גם כשהמערכת סגורה.');
+    } else {
+      alert('⚠️ ההפעלה לא הושלמה. ייתכן שההרשאה לא אושרה, או שהייתה בעיית התחברות. נסה שוב, ואם זה חוזר — דווח לי.');
     }
   });
 }
