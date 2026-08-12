@@ -34,6 +34,7 @@
   tbody tr:hover{background:#faf8f2;}
   .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;background:#eef1f6;color:var(--navy);}
   .agr-badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;white-space:nowrap;}
+  .agr-num{display:block;font-size:.68rem;color:#666;margin-top:3px;white-space:nowrap;}
   .agr-none{background:#f1f1f1;color:#777;}
   .agr-sent{background:#fdeccb;color:#8a5a10;}
   .agr-signed{background:#dff0e4;color:#245c40;}
@@ -78,7 +79,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 06:10</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 15:50</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -196,7 +197,7 @@ let ALL_USERS = [];
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
 function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
-function fmtMoney(n){ if(n===null||n===undefined) return '—'; return '₪' + Number(n).toLocaleString('he-IL'); }
+function fmtMoney(n){ if(n===null||n===undefined||n==='') return '—'; return Number(n).toLocaleString('he-IL') + ' ₪'; }
 function fmtPhone(phone){
   if (!phone) return '—';
   let d = String(phone).replace(/\D/g,'');
@@ -322,16 +323,18 @@ function agreementShortLabel(status){
   const s = status || 'אין הסכם';
   return s === 'נשלח הסכם לחתימה' ? 'נשלח לחתימה' : s;
 }
-function agreementBadge(status){
+function agreementBadge(status, agreementNumber){
   const s = status || 'אין הסכם';
   const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
-  return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>`;
+  const numLine = (s === 'יש הסכם חתום' && agreementNumber) ? `<span class="agr-num">מס' הסכם: ${esc(agreementNumber)}</span>` : '';
+  return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>${numLine}`;
 }
 // שורת מידע פשוטה בלבד (לא באנר בולט) - השדה האמיתי הניתן לעריכה נמצא בטופס עצמו למטה
-function agreementBanner(status){
+function agreementBanner(status, agreementNumber){
   const s = status || 'אין הסכם';
   const icon = s === 'יש הסכם חתום' ? '✅' : (s === 'נשלח הסכם לחתימה' ? '📤' : '⭕');
-  return `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(agreementShortLabel(s))}</div>`;
+  const numLine = (s === 'יש הסכם חתום' && agreementNumber) ? `<div class="agr-note" style="margin-top:2px;">מס' הסכם: ${esc(agreementNumber)}</div>` : '';
+  return `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(agreementShortLabel(s))}</div>${numLine}`;
 }
 
 function renderTable(){
@@ -401,7 +404,7 @@ function renderTable(){
       <td data-label="סטטוס"><span class="badge">${esc(b.status||'—')}</span></td>
       <td data-label="הוזן ע&quot;י">${b.created_by ? `<b style="color:${creatorColor(b.created_by) || '#333'};">${esc(userName(b.created_by))}</b>` : 'לא ידוע'}</td>
       <td data-label="מטופל ע&quot;י">${b.handled_by ? esc(userName(b.handled_by)) : '—'}</td>
-      <td data-label="סטטוס הסכם">${agreementBadge(b.agreement_status)}</td>
+      <td data-label="סטטוס הסכם">${agreementBadge(b.agreement_status, b.agreement_number)}</td>
       <td data-label="מצגת" style="text-align:center;">${b.anon_presentation_name
         ? `<span title="${esc(b.anon_presentation_name)}" style="display:inline-block;background:#e3f5e9;color:#1f7a45;font-weight:700;font-size:.75rem;padding:4px 10px;border-radius:20px;white-space:nowrap;">📄 יש מצגת</span>`
         : `<span style="display:inline-block;background:#f2f0e8;color:#999;font-weight:600;font-size:.75rem;padding:4px 10px;border-radius:20px;white-space:nowrap;">אין מצגת</span>`}</td>
@@ -472,7 +475,7 @@ function openBizForm(id){
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>${biz ? 'עריכת עסק' : 'עסק חדש'}</h3>
-    ${biz ? agreementBanner(biz.agreement_status) : ''}
+    ${biz ? agreementBanner(biz.agreement_status, biz.agreement_number) : ''}
     <form id="bizForm">
       <div class="form-grid">
         <div class="section-h">זיהוי</div>

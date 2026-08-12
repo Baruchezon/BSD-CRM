@@ -146,7 +146,7 @@ let ALL_LISTINGS = [];
 
 function fmtMoney(n){
   if (n === null || n === undefined || n === '') return null;
-  return '₪' + Number(n).toLocaleString('he-IL');
+  return Number(n).toLocaleString('he-IL') + ' ₪';
 }
 
 function esc(s){

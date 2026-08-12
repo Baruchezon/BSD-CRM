@@ -143,7 +143,7 @@ const supabaseClient = window.supabase.createClient(
   "sb_publishable_baq54BVGwvtjB8c7ZiegCQ_tAXevwfN"
 );
 
-function fmtMoney(n){ return '₪' + Number(n||0).toLocaleString('he-IL'); }
+function fmtMoney(n){ return Number(n||0).toLocaleString('he-IL') + ' ₪'; }
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 document.querySelectorAll('input[name="pay"]').forEach(r => {
@@ -293,9 +293,9 @@ function notifyAdminByEmail(d){
       'טלפון': d.phone,
       'אימייל': d.email,
       'כתובת': d.address,
-      'מחיר לפני מעמ': (LEAD.price_before_vat || 0) + ' ש"ח',
-      'מעמ': (LEAD.vat_amount || 0) + ' ש"ח',
-      'סהכ לתשלום': (LEAD.price_with_vat || 0) + ' ש"ח',
+      'מחיר לפני מעמ': Number(LEAD.price_before_vat || 0).toLocaleString('he-IL') + ' ₪',
+      'מעמ': Number(LEAD.vat_amount || 0).toLocaleString('he-IL') + ' ₪',
+      'סהכ לתשלום': Number(LEAD.price_with_vat || 0).toLocaleString('he-IL') + ' ₪',
       'אמצעי תשלום שנבחר': d.payMethod,
       'תאריך ושעת חתימה': now,
       'הערה': 'קובץ ה-PDF החתום המלא נשמר בכרטיס המתעניין במערכת BSD CRM (מסך הכשרות ומתעניינים) וניתן להורדה משם.'

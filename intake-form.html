@@ -43,7 +43,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 06:10</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 15:50</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -248,6 +248,7 @@ function toast(msg){
 }
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function g(id){ const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+function fmtNum(v){ if(!v) return v; const n = Number(String(v).replace(/,/g,'')); return isNaN(n) ? v : n.toLocaleString('he-IL'); }
 function num(v){ if(!v) return null; const n = Number(String(v).replace(/[^\d.]/g,'')); return isNaN(n) ? null : n; }
 
 function rowHtml(label, value){
@@ -270,7 +271,7 @@ function buildPrintTemplate(){
   body += rowHtml('תחום פעילות', g('field'));
   body += rowHtml('כתובת מלאה', g('address'));
   body += rowHtml('כמה מילים על העסק', g('short_description'));
-  body += rowHtml('מחיר מבוקש (₪)', g('asking_price'));
+  body += rowHtml('מחיר מבוקש (₪)', fmtNum(g('asking_price')));
   body += rowHtml('מספר עובדים', g('employees_count'));
   body += rowHtml('שם בעל העסק', g('owner_name'));
   body += rowHtml('טלפון', g('owner_phone'));
@@ -285,9 +286,9 @@ function buildPrintTemplate(){
   body += rowHtml('ציוד קיים', g('equipment'));
   body += rowHtml('לקוחות - אופי הלקוחות', g('customers'));
   body += rowHtml('ספקים', g('suppliers'));
-  body += rowHtml('מחזור שנתי משוער (₪)', g('annual_revenue'));
-  body += rowHtml('רווח תפעולי שנתי משוער (₪)', g('operating_profit'));
-  body += rowHtml('רווח נקי שנתי משוער (₪)', g('net_profit'));
+  body += rowHtml('מחזור שנתי משוער (₪)', fmtNum(g('annual_revenue')));
+  body += rowHtml('רווח תפעולי שנתי משוער (₪)', fmtNum(g('operating_profit')));
+  body += rowHtml('רווח נקי שנתי משוער (₪)', fmtNum(g('net_profit')));
   body += rowHtml('למה מוכרים את העסק', g('sale_reason'));
   body += rowHtml('חוזקות בולטות', g('strengths'));
   body += rowHtml('חולשות / אתגרים', g('weaknesses'));

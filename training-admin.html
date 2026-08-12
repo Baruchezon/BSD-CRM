@@ -49,7 +49,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 06:10</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 15:50</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -157,7 +157,7 @@ const BIZ_FILES_BUCKET = window.BSD_CONFIG.STORAGE_BUCKET;
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
 function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL', {hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit',year:'numeric'}); }catch(e){ return iso; } }
-function fmtMoney(n){ if(n===null||n===undefined) return '—'; return '₪' + Number(n).toLocaleString('he-IL'); }
+function fmtMoney(n){ if(n===null||n===undefined||n==='') return '—'; return Number(n).toLocaleString('he-IL') + ' ₪'; }
 function fmtPhone(phone){
   if (!phone) return '—';
   let d = String(phone).replace(/\D/g,'');
@@ -500,7 +500,7 @@ async function submitSendForm(e){
     }).eq('id', existingLeadId);
     if (error){ toast('שגיאה בעדכון: ' + error.message); return; }
     leadId = existingLeadId;
-    await logEvent(leadId, `נשלח טופס רישום ב-WhatsApp (מחיר: ${price_before_vat} ₪ + מע"מ)`);
+    await logEvent(leadId, `נשלח טופס רישום ב-WhatsApp (מחיר: ${price_before_vat.toLocaleString('he-IL')} ₪ + מע"מ)`);
   } else {
     token = randomToken();
     const { data, error } = await window.supabaseClient.from('training_leads').insert({
@@ -655,7 +655,7 @@ async function resendWhatsapp(id){
   const lead = ALL_LEADS.find(l => l.id === id);
   if (!lead) return;
   const link = trainingFormLink(lead.form_token);
-  const message = `שלום ${lead.first_name},\n\nבהמשך להתעניינותך בהכשרת מתווכי העסקים של BSD Business Brokers Israel, מצורף קישור אישי לקבלת פרטי ההכשרה ולהשלמת טופס הרישום.\n\n${link}\n\nמחיר ההכשרה עבורך הוא ${lead.price_before_vat} ₪ בתוספת מע"מ.\n\nלאחר מעבר על פרטי ההכשרה ניתן למלא את הפרטים, לאשר ולחתום ישירות בטופס.\n\nBSD Business Brokers Israel`;
+  const message = `שלום ${lead.first_name},\n\nבהמשך להתעניינותך בהכשרת מתווכי העסקים של BSD Business Brokers Israel, מצורף קישור אישי לקבלת פרטי ההכשרה ולהשלמת טופס הרישום.\n\n${link}\n\nמחיר ההכשרה עבורך הוא ${Number(lead.price_before_vat||0).toLocaleString('he-IL')} ₪ בתוספת מע"מ.\n\nלאחר מעבר על פרטי ההכשרה ניתן למלא את הפרטים, לאשר ולחתום ישירות בטופס.\n\nBSD Business Brokers Israel`;
   let waPhone = (lead.phone||'').replace(/\D/g,'');
   if (waPhone.startsWith('0')) waPhone = '972' + waPhone.slice(1);
   window.open('https://wa.me/' + waPhone + '?text=' + encodeURIComponent(message), '_blank');
