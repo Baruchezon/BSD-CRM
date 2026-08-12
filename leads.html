@@ -43,6 +43,7 @@
   .badge-seller{background:#f7ecd4;color:#8a651e;}
   .badge-partner{background:#ece3fa;color:#5a2f9e;}
   .agr-badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;white-space:nowrap;}
+  .agr-num{display:block;font-size:.68rem;color:#666;margin-top:3px;white-space:nowrap;}
   .agr-none{background:#f1f1f1;color:#777;}
   .agr-sent{background:#fdeccb;color:#8a5a10;}
   .agr-signed{background:#dff0e4;color:#245c40;}
@@ -90,7 +91,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 06:10</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 15:50</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -360,7 +361,7 @@ function renderTable(){
     if (search){
       const hay = [l.full_name, l.first_name, l.last_name, l.phone, l.phone2, l.city, l.source, l.status, l.email,
         l.business_name, l.business_field, l.business_city, l.requested_field, l.requested_area,
-        l.requested_categories, l.company, l.address, l.notes].join(' ').toLowerCase();
+        l.requested_categories, l.company, l.address, l.id_number, l.notes].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -424,7 +425,7 @@ function renderTable(){
       <td data-label="אימייל" class="email-cell" title="${esc(l.email||'')}">${esc(l.email||'—')}</td>
       <td data-label="הוזן ע&quot;י">${l.created_by ? `<b style="color:${creatorColor(l.created_by) || '#333'};">${esc(userName(l.created_by))}</b>` : 'לא ידוע'}</td>
       <td data-label="מטופל ע&quot;י">${l.handled_by ? esc(userName(l.handled_by)) : '—'}</td>
-      <td data-label="סטטוס הסכם">${agreementBadge(l.agreement_status)}</td>
+      <td data-label="סטטוס הסכם">${agreementBadge(l.agreement_status, l.agreement_number)}</td>
       <td data-label="נוצר">${fmtDate(l.created_at)}</td>
       <td data-label="עודכן">${fmtDate(l.updated_at)}</td>
       <td data-label="הערות" class="notes-cell">${esc(l.notes||'—')}</td>
@@ -449,16 +450,18 @@ function agreementShortLabel(status){
   const s = status || 'אין הסכם';
   return s === 'נשלח הסכם לחתימה' ? 'נשלח לחתימה' : s;
 }
-function agreementBadge(status){
+function agreementBadge(status, agreementNumber){
   const s = status || 'אין הסכם';
   const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
-  return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>`;
+  const numLine = (s === 'יש הסכם חתום' && agreementNumber) ? `<span class="agr-num">מס' הסכם: ${esc(agreementNumber)}</span>` : '';
+  return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>${numLine}`;
 }
 // שורת מידע פשוטה בלבד (לא באנר בולט) - השדה האמיתי הניתן לעריכה נמצא בטופס עצמו למטה
-function agreementBanner(status){
+function agreementBanner(status, agreementNumber){
   const s = status || 'אין הסכם';
   const icon = s === 'יש הסכם חתום' ? '✅' : (s === 'נשלח הסכם לחתימה' ? '📤' : '⭕');
-  return `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(agreementShortLabel(s))}</div>`;
+  const numLine = (s === 'יש הסכם חתום' && agreementNumber) ? `<div class="agr-note" style="margin-top:2px;">מס' הסכם: ${esc(agreementNumber)}</div>` : '';
+  return `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(agreementShortLabel(s))}</div>${numLine}`;
 }
 
 ['fSearch','fType','fStatus','fAgreement','fCreatedBy','fSort'].forEach(id=>{
@@ -496,7 +499,7 @@ function openLeadForm(id, forcedType){
   const typeLabel = type==='buyer' ? 'קונה' : type==='partner' ? 'שותפות/השקעה' : 'מוכר';
   modal.innerHTML = `
     <h3>${lead ? 'עריכת' : 'הוספת'} ${typeLabel}</h3>
-    ${lead ? agreementBanner(lead.agreement_status) : ''}
+    ${lead ? agreementBanner(lead.agreement_status, lead.agreement_number) : ''}
     ${lead ? '' : `<div class="type-toggle">
       <button type="button" class="${type==='buyer'?'active buyer':''}" onclick="switchLeadType('buyer', null)">קונה</button>
       <button type="button" class="${type==='partner'?'active partner':''}" onclick="switchLeadType('partner', null)">שותפות/השקעה</button>
@@ -516,6 +519,7 @@ function openLeadForm(id, forcedType){
         ${fieldRow('email','דוא"ל', lead?.email, 'email')}
         ${fieldRow('city','עיר', lead?.city)}
         ${fieldRow('address','כתובת', lead?.address)}
+        ${fieldRow('id_number','ת.ז / ח.פ / עוסק מורשה', lead?.id_number)}
         ${fieldRow('company','חברה', lead?.company)}
         ${fieldRow('source','מקור הפנייה', lead?.source)}
         ${fieldRow('status','סטטוס', lead?.status)}
@@ -593,7 +597,7 @@ async function saveLead(e){
     first_name: g('first_name'), last_name: g('last_name'),
     full_name: [g('first_name'), g('last_name')].filter(Boolean).join(' '),
     phone: g('phone'), phone2: g('phone2'), email: g('email'),
-    city: g('city'), address: g('address'), company: g('company'),
+    city: g('city'), address: g('address'), id_number: g('id_number'), company: g('company'),
     source: g('source'), status: g('status'), notes: g('notes'),
     handled_by: g('handled_by') || null,
     agreement_status: g('agreement_status') || 'אין הסכם'
