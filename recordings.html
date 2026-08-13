@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<script>
+// בדיקת גרסה אוטומטית - עוקפת בעיות קאשינג של דפדפני מובייל (ראו הסבר ב-match-detail.html)
+(function(){
+  try{
+    var KEY = 'bsd_ver_seen';
+    var seen = sessionStorage.getItem(KEY);
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        if (seen && seen !== v.version){
+          sessionStorage.setItem(KEY, v.version);
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        } else if (!seen){
+          sessionStorage.setItem(KEY, v.version);
+        }
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - הקלטות</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=202608120610">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:900px;margin:0 auto;}
+  .wrap h2{color:var(--navy);margin-bottom:4px;}
+  .wrap .sub{color:#8a93ab;font-size:.85rem;margin-bottom:22px;}
+  .rec-card{background:#fff;border-radius:14px;padding:18px 22px;margin-bottom:14px;box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 8px 20px rgba(14,27,52,.10),0 2px 6px rgba(14,27,52,.06);}
+  .rec-title{font-weight:700;color:var(--navy);font-size:1.05rem;}
+  .rec-meta{color:#8a93ab;font-size:.78rem;margin:3px 0 8px;}
+  .rec-summary{font-size:.85rem;color:#444;margin-bottom:10px;}
+  .rec-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .rec-actions .btn{padding:7px 14px;font-size:.8rem;}
+  .empty{color:#999;font-size:.85rem;padding:20px 0;text-align:center;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:.92rem;font-weight:700;color:#3a3f4d;margin-bottom:6px;}
+  .field input,.field select,.field textarea{width:100%;padding:12px 13px;border:1.5px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:1rem;box-sizing:border-box;}
+  .field textarea{min-height:78px;resize:vertical;}
+  .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
+  .overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:14px;max-width:560px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);box-sizing:border-box;overflow-x:hidden;}
+  .modal *{box-sizing:border-box;max-width:100%;}
+  .modal h3{margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+  @media(max-width:640px){
+    .overlay{padding:0;align-items:stretch;}
+    .modal{max-width:100%;width:100%;min-height:100%;border-radius:0;padding:20px 16px 100px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 23:59</span></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+  <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
+  <div class="nav">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="leads-hub.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לידים</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+  </div>
+  <div class="nav">
+    <a href="tasks.html" class="nav-tasks">✅ משימות</a>
+    <a href="needs-attention.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">🚨 דורש טיפול</a>
+    <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
+    <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+  </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <h2>🎙️ הקלטות</h2>
+  <div class="sub">הקלטות כלליות שלא משויכות לעסק, קונה או התאמה ספציפיים</div>
+
+  <button class="btn btn-primary" style="margin-bottom:20px;" onclick="startGeneralRecording()">🔴 הקלטה חדשה</button>
+
+  <div id="recordingsList"><div class="empty">טוען...</div></div>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
+<div id="toastBox"></div>
+
+<script src="js/config.js?v=202608111530"></script>
+<script src="js/supabaseClient.js?v=202608111530"></script>
+<script src="js/auth.js?v=202608111530"></script>
+<script src="js/standaloneRecording.js?v=202608132300"></script>
+<script>
+let CURRENT_PROFILE = null;
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
+function toast(msg){
+  const isError = /שגיאה|error/i.test(msg);
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed;bottom:24px;left:24px;z-index:200;background:${isError ? '#b00020' : 'var(--navy)'};color:#fff;padding:14px 18px;border-radius:10px;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.35);max-width:380px;`;
+  el.textContent = msg;
+  document.getElementById('toastBox').appendChild(el);
+  setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
+}
+
+function startGeneralRecording(){
+  window.openStandaloneRecording({
+    type: 'general', id: 'general', label: 'הקלטה כללית',
+    currentProfile: CURRENT_PROFILE,
+    onSaved: loadRecordings
+  });
+}
+
+async function loadRecordings(){
+  const box = document.getElementById('recordingsList');
+  let q = window.supabaseClient.from('match_meetings').select('*').is('match_id', null).is('business_id', null).is('buyer_id', null).is('deleted_at', null).order('meeting_date', {ascending:false});
+  const { data, error } = await q;
+  if (error){ box.innerHTML = `<div class="empty" style="color:#a02c1d;">שגיאה: ${esc(error.message)}</div>`; return; }
+  if (!data || !data.length){ box.innerHTML = '<div class="empty">אין עדיין הקלטות. לחץ "הקלטה חדשה" כדי להתחיל.</div>'; return; }
+  box.innerHTML = data.map(m=>`
+    <div class="rec-card">
+      <div class="rec-title">🎙️ ${esc(m.title || m.meeting_type || 'הקלטה')}</div>
+      <div class="rec-meta">${fmtDate(m.meeting_date)} ${m.start_time?('· '+m.start_time.slice(0,5)):''}${m.location?(' · '+esc(m.location)):''}</div>
+      ${m.summary_text ? `<div class="rec-summary">${esc(m.summary_text).slice(0,220)}${m.summary_text.length>220?'…':''}</div>` : ''}
+      <div class="rec-actions">
+        <button class="btn btn-ghost" onclick='window.viewStandaloneMeetingPdf(${JSON.stringify(m)})'>👁️ צפה</button>
+        <button class="btn btn-ghost" onclick='window.downloadStandaloneMeetingPdf(${JSON.stringify(m)})'>📄 הורד PDF</button>
+        <button class="btn btn-ghost" onclick='window.sendStandaloneMeetingEmail(${JSON.stringify(m)}, ${JSON.stringify(m.title||m.meeting_type)}, CURRENT_PROFILE)'>✉️ שלח</button>
+      </div>
+    </div>`).join('');
+}
+
+(async function init(){
+  CURRENT_PROFILE = await requireAuth();
+  if (!CURRENT_PROFILE) return;
+  document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+  await loadRecordings();
+})();
+</script>
+</body>
+</html>
