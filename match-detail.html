@@ -508,22 +508,73 @@ function openEmailModal(meetingId){
     <div class="field"><label>למי לשלוח</label>
       <select id="emTarget">
         <option value="self">אליי (${esc(CURRENT_PROFILE.email)})</option>
-        <option value="buyer">קונה</option>
-        <option value="biz">בעל העסק</option>
+        <option value="buyer" ${BUYER?.email?'':'disabled'}>קונה ${BUYER?.email?('('+esc(BUYER.email)+')'):'(אין כתובת מייל)'}</option>
+        <option value="biz" ${BIZ?.owner_email?'':'disabled'}>בעל העסק ${BIZ?.owner_email?('('+esc(BIZ.owner_email)+')'):'(אין כתובת מייל)'}</option>
         <option value="other">כתובת אחרת</option>
       </select>
     </div>
     <div class="field" id="emOtherField" style="display:none;"><label>כתובת מייל</label><input type="email" id="emOtherAddr"></div>
+    <div class="field"><label>נושא</label><input type="text" id="emSubject" value="${esc('סיכום ' + (m.meeting_type||'פגישה') + ' - ' + (MATCH.disclosure_level>=2 ? (BIZ?.internal_name||'') : 'עסק'))}"></div>
     <div class="field"><label>תוכן</label><select id="emContent"><option value="body">סיכום בגוף המייל</option><option value="pdf">PDF מצורף</option><option value="both">שניהם</option></select></div>
-    <div class="field"><label>תצוגה מקדימה של הטקסט</label><textarea style="min-height:140px;" readonly>${esc(m.summary_text||'')}\n\nהחלטות: ${esc(m.decisions||'')}\nפעולה הבאה: ${esc(m.next_action||'')}</textarea></div>
-    <div class="stage-note">שליחת המייל בפועל תופעל לאחר שיוגדר ספק מייל לשליחה (Edge Function) — כרגע זו תצוגה מקדימה בלבד.</div>
+    <div class="field"><label>תצוגה מקדימה של הטקסט</label><textarea id="emPreviewText" style="min-height:140px;" readonly>${esc(m.summary_text||'')}\n\nהחלטות: ${esc(m.decisions||'')}\nפעולה הבאה: ${esc(m.next_action||'')}</textarea></div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">סגור</button>
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="sendEmail('${meetingId}')">שלח</button>
     </div>`;
   document.getElementById('overlay').classList.add('open');
   document.getElementById('emTarget').addEventListener('change', function(){
     document.getElementById('emOtherField').style.display = this.value === 'other' ? '' : 'none';
   });
+}
+
+function blobToBase64(blob){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function sendEmail(meetingId){
+  const target = document.getElementById('emTarget').value;
+  const to = target === 'self' ? CURRENT_PROFILE.email
+    : target === 'buyer' ? BUYER?.email
+    : target === 'biz' ? BIZ?.owner_email
+    : document.getElementById('emOtherAddr').value.trim();
+  if (!to){ toast('אין כתובת מייל תקינה'); return; }
+
+  const subject = document.getElementById('emSubject').value || 'סיכום פגישה';
+  const contentMode = document.getElementById('emContent').value;
+  const bodyText = document.getElementById('emPreviewText').value;
+  const htmlBody = `<div dir="rtl" style="font-family:Heebo,Rubik,sans-serif;white-space:pre-wrap;">${esc(bodyText)}</div>`;
+
+  const sendBtn = document.querySelector('.modal-actions .btn-primary');
+  if (sendBtn){ sendBtn.disabled = true; sendBtn.textContent = 'שולח...'; }
+
+  try {
+    let attachment_base64, attachment_filename;
+    if (contentMode === 'pdf' || contentMode === 'both'){
+      const { blob, filename } = await generateMeetingPdfBlob(meetingId);
+      attachment_base64 = await blobToBase64(blob);
+      attachment_filename = filename;
+    }
+    const { data, error } = await window.supabaseClient.functions.invoke('send-match-summary', {
+      body: {
+        to, subject,
+        html_body: contentMode === 'pdf' ? '<div dir="rtl">מצורף PDF עם סיכום הפגישה.</div>' : htmlBody,
+        reply_to: CURRENT_PROFILE.email,
+        attachment_base64, attachment_filename
+      }
+    });
+    if (error || data?.error){ throw new Error(data?.error || error.message); }
+    await logAudit('send_email', { meeting_id: meetingId, to, subject });
+    toast('המייל נשלח בהצלחה');
+    closeModal();
+  } catch(e){
+    toast('שגיאה בשליחת המייל: ' + (e.message || e));
+    if (sendBtn){ sendBtn.disabled = false; sendBtn.textContent = 'שלח'; }
+  }
 }
 
 function renderHero(){
