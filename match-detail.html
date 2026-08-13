@@ -121,7 +121,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 21:15</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 21:45</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -431,6 +431,147 @@ async function saveMeeting(id){
   await loadEverything();
 }
 
+// ---------- מסך אישור AI עשיר (הקלטה בלבד) - כל הפרטים, גרפיקה ברורה ----------
+let CURRENT_AI_TASKS_RICH = [];
+
+function aiCard(icon, label, innerHtml){
+  return `<div style="border:1.5px solid #e3dfd0;border-radius:10px;padding:14px 16px;margin-bottom:14px;background:#fdfcf9;">
+    <div style="font-weight:700;color:var(--navy);font-size:1rem;margin-bottom:8px;display:flex;align-items:center;gap:8px;">${icon} ${label}</div>
+    ${innerHtml}
+  </div>`;
+}
+
+function openAiApprovalModal(aiData, meetingType, recLocation){
+  const a = aiData.analysis || {};
+  CURRENT_AI_APPLY = a;
+  CURRENT_MEETING_PARTICIPANTS = [];
+  CURRENT_AI_TRANSCRIPT = aiData.transcript || '';
+  CURRENT_AI_TASKS_RICH = (Array.isArray(a.tasks) ? a.tasks : []).map(t => ({
+    title: t.title, due_date: t.due_hint || null, assigned_to: CURRENT_PROFILE.id, approved: true
+  }));
+  if (a.follow_up_meeting_date){
+    CURRENT_AI_TASKS_RICH.push({ title: 'לקבוע פגישת המשך', due_date: a.follow_up_meeting_date, assigned_to: CURRENT_PROFILE.id, approved: true });
+  }
+
+  const now = new Date();
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>✅ אישור סיכום שנוצר מהקלטה</h3>
+    <div style="background:#f7f5ee;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-weight:700;color:var(--navy);">🏢 ${esc(BIZ?.internal_name||'—')} &nbsp;⇄&nbsp; 🧍 ${esc(BUYER?.full_name||'—')}</div>
+
+    <div style="display:flex;gap:10px;">
+      <div class="field" style="flex:1;"><label>סוג</label><select id="aiType">${MEETING_TYPES.map(t=>`<option value="${t}" ${t===meetingType?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="field" style="flex:1;"><label>תאריך</label><input type="date" id="aiDate" value="${now.toISOString().slice(0,10)}"></div>
+      <div class="field" style="flex:1;"><label>שעה</label><input type="time" id="aiStart" value="${now.toTimeString().slice(0,5)}"></div>
+    </div>
+    <div class="field"><label>מיקום</label><input type="text" id="aiLocation" value="${esc(recLocation)}"></div>
+
+    ${aiCard('📄','תמלול מלא', `<textarea readonly style="min-height:110px;color:#555;background:#fff;">${esc(CURRENT_AI_TRANSCRIPT || '(התמלול חזר ריק)')}</textarea>`)}
+    ${aiCard('📝','עיקרי הדברים', `<textarea id="aiSummary" style="min-height:80px;">${esc(a.summary)}</textarea>`)}
+    ${aiCard('✅','החלטות', `<textarea id="aiDecisions" style="min-height:60px;">${esc(a.decisions)}</textarea>`)}
+    ${aiCard('❓','שאלות פתוחות', `<textarea id="aiQuestions" style="min-height:60px;">${esc(a.open_questions)}</textarea>`)}
+    ${aiCard('📎','מסמכים שהתבקשו', `<textarea id="aiDocs" style="min-height:50px;">${esc(a.requested_documents)}</textarea>`)}
+    ${aiCard('➡️','פעולה הבאה', `<input type="text" id="aiNextAction" value="${esc(a.next_action)}">`)}
+    ${aiCard('🔄','סטטוס מוצע להתאמה', `
+      <select id="aiSuggestedStatus"><option value="">— ללא שינוי —</option>${MATCH_STATUSES.map(s=>`<option value="${s}" ${a.suggested_status===s?'selected':''}>${s}</option>`).join('')}</select>
+      ${a.drop_reason_category ? `<div style="font-size:.8rem;color:#8a6a10;margin-top:6px;">סיבת ירידה משוערת: ${esc(a.drop_reason_category)}</div>` : ''}
+    `)}
+    ${aiCard('✅','משימות שזוהו - סמן אילו לאשר, ואפשר לשנות אחראי/תאריך', `<div id="aiTasksListRich"></div>`)}
+    ${aiCard('🧍','משתתפים', `
+      <div id="participantsList" style="margin-bottom:8px;"></div>
+      <div style="display:flex;gap:6px;">
+        <select id="newPartType" style="flex:1;">${PARTICIPANT_TYPES.map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
+        <input type="text" id="newPartName" placeholder="שם" style="flex:2;">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="addParticipantLocal()">הוסף</button>
+      </div>
+    `)}
+    ${aiCard('🗒️','הערות נוספות (ידני)', `<textarea id="aiNotes" style="min-height:60px;"></textarea>`)}
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="saveAiApproval()">✅ אשר ושמור</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+  renderParticipantsLocal();
+  renderAiTasksRich();
+}
+function renderAiTasksRich(){
+  const box = document.getElementById('aiTasksListRich');
+  if (!CURRENT_AI_TASKS_RICH.length){ box.innerHTML = '<div class="empty-note">לא זוהו משימות בתמלול</div>'; return; }
+  box.innerHTML = CURRENT_AI_TASKS_RICH.map((t,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #eee;">
+      <input type="checkbox" ${t.approved?'checked':''} onchange="CURRENT_AI_TASKS_RICH[${i}].approved=this.checked">
+      <input type="text" value="${esc(t.title)}" oninput="CURRENT_AI_TASKS_RICH[${i}].title=this.value" style="flex:2;min-width:160px;padding:8px;border:1px solid #d8d3c4;border-radius:6px;font-size:.95rem;">
+      <select onchange="CURRENT_AI_TASKS_RICH[${i}].assigned_to=this.value" style="flex:1;min-width:120px;padding:8px;border:1px solid #d8d3c4;border-radius:6px;font-size:.9rem;">${userOptions(t.assigned_to)}</select>
+      <input type="date" value="${t.due_date&&/^\d{4}-\d{2}-\d{2}$/.test(t.due_date)?t.due_date:''}" onchange="CURRENT_AI_TASKS_RICH[${i}].due_date=this.value" style="padding:8px;border:1px solid #d8d3c4;border-radius:6px;">
+    </div>`).join('');
+}
+
+async function saveAiApproval(){
+  const meetingType = document.getElementById('aiType').value;
+  const payload = {
+    match_id: MATCH_ID, business_id: MATCH.business_id, buyer_id: MATCH.buyer_id,
+    meeting_type: meetingType,
+    meeting_date: document.getElementById('aiDate').value || null,
+    start_time: document.getElementById('aiStart').value || null,
+    location: document.getElementById('aiLocation').value || null,
+    agent_id: CURRENT_PROFILE.id,
+    summary_text: document.getElementById('aiSummary').value || null,
+    decisions: document.getElementById('aiDecisions').value || null,
+    open_questions: document.getElementById('aiQuestions').value || null,
+    requested_documents: document.getElementById('aiDocs').value || null,
+    next_action: document.getElementById('aiNextAction').value || null,
+    suggested_status: document.getElementById('aiSuggestedStatus').value || null,
+    notes: document.getElementById('aiNotes').value || null,
+    status: 'סופי',
+    raw_transcript: CURRENT_AI_TRANSCRIPT || null,
+    created_by: CURRENT_PROFILE.id, updated_by: CURRENT_PROFILE.id, updated_at: new Date().toISOString()
+  };
+
+  const { data, error } = await window.supabaseClient.from('match_meetings').insert(payload).select().single();
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  const meetingId = data.id;
+
+  await window.supabaseClient.from('meeting_summary_versions').insert({
+    meeting_id: meetingId, version_number: 1, snapshot: payload, changed_by: CURRENT_PROFILE.id
+  }).then(null, ()=>{});
+
+  if (CURRENT_MEETING_PARTICIPANTS.length){
+    await window.supabaseClient.from('meeting_participants').insert(
+      CURRENT_MEETING_PARTICIPANTS.map(p=>({ ...p, meeting_id: meetingId }))
+    );
+  }
+
+  const matchUpdate = { last_action: `תועדה ${meetingType}`, last_action_at: new Date().toISOString() };
+  const nextAction = document.getElementById('aiNextAction').value;
+  const suggestedStatus = document.getElementById('aiSuggestedStatus').value;
+  if (nextAction) matchUpdate.next_action = nextAction;
+  if (suggestedStatus && MATCH_STATUSES.includes(suggestedStatus)){
+    matchUpdate.status = suggestedStatus;
+    if (suggestedStatus === 'לא רלוונטי' && CURRENT_AI_APPLY?.drop_reason_category) matchUpdate.drop_reason_category = CURRENT_AI_APPLY.drop_reason_category;
+  }
+  await window.supabaseClient.from('matches').update(matchUpdate).eq('id', MATCH_ID);
+  if (matchUpdate.status){
+    await window.supabaseClient.from('match_status_history').insert({ match_id: MATCH_ID, status: matchUpdate.status, changed_at: new Date().toISOString(), changed_by: CURRENT_PROFILE.id });
+  }
+
+  const approvedTasks = CURRENT_AI_TASKS_RICH.filter(t=>t.approved && t.title && t.title.trim());
+  if (approvedTasks.length){
+    await window.supabaseClient.from('tasks').insert(approvedTasks.map(t=>({
+      title: t.title, assigned_to: t.assigned_to || CURRENT_PROFILE.id,
+      due_date: (t.due_date && /^\d{4}-\d{2}-\d{2}$/.test(t.due_date)) ? t.due_date : null,
+      priority: 'רגילה', status: 'פתוחה',
+      match_id: MATCH_ID, business_id: MATCH.business_id, buyer_id: MATCH.buyer_id, source: 'ai_meeting'
+    })));
+  }
+
+  await logAudit('add_meeting', { meeting_id: meetingId, type: meetingType, ai_generated: true, approved_ai_tasks: approvedTasks.length });
+
+  toast(`הסיכום נשמר${approvedTasks.length ? ` + ${approvedTasks.length} משימות` : ''}`);
+  closeModal();
+  await loadEverything();
+}
+
 async function deleteMeeting(id){
   if (!confirm('למחוק את הסיכום? ניתן לשחזר דרך Admin (Soft Delete).')) return;
   const { error } = await window.supabaseClient.from('match_meetings').update({ deleted_at: new Date().toISOString(), deleted_by: CURRENT_PROFILE.id }).eq('id', id);
@@ -621,7 +762,7 @@ async function runAnalysis(storagePath, meetingType, recLocation){
     return;
   }
   closeModal();
-  openMeetingModal(null, meetingType, result, recLocation);
+  openAiApprovalModal(result, meetingType, recLocation);
 }
 
 function showRecordingError(message, storagePath, meetingType, recLocation){
