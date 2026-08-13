@@ -89,7 +89,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 15:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 16:15</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -462,6 +462,19 @@ async function downloadMeetingPdf(meetingId){
   } catch(e){ toast('שגיאה ביצירת PDF: ' + (e.message||e)); }
 }
 
+// ---------- טקסט משותף לשיתוף (וואטסאפ/מייל) - תוויות ברורות, בלי שורות ריקות למידע שלא מולא ----------
+function meetingShareText(m){
+  const lines = [];
+  lines.push(`סיכום ${m.meeting_type||'פגישה'} - ${fmtDate(m.meeting_date)}`);
+  lines.push(`${BIZ?.internal_name||''} / ${BUYER?.full_name||''}`);
+  lines.push('');
+  if (m.summary_text) lines.push(`עיקרי הדברים:\n${m.summary_text}`);
+  if (m.decisions) lines.push(`\nהחלטות:\n${m.decisions}`);
+  if (m.open_questions) lines.push(`\nשאלות פתוחות:\n${m.open_questions}`);
+  lines.push(`\nפעולה הבאה: ${m.next_action||'—'}`);
+  return lines.join('\n');
+}
+
 // ---------- וואטסאפ ----------
 function resolveWaPhone(target){
   let phone = target === 'buyer' ? BUYER?.phone : target === 'biz' ? BIZ?.owner_phone : '';
@@ -470,11 +483,12 @@ function resolveWaPhone(target){
 }
 function openWhatsappModal(meetingId){
   const m = window._lastMeetings.find(x=>x.id===meetingId);
-  const text = `סיכום ${m.meeting_type||'פגישה'} - ${fmtDate(m.meeting_date)}\n${BIZ?.internal_name||''} / ${BUYER?.full_name||''}\n\n${m.summary_text||''}\n\nפעולה הבאה: ${m.next_action||'—'}`;
+  const text = meetingShareText(m);
   const signed = buyerAgreementSigned();
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>שליחה ב-WhatsApp — תצוגה מקדימה</h3>
+    ${!m.summary_text ? `<div class="stage-note">⚠️ לא הוזנו "עיקרי הדברים" בסיכום הזה — ההודעה תישלח כמעט ריקה. אפשר לחזור ל"✏️ ערוך" ולמלא לפני השליחה.</div>` : ''}
     ${!signed ? `<div class="disclosure-warning" style="display:block;background:#fbe1de;border-color:#e39185;color:#7a1f10;font-weight:700;">🚫 לקונה הזה <u>אין הסכם חתום</u>! מותר לשלוח אליו (או למספר אחר) אך ורק מידע אנונימי — ללא שם עסק, כתובת או פרטי בעלים. שליחה לבעל העסק עצמו אינה מוגבלת.</div>` : ''}
     <div class="field"><label>למי לשלוח</label>
       <select id="waTarget" onchange="onWaTargetChange()">
@@ -547,7 +561,8 @@ function openEmailModal(meetingId){
     <div class="field" id="emOtherField" style="display:none;"><label>כתובת מייל לשליחה</label><input type="email" id="emOtherAddr" placeholder="name@example.com"></div>
     <div class="field"><label>נושא</label><input type="text" id="emSubject" value="${esc('סיכום ' + (m.meeting_type||'פגישה') + ' - ' + (MATCH.disclosure_level>=2 ? (BIZ?.internal_name||'') : 'עסק'))}"></div>
     <div class="field"><label>תוכן</label><select id="emContent"><option value="body">סיכום בגוף המייל</option><option value="pdf">PDF מצורף</option><option value="both">שניהם</option></select></div>
-    <div class="field"><label>תצוגה מקדימה של הטקסט</label><textarea id="emPreviewText" style="min-height:140px;" readonly>${esc(m.summary_text||'')}\n\nהחלטות: ${esc(m.decisions||'')}\nפעולה הבאה: ${esc(m.next_action||'')}</textarea></div>
+    ${!m.summary_text ? `<div class="stage-note">⚠️ לא הוזנו "עיקרי הדברים" בסיכום הזה — הגוף כמעט ריק. אפשר לחזור ל"✏️ ערוך" ולמלא לפני השליחה.</div>` : ''}
+    <div class="field"><label>תצוגה מקדימה של הטקסט</label><textarea id="emPreviewText" style="min-height:140px;" readonly>${esc(meetingShareText(m))}</textarea></div>
     <div class="field" id="emConfirmAnonField" style="display:none;">
       <label style="display:flex;align-items:flex-start;gap:8px;font-weight:700;color:#7a1f10;"><input type="checkbox" id="emConfirmAnon" onchange="onEmailGateChange()" style="width:auto;margin-top:3px;"> אני מוודא שהתוכן שלמעלה אנונימי בלבד — לא כולל שם עסק, כתובת או פרטי בעלים</label>
     </div>
