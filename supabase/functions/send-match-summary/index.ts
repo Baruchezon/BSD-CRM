@@ -60,10 +60,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const { to, subject, html_body, reply_to, attachment_base64, attachment_filename } = body;
+    const { to, subject, html_body, body_text, reply_to, attachment_base64, attachment_filename } = body;
 
-    if (!to || !subject || !html_body) {
-      return new Response(JSON.stringify({ error: 'חסרים שדות חובה: to, subject, html_body' }), {
+    if (!to || !subject || (!html_body && !body_text)) {
+      return new Response(JSON.stringify({ error: 'חסרים שדות חובה: to, subject, ותוכן (body_text)' }), {
         status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' }
       });
     }
@@ -77,11 +77,15 @@ Deno.serve(async (req: Request) => {
       },
     });
 
+    // הערה: denomailer עם html מייצר לפעמים גוף עם קידוד quoted-printable
+    // שגוי כשיש תווים לא-לטיניים (עברית) - הודעת מייל יוצאת "מקולקלת"
+    // (=d7=a9=d7=99... נשאר גולמי, לא מפוענח). כדי למנוע את זה בוודאות,
+    // שולחים כטקסט פשוט (content) בלבד ולא כ-HTML.
     const sendConfig: Record<string, unknown> = {
       from: `BSD Business Brokers Israel <${GMAIL_USER}>`,
       to,
       subject,
-      html: html_body,
+      content: body_text || String(html_body).replace(/<[^>]+>/g, ''),
     };
     if (reply_to) sendConfig.replyTo = reply_to;
     if (attachment_base64 && attachment_filename) {
