@@ -89,7 +89,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 17:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 17:30</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -612,7 +612,6 @@ async function sendEmail(meetingId){
   const subject = document.getElementById('emSubject').value || 'סיכום פגישה';
   const contentMode = document.getElementById('emContent').value;
   const bodyText = document.getElementById('emPreviewText').value;
-  const htmlBody = `<div dir="rtl" style="font-family:Heebo,Rubik,sans-serif;white-space:pre-wrap;">${esc(bodyText)}</div>`;
   const forcePdfLevel = needsGate ? 1 : null; // רשת ביטחון נוספת - PDF תמיד אנונימי לקונה ללא הסכם חתום, גם אם רמת החשיפה בהתאמה גבוהה יותר
 
   const sendBtn = document.getElementById('emSendBtn');
@@ -621,14 +620,18 @@ async function sendEmail(meetingId){
   try {
     let attachment_base64, attachment_filename;
     if (contentMode === 'pdf' || contentMode === 'both'){
-      const { blob, filename } = await generateMeetingPdfBlob(meetingId, forcePdfLevel);
+      const { blob } = await generateMeetingPdfBlob(meetingId, forcePdfLevel);
       attachment_base64 = await blobToBase64(blob);
-      attachment_filename = filename;
+      // שם קובץ באנגלית בלבד לצירוף במייל - שמות עבריים בקובץ מצורף
+      // חשופים לאותה בעיית קידוד כמו גוף ה-HTML; בהורדה ישירה (📄 PDF)
+      // זה לא רלוונטי כי זה attribute של הדפדפן, לא כותרת MIME.
+      const m = window._lastMeetings.find(x=>x.id===meetingId);
+      attachment_filename = `meeting-summary-${(m?.meeting_date||'').replace(/[^0-9-]/g,'')||'file'}.pdf`;
     }
     const { data, error } = await window.supabaseClient.functions.invoke('send-match-summary', {
       body: {
         to, subject,
-        html_body: contentMode === 'pdf' ? '<div dir="rtl">מצורף PDF עם סיכום הפגישה.</div>' : htmlBody,
+        body_text: contentMode === 'pdf' ? 'מצורף PDF עם סיכום הפגישה.' : bodyText,
         reply_to: CURRENT_PROFILE.email,
         attachment_base64, attachment_filename
       }
