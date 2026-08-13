@@ -62,7 +62,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 12.08.2026 23:20</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 10:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
       <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -93,6 +93,7 @@
     <a href="tasks.html" class="nav-tasks">✅ משימות</a>
     <a href="messages.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;position:relative;">💬 הודעות<span id="navMsgBadge" style="display:none;position:absolute;top:2px;left:2px;background:#b3402c;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;font-weight:700;"></span></a>
     <a href="matches.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
+    <a href="needs-attention.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">🚨 דורש טיפול</a>
     <div id="navToolsWrap" style="position:relative;display:inline-block;">
     <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">🛠️ כלים ▾</button>
     <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
@@ -134,13 +135,19 @@
     </select>
   </div>
 
+  <div style="display:flex;gap:8px;margin-bottom:14px;">
+    <button type="button" class="btn btn-sm" id="viewBtn_list" onclick="setViewMode('list')">📋 רשימה</button>
+    <button type="button" class="btn btn-sm" id="viewBtn_by_business" onclick="setViewMode('by_business')">🏢 לפי עסק</button>
+    <button type="button" class="btn btn-sm" id="viewBtn_by_buyer" onclick="setViewMode('by_buyer')">🧍 לפי קונה</button>
+  </div>
+
   <div class="table-scroll-wrap" style="position:relative;">
   <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
   <table>
-    <thead>
-      <tr><th>קונה</th><th>עסק</th><th>אחוז התאמה</th><th>סטטוס</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>נוצר</th><th>עודכן</th></tr>
+    <thead id="matchTableHead">
+      <tr><th>קונה</th><th>עסק</th><th>סטטוס</th><th>רמת חשיפה</th><th>פעולה הבאה</th><th>תאריך פעולה הבאה</th><th>אחראי</th><th>מטופל ע"י</th><th>עודכן</th></tr>
     </thead>
-    <tbody id="matchBody"><tr class="empty-row"><td colspan="8">טוען...</td></tr></tbody>
+    <tbody id="matchBody"><tr class="empty-row"><td colspan="9">טוען...</td></tr></tbody>
   </table>
   </div>
   <div style="display:flex;justify-content:center;gap:10px;margin:8px 0 2px;">
@@ -159,29 +166,51 @@
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script>
-const MATCH_STATUSES = ['התאמה חדשה','נשלח לקונה - ממתין לתגובה (אנונימי)','נשלחו מסמכים לאחר חתימת הסכם',
+// 13.08.2026: הוחלף לרשימת ה-19 הסטטוסים המוגדרת באפיון (סעיף 3). התאמות
+// קיימות עם סטטוס מהרשימה הישנה לא עודכנו רטרואקטיבית - ראו LEGACY_STATUSES.
+const MATCH_STATUSES = ['מידע ראשוני','ממתין לתגובת קונה','מתעניין','ממתין להסכם או NDA','חומר מורחב נשלח',
+  'בבדיקת הקונה','ממתין למידע מהעסק','ממתין לקונה','שיחה עם בעל העסק','פגישה','משא ומתן',
+  'הצעה התקבלה','כתב כוונות','בדיקת נאותות','עורכי דין','לקראת סגירה','נסגר בהצלחה','בהשהיה','לא רלוונטי'];
+
+// ערכי סטטוס ישנים שעדיין עשויים להופיע בהתאמות שנוצרו לפני 13.08.2026 -
+// נשמרים כאופציה נבחרת בטופס כדי שלא "ייעלמו" מהתצוגה, בלי לאלץ מיפוי אוטומטי.
+const LEGACY_STATUSES = ['התאמה חדשה','נשלח לקונה - ממתין לתגובה (אנונימי)','נשלחו מסמכים לאחר חתימת הסכם',
   'נקבעה פגישה','התקיימה פגישה','המשך מו"מ','לא מתאים לקונה','העסקה נסגרה','העסקה נעצרה'];
 
-// Statuses that need a meeting date field
-const STATUSES_WITH_MEETING_DATE = ['נקבעה פגישה','התקיימה פגישה','המשך מו"מ'];
-// Statuses that need the meeting-summary field (a meeting has already taken place)
-const STATUSES_WITH_MEETING_SUMMARY = ['התקיימה פגישה','המשך מו"מ','לא מתאים לקונה','העסקה נסגרה'];
-// Status that needs the "reason stopped" field
-const STATUSES_WITH_STOP_REASON = ['העסקה נעצרה'];
+// סיבות ירידה מבוקרות (סעיף 22 באפיון)
+const DROP_REASON_CATEGORIES = ['מחיר','תחום','מיקום','רווחיות','מימון','גודל העסק','סיכון',
+  'לא מתאים לקונה','לא מתאים לבעל העסק','בחר עסק אחר','הקונה עצר חיפוש','אחר'];
 
-// Color scheme: white = untouched/new (needs attention), yellow = materials/interest
-// sent and awaiting a reply, green (progressively deeper) = things moving forward
-// (meeting scheduled → held → negotiating), red = negative outcomes, teal = closed/won.
+// Statuses that need a meeting date field
+const STATUSES_WITH_MEETING_DATE = ['פגישה','שיחה עם בעל העסק','משא ומתן', ...LEGACY_STATUSES.filter(s=>['נקבעה פגישה','התקיימה פגישה','המשך מו"מ'].includes(s))];
+// Statuses that need the meeting-summary field (a meeting has already taken place)
+const STATUSES_WITH_MEETING_SUMMARY = ['שיחה עם בעל העסק','פגישה','משא ומתן','לא רלוונטי','נסגר בהצלחה', ...LEGACY_STATUSES.filter(s=>['התקיימה פגישה','המשך מו"מ','לא מתאים לקונה','העסקה נסגרה'].includes(s))];
+// Status that needs the "reason stopped" field / drop reason category
+const STATUSES_WITH_STOP_REASON = ['לא רלוונטי','העסקה נעצרה'];
+
+// Color scheme: white/cream = early stage (needs attention), yellow/orange = materials
+// sent and awaiting a reply, green (progressively deeper) = things moving forward,
+// teal = late-stage/closing, red = negative/not-relevant, grey = on hold.
 const STATUS_STYLES = {
-  'התאמה חדשה':                              { bg:'#ffffff', color:'#4a5164', border:'1px solid #d8d3c4' },
-  'נשלח לקונה - ממתין לתגובה (אנונימי)':       { bg:'#fdeccb', color:'#8a5a10' },
-  'נשלחו מסמכים לאחר חתימת הסכם':             { bg:'#fbe1a8', color:'#7a4d0a' },
-  'נקבעה פגישה':                              { bg:'#dff0e4', color:'#245c40' },
-  'התקיימה פגישה':                            { bg:'#b7e8cb', color:'#186a41' },
-  'המשך מו"מ':                                { bg:'#6fce97', color:'#0f4a2c' },
-  'לא מתאים לקונה':                           { bg:'#f9d6d2', color:'#8a2e22' },
-  'העסקה נסגרה':                              { bg:'linear-gradient(90deg,#2fae7a,#2f8fc9)', color:'#ffffff' },
-  'העסקה נעצרה':                              { bg:'#ef9d92', color:'#5c140a' }
+  'מידע ראשוני':            { bg:'#ffffff', color:'#4a5164', border:'1px solid #d8d3c4' },
+  'ממתין לתגובת קונה':      { bg:'#fdf3dd', color:'#8a6a10' },
+  'מתעניין':                { bg:'#fdeccb', color:'#8a5a10' },
+  'ממתין להסכם או NDA':     { bg:'#fbe1a8', color:'#7a4d0a' },
+  'חומר מורחב נשלח':        { bg:'#f6d998', color:'#6e4406' },
+  'בבדיקת הקונה':           { bg:'#eaf3e0', color:'#3c6b28' },
+  'ממתין למידע מהעסק':      { bg:'#dfeaf6', color:'#25507a' },
+  'ממתין לקונה':            { bg:'#dfeaf6', color:'#25507a' },
+  'שיחה עם בעל העסק':       { bg:'#dff0e4', color:'#245c40' },
+  'פגישה':                  { bg:'#b7e8cb', color:'#186a41' },
+  'משא ומתן':               { bg:'#6fce97', color:'#0f4a2c' },
+  'הצעה התקבלה':            { bg:'#4fc48a', color:'#0c3d24' },
+  'כתב כוונות':             { bg:'#7fd6c9', color:'#0d443c' },
+  'בדיקת נאותות':           { bg:'#5cc7b8', color:'#0a352f' },
+  'עורכי דין':              { bg:'#43b8ac', color:'#08302a' },
+  'לקראת סגירה':            { bg:'#2fae9e', color:'#ffffff' },
+  'נסגר בהצלחה':            { bg:'linear-gradient(90deg,#2fae7a,#2f8fc9)', color:'#ffffff' },
+  'בהשהיה':                 { bg:'#e4e2da', color:'#5c5a52' },
+  'לא רלוונטי':             { bg:'#f9d6d2', color:'#8a2e22' }
 };
 function statusStyle(status){
   const st = STATUS_STYLES[status] || { bg:'#eef1f6', color:'var(--navy)' };
@@ -190,19 +219,16 @@ function statusStyle(status){
 // A soft tint for the whole row, so anything past "new match" visibly stands out
 // in the list itself (not just in the small status badge).
 const ROW_TINTS = {
-  'התאמה חדשה':                              '',
-  'נשלח לקונה - ממתין לתגובה (אנונימי)':       '#fffaf0',
-  'נשלחו מסמכים לאחר חתימת הסכם':             '#fdf3dd',
-  'נקבעה פגישה':                              '#eef8f1',
-  'התקיימה פגישה':                            '#e2f5e9',
-  'המשך מו"מ':                                '#d3f0dd',
-  'לא מתאים לקונה':                           '#fdedeb',
-  'העסקה נסגרה':                              '#e7f6f2',
-  'העסקה נעצרה':                              '#fbe2df'
+  'מידע ראשוני': '', 'ממתין לתגובת קונה':'#fffaf0', 'מתעניין':'#fdf3dd', 'ממתין להסכם או NDA':'#fdf0d8',
+  'חומר מורחב נשלח':'#fbecc9', 'בבדיקת הקונה':'#f2f7ec', 'ממתין למידע מהעסק':'#eef4fa', 'ממתין לקונה':'#eef4fa',
+  'שיחה עם בעל העסק':'#eef8f1', 'פגישה':'#e2f5e9', 'משא ומתן':'#d3f0dd', 'הצעה התקבלה':'#c9ecdb',
+  'כתב כוונות':'#e0f4f0', 'בדיקת נאותות':'#d7f0ea', 'עורכי דין':'#cdeae3', 'לקראת סגירה':'#c3e6de',
+  'נסגר בהצלחה':'#e7f6f2', 'בהשהיה':'#f4f3ee', 'לא רלוונטי':'#fdedeb'
 };
 function rowTint(status){
   return ROW_TINTS[status] || '';
 }
+const DISCLOSURE_LABELS = {1:'רמה 1 · אנונימי', 2:'רמה 2 · מורחב', 3:'רמה 3 · מלא'};
 
 let ALL_MATCHES = [], ALL_BUYERS = [], ALL_BIZ = [], ALL_USERS = [], CURRENT_PROFILE = null;
 let AGENT_OWN_BIZ_IDS = [], AGENT_OWN_LEAD_IDS = [];
@@ -314,6 +340,40 @@ async function loadMatches(){
   renderTable();
 }
 
+let VIEW_MODE = 'list'; // 'list' | 'by_business' | 'by_buyer'
+
+function setViewMode(mode){
+  VIEW_MODE = mode;
+  ['list','by_business','by_buyer'].forEach(m=>{
+    const btn = document.getElementById('viewBtn_'+m);
+    btn.className = 'btn btn-sm ' + (m===mode ? 'btn-primary' : 'btn-ghost');
+  });
+  renderTable();
+}
+
+function daysSince(iso){
+  if (!iso) return '—';
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (d <= 0) return 'היום';
+  return d + ' ימים';
+}
+
+function matchRowHTML(m, opts){
+  opts = opts || {};
+  const cells = [];
+  if (!opts.hideBuyer) cells.push(`<td data-label="קונה">${esc(buyerName(m.buyer_id))}</td>`);
+  if (!opts.hideBiz) cells.push(`<td data-label="עסק">${esc(bizName(m.business_id))}</td>`);
+  cells.push(`<td data-label="סטטוס"><span class="status-pill" style="${statusStyle(m.status)}">${esc(m.status)}</span></td>`);
+  cells.push(`<td data-label="רמת חשיפה">${esc(DISCLOSURE_LABELS[m.disclosure_level||1]||'—')}</td>`);
+  cells.push(`<td data-label="פעולה הבאה">${esc(m.next_action)||'<span style="color:#c0392b;font-weight:700;">— אין —</span>'}</td>`);
+  cells.push(`<td data-label="תאריך פעולה הבאה">${fmtDate(m.next_action_at)}</td>`);
+  cells.push(`<td data-label="אחראי">${esc(userName(m.next_action_owner))}</td>`);
+  if (opts.showDaysIdle) cells.push(`<td data-label="ימים ללא פעילות">${daysSince(m.last_action_at||m.updated_at)}</td>`);
+  else cells.push(`<td data-label="מטופל ע&quot;י">${esc(userName(m.current_handler))}</td>`);
+  if (!opts.showDaysIdle) cells.push(`<td data-label="עודכן">${fmtDate(m.updated_at)}</td>`);
+  return `<tr style="cursor:pointer;${rowTint(m.status) ? `background:${rowTint(m.status)};` : ''}" onclick="location.href='match-detail.html?id=${m.id}'">${cells.join('')}</tr>`;
+}
+
 function renderTable(){
   const fBuyer = document.getElementById('fBuyer').value;
   const fBiz = document.getElementById('fBiz').value;
@@ -335,38 +395,56 @@ function renderTable(){
     return new Date(b.updated_at) - new Date(a.updated_at);
   });
 
+  const head = document.getElementById('matchTableHead');
   const body = document.getElementById('matchBody');
-  if (rows.length === 0){ body.innerHTML = '<tr class="empty-row"><td colspan="8">לא נמצאו התאמות</td></tr>'; return; }
 
-  body.innerHTML = rows.map(m=>`
-    <tr style="cursor:pointer;${rowTint(m.status) ? `background:${rowTint(m.status)};` : ''}" onclick="openMatchForm('${m.id}')">
-      <td data-label="קונה">
-        <div style="display:flex;align-items:flex-start;gap:8px;">
-          <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
-            <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
-            <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
-              <a href="javascript:void(0)" onclick="openMatchForm('${m.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">📂 פתח / ערוך</a>
-              <a href="javascript:void(0)" onclick="deleteMatch('${m.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>
-            </div>
-          </div>
-          <div>${esc(buyerName(m.buyer_id))}</div>
-        </div>
-      </td>
-      <td data-label="עסק">${esc(bizName(m.business_id))}</td>
-      <td data-label="אחוז התאמה">${m.match_percent!==null&&m.match_percent!==undefined ? m.match_percent+'%' : '—'}</td>
-      <td data-label="סטטוס"><span class="status-pill" style="${statusStyle(m.status)}">${esc(m.status)}</span></td>
-      <td data-label="הוזן ע&quot;י">${m.created_by ? esc(userName(m.created_by)) : 'לא ידוע'}</td>
-      <td data-label="מטופל ע&quot;י">${esc(userName(m.current_handler))}</td>
-      <td data-label="נוצר">${fmtDate(m.created_at)}</td>
-      <td data-label="עודכן">${fmtDate(m.updated_at)}</td>
-    </tr>
-  `).join('');
+  if (rows.length === 0){
+    head.innerHTML = '<tr><th>—</th></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="9">לא נמצאו התאמות</td></tr>';
+    return;
+  }
+
+  if (VIEW_MODE === 'by_business'){
+    head.innerHTML = '<tr><th>קונה</th><th>סטטוס</th><th>רמת חשיפה</th><th>פעולה הבאה</th><th>תאריך פעולה הבאה</th><th>אחראי</th><th>ימים ללא פעילות</th></tr>';
+    const groups = {};
+    rows.forEach(m=>{ (groups[m.business_id] = groups[m.business_id] || []).push(m); });
+    const bizIds = Object.keys(groups).sort((a,b)=>bizName(a).localeCompare(bizName(b),'he'));
+    body.innerHTML = bizIds.map(bizId=>`
+      <tr><td colspan="7" style="background:var(--navy);color:#fff;font-weight:700;padding:9px 14px;">🏢 ${esc(bizName(bizId))} <span style="font-weight:400;opacity:.75;">(${groups[bizId].length} קונים)</span></td></tr>
+      ${groups[bizId].map(m=>matchRowHTML(m,{hideBiz:true, showDaysIdle:true})).join('')}
+    `).join('');
+    return;
+  }
+
+  if (VIEW_MODE === 'by_buyer'){
+    head.innerHTML = '<tr><th>עסק</th><th>סטטוס</th><th>רמת חשיפה</th><th>פעולה הבאה</th><th>תאריך פעולה הבאה</th><th>אחראי</th><th>ימים ללא פעילות</th></tr>';
+    const groups = {};
+    rows.forEach(m=>{ (groups[m.buyer_id] = groups[m.buyer_id] || []).push(m); });
+    const buyerIds = Object.keys(groups).sort((a,b)=>buyerName(a).localeCompare(buyerName(b),'he'));
+    body.innerHTML = buyerIds.map(buyerId=>`
+      <tr><td colspan="7" style="background:var(--navy);color:#fff;font-weight:700;padding:9px 14px;">🧍 ${esc(buyerName(buyerId))} <span style="font-weight:400;opacity:.75;">(${groups[buyerId].length} עסקים)</span></td></tr>
+      ${groups[buyerId].map(m=>matchRowHTML(m,{hideBuyer:true, showDaysIdle:true})).join('')}
+    `).join('');
+    return;
+  }
+
+  head.innerHTML = '<tr><th>קונה</th><th>עסק</th><th>סטטוס</th><th>רמת חשיפה</th><th>פעולה הבאה</th><th>תאריך פעולה הבאה</th><th>אחראי</th><th>מטופל ע"י</th><th>עודכן</th></tr>';
+  body.innerHTML = rows.map(m=>matchRowHTML(m)).join('');
 }
 
 ['fBuyer','fBiz','fStatus','fCreatedBy','fSort'].forEach(id=>document.getElementById(id).addEventListener('change', renderTable));
 
 function statusOptions(selected){
-  return MATCH_STATUSES.map(s=>`<option value="${s}" ${s===selected?'selected':''}>${s}</option>`).join('');
+  let html = MATCH_STATUSES.map(s=>`<option value="${s}" ${s===selected?'selected':''}>${s}</option>`).join('');
+  if (selected && LEGACY_STATUSES.includes(selected) && !MATCH_STATUSES.includes(selected)){
+    html += `<optgroup label="ערכים ישנים (מלפני 13.08.2026)">` +
+      LEGACY_STATUSES.map(s=>`<option value="${s}" ${s===selected?'selected':''}>${s}</option>`).join('') +
+      `</optgroup>`;
+  }
+  return html;
+}
+function disclosureOptions(selected){
+  return [1,2,3].map(n=>`<option value="${n}" ${Number(selected||1)===n?'selected':''}>${DISCLOSURE_LABELS[n]}</option>`).join('');
 }
 function userOptions(selected){
   return '<option value="">— ללא —</option>' + ALL_USERS.map(u=>{
@@ -396,13 +474,15 @@ async function openMatchForm(id){
           selectedValue: match?.business_id || '', selectedLabel: bizLabel(match?.business_id), disabled: !!match
         })}</div>
         <div class="field"><label>אחוז התאמה</label><input type="number" id="match_percent" min="0" max="100" value="${match?.match_percent??''}"></div>
-        <div class="field"><label>סטטוס</label><select id="status" onchange="onMatchStatusChange()">${statusOptions(match?.status||'התאמה חדשה')}</select></div>
+        <div class="field"><label>סטטוס</label><select id="status" onchange="onMatchStatusChange()">${statusOptions(match?.status||'מידע ראשוני')}</select></div>
         <div class="field"><label>תאריך/שעה לסטטוס זה</label><input type="datetime-local" id="status_changed_at" value="${nowLocalDatetime()}"></div>
+        <div class="field"><label>רמת חשיפה</label><select id="disclosure_level">${disclosureOptions(match?.disclosure_level)}</select></div>
         <div class="field"><label>מטפל כרגע</label><select id="current_handler">${userOptions(match?.current_handler)}</select></div>
         <div class="field"><label>תגובת הקונה</label><input type="text" id="buyer_response" value="${esc(match?.buyer_response)}"></div>
         <div class="field" id="meetingDateField" style="display:none;"><label>תאריך הפגישה</label><input type="date" id="meeting_date" value="${match?.meeting_date||''}"></div>
         <div class="field full" id="meetingSummaryField" style="display:none;"><label>סיכום הפגישה</label><textarea id="meeting_summary">${esc(match?.meeting_summary)}</textarea></div>
-        <div class="field full" id="stopReasonField" style="display:none;"><label>סיבת עצירת העסקה</label><textarea id="stopped_reason">${esc(match?.stopped_reason)}</textarea></div>
+        <div class="field" id="stopReasonField" style="display:none;"><label>קטגוריית סיבת ירידה</label><select id="drop_reason_category"><option value="">— בחר —</option>${DROP_REASON_CATEGORIES.map(c=>`<option value="${c}" ${match?.drop_reason_category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+        <div class="field full" id="stopReasonNoteField" style="display:none;"><label>הערה לסיבת הירידה</label><textarea id="stopped_reason">${esc(match?.stopped_reason)}</textarea></div>
         <div class="field full"><label>סיבת ההתאמה</label><textarea id="match_reason">${esc(match?.match_reason)}</textarea></div>
         <div class="field full"><label>הערות</label><textarea id="notes">${esc(match?.notes)}</textarea></div>
       </div>
@@ -460,9 +540,11 @@ function onMatchStatusChange(){
   const dateField = document.getElementById('meetingDateField');
   const summaryField = document.getElementById('meetingSummaryField');
   const stopField = document.getElementById('stopReasonField');
+  const stopNoteField = document.getElementById('stopReasonNoteField');
   if (dateField) dateField.style.display = STATUSES_WITH_MEETING_DATE.includes(status) ? '' : 'none';
   if (summaryField) summaryField.style.display = STATUSES_WITH_MEETING_SUMMARY.includes(status) ? '' : 'none';
   if (stopField) stopField.style.display = STATUSES_WITH_STOP_REASON.includes(status) ? '' : 'none';
+  if (stopNoteField) stopNoteField.style.display = STATUSES_WITH_STOP_REASON.includes(status) ? '' : 'none';
 }
 
 async function loadParticipants(matchId){
@@ -505,14 +587,16 @@ async function saveMatch(e){
   const statusChangedAtRaw = g('status_changed_at');
   const statusChangedAt = statusChangedAtRaw ? new Date(statusChangedAtRaw).toISOString() : new Date().toISOString();
 
-  if (STATUSES_WITH_STOP_REASON.includes(status) && !(g('stopped_reason')||'').trim()){
-    toast('יש למלא סיבה לעצירת העסקה'); return;
+  if (STATUSES_WITH_STOP_REASON.includes(status) && !(g('drop_reason_category')||'').trim()){
+    toast('יש לבחור קטגוריית סיבה כשההתאמה עוברת ל"לא רלוונטי"'); return;
   }
 
   const extraFields = {
     meeting_date: STATUSES_WITH_MEETING_DATE.includes(status) ? (g('meeting_date') || null) : null,
     meeting_summary: STATUSES_WITH_MEETING_SUMMARY.includes(status) ? g('meeting_summary') : null,
-    stopped_reason: STATUSES_WITH_STOP_REASON.includes(status) ? g('stopped_reason') : null
+    stopped_reason: STATUSES_WITH_STOP_REASON.includes(status) ? g('stopped_reason') : null,
+    drop_reason_category: STATUSES_WITH_STOP_REASON.includes(status) ? g('drop_reason_category') : null,
+    disclosure_level: g('disclosure_level') ? Number(g('disclosure_level')) : 1
   };
 
   const schemaMissing = (err) => err && /column|schema cache/i.test(err.message || '');
@@ -537,6 +621,11 @@ async function saveMatch(e){
       await window.supabaseClient.from('match_status_history').insert({
         match_id: matchId, status, changed_at: statusChangedAt, changed_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null
       });
+      await window.supabaseClient.from('audit_log').insert({
+        table_name: 'matches', record_id: matchId, action: 'status_change',
+        actor_id: CURRENT_PROFILE ? CURRENT_PROFILE.id : null,
+        details: { from: prevMatch ? prevMatch.status : null, to: status }
+      }).then(null, ()=>{}); // audit_log אופציונלי - לא חוסם שמירה אם עדיין לא הורץ ה-migration
     }
   } else {
     const buyerId = g('buyer_id'), bizId = g('business_id');
@@ -588,6 +677,17 @@ async function deleteMatch(id){
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
   refreshNavMsgBadge();
   await loadMatches();
+
+  // כניסה עמוקה מכרטיס עסק/קונה: matches.html?view=by_business&business_id=X
+  // או ?view=by_buyer&buyer_id=X (סעיפים 23-24 באפיון)
+  const params = new URLSearchParams(location.search);
+  const viewParam = params.get('view');
+  const bizParam = params.get('business_id');
+  const buyerParam = params.get('buyer_id');
+  if (bizParam){ document.getElementById('fBiz').value = bizParam; const bi=document.getElementById('fBizBox_input'); if (bi) bi.value = bizLabel(bizParam) || bi.value; }
+  if (buyerParam){ document.getElementById('fBuyer').value = buyerParam; const byi=document.getElementById('fBuyerBox_input'); if (byi) byi.value = buyerLabel(buyerParam) || byi.value; }
+  if (viewParam === 'by_business' || viewParam === 'by_buyer') setViewMode(viewParam);
+  else renderTable();
 })();
 </script>
 </body>
