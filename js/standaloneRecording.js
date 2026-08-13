@@ -162,6 +162,7 @@
     function card(icon,label,inner){ return `<div style="border:1.5px solid #e3dfd0;border-radius:10px;padding:14px 16px;margin-bottom:14px;background:#fdfcf9;box-sizing:border-box;"><div style="font-weight:700;color:#0e1b34;font-size:1rem;margin-bottom:8px;">${icon} ${label}</div>${inner}</div>`; }
     modal.innerHTML = `
       <h3>✅ אישור סיכום — ${esc(ctx.label)}</h3>
+      ${ctx.type === 'general' ? `<div class="field"><label>כותרת (הוצע אוטומטית מהתמלול, ניתן לערוך)</label><input type="text" id="apTitle" value="${esc(a.suggested_title || meetingType)}"></div>` : ''}
       <div style="display:flex;gap:10px;">
         <div class="field" style="flex:1;"><label>סוג</label><select id="apType">${MEETING_TYPES.map(t=>`<option value="${t}" ${t===meetingType?'selected':''}>${t}</option>`).join('')}</select></div>
         <div class="field" style="flex:1;"><label>תאריך</label><input type="date" id="apDate" value="${now.toISOString().slice(0,10)}"></div>
@@ -197,9 +198,11 @@
 
   window._bsdRecSave = async function(){
     const meetingType = document.getElementById('apType').value;
+    const titleField = document.getElementById('apTitle');
     const payload = {
       business_id: ctx.type==='business' ? ctx.id : null,
       buyer_id: ctx.type==='buyer' ? ctx.id : null,
+      title: titleField ? (titleField.value.trim() || null) : null,
       meeting_type: meetingType,
       meeting_date: document.getElementById('apDate').value || null,
       start_time: document.getElementById('apStart').value || null,
@@ -220,8 +223,8 @@
       meeting_id: data.id, version_number: 1, snapshot: payload, changed_by: ctx.currentProfile.id
     }).then(null, ()=>{});
 
-    // גם כהערה רגילה בכרטיס - כדי שיהיה גלוי מיד בפאנל ההערות הקיים
-    if (payload.summary_text){
+    // גם כהערה רגילה בכרטיס - כדי שיהיה גלוי מיד בפאנל ההערות הקיים (רק כשיש כרטיס מקושר)
+    if (payload.summary_text && ctx.type !== 'general'){
       await window.supabaseClient.from('record_notes').insert({
         table_name: ctx.type==='business' ? 'businesses' : 'leads', record_id: ctx.id,
         note_text: `🎙️ סיכום הקלטה (${meetingType}): ${payload.summary_text}`, author_id: ctx.currentProfile.id
@@ -262,11 +265,13 @@
   window.generateStandaloneMeetingPdf = async function(meeting, labelForFilename){
     await ensureHtml2pdf();
     ensurePrintTemplate();
-    document.getElementById('bsdRecPtTitle').textContent = meeting.meeting_type || 'סיכום';
+    const displayTitle = meeting.title || meeting.meeting_type || 'סיכום';
+    document.getElementById('bsdRecPtTitle').textContent = displayTitle;
     document.getElementById('bsdRecPtMeta').textContent = `${fmtDate(meeting.meeting_date)} ${meeting.start_time?('· '+meeting.start_time.slice(0,5)):''}${meeting.location?(' · '+meeting.location):''}`;
     let body = rowHtmlLocal('עיקרי הדברים', meeting.summary_text) + rowHtmlLocal('החלטות', meeting.decisions) + rowHtmlLocal('שאלות פתוחות', meeting.open_questions) + rowHtmlLocal('מסמכים שהתבקשו', meeting.requested_documents);
     document.getElementById('bsdRecPtBody').innerHTML = body;
-    const filename = `${labelForFilename} - ${fmtDate(meeting.meeting_date)}.pdf`;
+    const safeLabel = (labelForFilename || meeting.title || meeting.meeting_type || 'הקלטה').replace(/[\\/:*?"<>|]/g,'');
+    const filename = `${safeLabel} - ${fmtDate(meeting.meeting_date)}.pdf`;
 
     const overlayEl = document.getElementById('bsdRecCaptureOverlay');
     overlayEl.style.display = 'block';
@@ -295,5 +300,51 @@
     const { blob } = await window.generateStandaloneMeetingPdf(meeting, labelForFilename);
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
+  };
+
+  // ---------- שליחה במייל (עם PDF מצורף) ----------
+  window.sendStandaloneMeetingEmail = function(meeting, labelForFilename, currentProfile){
+    const modal = document.getElementById('modalBox');
+    modal.innerHTML = `
+      <h3>✉️ שליחה במייל</h3>
+      <div class="field"><label>כתובת מייל לשליחה</label><input type="email" id="bsdSendAddr" value="${esc(currentProfile.email)}"></div>
+      <div class="field"><label>נושא</label><input type="text" id="bsdSendSubject" value="${esc(meeting.title || meeting.meeting_type || 'סיכום')} - ${fmtDate(meeting.meeting_date)}"></div>
+      <div class="field"><label>תצוגה מקדימה</label><textarea readonly style="min-height:120px;">${esc(meeting.summary_text||'')}</textarea></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="window._bsdRecCancel()">ביטול</button>
+        <button type="button" class="btn btn-primary" id="bsdSendBtn" onclick='window._bsdSendConfirm(${JSON.stringify(meeting)}, ${JSON.stringify(labelForFilename)})'>שלח</button>
+      </div>`;
+    document.getElementById('overlay').classList.add('open');
+  };
+  window._bsdSendConfirm = async function(meeting, labelForFilename){
+    const to = document.getElementById('bsdSendAddr').value.trim();
+    const subject = document.getElementById('bsdSendSubject').value || 'סיכום';
+    if (!to){ toast('יש להזין כתובת מייל'); return; }
+    const btn = document.getElementById('bsdSendBtn');
+    btn.disabled = true; btn.textContent = 'שולח...';
+    try{
+      const { blob } = await window.generateStandaloneMeetingPdf(meeting, labelForFilename);
+      const attachment_base64 = await new Promise((resolve,reject)=>{
+        const r = new FileReader();
+        r.onloadend = () => resolve(String(r.result).split(',')[1]);
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+      });
+      const { data, error } = await window.supabaseClient.functions.invoke('send-match-summary', {
+        body: { to, subject, body_text: meeting.summary_text || 'מצורף PDF', attachment_base64, attachment_filename: 'summary.pdf' }
+      });
+      if (error || data?.error){
+        let detail = data?.error || error?.message || 'שגיאה לא ידועה';
+        if (error && error.context && typeof error.context.json === 'function'){
+          try { const b = await error.context.json(); if (b?.error) detail = b.error; } catch(e){}
+        }
+        throw new Error(detail);
+      }
+      toast('נשלח בהצלחה');
+      window._bsdRecCancel();
+    } catch(e){
+      toast('שגיאה בשליחה: ' + (e.message||e));
+      btn.disabled = false; btn.textContent = 'שלח';
+    }
   };
 })();
