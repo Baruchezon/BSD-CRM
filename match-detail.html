@@ -89,7 +89,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 12:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 14:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -136,9 +136,9 @@
 
 <div id="captureOverlay" style="display:none;position:fixed;inset:0;background:#fff;z-index:99999;overflow:auto;">
   <div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;color:#5c5648;font-size:13px;">⏳ יוצר קובץ סיכום...</div>
-  <div id="printTemplate" style="width:760px;max-width:92vw;margin:0 auto 40px;background:#fff;padding:36px;font-family:'Heebo','Rubik',sans-serif;color:#1c2333;direction:ltr;text-align:right;">
-    <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:14px;border-bottom:3px solid #c9a24b;padding-bottom:16px;margin-bottom:20px;">
-      <div style="width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #e8cf8a, #c9a24b 70%);display:flex;align-items:center;justify-content:center;font-weight:800;color:#1c2333;font-size:20px;">BSD</div>
+  <div id="printTemplate" style="width:760px;max-width:92vw;margin:0 auto 40px;background:#fff;padding:36px;font-family:'Heebo','Rubik','Arial Hebrew',sans-serif;color:#1c2333;direction:rtl;text-align:right;word-spacing:normal;">
+    <div style="display:flex;flex-direction:row;align-items:center;gap:14px;border-bottom:3px solid #c9a24b;padding-bottom:16px;margin-bottom:20px;">
+      <div style="width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #e8cf8a, #c9a24b 70%);display:flex;align-items:center;justify-content:center;font-weight:800;color:#1c2333;font-size:20px;flex-shrink:0;">BSD</div>
       <div>
         <div style="font-size:20px;font-weight:800;">BSD Business Brokers Israel</div>
         <div style="font-size:12px;color:#5c5648;">סיכום שיחה / פגישה</div>
@@ -146,9 +146,9 @@
     </div>
     <h2 id="pt_title" style="font-size:22px;margin:0 0 4px;"></h2>
     <div id="pt_meta" style="font-size:12px;color:#5c5648;margin-bottom:22px;"></div>
-    <div id="pt_body" style="font-size:14px;line-height:1.7;"></div>
+    <div id="pt_body" style="font-size:14px;line-height:1.8;"></div>
     <div style="margin-top:30px;border-top:1px solid #e8dfc4;padding-top:12px;font-size:11px;color:#5c5648;text-align:center;">
-      Baruch Ezon · BSD Business Brokers Israel · 054-2424999 · baruch@bsd-bbi.co.il · bsd-bbi.co.il
+      Baruch Ezon &nbsp;·&nbsp; BSD Business Brokers Israel &nbsp;·&nbsp; 054-2424999 &nbsp;·&nbsp; baruch@bsd-bbi.co.il &nbsp;·&nbsp; bsd-bbi.co.il
     </div>
   </div>
 </div>
@@ -463,39 +463,48 @@ async function downloadMeetingPdf(meetingId){
 }
 
 // ---------- וואטסאפ ----------
+function resolveWaPhone(target){
+  let phone = target === 'buyer' ? BUYER?.phone : target === 'biz' ? BIZ?.owner_phone : '';
+  phone = (phone||'').replace(/\D/g,'');
+  return phone;
+}
 function openWhatsappModal(meetingId){
   const m = window._lastMeetings.find(x=>x.id===meetingId);
   const text = `סיכום ${m.meeting_type||'פגישה'} - ${fmtDate(m.meeting_date)}\n${BIZ?.internal_name||''} / ${BUYER?.full_name||''}\n\n${m.summary_text||''}\n\nפעולה הבאה: ${m.next_action||'—'}`;
+  const dl = MATCH.disclosure_level || 1;
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>שליחה ב-WhatsApp — תצוגה מקדימה</h3>
     <div class="field"><label>למי לשלוח</label>
-      <select id="waTarget">
+      <select id="waTarget" onchange="onWaTargetChange()">
         <option value="buyer">קונה (${esc(BUYER?.full_name||'—')})</option>
         <option value="biz">בעל העסק (${esc(BIZ?.owner_name||'—')})</option>
         <option value="other">מספר אחר</option>
       </select>
     </div>
-    <div class="field" id="waOtherField" style="display:none;"><label>מספר טלפון</label><input type="text" id="waOtherPhone" placeholder="05XXXXXXXX"></div>
+    <div class="field"><label>מספר טלפון (ניתן לתקן)</label><input type="text" id="waPhone" placeholder="05XXXXXXXX" value="${esc(resolveWaPhone('buyer'))}"></div>
+    ${dl < 2 ? `<div class="disclosure-warning" style="display:block;">⚠️ רמת החשיפה בהתאמה זו היא <b>רמה 1 · אנונימי</b>. ודא שההודעה לא חושפת שם עסק, כתובת או פרטי בעלים לפני שליחה.</div>` : ''}
     <div class="field"><label>תוכן ההודעה</label><textarea id="waText" style="min-height:140px;">${esc(text)}</textarea></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
       <button class="btn btn-primary" onclick="sendWhatsapp('${meetingId}')">פתח ב-WhatsApp</button>
     </div>`;
   document.getElementById('overlay').classList.add('open');
-  document.getElementById('waTarget').addEventListener('change', function(){
-    document.getElementById('waOtherField').style.display = this.value === 'other' ? '' : 'none';
-  });
+}
+function onWaTargetChange(){
+  const target = document.getElementById('waTarget').value;
+  const phoneField = document.getElementById('waPhone');
+  if (target === 'other'){ phoneField.value = ''; phoneField.focus(); }
+  else phoneField.value = resolveWaPhone(target);
 }
 function sendWhatsapp(meetingId){
   const target = document.getElementById('waTarget').value;
-  let phone = target === 'buyer' ? BUYER?.phone : target === 'biz' ? BIZ?.owner_phone : document.getElementById('waOtherPhone').value;
-  phone = (phone||'').replace(/\D/g,'');
-  if (!phone){ toast('אין מספר טלפון זמין - הזן מספר ידנית'); return; }
+  let phone = document.getElementById('waPhone').value.replace(/\D/g,'');
+  if (!phone){ toast('יש להזין מספר טלפון'); return; }
   if (phone.startsWith('0')) phone = '972' + phone.slice(1);
   const text = encodeURIComponent(document.getElementById('waText').value);
   window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
-  logAudit('send_whatsapp', { meeting_id: meetingId, target });
+  logAudit('send_whatsapp', { meeting_id: meetingId, target, phone });
   closeModal();
 }
 
@@ -516,6 +525,7 @@ function openEmailModal(meetingId){
     <div class="field" id="emOtherField" style="display:none;"><label>כתובת מייל</label><input type="email" id="emOtherAddr"></div>
     <div class="field"><label>נושא</label><input type="text" id="emSubject" value="${esc('סיכום ' + (m.meeting_type||'פגישה') + ' - ' + (MATCH.disclosure_level>=2 ? (BIZ?.internal_name||'') : 'עסק'))}"></div>
     <div class="field"><label>תוכן</label><select id="emContent"><option value="body">סיכום בגוף המייל</option><option value="pdf">PDF מצורף</option><option value="both">שניהם</option></select></div>
+    ${(MATCH.disclosure_level||1) < 2 ? `<div class="disclosure-warning" style="display:block;">⚠️ רמת החשיפה בהתאמה זו היא <b>רמה 1 · אנונימי</b>. בדוק שהטקסט למטה לא חושף שם עסק, כתובת או פרטי בעלים לפני שליחה (PDF מסנן זאת אוטומטית, אך תוכן חופשי בגוף המייל לא).</div>` : ''}
     <div class="field"><label>תצוגה מקדימה של הטקסט</label><textarea id="emPreviewText" style="min-height:140px;" readonly>${esc(m.summary_text||'')}\n\nהחלטות: ${esc(m.decisions||'')}\nפעולה הבאה: ${esc(m.next_action||'')}</textarea></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
@@ -567,7 +577,15 @@ async function sendEmail(meetingId){
         attachment_base64, attachment_filename
       }
     });
-    if (error || data?.error){ throw new Error(data?.error || error.message); }
+    if (error || data?.error){
+      // supabase-js מסתיר את גוף השגיאה האמיתי מה-Edge Function מאחורי הודעה
+      // גנרית ("non-2xx status code") - מוציאים את הסיבה האמיתית מ-error.context.
+      let detail = data?.error || error?.message || 'שגיאה לא ידועה';
+      if (error && error.context && typeof error.context.json === 'function'){
+        try { const body = await error.context.json(); if (body?.error) detail = body.error; } catch(e){}
+      }
+      throw new Error(detail);
+    }
     await logAudit('send_email', { meeting_id: meetingId, to, subject });
     toast('המייל נשלח בהצלחה');
     closeModal();
@@ -628,6 +646,15 @@ function openStatusModal(){
   modal.innerHTML = `
     <h3>שינוי סטטוס</h3>
     <div class="field"><label>סטטוס חדש</label><select id="newStatus" onchange="onStatusModalChange()">${MATCH_STATUSES.map(s=>`<option value="${s}" ${s===MATCH.status?'selected':''}>${s}</option>`).join('')}</select></div>
+    <div class="field">
+      <label>רמת חשיפה נוכחית להתאמה זו</label>
+      <select id="newDisclosure" onchange="onStatusModalChange()">
+        <option value="1" ${(MATCH.disclosure_level||1)===1?'selected':''}>${DISCLOSURE_LABELS[1]}</option>
+        <option value="2" ${MATCH.disclosure_level===2?'selected':''}>${DISCLOSURE_LABELS[2]}</option>
+        <option value="3" ${MATCH.disclosure_level===3?'selected':''}>${DISCLOSURE_LABELS[3]}</option>
+      </select>
+    </div>
+    <div id="disclosureRiskWarning" class="disclosure-warning"></div>
     <div class="field" id="dropReasonField" style="display:none;"><label>קטגוריית סיבת ירידה</label><select id="dropReasonCat"><option value="">— בחר —</option>${DROP_REASON_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
     <div class="field" id="dropReasonNoteField" style="display:none;"><label>הערה</label><textarea id="dropReasonNote"></textarea></div>
     <div class="modal-actions">
@@ -637,21 +664,40 @@ function openStatusModal(){
   document.getElementById('overlay').classList.add('open');
   onStatusModalChange();
 }
+// סטטוסים שבהם בפועל מועבר מידע לקונה - אם רמת החשיפה עדיין נמוכה כאן, זה
+// בדיוק הרגע לוודא שלא נשלח בטעות יותר ממה שהקונה מורשה לקבל (סעיף 5).
+const STATUSES_THAT_SHARE_INFO = ['חומר מורחב נשלח','בבדיקת הקונה','שיחה עם בעל העסק','פגישה','משא ומתן','הצעה התקבלה','כתב כוונות','בדיקת נאותות'];
 function onStatusModalChange(){
-  const isDrop = document.getElementById('newStatus').value === 'לא רלוונטי';
+  const status = document.getElementById('newStatus').value;
+  const disclosure = Number(document.getElementById('newDisclosure').value);
+  const isDrop = status === 'לא רלוונטי';
   document.getElementById('dropReasonField').style.display = isDrop ? '' : 'none';
   document.getElementById('dropReasonNoteField').style.display = isDrop ? '' : 'none';
+
+  const warnBox = document.getElementById('disclosureRiskWarning');
+  if (STATUSES_THAT_SHARE_INFO.includes(status) && disclosure < 2){
+    warnBox.style.display = 'block';
+    warnBox.innerHTML = '⚠️ הסטטוס הזה מניח שכבר הועבר מידע לקונה, אבל רמת החשיפה עדיין <b>רמה 1 · אנונימי</b>. ודא שרמת החשיפה מעודכנת נכון לפני שממשיכים, כדי שלא יישלח בטעות מידע מזהה למי שלא מורשה לקבל אותו.';
+  } else if (status === 'בדיקת נאותות' && disclosure < 3){
+    warnBox.style.display = 'block';
+    warnBox.innerHTML = '⚠️ בדיקת נאותות בדרך כלל דורשת <b>רמה 3 · מלא</b>. ודא שזה אכן המצב.';
+  } else {
+    warnBox.style.display = 'none';
+  }
 }
 async function saveStatusChange(){
   const newStatus = document.getElementById('newStatus').value;
+  const newDisclosure = Number(document.getElementById('newDisclosure').value);
   const isDrop = newStatus === 'לא רלוונטי';
   const dropCat = isDrop ? document.getElementById('dropReasonCat').value : null;
   if (isDrop && !dropCat){ toast('יש לבחור קטגוריית סיבה'); return; }
   const dropNote = isDrop ? document.getElementById('dropReasonNote').value : null;
   const prevStatus = MATCH.status;
+  const prevDisclosure = MATCH.disclosure_level || 1;
 
   const { error } = await window.supabaseClient.from('matches').update({
-    status: newStatus, last_action: `שינוי סטטוס ל"${newStatus}"`, last_action_at: new Date().toISOString(),
+    status: newStatus, disclosure_level: newDisclosure,
+    last_action: `שינוי סטטוס ל"${newStatus}"`, last_action_at: new Date().toISOString(),
     drop_reason_category: dropCat, stopped_reason: dropNote
   }).eq('id', MATCH_ID);
   if (error){ toast('שגיאה: ' + error.message); return; }
@@ -660,6 +706,9 @@ async function saveStatusChange(){
     match_id: MATCH_ID, status: newStatus, changed_at: new Date().toISOString(), changed_by: CURRENT_PROFILE.id
   });
   await logAudit('status_change', { from: prevStatus, to: newStatus, drop_reason_category: dropCat });
+  if (newDisclosure !== prevDisclosure){
+    await logAudit('disclosure_change', { from: prevDisclosure, to: newDisclosure });
+  }
 
   toast('הסטטוס עודכן');
   closeModal();
