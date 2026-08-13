@@ -64,11 +64,19 @@
   .overlay.open{display:flex;}
   .modal{background:#fff;border-radius:14px;max-width:560px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);}
   .modal h3{margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;}
-  .field{margin-bottom:12px;}
-  .field label{display:block;font-size:.78rem;color:#666;margin-bottom:4px;}
-  .field input,.field select,.field textarea{width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
-  .field textarea{min-height:70px;resize:vertical;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:.92rem;font-weight:700;color:#3a3f4d;margin-bottom:6px;}
+  .field input,.field select,.field textarea{width:100%;padding:12px 13px;border:1.5px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:1rem;line-height:1.4;}
+  .field textarea{min-height:78px;resize:vertical;}
   .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+  @media(max-width:640px){
+    .overlay{padding:0;align-items:stretch;}
+    .modal{max-width:100%;width:100%;min-height:100%;border-radius:0;padding:20px 16px 100px;}
+    .modal h3{font-size:1.15rem;}
+    .field label{font-size:1rem;}
+    .field input,.field select,.field textarea{font-size:1.05rem;padding:13px 14px;}
+    .modal-actions{position:fixed;bottom:0;right:0;left:0;background:#fff;padding:12px 16px;box-shadow:0 -4px 16px rgba(0,0,0,.12);margin-top:0;z-index:5;}
+  }
   .btn{border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-size:.85rem;cursor:pointer;font-weight:700;}
   .btn-primary{background:var(--navy);color:#fff;}
   .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);}
@@ -89,7 +97,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 19:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 20:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
