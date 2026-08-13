@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - תיק התאמה</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=202608120610">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:1200px;margin:0 auto;}
+  .breadcrumb{font-size:.82rem;color:#8a93ab;margin-bottom:10px;}
+  .breadcrumb a{color:#5a76b8;text-decoration:none;}
+  .hero{background:#fff;border-radius:14px;padding:22px 26px;margin-bottom:18px;box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 8px 20px rgba(14,27,52,.10),0 2px 6px rgba(14,27,52,.06);}
+  .hero-top{display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px;align-items:flex-start;}
+  .hero-title{font-size:1.4rem;font-weight:800;color:var(--navy);}
+  .hero-sub{font-size:.85rem;color:#8a93ab;margin-top:4px;}
+  .status-pill{padding:5px 14px;border-radius:14px;font-size:.85rem;font-weight:700;display:inline-block;white-space:nowrap;}
+  .disclosure-badge{padding:4px 10px;border-radius:10px;font-size:.75rem;font-weight:700;margin-inline-start:8px;}
+  .disc-1{background:#eee;color:#555;}
+  .disc-2{background:#fde9c8;color:#7a4d0a;}
+  .disc-3{background:#d6f0e0;color:#186a41;}
+  .disclosure-warning{background:#fff3cd;border:1px solid #ffe08a;color:#7a5b00;padding:8px 12px;border-radius:8px;font-size:.8rem;margin-top:10px;display:none;}
+
+  .quick-actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 4px;}
+  .qa-btn{background:#f7f5ee;border:1.5px solid #d8d3c4;border-radius:9px;padding:9px 14px;font-size:.82rem;font-weight:700;color:var(--navy);cursor:pointer;font-family:inherit;}
+  .qa-btn:hover{background:#eee8d8;}
+  .qa-btn.disabled{opacity:.45;cursor:not-allowed;}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px;}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr;}}
+  .card{background:#fff;border-radius:14px;padding:20px 22px;box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 8px 20px rgba(14,27,52,.10),0 2px 6px rgba(14,27,52,.06);}
+  .card h3{margin:0 0 12px;color:var(--navy);font-size:1rem;border-inline-start:4px solid var(--gold);padding-inline-start:10px;}
+  .card.full{grid-column:1/3;}
+  @media(max-width:900px){.card.full{grid-column:1;}}
+
+  .info-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed #eee;font-size:.85rem;}
+  .info-row .lbl{color:#8a93ab;}
+  .info-row .val{font-weight:600;color:#2a2f3e;text-align:left;}
+
+  .task-item{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f0ede4;font-size:.85rem;}
+  .task-item.done{opacity:.55;text-decoration:line-through;}
+  .task-item .tmeta{color:#8a93ab;font-size:.75rem;}
+  .empty-note{color:#999;font-size:.82rem;padding:10px 0;}
+
+  .note-item{padding:10px 0;border-bottom:1px solid #f0ede4;font-size:.85rem;}
+  .note-item .nmeta{color:#8a93ab;font-size:.75rem;margin-bottom:3px;}
+
+  .timeline{position:relative;padding-inline-start:18px;}
+  .timeline::before{content:'';position:absolute;top:4px;bottom:4px;right:5px;width:2px;background:#e5e0d0;}
+  .tl-item{position:relative;padding:0 0 16px 0;font-size:.82rem;}
+  .tl-item::before{content:'';position:absolute;right:-18px;top:3px;width:9px;height:9px;border-radius:50%;background:var(--gold);}
+  .tl-item .tl-date{color:#8a93ab;font-size:.72rem;}
+
+  .stage-note{background:#f4f2ec;border:1.5px dashed #cdbf9a;border-radius:8px;padding:10px 14px;font-size:.78rem;color:#8a7a52;margin-top:10px;}
+
+  .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
+  .overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:14px;max-width:560px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  .modal h3{margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:.78rem;color:#666;margin-bottom:4px;}
+  .field input,.field select,.field textarea{width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .field textarea{min-height:70px;resize:vertical;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+  .btn{border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-size:.85rem;cursor:pointer;font-weight:700;}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);}
+  .btn-danger{background:#fff;border:1px solid #e4b3ac;color:#a02c1d;}
+  .btn-sm{padding:6px 12px;font-size:.78rem;}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 10:00</span></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+  <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
+  <div class="nav">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="leads-hub.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לידים</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+  </div>
+  <div class="nav">
+    <a href="tasks.html" class="nav-tasks">✅ משימות</a>
+    <a href="needs-attention.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">🚨 דורש טיפול</a>
+    <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
+    <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+  </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="breadcrumb"><a href="matches.html">התאמות</a> ‹ תיק התאמה</div>
+
+  <div class="hero" id="heroBox">טוען...</div>
+
+  <div class="quick-actions" id="quickActions"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>משימות</h3>
+      <div id="tasksBox">טוען...</div>
+    </div>
+    <div class="card">
+      <h3>הערות</h3>
+      <div id="notesBox">טוען...</div>
+    </div>
+    <div class="card full">
+      <h3>שיחות ופגישות</h3>
+      <div class="stage-note">🎙️ הקלטה, תמלול, ניתוח AI וסיכומי פגישה מגיעים בשלב 2-3 של השדרוג. כרגע ניתן לתעד באמצעות "הוסף הערה".</div>
+    </div>
+    <div class="card full">
+      <h3>היסטוריה מלאה (Timeline)</h3>
+      <div id="timelineBox" class="timeline">טוען...</div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
+<div id="toastBox"></div>
+
+<script src="js/config.js?v=202608111530"></script>
+<script src="js/supabaseClient.js?v=202608111530"></script>
+<script src="js/auth.js?v=202608111530"></script>
+<script>
+const DISCLOSURE_LABELS = {1:'רמה 1 · אנונימי', 2:'רמה 2 · מורחב', 3:'רמה 3 · מלא'};
+const MATCH_STATUSES = ['מידע ראשוני','ממתין לתגובת קונה','מתעניין','ממתין להסכם או NDA','חומר מורחב נשלח',
+  'בבדיקת הקונה','ממתין למידע מהעסק','ממתין לקונה','שיחה עם בעל העסק','פגישה','משא ומתן',
+  'הצעה התקבלה','כתב כוונות','בדיקת נאותות','עורכי דין','לקראת סגירה','נסגר בהצלחה','בהשהיה','לא רלוונטי'];
+const DROP_REASON_CATEGORIES = ['מחיר','תחום','מיקום','רווחיות','מימון','גודל העסק','סיכון',
+  'לא מתאים לקונה','לא מתאים לבעל העסק','בחר עסק אחר','הקונה עצר חיפוש','אחר'];
+
+let MATCH_ID = null, MATCH = null, CURRENT_PROFILE = null, ALL_USERS = [], BIZ = null, BUYER = null;
+
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
+function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
+function userName(id){ const u = ALL_USERS.find(x=>x.id===id); return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—'; }
+function userOptions(selected){
+  return '<option value="">— ללא —</option>' + ALL_USERS.map(u=>{
+    const label = u.full_name && u.full_name.trim() ? u.full_name : u.email;
+    return `<option value="${u.id}" ${u.id===selected?'selected':''}>${esc(label)}</option>`;
+  }).join('');
+}
+function toast(msg){
+  let box = document.getElementById('toastBox');
+  const isError = /שגיאה|error/i.test(msg);
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed;bottom:24px;left:24px;z-index:200;background:${isError ? '#b00020' : 'var(--navy)'};color:#fff;padding:14px 18px;border-radius:10px;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.35);max-width:380px;`;
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); document.getElementById('modalBox').innerHTML=''; }
+
+async function logAudit(action, details){
+  try {
+    await window.supabaseClient.from('audit_log').insert({
+      table_name: 'matches', record_id: MATCH_ID, action, actor_id: CURRENT_PROFILE ? CURRENT_PROFILE.id : null, details
+    });
+  } catch(e){ /* audit_log אופציונלי - לא חוסם פעולה אם הטבלה עדיין לא קיימת */ }
+}
+
+async function loadEverything(){
+  const { data: match, error } = await window.supabaseClient.from('matches').select('*').eq('id', MATCH_ID).single();
+  if (error || !match){ document.getElementById('heroBox').innerHTML = '<div style="color:#a02c1d;">התאמה לא נמצאה, או שאין לך הרשאה לצפות בה.</div>'; return; }
+  MATCH = match;
+
+  const [{data:biz}, {data:buyer}, {data:users}] = await Promise.all([
+    window.supabaseClient.from('businesses').select('*').eq('id', match.business_id).single(),
+    window.supabaseClient.from('leads').select('*').eq('id', match.buyer_id).single(),
+    window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active')
+  ]);
+  BIZ = biz; BUYER = buyer; ALL_USERS = users || [];
+
+  renderHero();
+  renderQuickActions();
+  await Promise.all([loadTasks(), loadNotes(), loadTimeline()]);
+}
+
+function renderHero(){
+  const dl = MATCH.disclosure_level || 1;
+  document.getElementById('heroBox').innerHTML = `
+    <div class="hero-top">
+      <div>
+        <div class="hero-title">🧍 ${esc(BUYER?.full_name||'—')} &nbsp;⇄&nbsp; 🏢 ${esc(BIZ?.internal_name||'—')}</div>
+        <div class="hero-sub">
+          נוצרה ע"י ${esc(userName(MATCH.created_by))} בתאריך ${fmtDate(MATCH.created_at)}
+          · מטפל כרגע: <b>${esc(userName(MATCH.current_handler))}</b>
+        </div>
+      </div>
+      <div style="text-align:left;">
+        <span class="status-pill" id="statusPillDisplay" style="background:#eef1f6;color:var(--navy);">${esc(MATCH.status)}</span>
+        <span class="disclosure-badge disc-${dl}">${DISCLOSURE_LABELS[dl]}</span>
+      </div>
+    </div>
+    <div id="disclosureWarning" class="disclosure-warning"></div>
+    <div class="grid2" style="margin-top:16px;">
+      <div>
+        <div class="info-row"><span class="lbl">פעולה אחרונה</span><span class="val">${esc(MATCH.last_action)||'—'}</span></div>
+        <div class="info-row"><span class="lbl">תאריך פעולה אחרונה</span><span class="val">${fmtDate(MATCH.last_action_at)}</span></div>
+      </div>
+      <div>
+        <div class="info-row"><span class="lbl">פעולה הבאה</span><span class="val" style="${!MATCH.next_action?'color:#c0392b;':''}">${esc(MATCH.next_action)||'אין פעולה הבאה מוגדרת ⚠️'}</span></div>
+        <div class="info-row"><span class="lbl">תאריך פעולה הבאה</span><span class="val">${fmtDate(MATCH.next_action_at)}</span></div>
+        <div class="info-row"><span class="lbl">אחראי לפעולה הבאה</span><span class="val">${esc(userName(MATCH.next_action_owner))}</span></div>
+      </div>
+    </div>
+  `;
+}
+
+function renderQuickActions(){
+  document.getElementById('quickActions').innerHTML = `
+    <button class="qa-btn" onclick="openNoteModal()">📝 הוסף הערה</button>
+    <button class="qa-btn" onclick="openTaskModal()">✅ הוסף משימה</button>
+    <button class="qa-btn" onclick="openStatusModal()">🔄 שנה סטטוס</button>
+    <button class="qa-btn" onclick="openNextActionModal()">➡️ קבע פעולה הבאה</button>
+    <button class="qa-btn disabled" title="מגיע בשלב 3">🎙️ הקלט שיחה</button>
+    <button class="qa-btn disabled" title="מגיע בשלב 2">📅 תעד פגישה</button>
+    <button class="qa-btn btn-danger" onclick="deleteMatchConfirm()" style="margin-inline-start:auto;">🗑️ מחק התאמה</button>
+  `;
+}
+
+// ---------- סטטוס ----------
+function openStatusModal(){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>שינוי סטטוס</h3>
+    <div class="field"><label>סטטוס חדש</label><select id="newStatus" onchange="onStatusModalChange()">${MATCH_STATUSES.map(s=>`<option value="${s}" ${s===MATCH.status?'selected':''}>${s}</option>`).join('')}</select></div>
+    <div class="field" id="dropReasonField" style="display:none;"><label>קטגוריית סיבת ירידה</label><select id="dropReasonCat"><option value="">— בחר —</option>${DROP_REASON_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
+    <div class="field" id="dropReasonNoteField" style="display:none;"><label>הערה</label><textarea id="dropReasonNote"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="saveStatusChange()">שמירה</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+  onStatusModalChange();
+}
+function onStatusModalChange(){
+  const isDrop = document.getElementById('newStatus').value === 'לא רלוונטי';
+  document.getElementById('dropReasonField').style.display = isDrop ? '' : 'none';
+  document.getElementById('dropReasonNoteField').style.display = isDrop ? '' : 'none';
+}
+async function saveStatusChange(){
+  const newStatus = document.getElementById('newStatus').value;
+  const isDrop = newStatus === 'לא רלוונטי';
+  const dropCat = isDrop ? document.getElementById('dropReasonCat').value : null;
+  if (isDrop && !dropCat){ toast('יש לבחור קטגוריית סיבה'); return; }
+  const dropNote = isDrop ? document.getElementById('dropReasonNote').value : null;
+  const prevStatus = MATCH.status;
+
+  const { error } = await window.supabaseClient.from('matches').update({
+    status: newStatus, last_action: `שינוי סטטוס ל"${newStatus}"`, last_action_at: new Date().toISOString(),
+    drop_reason_category: dropCat, stopped_reason: dropNote
+  }).eq('id', MATCH_ID);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+
+  await window.supabaseClient.from('match_status_history').insert({
+    match_id: MATCH_ID, status: newStatus, changed_at: new Date().toISOString(), changed_by: CURRENT_PROFILE.id
+  });
+  await logAudit('status_change', { from: prevStatus, to: newStatus, drop_reason_category: dropCat });
+
+  toast('הסטטוס עודכן');
+  closeModal();
+  await loadEverything();
+}
+
+// ---------- פעולה הבאה ----------
+function openNextActionModal(){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>קביעת פעולה הבאה</h3>
+    <div class="field"><label>מה צריך לקרות</label><input type="text" id="naText" value="${esc(MATCH.next_action)}" placeholder="למשל: להתקשר לקונה"></div>
+    <div class="field"><label>תאריך יעד</label><input type="date" id="naDate" value="${MATCH.next_action_at ? MATCH.next_action_at.slice(0,10) : ''}"></div>
+    <div class="field"><label>אחראי</label><select id="naOwner">${userOptions(MATCH.next_action_owner)}</select></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="saveNextAction()">שמירה</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+async function saveNextAction(){
+  const text = document.getElementById('naText').value.trim();
+  const date = document.getElementById('naDate').value || null;
+  const owner = document.getElementById('naOwner').value || null;
+  const { error } = await window.supabaseClient.from('matches').update({
+    next_action: text || null, next_action_at: date, next_action_owner: owner
+  }).eq('id', MATCH_ID);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  await logAudit('set_next_action', { next_action: text, next_action_at: date, next_action_owner: owner });
+  toast('פעולה הבאה עודכנה');
+  closeModal();
+  await loadEverything();
+}
+
+// ---------- הערות (record_notes) ----------
+function openNoteModal(){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>הוספת הערה</h3>
+    <div class="field"><textarea id="noteText" placeholder="הערה חופשית..."></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="saveNote()">שמירה</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+async function saveNote(){
+  const text = document.getElementById('noteText').value.trim();
+  if (!text){ toast('יש להזין טקסט'); return; }
+  const { error } = await window.supabaseClient.from('record_notes').insert({
+    table_name: 'matches', record_id: MATCH_ID, note: text, created_by: CURRENT_PROFILE.id
+  });
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  await window.supabaseClient.from('matches').update({ last_action: 'נוספה הערה', last_action_at: new Date().toISOString() }).eq('id', MATCH_ID);
+  await logAudit('add_note', { preview: text.slice(0,80) });
+  toast('ההערה נשמרה');
+  closeModal();
+  await loadEverything();
+}
+async function loadNotes(){
+  const { data, error } = await window.supabaseClient.from('record_notes').select('*').eq('table_name','matches').eq('record_id', MATCH_ID).order('created_at', {ascending:false});
+  const box = document.getElementById('notesBox');
+  if (error){ box.innerHTML = `<div class="empty-note">שגיאה בטעינת הערות: ${esc(error.message)}</div>`; return; }
+  if (!data || data.length === 0){ box.innerHTML = '<div class="empty-note">אין הערות עדיין</div>'; return; }
+  box.innerHTML = data.map(n=>`
+    <div class="note-item">
+      <div class="nmeta">${esc(userName(n.created_by))} · ${fmtDateTime(n.created_at)}</div>
+      <div>${esc(n.note)}</div>
+    </div>`).join('');
+}
+
+// ---------- משימות ----------
+function openTaskModal(){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>הוספת משימה</h3>
+    <div class="field"><label>כותרת</label><input type="text" id="tTitle"></div>
+    <div class="field"><label>תיאור</label><textarea id="tDesc"></textarea></div>
+    <div class="field"><label>אחראי</label><select id="tAssignee">${userOptions(CURRENT_PROFILE.id)}</select></div>
+    <div class="field"><label>תאריך יעד</label><input type="date" id="tDue"></div>
+    <div class="field"><label>עדיפות</label><select id="tPriority"><option value="רגילה">רגילה</option><option value="גבוהה">גבוהה</option><option value="דחופה">דחופה</option></select></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="saveTask()">שמירה</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+async function saveTask(){
+  const title = document.getElementById('tTitle').value.trim();
+  if (!title){ toast('יש להזין כותרת'); return; }
+  const payload = {
+    title, description: document.getElementById('tDesc').value || null,
+    assigned_to: document.getElementById('tAssignee').value || null,
+    due_date: document.getElementById('tDue').value || null,
+    priority: document.getElementById('tPriority').value, status: 'פתוחה',
+    match_id: MATCH_ID, business_id: MATCH.business_id, buyer_id: MATCH.buyer_id, source: 'manual'
+  };
+  const { error } = await window.supabaseClient.from('tasks').insert(payload);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  await logAudit('add_task', { title });
+  toast('המשימה נוספה');
+  closeModal();
+  await loadEverything();
+}
+async function loadTasks(){
+  const { data, error } = await window.supabaseClient.from('tasks').select('*').eq('match_id', MATCH_ID).order('due_date', {ascending:true});
+  const box = document.getElementById('tasksBox');
+  if (error){ box.innerHTML = `<div class="empty-note">משימות עדיין לא זמינות עבור התאמות (יש להריץ Migration) — ${esc(error.message)}</div>`; return; }
+  if (!data || data.length === 0){ box.innerHTML = '<div class="empty-note">אין משימות משויכות</div>'; return; }
+  box.innerHTML = data.map(t=>`
+    <div class="task-item ${t.status==='הושלמה'?'done':''}">
+      <input type="checkbox" ${t.status==='הושלמה'?'checked':''} onchange="toggleTask('${t.id}', this.checked)">
+      <div>
+        <div>${esc(t.title)}</div>
+        <div class="tmeta">${esc(userName(t.assigned_to))} · יעד: ${fmtDate(t.due_date)} · ${esc(t.priority||'')}</div>
+      </div>
+    </div>`).join('');
+}
+async function toggleTask(id, done){
+  await window.supabaseClient.from('tasks').update({ status: done ? 'הושלמה' : 'פתוחה', completed_at: done ? new Date().toISOString() : null }).eq('id', id);
+  await loadTasks();
+}
+
+// ---------- Timeline ----------
+async function loadTimeline(){
+  const [{data:hist}, {data:audit}] = await Promise.all([
+    window.supabaseClient.from('match_status_history').select('*').eq('match_id', MATCH_ID),
+    window.supabaseClient.from('audit_log').select('*').eq('table_name','matches').eq('record_id', MATCH_ID)
+  ]);
+  const events = [];
+  (hist||[]).forEach(h=>events.push({ at: h.changed_at, who: h.changed_by, text: `סטטוס שונה ל"${h.status}"` }));
+  (audit||[]).forEach(a=>{
+    if (a.action === 'status_change') return; // כבר מוצג מ-match_status_history
+    let text = a.action;
+    if (a.action === 'add_note') text = 'נוספה הערה';
+    if (a.action === 'add_task') text = `נוספה משימה: ${a.details?.title||''}`;
+    if (a.action === 'set_next_action') text = `נקבעה פעולה הבאה: ${a.details?.next_action||''}`;
+    events.push({ at: a.occurred_at, who: a.actor_id, text });
+  });
+  events.sort((a,b)=> new Date(b.at) - new Date(a.at));
+  const box = document.getElementById('timelineBox');
+  if (events.length === 0){ box.innerHTML = '<div class="empty-note">אין עדיין היסטוריה</div>'; return; }
+  box.innerHTML = events.map(e=>`
+    <div class="tl-item">
+      <div>${esc(e.text)} <span style="color:#8a93ab;">· ${esc(userName(e.who))}</span></div>
+      <div class="tl-date">${fmtDateTime(e.at)}</div>
+    </div>`).join('');
+}
+
+// ---------- מחיקה ----------
+async function deleteMatchConfirm(){
+  if (!confirm('למחוק את ההתאמה הזו? הפעולה אינה הפיכה.')) return;
+  await logAudit('delete', { status: MATCH.status });
+  const { error } = await window.supabaseClient.from('matches').delete().eq('id', MATCH_ID);
+  if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
+  toast('ההתאמה נמחקה');
+  setTimeout(()=>{ location.href = 'matches.html'; }, 900);
+}
+
+(async function init(){
+  CURRENT_PROFILE = await requireAuth();
+  if (!CURRENT_PROFILE) return;
+  const params = new URLSearchParams(location.search);
+  MATCH_ID = params.get('id');
+  if (!MATCH_ID){ document.getElementById('heroBox').innerHTML = '<div style="color:#a02c1d;">לא צוין מזהה התאמה.</div>'; return; }
+  document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+  await loadEverything();
+})();
+</script>
+</body>
+</html>
