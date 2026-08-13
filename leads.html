@@ -91,7 +91,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 22:45</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 23:15</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -209,6 +209,7 @@
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202608111530"></script>
 <script src="js/push.js?v=202608122320"></script>
+<script src="js/standaloneRecording.js?v=202608132300"></script>
 <script>
 let ALL_LEADS = [];
 let ALL_USERS = [];
@@ -559,6 +560,13 @@ function openLeadForm(id, forcedType){
         `}
         <div class="section-h">הערות</div>
         ${textareaRow('notes','הערות', lead?.notes, 180)}
+        ${lead ? `
+        <div class="section-h">🎙️ הקלטות ותמלולים</div>
+        <div class="field full">
+          <button type="button" class="btn btn-ghost" onclick="window.openStandaloneRecording({type:'buyer', id:'${lead.id}', label:'${esc((lead.full_name||'קונה').replace(/'/g,''))}', currentProfile:CURRENT_PROFILE, onSaved: () => loadLeadMeetings('${lead.id}')})">🔴 הקלט שיחה/פגישה</button>
+          <div id="leadMeetingsList" style="margin-top:10px;font-size:.82rem;">טוען...</div>
+        </div>
+        ` : ''}
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="cancelLeadForm()">ביטול</button>
@@ -576,6 +584,26 @@ function openLeadForm(id, forcedType){
   document.getElementById('leadForm').dataset.leadId = lead ? lead.id : '';
   document.getElementById('leadForm').dataset.leadType = type;
   document.getElementById('leadForm').addEventListener('submit', saveLead);
+  if (lead) loadLeadMeetings(lead.id);
+}
+
+async function loadLeadMeetings(leadId){
+  const box = document.getElementById('leadMeetingsList');
+  if (!box) return;
+  const { data, error } = await window.supabaseClient.from('match_meetings').select('*').eq('buyer_id', leadId).is('match_id', null).is('deleted_at', null).order('meeting_date', {ascending:false});
+  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה: ${esc(error.message)}</span>`; return; }
+  if (!data || !data.length){ box.innerHTML = '<span style="color:#999;">אין עדיין הקלטות</span>'; return; }
+  const lead = ALL_LEADS.find(l=>l.id===leadId);
+  const leadName = (lead?.full_name) || [lead?.first_name,lead?.last_name].filter(Boolean).join(' ') || 'קונה';
+  box.innerHTML = data.map(m=>`
+    <div style="border:1px solid #eee;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
+      <div style="font-weight:700;">${esc(m.meeting_type||'—')} <span style="font-weight:400;color:#8a93ab;">· ${fmtDate(m.meeting_date)}</span></div>
+      ${m.summary_text ? `<div style="font-size:.8rem;color:#555;margin-top:3px;">${esc(m.summary_text).slice(0,140)}${m.summary_text.length>140?'…':''}</div>` : ''}
+      <div style="margin-top:6px;display:flex;gap:6px;">
+        <button type="button" class="btn btn-ghost" style="padding:5px 10px;font-size:.78rem;" onclick='window.viewStandaloneMeetingPdf(${JSON.stringify(m)}, ${JSON.stringify(leadName)})'>👁️ צפה</button>
+        <button type="button" class="btn btn-ghost" style="padding:5px 10px;font-size:.78rem;" onclick='window.downloadStandaloneMeetingPdf(${JSON.stringify(m)}, ${JSON.stringify(leadName)})'>📄 הורד PDF</button>
+      </div>
+    </div>`).join('');
 }
 
 function switchLeadType(newType, leadId){
