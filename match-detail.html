@@ -121,7 +121,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 21:45</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 22:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -1136,7 +1136,7 @@ async function saveNote(){
   const text = document.getElementById('noteText').value.trim();
   if (!text){ toast('יש להזין טקסט'); return; }
   const { error } = await window.supabaseClient.from('record_notes').insert({
-    table_name: 'matches', record_id: MATCH_ID, note: text, created_by: CURRENT_PROFILE.id
+    table_name: 'matches', record_id: MATCH_ID, note_text: text, author_id: CURRENT_PROFILE.id
   });
   if (error){ toast('שגיאה: ' + error.message); return; }
   await window.supabaseClient.from('matches').update({ last_action: 'נוספה הערה', last_action_at: new Date().toISOString() }).eq('id', MATCH_ID);
@@ -1152,8 +1152,8 @@ async function loadNotes(){
   if (!data || data.length === 0){ box.innerHTML = '<div class="empty-note">אין הערות עדיין</div>'; return; }
   box.innerHTML = data.map(n=>`
     <div class="note-item">
-      <div class="nmeta">${esc(userName(n.created_by))} · ${fmtDateTime(n.created_at)}</div>
-      <div>${esc(n.note)}</div>
+      <div class="nmeta">${esc(userName(n.author_id))} · ${fmtDateTime(n.created_at)}</div>
+      <div>${esc(n.note_text)}</div>
     </div>`).join('');
 }
 
