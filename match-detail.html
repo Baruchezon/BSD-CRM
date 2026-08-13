@@ -97,7 +97,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 20:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 20:15</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -273,7 +273,7 @@ async function loadMeetings(){
   }).join('');
 }
 
-function openMeetingModal(id, presetType, aiData){
+function openMeetingModal(id, presetType, aiData, presetLocation){
   const m = id ? window._lastMeetings.find(x=>x.id===id) : null;
   CURRENT_MEETING_PARTICIPANTS = m ? (window._lastParticipants[id] || []) : [];
   const a = aiData ? aiData.analysis : null;
@@ -292,7 +292,7 @@ function openMeetingModal(id, presetType, aiData){
       <div class="field" style="flex:1;"><label>שעת התחלה</label><input type="time" id="mStart" value="${m?.start_time ? m.start_time.slice(0,5) : ''}"></div>
       <div class="field" style="flex:1;"><label>שעת סיום</label><input type="time" id="mEnd" value="${m?.end_time ? m.end_time.slice(0,5) : ''}"></div>
     </div>
-    <div class="field"><label>מיקום</label><input type="text" id="mLocation" value="${esc(m?.location)}"></div>
+    <div class="field"><label>מיקום</label><input type="text" id="mLocation" value="${esc(m?.location || presetLocation)}"></div>
     <div class="field"><label>עיקרי הדברים</label><textarea id="mSummary">${esc(m?.summary_text || a?.summary)}</textarea></div>
     <div class="field"><label>החלטות</label><textarea id="mDecisions">${esc(m?.decisions || a?.decisions)}</textarea></div>
     <div class="field"><label>שאלות פתוחות</label><textarea id="mQuestions">${esc(m?.open_questions || a?.open_questions)}</textarea></div>
@@ -521,11 +521,13 @@ function pickRecorderMimeType(){
 function openRecordingModal(meetingType){
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
-    <h3>🎙️ הקלטת ${meetingType}</h3>
+    <h3>🎙️ הקלטת שיחה/פגישה</h3>
+    <div class="field"><label>סוג</label><select id="recType">${MEETING_TYPES.map(t=>`<option value="${t}" ${t===meetingType?'selected':''}>${t}</option>`).join('')}</select></div>
+    <div class="field"><label>מיקום (אופציונלי)</label><input type="text" id="recLocation" placeholder="למשל: משרד הלקוח / שיחת טלפון"></div>
     <div id="recArea" style="text-align:center;padding:20px 0;">
       <div style="font-size:2.2rem;margin-bottom:14px;">🎙️</div>
       <div id="recStatus" style="color:#8a93ab;font-size:.85rem;margin-bottom:16px;">לחץ להתחיל הקלטה. תתבקש לאשר גישה למיקרופון.</div>
-      <button class="btn btn-primary" id="recStartBtn" onclick="startRecording('${meetingType}')">🔴 התחל הקלטה</button>
+      <button class="btn btn-primary" id="recStartBtn" onclick="startRecording()">🔴 התחל הקלטה</button>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="cancelRecordingModal()">ביטול</button>
@@ -539,7 +541,9 @@ function cancelRecordingModal(){
   closeModal();
 }
 
-async function startRecording(meetingType){
+async function startRecording(){
+  const meetingType = document.getElementById('recType').value;
+  const recLocation = document.getElementById('recLocation').value.trim();
   const mimeType = pickRecorderMimeType();
   if (!mimeType){ toast('הדפדפן הזה לא תומך בהקלטת אודיו'); return; }
   try {
@@ -551,7 +555,7 @@ async function startRecording(meetingType){
   RECORDED_CHUNKS = [];
   ACTIVE_RECORDER = new MediaRecorder(ACTIVE_STREAM, { mimeType });
   ACTIVE_RECORDER.ondataavailable = (e) => { if (e.data.size > 0) RECORDED_CHUNKS.push(e.data); };
-  ACTIVE_RECORDER.onstop = () => { processRecording(meetingType, mimeType); };
+  ACTIVE_RECORDER.onstop = () => { processRecording(meetingType, recLocation, mimeType); };
   ACTIVE_RECORDER.start();
   REC_START_TIME = Date.now();
 
@@ -574,7 +578,7 @@ function stopRecording(){
   if (ACTIVE_STREAM) ACTIVE_STREAM.getTracks().forEach(t=>t.stop());
 }
 
-async function processRecording(meetingType, mimeType){
+async function processRecording(meetingType, recLocation, mimeType){
   document.getElementById('recArea').innerHTML = `<div style="padding:20px 0;color:#8a93ab;">⏳ מעלה הקלטה...</div>`;
   const blob = new Blob(RECORDED_CHUNKS, { type: mimeType });
   const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
@@ -582,15 +586,15 @@ async function processRecording(meetingType, mimeType){
 
   const { error: upErr } = await window.supabaseClient.storage.from('temp-audio').upload(storagePath, blob, { contentType: mimeType });
   if (upErr){
-    showRecordingError('שגיאה בהעלאת ההקלטה: ' + upErr.message, null, meetingType);
+    showRecordingError('שגיאה בהעלאת ההקלטה: ' + upErr.message, null, meetingType, recLocation);
     return;
   }
 
   document.getElementById('recArea').innerHTML = `<div style="padding:20px 0;color:#8a93ab;">🧠 מתמלל ומנתח... זה יכול לקחת עד דקה.</div>`;
-  await runAnalysis(storagePath, meetingType);
+  await runAnalysis(storagePath, meetingType, recLocation);
 }
 
-async function runAnalysis(storagePath, meetingType){
+async function runAnalysis(storagePath, meetingType, recLocation){
   const { data, error } = await window.supabaseClient.functions.invoke('analyze-meeting-audio', {
     body: { storage_path: storagePath, meeting_type: meetingType, business_name: BIZ?.internal_name, buyer_name: BUYER?.full_name }
   });
@@ -600,14 +604,14 @@ async function runAnalysis(storagePath, meetingType){
     if (error && error.context && typeof error.context.json === 'function'){
       try { const b = await error.context.json(); if (b?.error) detail = b.error; } catch(e){}
     }
-    showRecordingError(detail, storagePath, meetingType);
+    showRecordingError(detail, storagePath, meetingType, recLocation);
     return;
   }
   closeModal();
-  openMeetingModal(null, meetingType, result);
+  openMeetingModal(null, meetingType, result, recLocation);
 }
 
-function showRecordingError(message, storagePath, meetingType){
+function showRecordingError(message, storagePath, meetingType, recLocation){
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>⚠️ קרתה תקלה</h3>
@@ -615,13 +619,13 @@ function showRecordingError(message, storagePath, meetingType){
     ${storagePath ? `<div style="font-size:.78rem;color:#8a93ab;margin:10px 0;">ההקלטה נשמרה ולא נמחקה - אפשר לנסות שוב בלי להקליט מחדש.</div>` : ''}
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">סגור</button>
-      ${storagePath ? `<button class="btn btn-primary" onclick="retryAnalysis('${storagePath}','${meetingType}')">🔁 נסה שוב</button>` : ''}
+      ${storagePath ? `<button class="btn btn-primary" onclick="retryAnalysis('${storagePath}','${meetingType}','${esc(recLocation||'')}')">🔁 נסה שוב</button>` : ''}
     </div>`;
   document.getElementById('overlay').classList.add('open');
 }
-async function retryAnalysis(storagePath, meetingType){
+async function retryAnalysis(storagePath, meetingType, recLocation){
   document.getElementById('modalBox').innerHTML = `<h3>🎙️ הקלטת ${meetingType}</h3><div style="padding:20px 0;text-align:center;color:#8a93ab;">🧠 מנסה שוב...</div>`;
-  await runAnalysis(storagePath, meetingType);
+  await runAnalysis(storagePath, meetingType, recLocation);
 }
 
 // ---------- טקסט משותף לשיתוף (וואטסאפ/מייל) - תוויות ברורות, בלי שורות ריקות למידע שלא מולא ----------
@@ -853,7 +857,6 @@ function renderQuickActions(){
     <button class="qa-btn" onclick="openTaskModal()">✅ הוסף משימה</button>
     <button class="qa-btn" onclick="openStatusModal()">🔄 שנה סטטוס</button>
     <button class="qa-btn" onclick="openNextActionModal()">➡️ קבע פעולה הבאה</button>
-    <button class="qa-btn" onclick="openRecordingModal('שיחת טלפון')">🎙️ הקלט שיחה</button>
     <button class="qa-btn" onclick="openRecordingModal('פגישה')">🎙️ הקלט פגישה</button>
     <button class="qa-btn" onclick="openMeetingModal(null,'פגישה')">📅 תעד פגישה</button>
     <button class="qa-btn btn-danger" onclick="deleteMatchConfirm()" style="margin-inline-start:auto;">🗑️ מחק התאמה</button>
