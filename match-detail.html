@@ -89,7 +89,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 18:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 19:30</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -221,6 +221,8 @@ async function loadEverything(){
 const MEETING_TYPES = ['שיחת טלפון','שיחת וידאו','פגישה','פגישת נתונים','פגישת המשך','פגישת מו"מ','שיחה פנימית','אחר'];
 const PARTICIPANT_TYPES = ['קונה','בעל עסק','סוכן','עורך דין','רואה חשבון','אחר'];
 let CURRENT_MEETING_PARTICIPANTS = []; // מערך זמני בטופס העריכה, נשמר לטבלה בפועל רק ב-saveMeeting
+let CURRENT_AI_TASKS = []; // משימות שה-AI הציע במסך האישור (שלב 3), עד לאישור/דחיה ידני
+let CURRENT_AI_TRANSCRIPT = null;
 
 async function loadMeetings(){
   const { data, error } = await window.supabaseClient.from('match_meetings').select('*').eq('match_id', MATCH_ID).is('deleted_at', null).order('meeting_date', {ascending:false});
@@ -263,12 +265,19 @@ async function loadMeetings(){
   }).join('');
 }
 
-function openMeetingModal(id, presetType){
+function openMeetingModal(id, presetType, aiData){
   const m = id ? window._lastMeetings.find(x=>x.id===id) : null;
   CURRENT_MEETING_PARTICIPANTS = m ? (window._lastParticipants[id] || []) : [];
+  const a = aiData ? aiData.analysis : null;
+  CURRENT_AI_TASKS = a && Array.isArray(a.tasks) ? a.tasks.map(t=>({...t, approved:true})) : [];
+  if (a?.follow_up_meeting_date){
+    CURRENT_AI_TASKS.push({ title: 'לקבוע פגישת המשך', due_hint: a.follow_up_meeting_date, due_date: a.follow_up_meeting_date, approved: true });
+  }
+  CURRENT_AI_TRANSCRIPT = aiData ? aiData.transcript : null;
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
-    <h3>${m ? 'עריכת' : 'תיעוד'} שיחה/פגישה</h3>
+    <h3>${aiData ? '✅ אישור סיכום שנוצר ע"י AI' : (m ? 'עריכת' : 'תיעוד')} שיחה/פגישה</h3>
+    ${aiData ? `<div class="stage-note" style="border-color:#8ac;color:#345;background:#eef4fb;">🤖 המערכת ניתחה את ההקלטה. עבור על כל שדה, תקן/מחק/הוסף מה שצריך, ורק אז לחץ "אשר ושמור". שום דבר לא נשמר אוטומטית לפני כן.</div>` : ''}
     <div class="field"><label>סוג</label><select id="mType">${MEETING_TYPES.map(t=>`<option value="${t}" ${(m?.meeting_type||presetType)===t?'selected':''}>${t}</option>`).join('')}</select></div>
     <div style="display:flex;gap:10px;">
       <div class="field" style="flex:1;"><label>תאריך</label><input type="date" id="mDate" value="${m?.meeting_date || new Date().toISOString().slice(0,10)}"></div>
@@ -276,14 +285,24 @@ function openMeetingModal(id, presetType){
       <div class="field" style="flex:1;"><label>שעת סיום</label><input type="time" id="mEnd" value="${m?.end_time ? m.end_time.slice(0,5) : ''}"></div>
     </div>
     <div class="field"><label>מיקום</label><input type="text" id="mLocation" value="${esc(m?.location)}"></div>
-    <div class="field"><label>עיקרי הדברים</label><textarea id="mSummary">${esc(m?.summary_text)}</textarea></div>
-    <div class="field"><label>החלטות</label><textarea id="mDecisions">${esc(m?.decisions)}</textarea></div>
-    <div class="field"><label>שאלות פתוחות</label><textarea id="mQuestions">${esc(m?.open_questions)}</textarea></div>
-    <div class="field"><label>מסמכים שהתבקשו</label><textarea id="mDocs">${esc(m?.requested_documents)}</textarea></div>
-    <div class="field"><label>פעולה הבאה</label><input type="text" id="mNextAction" value="${esc(m?.next_action)}"></div>
-    <div class="field"><label>סטטוס מוצע להתאמה</label><select id="mSuggestedStatus"><option value="">— ללא —</option>${MATCH_STATUSES.map(s=>`<option value="${s}" ${m?.suggested_status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+    <div class="field"><label>עיקרי הדברים</label><textarea id="mSummary">${esc(m?.summary_text || a?.summary)}</textarea></div>
+    <div class="field"><label>החלטות</label><textarea id="mDecisions">${esc(m?.decisions || a?.decisions)}</textarea></div>
+    <div class="field"><label>שאלות פתוחות</label><textarea id="mQuestions">${esc(m?.open_questions || a?.open_questions)}</textarea></div>
+    <div class="field"><label>מסמכים שהתבקשו</label><textarea id="mDocs">${esc(m?.requested_documents || a?.requested_documents)}</textarea></div>
+    <div class="field"><label>פעולה הבאה</label><input type="text" id="mNextAction" value="${esc(m?.next_action || a?.next_action)}"></div>
+    <div class="field"><label>סטטוס מוצע להתאמה</label><select id="mSuggestedStatus"><option value="">— ללא —</option>${MATCH_STATUSES.map(s=>`<option value="${s}" ${(m?.suggested_status||a?.suggested_status)===s?'selected':''}>${s}</option>`).join('')}</select>
+      ${a?.drop_reason_category ? `<div style="font-size:.75rem;color:#8a6a10;margin-top:4px;">🤖 סיבת ירידה משוערת: ${esc(a.drop_reason_category)} — אם תשנה בפועל את סטטוס ההתאמה ל"לא רלוונטי", תתבקש לבחור סיבה בעצמך.</div>` : ''}
+    </div>
     <div class="field"><label>הערות</label><textarea id="mNotes">${esc(m?.notes)}</textarea></div>
     <div class="field"><label>סטטוס הסיכום</label><select id="mStatus"><option value="טיוטה" ${(!m||m.status==='טיוטה')?'selected':''}>טיוטה</option><option value="סופי" ${m?.status==='סופי'?'selected':''}>סופי</option></select></div>
+
+    ${CURRENT_AI_TASKS.length ? `
+    <div class="field">
+      <label>✅ משימות שה-AI זיהה - סמן אילו לאשר</label>
+      <div id="aiTasksList"></div>
+    </div>` : ''}
+    ${a?.follow_up_meeting_date ? `<div class="stage-note">🤖 זוהתה בקשה לפגישת המשך בתאריך ${esc(a.follow_up_meeting_date)} — נוספה כמשימה ברשימה למעלה.</div>` : ''}
+    ${CURRENT_AI_TRANSCRIPT ? `<div class="field"><label>📄 תמלול מלא (לעיון בלבד)</label><textarea readonly style="min-height:90px;color:#888;">${esc(CURRENT_AI_TRANSCRIPT)}</textarea></div>` : ''}
 
     <div class="field">
       <label>משתתפים</label>
@@ -297,10 +316,18 @@ function openMeetingModal(id, presetType){
 
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-      <button class="btn btn-primary" onclick="saveMeeting('${id||''}')">שמירה</button>
+      <button class="btn btn-primary" onclick="saveMeeting('${id||''}')">${aiData ? 'אשר ושמור' : 'שמירה'}</button>
     </div>`;
   document.getElementById('overlay').classList.add('open');
   renderParticipantsLocal();
+  if (CURRENT_AI_TASKS.length) renderAiTasksList();
+}
+function renderAiTasksList(){
+  document.getElementById('aiTasksList').innerHTML = CURRENT_AI_TASKS.map((t,i)=>`
+    <label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:.83rem;">
+      <input type="checkbox" ${t.approved?'checked':''} onchange="CURRENT_AI_TASKS[${i}].approved=this.checked">
+      <span>${esc(t.title)}${t.due_hint?` <span style="color:#8a93ab;">(${esc(t.due_hint)})</span>`:''}</span>
+    </label>`).join('');
 }
 function renderParticipantsLocal(){
   document.getElementById('participantsList').innerHTML = CURRENT_MEETING_PARTICIPANTS.map((p,i)=>
@@ -318,6 +345,7 @@ function addParticipantLocal(){
 function removeParticipantLocal(i){ CURRENT_MEETING_PARTICIPANTS.splice(i,1); renderParticipantsLocal(); }
 
 async function saveMeeting(id){
+
   const payload = {
     match_id: MATCH_ID, business_id: MATCH.business_id, buyer_id: MATCH.buyer_id,
     meeting_type: document.getElementById('mType').value,
@@ -336,6 +364,7 @@ async function saveMeeting(id){
     status: document.getElementById('mStatus').value,
     updated_by: CURRENT_PROFILE.id, updated_at: new Date().toISOString()
   };
+  if (CURRENT_AI_TRANSCRIPT) payload.raw_transcript = CURRENT_AI_TRANSCRIPT;
 
   let meetingId = id;
   if (id){
@@ -363,10 +392,20 @@ async function saveMeeting(id){
     );
   }
 
-  await window.supabaseClient.from('matches').update({ last_action: `תועדה ${payload.meeting_type}`, last_action_at: new Date().toISOString() }).eq('id', MATCH_ID);
-  await logAudit(id ? 'edit_meeting' : 'add_meeting', { meeting_id: meetingId, type: payload.meeting_type });
+  // משימות שאושרו מתוך הצעת ה-AI (שלב 3) - רק אלה שסומנו, ורק פעם אחת (בשמירה החדשה בלבד, לא בעריכה חוזרת)
+  const approvedAiTasks = CURRENT_AI_TASKS.filter(t=>t.approved);
+  if (!id && approvedAiTasks.length){
+    await window.supabaseClient.from('tasks').insert(approvedAiTasks.map(t=>({
+      title: t.title, assigned_to: CURRENT_PROFILE.id,
+      due_date: t.due_date || null, priority: 'רגילה', status: 'פתוחה',
+      match_id: MATCH_ID, business_id: MATCH.business_id, buyer_id: MATCH.buyer_id, source: 'ai_meeting'
+    })));
+  }
 
-  toast('הסיכום נשמר');
+  await window.supabaseClient.from('matches').update({ last_action: `תועדה ${payload.meeting_type}`, last_action_at: new Date().toISOString() }).eq('id', MATCH_ID);
+  await logAudit(id ? 'edit_meeting' : 'add_meeting', { meeting_id: meetingId, type: payload.meeting_type, ai_generated: !!CURRENT_AI_TRANSCRIPT, approved_ai_tasks: approvedAiTasks.length });
+
+  toast('הסיכום נשמר' + (approvedAiTasks.length ? ` + ${approvedAiTasks.length} משימות` : ''));
   closeModal();
   await loadEverything();
 }
@@ -460,6 +499,121 @@ async function downloadMeetingPdf(meetingId){
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
   } catch(e){ toast('שגיאה ביצירת PDF: ' + (e.message||e)); }
+}
+
+// ---------- שלב 3: הקלטה, תמלול, ניתוח AI ----------
+let ACTIVE_RECORDER = null, ACTIVE_STREAM = null, RECORDED_CHUNKS = [], REC_START_TIME = null, REC_TIMER_HANDLE = null;
+
+function pickRecorderMimeType(){
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+  for (const c of candidates){ if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c; }
+  return '';
+}
+
+function openRecordingModal(meetingType){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>🎙️ הקלטת ${meetingType}</h3>
+    <div id="recArea" style="text-align:center;padding:20px 0;">
+      <div style="font-size:2.2rem;margin-bottom:14px;">🎙️</div>
+      <div id="recStatus" style="color:#8a93ab;font-size:.85rem;margin-bottom:16px;">לחץ להתחיל הקלטה. תתבקש לאשר גישה למיקרופון.</div>
+      <button class="btn btn-primary" id="recStartBtn" onclick="startRecording('${meetingType}')">🔴 התחל הקלטה</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="cancelRecordingModal()">ביטול</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+function cancelRecordingModal(){
+  if (ACTIVE_RECORDER && ACTIVE_RECORDER.state !== 'inactive') ACTIVE_RECORDER.stop();
+  if (ACTIVE_STREAM) ACTIVE_STREAM.getTracks().forEach(t=>t.stop());
+  if (REC_TIMER_HANDLE) clearInterval(REC_TIMER_HANDLE);
+  closeModal();
+}
+
+async function startRecording(meetingType){
+  const mimeType = pickRecorderMimeType();
+  if (!mimeType){ toast('הדפדפן הזה לא תומך בהקלטת אודיו'); return; }
+  try {
+    ACTIVE_STREAM = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch(e){
+    document.getElementById('recStatus').innerHTML = '❌ אין גישה למיקרופון. יש לאשר הרשאה בדפדפן ולנסות שוב.';
+    return;
+  }
+  RECORDED_CHUNKS = [];
+  ACTIVE_RECORDER = new MediaRecorder(ACTIVE_STREAM, { mimeType });
+  ACTIVE_RECORDER.ondataavailable = (e) => { if (e.data.size > 0) RECORDED_CHUNKS.push(e.data); };
+  ACTIVE_RECORDER.onstop = () => { processRecording(meetingType, mimeType); };
+  ACTIVE_RECORDER.start();
+  REC_START_TIME = Date.now();
+
+  document.getElementById('recArea').innerHTML = `
+    <div style="font-size:2.2rem;margin-bottom:10px;color:#c0392b;">🔴</div>
+    <div id="recTimer" style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-bottom:16px;">00:00</div>
+    <div style="color:#8a93ab;font-size:.8rem;margin-bottom:16px;">מקליט... אפשר לדבר בעברית באופן טבעי.</div>
+    <button class="btn btn-danger" onclick="stopRecording()">⏹️ עצור הקלטה</button>`;
+  REC_TIMER_HANDLE = setInterval(()=>{
+    const secs = Math.floor((Date.now() - REC_START_TIME)/1000);
+    const mm = String(Math.floor(secs/60)).padStart(2,'0'), ss = String(secs%60).padStart(2,'0');
+    const el = document.getElementById('recTimer');
+    if (el) el.textContent = `${mm}:${ss}`;
+  }, 500);
+}
+
+function stopRecording(){
+  if (REC_TIMER_HANDLE) clearInterval(REC_TIMER_HANDLE);
+  if (ACTIVE_RECORDER && ACTIVE_RECORDER.state !== 'inactive') ACTIVE_RECORDER.stop();
+  if (ACTIVE_STREAM) ACTIVE_STREAM.getTracks().forEach(t=>t.stop());
+}
+
+async function processRecording(meetingType, mimeType){
+  document.getElementById('recArea').innerHTML = `<div style="padding:20px 0;color:#8a93ab;">⏳ מעלה הקלטה...</div>`;
+  const blob = new Blob(RECORDED_CHUNKS, { type: mimeType });
+  const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+  const storagePath = `${MATCH_ID}/${Date.now()}.${ext}`;
+
+  const { error: upErr } = await window.supabaseClient.storage.from('temp-audio').upload(storagePath, blob, { contentType: mimeType });
+  if (upErr){
+    showRecordingError('שגיאה בהעלאת ההקלטה: ' + upErr.message, null, meetingType);
+    return;
+  }
+
+  document.getElementById('recArea').innerHTML = `<div style="padding:20px 0;color:#8a93ab;">🧠 מתמלל ומנתח... זה יכול לקחת עד דקה.</div>`;
+  await runAnalysis(storagePath, meetingType);
+}
+
+async function runAnalysis(storagePath, meetingType){
+  const { data, error } = await window.supabaseClient.functions.invoke('analyze-meeting-audio', {
+    body: { storage_path: storagePath, meeting_type: meetingType, business_name: BIZ?.internal_name, buyer_name: BUYER?.full_name }
+  });
+  let result = data;
+  if (error || result?.error){
+    let detail = result?.error || error?.message || 'שגיאה לא ידועה';
+    if (error && error.context && typeof error.context.json === 'function'){
+      try { const b = await error.context.json(); if (b?.error) detail = b.error; } catch(e){}
+    }
+    showRecordingError(detail, storagePath, meetingType);
+    return;
+  }
+  closeModal();
+  openMeetingModal(null, meetingType, result);
+}
+
+function showRecordingError(message, storagePath, meetingType){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>⚠️ קרתה תקלה</h3>
+    <div class="stage-note" style="border-color:#e39185;color:#7a1f10;background:#fbe1de;">${esc(message)}</div>
+    ${storagePath ? `<div style="font-size:.78rem;color:#8a93ab;margin:10px 0;">ההקלטה נשמרה ולא נמחקה - אפשר לנסות שוב בלי להקליט מחדש.</div>` : ''}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">סגור</button>
+      ${storagePath ? `<button class="btn btn-primary" onclick="retryAnalysis('${storagePath}','${meetingType}')">🔁 נסה שוב</button>` : ''}
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+async function retryAnalysis(storagePath, meetingType){
+  document.getElementById('modalBox').innerHTML = `<h3>🎙️ הקלטת ${meetingType}</h3><div style="padding:20px 0;text-align:center;color:#8a93ab;">🧠 מנסה שוב...</div>`;
+  await runAnalysis(storagePath, meetingType);
 }
 
 // ---------- טקסט משותף לשיתוף (וואטסאפ/מייל) - תוויות ברורות, בלי שורות ריקות למידע שלא מולא ----------
@@ -691,8 +845,8 @@ function renderQuickActions(){
     <button class="qa-btn" onclick="openTaskModal()">✅ הוסף משימה</button>
     <button class="qa-btn" onclick="openStatusModal()">🔄 שנה סטטוס</button>
     <button class="qa-btn" onclick="openNextActionModal()">➡️ קבע פעולה הבאה</button>
-    <button class="qa-btn disabled" title="מגיע בשלב 3">🎙️ הקלט שיחה</button>
-    <button class="qa-btn disabled" title="מגיע בשלב 3">🎙️ הקלט פגישה</button>
+    <button class="qa-btn" onclick="openRecordingModal('שיחת טלפון')">🎙️ הקלט שיחה</button>
+    <button class="qa-btn" onclick="openRecordingModal('פגישה')">🎙️ הקלט פגישה</button>
     <button class="qa-btn" onclick="openMeetingModal(null,'פגישה')">📅 תעד פגישה</button>
     <button class="qa-btn btn-danger" onclick="deleteMatchConfirm()" style="margin-inline-start:auto;">🗑️ מחק התאמה</button>
   `;
