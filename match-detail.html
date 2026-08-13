@@ -89,7 +89,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 14:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 13.08.2026 15:30</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -410,8 +410,8 @@ function isCanvasBlank(canvas){
     return true;
   } catch(e){ return false; }
 }
-function buildMeetingPrintTemplate(m){
-  const dl = MATCH.disclosure_level || 1;
+function buildMeetingPrintTemplate(m, forceLevel){
+  const dl = forceLevel != null ? forceLevel : (MATCH.disclosure_level || 1);
   document.getElementById('pt_title').textContent = `${m.meeting_type||'סיכום'} — ${dl>=2 ? (BIZ?.internal_name||'') : 'עסק (אנונימי)'}`;
   document.getElementById('pt_meta').textContent = `${fmtDate(m.meeting_date)} ${m.start_time?('· '+m.start_time.slice(0,5)):''}${m.location?(' · '+m.location):''} · תיעד: ${fillerLabel()}`;
   let body = '';
@@ -429,10 +429,10 @@ function buildMeetingPrintTemplate(m){
 }
 function fillerLabel(){ return CURRENT_PROFILE ? ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) : ''; }
 
-async function generateMeetingPdfBlob(meetingId){
+async function generateMeetingPdfBlob(meetingId, forceLevel){
   const { data: m, error } = await window.supabaseClient.from('match_meetings').select('*').eq('id', meetingId).single();
   if (error || !m) throw new Error('לא נמצא סיכום');
-  const filename = buildMeetingPrintTemplate(m);
+  const filename = buildMeetingPrintTemplate(m, forceLevel);
   const el = document.getElementById('printTemplate');
   const overlay = document.getElementById('captureOverlay');
   overlay.style.display = 'block';
@@ -471,10 +471,11 @@ function resolveWaPhone(target){
 function openWhatsappModal(meetingId){
   const m = window._lastMeetings.find(x=>x.id===meetingId);
   const text = `סיכום ${m.meeting_type||'פגישה'} - ${fmtDate(m.meeting_date)}\n${BIZ?.internal_name||''} / ${BUYER?.full_name||''}\n\n${m.summary_text||''}\n\nפעולה הבאה: ${m.next_action||'—'}`;
-  const dl = MATCH.disclosure_level || 1;
+  const signed = buyerAgreementSigned();
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>שליחה ב-WhatsApp — תצוגה מקדימה</h3>
+    ${!signed ? `<div class="disclosure-warning" style="display:block;background:#fbe1de;border-color:#e39185;color:#7a1f10;font-weight:700;">🚫 לקונה הזה <u>אין הסכם חתום</u>! מותר לשלוח אליו (או למספר אחר) אך ורק מידע אנונימי — ללא שם עסק, כתובת או פרטי בעלים. שליחה לבעל העסק עצמו אינה מוגבלת.</div>` : ''}
     <div class="field"><label>למי לשלוח</label>
       <select id="waTarget" onchange="onWaTargetChange()">
         <option value="buyer">קונה (${esc(BUYER?.full_name||'—')})</option>
@@ -483,58 +484,90 @@ function openWhatsappModal(meetingId){
       </select>
     </div>
     <div class="field"><label>מספר טלפון (ניתן לתקן)</label><input type="text" id="waPhone" placeholder="05XXXXXXXX" value="${esc(resolveWaPhone('buyer'))}"></div>
-    ${dl < 2 ? `<div class="disclosure-warning" style="display:block;">⚠️ רמת החשיפה בהתאמה זו היא <b>רמה 1 · אנונימי</b>. ודא שההודעה לא חושפת שם עסק, כתובת או פרטי בעלים לפני שליחה.</div>` : ''}
     <div class="field"><label>תוכן ההודעה</label><textarea id="waText" style="min-height:140px;">${esc(text)}</textarea></div>
+    <div class="field" id="waConfirmAnonField" style="display:none;">
+      <label style="display:flex;align-items:flex-start;gap:8px;font-weight:700;color:#7a1f10;"><input type="checkbox" id="waConfirmAnon" onchange="onWaTargetChange()" style="width:auto;margin-top:3px;"> אני מוודא שההודעה שלמעלה אנונימית בלבד — לא כוללת שם עסק, כתובת או פרטי בעלים</label>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-      <button class="btn btn-primary" onclick="sendWhatsapp('${meetingId}')">פתח ב-WhatsApp</button>
+      <button class="btn btn-primary" id="waSendBtn" onclick="sendWhatsapp('${meetingId}')">פתח ב-WhatsApp</button>
     </div>`;
   document.getElementById('overlay').classList.add('open');
+  onWaTargetChange();
 }
 function onWaTargetChange(){
   const target = document.getElementById('waTarget').value;
   const phoneField = document.getElementById('waPhone');
   if (target === 'other'){ phoneField.value = ''; phoneField.focus(); }
   else phoneField.value = resolveWaPhone(target);
+
+  const signed = buyerAgreementSigned();
+  const needsGate = !signed && (target === 'buyer' || target === 'other');
+  document.getElementById('waConfirmAnonField').style.display = needsGate ? '' : 'none';
+  const sendBtn = document.getElementById('waSendBtn');
+  const confirmed = document.getElementById('waConfirmAnon')?.checked;
+  sendBtn.disabled = needsGate && !confirmed;
+  sendBtn.style.opacity = sendBtn.disabled ? '.5' : '1';
 }
 function sendWhatsapp(meetingId){
   const target = document.getElementById('waTarget').value;
+  const signed = buyerAgreementSigned();
+  const needsGate = !signed && (target === 'buyer' || target === 'other');
+  if (needsGate && !document.getElementById('waConfirmAnon').checked){
+    toast('יש לאשר שההודעה אנונימית בלבד לפני שליחה לקונה ללא הסכם חתום');
+    return;
+  }
   let phone = document.getElementById('waPhone').value.replace(/\D/g,'');
   if (!phone){ toast('יש להזין מספר טלפון'); return; }
   if (phone.startsWith('0')) phone = '972' + phone.slice(1);
   const text = encodeURIComponent(document.getElementById('waText').value);
   window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
-  logAudit('send_whatsapp', { meeting_id: meetingId, target, phone });
+  logAudit('send_whatsapp', { meeting_id: meetingId, target, phone, forced_anonymous: needsGate });
   closeModal();
 }
 
 // ---------- מייל ----------
+function buyerAgreementSigned(){ return BUYER?.agreement_status === 'יש הסכם חתום'; }
+
 function openEmailModal(meetingId){
   const m = window._lastMeetings.find(x=>x.id===meetingId);
   const modal = document.getElementById('modalBox');
+  const signed = buyerAgreementSigned();
   modal.innerHTML = `
     <h3>שליחה במייל — תצוגה מקדימה</h3>
+    ${!signed ? `<div class="disclosure-warning" style="display:block;background:#fbe1de;border-color:#e39185;color:#7a1f10;font-weight:700;">🚫 לקונה הזה <u>אין הסכם חתום</u>! מותר לשלוח אליו (או לכתובת אחרת) אך ורק מידע אנונימי — ללא שם עסק, כתובת או פרטי בעלים. שליחה לבעל העסק עצמו או אליך אינה מוגבלת.</div>` : ''}
     <div class="field"><label>למי לשלוח</label>
-      <select id="emTarget">
+      <select id="emTarget" onchange="onEmailGateChange()">
         <option value="self">אליי (${esc(CURRENT_PROFILE.email)})</option>
         <option value="buyer" ${BUYER?.email?'':'disabled'}>קונה ${BUYER?.email?('('+esc(BUYER.email)+')'):'(אין כתובת מייל)'}</option>
         <option value="biz" ${BIZ?.owner_email?'':'disabled'}>בעל העסק ${BIZ?.owner_email?('('+esc(BIZ.owner_email)+')'):'(אין כתובת מייל)'}</option>
         <option value="other">כתובת אחרת</option>
       </select>
     </div>
-    <div class="field" id="emOtherField" style="display:none;"><label>כתובת מייל</label><input type="email" id="emOtherAddr"></div>
+    <div class="field" id="emOtherField" style="display:none;"><label>כתובת מייל לשליחה</label><input type="email" id="emOtherAddr" placeholder="name@example.com"></div>
     <div class="field"><label>נושא</label><input type="text" id="emSubject" value="${esc('סיכום ' + (m.meeting_type||'פגישה') + ' - ' + (MATCH.disclosure_level>=2 ? (BIZ?.internal_name||'') : 'עסק'))}"></div>
     <div class="field"><label>תוכן</label><select id="emContent"><option value="body">סיכום בגוף המייל</option><option value="pdf">PDF מצורף</option><option value="both">שניהם</option></select></div>
-    ${(MATCH.disclosure_level||1) < 2 ? `<div class="disclosure-warning" style="display:block;">⚠️ רמת החשיפה בהתאמה זו היא <b>רמה 1 · אנונימי</b>. בדוק שהטקסט למטה לא חושף שם עסק, כתובת או פרטי בעלים לפני שליחה (PDF מסנן זאת אוטומטית, אך תוכן חופשי בגוף המייל לא).</div>` : ''}
     <div class="field"><label>תצוגה מקדימה של הטקסט</label><textarea id="emPreviewText" style="min-height:140px;" readonly>${esc(m.summary_text||'')}\n\nהחלטות: ${esc(m.decisions||'')}\nפעולה הבאה: ${esc(m.next_action||'')}</textarea></div>
+    <div class="field" id="emConfirmAnonField" style="display:none;">
+      <label style="display:flex;align-items:flex-start;gap:8px;font-weight:700;color:#7a1f10;"><input type="checkbox" id="emConfirmAnon" onchange="onEmailGateChange()" style="width:auto;margin-top:3px;"> אני מוודא שהתוכן שלמעלה אנונימי בלבד — לא כולל שם עסק, כתובת או פרטי בעלים</label>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-      <button class="btn btn-primary" onclick="sendEmail('${meetingId}')">שלח</button>
+      <button class="btn btn-primary" id="emSendBtn" onclick="sendEmail('${meetingId}')">שלח</button>
     </div>`;
   document.getElementById('overlay').classList.add('open');
-  document.getElementById('emTarget').addEventListener('change', function(){
-    document.getElementById('emOtherField').style.display = this.value === 'other' ? '' : 'none';
-  });
+  onEmailGateChange();
+}
+function onEmailGateChange(){
+  const target = document.getElementById('emTarget').value;
+  document.getElementById('emOtherField').style.display = target === 'other' ? '' : 'none';
+  const signed = buyerAgreementSigned();
+  const needsGate = !signed && (target === 'buyer' || target === 'other');
+  document.getElementById('emConfirmAnonField').style.display = needsGate ? '' : 'none';
+  const sendBtn = document.getElementById('emSendBtn');
+  const confirmed = document.getElementById('emConfirmAnon')?.checked;
+  sendBtn.disabled = needsGate && !confirmed;
+  sendBtn.style.opacity = sendBtn.disabled ? '.5' : '1';
 }
 
 function blobToBase64(blob){
@@ -554,18 +587,26 @@ async function sendEmail(meetingId){
     : document.getElementById('emOtherAddr').value.trim();
   if (!to){ toast('אין כתובת מייל תקינה'); return; }
 
+  const signed = buyerAgreementSigned();
+  const needsGate = !signed && (target === 'buyer' || target === 'other');
+  if (needsGate && !document.getElementById('emConfirmAnon').checked){
+    toast('יש לאשר שהתוכן אנונימי בלבד לפני שליחה לקונה ללא הסכם חתום');
+    return;
+  }
+
   const subject = document.getElementById('emSubject').value || 'סיכום פגישה';
   const contentMode = document.getElementById('emContent').value;
   const bodyText = document.getElementById('emPreviewText').value;
   const htmlBody = `<div dir="rtl" style="font-family:Heebo,Rubik,sans-serif;white-space:pre-wrap;">${esc(bodyText)}</div>`;
+  const forcePdfLevel = needsGate ? 1 : null; // רשת ביטחון נוספת - PDF תמיד אנונימי לקונה ללא הסכם חתום, גם אם רמת החשיפה בהתאמה גבוהה יותר
 
-  const sendBtn = document.querySelector('.modal-actions .btn-primary');
+  const sendBtn = document.getElementById('emSendBtn');
   if (sendBtn){ sendBtn.disabled = true; sendBtn.textContent = 'שולח...'; }
 
   try {
     let attachment_base64, attachment_filename;
     if (contentMode === 'pdf' || contentMode === 'both'){
-      const { blob, filename } = await generateMeetingPdfBlob(meetingId);
+      const { blob, filename } = await generateMeetingPdfBlob(meetingId, forcePdfLevel);
       attachment_base64 = await blobToBase64(blob);
       attachment_filename = filename;
     }
@@ -586,7 +627,7 @@ async function sendEmail(meetingId){
       }
       throw new Error(detail);
     }
-    await logAudit('send_email', { meeting_id: meetingId, to, subject });
+    await logAudit('send_email', { meeting_id: meetingId, to, subject, forced_anonymous: !!forcePdfLevel });
     toast('המייל נשלח בהצלחה');
     closeModal();
   } catch(e){
