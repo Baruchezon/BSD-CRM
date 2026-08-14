@@ -45,6 +45,7 @@ function sfCanManageFile(file){
 
 let SF_CURRENT_BIZ = null;
 let SF_FILES_BY_CATEGORY = {};
+let SF_SEND_BUYERS_CACHE = null;
 
 async function loadSaleFileModule(bizId){
   SF_CURRENT_BIZ = bizId;
@@ -285,4 +286,177 @@ async function deleteSaleFile(fileId){
   if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
   toast('הקובץ נמחק');
   await loadSaleFileModule(SF_CURRENT_BIZ);
+}
+
+// ============================================================
+// שלב 7 — שליחת חומרי תיק מכירה לקונה
+// ------------------------------------------------------------
+// שולח קישורים חתומים (לא מצרף קבצים גולמיים למייל) - פשוט, לא
+// תלוי במגבלת גודל של Gmail, ועובד זהה לקובץ אחד או לכמה קבצים.
+// חוסם קבצים ברמת סודיות 2 (חסוי) אם אין לקונה הסכם חתום - נאכף
+// גם ב-UI וגם בפועל (קבצים חסויים פשוט לא נכנסים לרשימת הנבחרים).
+// ============================================================
+const SF_SIGNED_URL_SECONDS = 60 * 60 * 24 * 7; // שבוע
+
+async function sfLogAudit(bizId, action, details){
+  try {
+    await window.supabaseClient.from('audit_log').insert({
+      table_name: 'business_sale_files', record_id: bizId, action,
+      actor_id: CURRENT_PROFILE ? CURRENT_PROFILE.id : null, details
+    });
+  } catch(e){ /* audit_log אופציונלי - לא חוסם את השליחה עצמה */ }
+}
+
+function sfAllActiveFiles(){
+  return Object.values(SF_FILES_BY_CATEGORY).flat();
+}
+
+async function openSendToBuyerModal(bizId, bizName){
+  const files = sfAllActiveFiles();
+  if (!files.length){ toast('אין עדיין קבצים בתיק המכירה לשליחה'); return; }
+  const { data: buyers, error } = await window.supabaseClient
+    .from('leads').select('id, full_name, first_name, last_name, email, agreement_status')
+    .eq('type', 'buyer').order('full_name');
+  if (error){ toast('שגיאה בטעינת רשימת קונים: ' + error.message); return; }
+  SF_SEND_BUYERS_CACHE = {};
+  (buyers || []).forEach(b => { SF_SEND_BUYERS_CACHE[b.id] = b.agreement_status; });
+
+  const overlay = document.createElement('div');
+  overlay.id = 'sfSendOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:150;padding:40px 20px;';
+  const buyerOptions = (buyers || []).map(b => {
+    const name = b.full_name || [b.first_name, b.last_name].filter(Boolean).join(' ') || '(ללא שם)';
+    return `<option value="${b.id}">${esc(name)}${b.email ? '' : ' — ⚠️ אין אימייל'}</option>`;
+  }).join('');
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:inherit;">
+      <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">📤 שליחת חומרים לקונה</h3>
+      <div class="field"><label>קונה</label>
+        <select id="sfSendBuyer" onchange="sfOnBuyerChange()"><option value="">— בחר קונה —</option>${buyerOptions}</select>
+      </div>
+      <div id="sfSendAgreementNote" style="font-size:.8rem;margin:8px 0;"></div>
+      <div style="font-weight:700;font-size:.85rem;color:var(--navy);margin-top:10px;">בחר קבצים לשליחה:</div>
+      <div id="sfSendFilesList" style="max-height:220px;overflow-y:auto;margin:8px 0;border:1px solid #e5e1d5;border-radius:8px;padding:8px;">
+        ${files.map(f => {
+          const cat = sfCategoryMeta(f.category);
+          return `
+          <label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:.83rem;cursor:pointer;">
+            <input type="checkbox" class="sfSendFileChk" data-conf="${f.confidentiality_level}" value="${f.id}" data-name="${esc(f.file_name)}" data-cat="${esc(cat.label)}" data-path="${esc(f.storage_path)}" style="width:auto;">
+            ${cat.icon} ${esc(f.file_name)} <span style="color:#8a93ab;font-size:.75rem;">(${esc(cat.label)}${f.confidentiality_level === 2 ? ' · חסוי' : ' · אנונימי'})</span>
+          </label>`;
+        }).join('')}
+      </div>
+      <div id="sfSendStatus" style="font-size:.8rem;min-height:18px;margin-top:6px;"></div>
+      <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('sfSendOverlay').remove()">ביטול</button>
+        <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend('${bizId}','${(bizName||'עסק').replace(/'/g,'')}')">שלח</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  sfOnBuyerChange();
+}
+
+function sfOnBuyerChange(){
+  const sel = document.getElementById('sfSendBuyer');
+  const buyerId = sel.value;
+  const note = document.getElementById('sfSendAgreementNote');
+  const checkboxes = Array.from(document.querySelectorAll('.sfSendFileChk'));
+  if (!buyerId){
+    note.textContent = '';
+    checkboxes.forEach(c => { c.disabled = false; c.closest('label').style.opacity = '1'; });
+    return;
+  }
+  const option = sel.selectedOptions[0];
+  // agreement_status לא נשלף שוב מהשרת כאן - כבר נטען עם רשימת הקונים; קוראים מה-dataset שנשמר ברגע הפתיחה
+  const signed = SF_SEND_BUYERS_CACHE && SF_SEND_BUYERS_CACHE[buyerId] === 'יש הסכם חתום';
+  if (signed){
+    note.innerHTML = '<span style="color:#1f7a45;">✅ יש הסכם חתום — כל הקבצים זמינים לשליחה</span>';
+    checkboxes.forEach(c => { c.disabled = false; c.closest('label').style.opacity = '1'; });
+  } else {
+    note.innerHTML = '<span style="color:#b3402c;">🚫 אין הסכם חתום לקונה זה — ניתן לשלוח רק קבצים אנונימיים</span>';
+    checkboxes.forEach(c => {
+      const confidential = c.dataset.conf === '2';
+      c.disabled = confidential;
+      if (confidential) c.checked = false;
+      c.closest('label').style.opacity = confidential ? '.45' : '1';
+    });
+  }
+}
+
+async function sfConfirmSend(bizId, bizName){
+  const buyerSel = document.getElementById('sfSendBuyer');
+  const buyerId = buyerSel.value;
+  if (!buyerId){ toast('יש לבחור קונה'); return; }
+  const buyerOption = buyerSel.selectedOptions[0];
+  const buyerName = buyerOption.textContent.replace(' — ⚠️ אין אימייל', '');
+
+  const { data: buyerRow, error: buyerErr } = await window.supabaseClient
+    .from('leads').select('email, agreement_status').eq('id', buyerId).maybeSingle();
+  if (buyerErr || !buyerRow?.email){ toast('לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם'); return; }
+  // נשלף עכשיו מהשרת, לא מה-cache שנטען כשהמודל נפתח - למקרה שמצב ההסכם השתנה בינתיים
+  const signed = buyerRow.agreement_status === 'יש הסכם חתום';
+
+  const selected = Array.from(document.querySelectorAll('.sfSendFileChk:checked'));
+  if (!selected.length){ toast('יש לבחור לפחות קובץ אחד'); return; }
+
+  // הגנה כפולה: לא סומכים רק על ה-UI (checkbox מנוטרל) - גם כאן, ברגע השליחה
+  // בפועל, מסננים שוב כל קובץ חסוי אם אין הסכם חתום. אם ה-UI תקין זה תמיד
+  // no-op; זו רשת ביטחון למקרה של תקלת מצב ב-JS ולא ההגנה היחידה.
+  const blocked = signed ? [] : selected.filter(c => c.dataset.conf === '2');
+  const allowed = signed ? selected : selected.filter(c => c.dataset.conf !== '2');
+  if (!allowed.length){
+    toast('כל הקבצים שנבחרו חסויים ולקונה הזה אין הסכם חתום - לא ניתן לשלוח');
+    return;
+  }
+  if (blocked.length){
+    toast(`${blocked.length} קבצים חסויים הוסרו אוטומטית מהשליחה (אין הסכם חתום לקונה זה)`);
+  }
+
+  const btn = document.getElementById('sfSendBtn');
+  const statusEl = document.getElementById('sfSendStatus');
+  btn.disabled = true; btn.textContent = 'שולח...';
+  if (statusEl) statusEl.textContent = 'יוצר קישורים מאובטחים...';
+
+  try {
+    const linkLines = [];
+    const fileIds = [];
+    for (const chk of allowed){
+      const { data, error } = await window.supabaseClient.storage.from(SALE_FILE_BUCKET)
+        .createSignedUrl(chk.dataset.path, SF_SIGNED_URL_SECONDS);
+      if (error){ throw new Error(`יצירת קישור נכשלה עבור "${chk.dataset.name}": ${error.message}`); }
+      linkLines.push(`${chk.dataset.cat} - ${chk.dataset.name}:\n${data.signedUrl}`);
+      fileIds.push(chk.value);
+    }
+
+    const subject = `חומרי מכירה${signed ? ' - ' + bizName : ' (אנונימי)'}`;
+    const bodyText =
+      `שלום ${buyerName},\n\n` +
+      `מצורפים קישורים להורדת החומרים (בתוקף לשבוע):\n\n` +
+      linkLines.join('\n\n') +
+      `\n\nבברכה,\nBSD Business Brokers Israel`;
+
+    if (statusEl) statusEl.textContent = 'שולח מייל...';
+    const { data: sendResult, error: sendErr } = await window.supabaseClient.functions.invoke('send-match-summary', {
+      body: { to: buyerRow.email, subject, body_text: bodyText, reply_to: CURRENT_PROFILE.email }
+    });
+    if (sendErr || sendResult?.error){
+      let detail = sendResult?.error || sendErr?.message || 'שגיאה לא ידועה';
+      if (sendErr && sendErr.context && typeof sendErr.context.json === 'function'){
+        try { const b = await sendErr.context.json(); if (b?.error) detail = b.error; } catch(e){}
+      }
+      throw new Error(detail);
+    }
+
+    await sfLogAudit(bizId, 'send_sale_files', {
+      buyer_id: buyerId, buyer_email: buyerRow.email, file_ids: fileIds,
+      file_names: allowed.map(c => c.dataset.name),
+      agreement_status_at_send: signed ? 'יש הסכם חתום' : 'ללא הסכם חתום',
+      method: 'email'
+    });
+    toast('החומרים נשלחו בהצלחה');
+    document.getElementById('sfSendOverlay').remove();
+  } catch(e){
+    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(e.message || String(e))}</span>`;
+    btn.disabled = false; btn.textContent = 'שלח';
+  }
 }

@@ -86,7 +86,7 @@ function assertOk(resp: string, step: string) {
 
 async function sendMailViaGmailSmtp(opts: {
   to: string; subject: string; bodyText: string; replyTo?: string;
-  attachmentBase64?: string; attachmentFilename?: string;
+  attachments?: { base64: string; filename: string; contentType?: string }[];
 }) {
   const conn = await Deno.connectTls({ hostname: 'smtp.gmail.com', port: 465 });
   try {
@@ -108,8 +108,17 @@ async function sendMailViaGmailSmtp(opts: {
       opts.replyTo ? `Reply-To: ${opts.replyTo}` : null,
     ].filter(Boolean).join('\r\n');
 
+    const attachments = (opts.attachments || []).filter(a => a && a.base64 && a.filename);
+
     let mime: string;
-    if (opts.attachmentBase64 && opts.attachmentFilename) {
+    if (attachments.length) {
+      const attachmentParts = attachments.map(a =>
+        `--${boundary}\r\n` +
+        `Content-Type: ${a.contentType || 'application/pdf'}; name="${a.filename}"\r\n` +
+        `Content-Disposition: attachment; filename="${a.filename}"\r\n` +
+        `Content-Transfer-Encoding: base64\r\n\r\n` +
+        `${wrapBase64(a.base64)}\r\n\r\n`
+      ).join('');
       mime =
         `${headers}\r\n` +
         `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n` +
@@ -117,11 +126,7 @@ async function sendMailViaGmailSmtp(opts: {
         `Content-Type: text/plain; charset="UTF-8"\r\n` +
         `Content-Transfer-Encoding: base64\r\n\r\n` +
         `${wrapBase64(utf8ToBase64(opts.bodyText))}\r\n\r\n` +
-        `--${boundary}\r\n` +
-        `Content-Type: application/pdf; name="${opts.attachmentFilename}"\r\n` +
-        `Content-Disposition: attachment; filename="${opts.attachmentFilename}"\r\n` +
-        `Content-Transfer-Encoding: base64\r\n\r\n` +
-        `${wrapBase64(opts.attachmentBase64)}\r\n\r\n` +
+        attachmentParts +
         `--${boundary}--\r\n`;
     } else {
       mime =
@@ -162,7 +167,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const { to, subject, html_body, body_text, reply_to, attachment_base64, attachment_filename } = body;
+    const { to, subject, html_body, body_text, reply_to, attachment_base64, attachment_filename, attachments } = body;
     const bodyText = body_text || String(html_body || '').replace(/<[^>]+>/g, '');
 
     if (!to || !subject || !bodyText) {
@@ -171,9 +176,15 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // תאימות לאחור: קריאות ישנות (match-detail.html) עדיין שולחות attachment_base64/attachment_filename יחיד.
+    // קריאות חדשות (שליחת חומרי תיק מכירה) שולחות attachments: [{base64, filename, contentType}].
+    const resolvedAttachments = Array.isArray(attachments) && attachments.length
+      ? attachments
+      : (attachment_base64 && attachment_filename ? [{ base64: attachment_base64, filename: attachment_filename }] : []);
+
     await sendMailViaGmailSmtp({
       to, subject, bodyText, replyTo: reply_to,
-      attachmentBase64: attachment_base64, attachmentFilename: attachment_filename,
+      attachments: resolvedAttachments,
     });
 
     return new Response(JSON.stringify({ ok: true }), {
