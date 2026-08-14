@@ -492,3 +492,21 @@ html, body{ overflow-x:hidden; max-width:100%; }
 @media (max-width: 380px){
   .login-card{ padding:28px 20px; }
 }
+
+/* ============================================================
+   הבהוב עמום בטעינה — כל שורה בטבלה (tbody tr) וכל כרטיס עגול
+   (.card, .sf-card) שנטענים לדף מקבלים דהייה עדינה של 200ms
+   במקום להופיע בבת אחת. משותף לכל הדפים שמחוברים לגיליון הזה.
+   ============================================================ */
+@keyframes bsdRowFadeIn{
+  from{ opacity:0; transform:translateY(4px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+tbody tr:not(.empty-row),
+.sf-card,
+.card{
+  animation:bsdRowFadeIn .2s ease-out both;
+}
+@media (prefers-reduced-motion: reduce){
+  tbody tr, .sf-card, .card{ animation:none; }
+}
