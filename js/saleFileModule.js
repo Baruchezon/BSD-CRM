@@ -189,10 +189,11 @@ async function uploadSaleFiles(bizId, categoryKey){
 
   const cat = sfCategoryMeta(categoryKey);
   let okCount = 0, failCount = 0;
+  const errorMessages = [];
   for (const rawFile of files){
     if (rawFile.size > SALE_FILE_MAX_MB * 1024 * 1024){
-      toast(`הקובץ "${rawFile.name}" גדול מדי (מקסימום ${SALE_FILE_MAX_MB}MB) - דולג`);
-      failCount++; continue;
+      const msg = `הקובץ "${rawFile.name}" גדול מדי (מקסימום ${SALE_FILE_MAX_MB}MB) - דולג`;
+      toast(msg); errorMessages.push(msg); failCount++; continue;
     }
     let file = rawFile;
     if (categoryKey === 'business_photo' && rawFile.type.startsWith('image/')){
@@ -203,7 +204,11 @@ async function uploadSaleFiles(bizId, categoryKey){
     const path = `${bizId}/sale-file/${categoryKey}/${Date.now()}__${encodeURIComponent(rawFile.name)}`;
     try {
       const { error: upErr } = await window.supabaseClient.storage.from(SALE_FILE_BUCKET).upload(path, file);
-      if (upErr){ toast(`שגיאה בהעלאת "${rawFile.name}": ${upErr.message}`); failCount++; continue; }
+      if (upErr){
+        console.error('sale-file storage upload error:', upErr, { bizId, categoryKey, fileName: rawFile.name });
+        const msg = `שגיאה בהעלאת "${rawFile.name}": ${upErr.message}`;
+        toast(msg); errorMessages.push(msg); failCount++; continue;
+      }
       const { error: dbErr } = await window.supabaseClient.from('business_sale_files').insert({
         business_id: bizId,
         category: categoryKey,
@@ -214,18 +219,29 @@ async function uploadSaleFiles(bizId, categoryKey){
         confidentiality_level: cat.confidentiality,
         uploaded_by: CURRENT_PROFILE.id
       });
-      if (dbErr){ toast(`הקובץ "${rawFile.name}" הועלה אך רישום נכשל: ${dbErr.message}`); failCount++; continue; }
+      if (dbErr){
+        console.error('sale-file DB insert error:', dbErr, { bizId, categoryKey, fileName: rawFile.name });
+        const msg = `הקובץ "${rawFile.name}" הועלה אך רישום נכשל: ${dbErr.message}`;
+        toast(msg); errorMessages.push(msg); failCount++; continue;
+      }
       okCount++;
     } catch(e){
-      toast(`שגיאה בלתי צפויה בהעלאת "${rawFile.name}"`);
-      failCount++;
+      console.error('sale-file unexpected upload exception:', e, { bizId, categoryKey, fileName: rawFile.name });
+      const msg = `שגיאה בלתי צפויה בהעלאת "${rawFile.name}": ${e && e.message ? e.message : String(e)}`;
+      toast(msg); errorMessages.push(msg); failCount++;
     }
   }
-  if (statusEl) statusEl.textContent = '';
   input.value = '';
-  if (okCount) toast(`הועלו בהצלחה ${okCount} קבצים${failCount ? `, ${failCount} נכשלו` : ''}`);
-  await loadSaleFileModule(bizId);
-  openSaleFileCategory(bizId, categoryKey);
+  if (okCount){
+    if (statusEl) statusEl.textContent = '';
+    toast(`הועלו בהצלחה ${okCount} קבצים${failCount ? `, ${failCount} נכשלו` : ''}`);
+    await loadSaleFileModule(bizId);
+    openSaleFileCategory(bizId, categoryKey);
+  } else if (failCount){
+    // כשל מוחלט: לא בונים מחדש את הפאנל (זה היה מוחק את הודעת השגיאה) -
+    // משאירים את הטקסט האדום גלוי עד שהמשתמש ינסה שוב.
+    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${errorMessages.map(esc).join('<br>')}</span>`;
+  }
 }
 
 async function viewSaleFile(fileId, path){
