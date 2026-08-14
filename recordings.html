@@ -71,7 +71,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 14.08.2026 07:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 14.08.2026 10:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -99,7 +99,7 @@
   </div>
 
   <div id="mineView">
-    <button class="btn btn-primary" style="margin-bottom:20px;" onclick="startGeneralRecording()">🔴 הקלטה חדשה</button>
+    <div id="newRecBtnWrap"></div>
     <div id="recordingsList"><div class="empty">טוען...</div></div>
   </div>
 
@@ -241,6 +241,11 @@ function renderAllRecordings(){
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
   if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager'){
     document.getElementById('recTabs').style.display = 'flex';
+  }
+  if (CURRENT_PROFILE.can_record !== false){
+    document.getElementById('newRecBtnWrap').innerHTML = '<button class="btn btn-primary" style="margin-bottom:20px;" onclick="startGeneralRecording()">🔴 הקלטה חדשה</button>';
+  } else {
+    document.getElementById('newRecBtnWrap').innerHTML = '<div class="sub" style="margin-bottom:10px;">אין לך הרשאה להקליט - ניתן לצפות בהקלטות קיימות בלבד.</div>';
   }
   await loadRecordings();
 })();

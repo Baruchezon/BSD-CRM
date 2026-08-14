@@ -124,7 +124,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 14.08.2026 07:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 14.08.2026 10:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
   <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -253,7 +253,7 @@ async function loadEverything(){
 // ============================================================================
 // שלב 2 — שיחות/פגישות, משתתפים, סיכומים, PDF, וואטסאפ, מייל
 // ============================================================================
-const MEETING_TYPES = ['שיחת טלפון','שיחת וידאו','פגישה','פגישת נתונים','פגישת המשך','פגישת מו"מ','שיחה פנימית','אחר'];
+const MEETING_TYPES = ['שיחה','שיחת וידאו','פגישה','פגישת נתונים','פגישת המשך','פגישת מו"מ','שיחה פנימית','אחר'];
 const PARTICIPANT_TYPES = ['קונה','בעל עסק','סוכן','עורך דין','רואה חשבון','אחר'];
 let CURRENT_MEETING_PARTICIPANTS = []; // מערך זמני בטופס העריכה, נשמר לטבלה בפועל רק ב-saveMeeting
 let CURRENT_AI_APPLY = null; // הצעות ה-AI (סטטוס/פעולה הבאה/משימות) - מוחלות בשקט בשמירה, לא כשדות נפרדים
@@ -688,11 +688,15 @@ function pickRecorderMimeType(){
 }
 
 function openRecordingModal(meetingType){
+  if (CURRENT_PROFILE && CURRENT_PROFILE.can_record === false){
+    toast('אין לך הרשאה להקליט - פנה למנהל המערכת');
+    return;
+  }
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>🎙️ הקלטת שיחה/פגישה</h3>
     <div class="field"><label>סוג</label><select id="recType">${MEETING_TYPES.map(t=>`<option value="${t}" ${t===meetingType?'selected':''}>${t}</option>`).join('')}</select></div>
-    <div class="field"><label>מיקום (אופציונלי)</label><input type="text" id="recLocation" placeholder="למשל: משרד הלקוח / שיחת טלפון"></div>
+    <div class="field"><label>מיקום (אופציונלי)</label><input type="text" id="recLocation" placeholder="למשל: משרד הלקוח / שיחה"></div>
     <div id="recArea" style="text-align:center;padding:20px 0;">
       <div style="font-size:2.2rem;margin-bottom:14px;">🎙️</div>
       <div id="recStatus" style="color:#8a93ab;font-size:.85rem;margin-bottom:16px;">לחץ להתחיל הקלטה. תתבקש לאשר גישה למיקרופון.</div>
@@ -1055,7 +1059,7 @@ function renderQuickActions(){
     <button class="qa-btn" onclick="openTaskModal()">✅ הוסף משימה</button>
     <button class="qa-btn" onclick="openStatusModal()">🔄 שנה סטטוס</button>
     <button class="qa-btn" onclick="openNextActionModal()">➡️ קבע פעולה הבאה</button>
-    <button class="qa-btn" onclick="openRecordingModal('פגישה')">🎙️ הקלט פגישה</button>
+    ${CURRENT_PROFILE.can_record!==false ? `<button class="qa-btn" onclick="openRecordingModal('פגישה')">🎙️ הקלט פגישה</button>` : ''}
     <button class="qa-btn" onclick="openMeetingModal(null,'פגישה')">📅 תעד פגישה</button>
     <button class="qa-btn btn-danger" onclick="deleteMatchConfirm()" style="margin-inline-start:auto;">🗑️ מחק התאמה</button>
   `;
@@ -1245,7 +1249,8 @@ async function loadTasks(){
       <input type="checkbox" ${t.status==='הושלמה'?'checked':''} onchange="onTaskCheckboxChange('${t.id}', this.checked)">
       <div style="flex:1;">
         <div>${esc(t.title)} ${t.status==='הושלמה'?'<span style="color:#2fae7a;font-weight:700;">✔ בוצעה</span>':'<span style="color:#c0392b;font-weight:700;">○ פתוחה</span>'}</div>
-        <div class="tmeta">${esc(userName(t.assigned_to))} · יעד: ${fmtDate(t.due_date)} · ${esc(t.priority||'')}</div>
+        <div class="tmeta">${esc(userName(t.assigned_to))} · יעד: ${fmtDate(t.due_date)} · ${esc(t.priority||'')} ${t.source==='ai_meeting' ? '<span class="badge" style="background:#eef2fb;color:#3a5cad;font-size:.7rem;padding:1px 8px;border-radius:10px;margin-inline-start:6px;">🎙️ מהקלטה</span>' : ''}</div>
+        <div class="tmeta" style="color:#a9afc0;">נוצרה: ${fmtDate(t.created_at)}${t.updated_at && t.updated_at !== t.created_at ? ' · עודכנה: ' + fmtDate(t.updated_at) : ''}</div>
         ${t.completion_note ? `<div class="tmeta" style="color:#2fae7a;margin-top:2px;">📝 ${esc(t.completion_note)}</div>` : ''}
       </div>
     </div>`).join('');

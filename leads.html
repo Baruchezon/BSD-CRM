@@ -113,7 +113,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 14.08.2026 07:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 14.08.2026 10:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -586,7 +586,7 @@ function openLeadForm(id, forcedType){
         ${lead ? `
         <div class="section-h">🎙️ הקלטות ותמלולים</div>
         <div class="field full">
-          <button type="button" class="btn btn-ghost" onclick="window.openStandaloneRecording({type:'buyer', id:'${lead.id}', label:'${esc((lead.full_name||'קונה').replace(/'/g,''))}', currentProfile:CURRENT_PROFILE, onSaved: () => loadLeadMeetings('${lead.id}')})">🔴 הקלט שיחה/פגישה</button>
+          ${CURRENT_PROFILE.can_record!==false ? `<button type="button" class="btn btn-ghost" onclick="window.openStandaloneRecording({type:'buyer', id:'${lead.id}', label:'${esc((lead.full_name||'קונה').replace(/'/g,''))}', currentProfile:CURRENT_PROFILE, onSaved: () => loadLeadMeetings('${lead.id}')})">🔴 הקלט שיחה/פגישה</button>` : ''}
           <div id="leadMeetingsList" style="margin-top:10px;font-size:.82rem;">טוען...</div>
         </div>
         ` : ''}
