@@ -384,40 +384,36 @@ function sfOnBuyerChange(){
 }
 
 async function sfConfirmSend(bizId, bizName){
-  const buyerSel = document.getElementById('sfSendBuyer');
-  const buyerId = buyerSel.value;
-  if (!buyerId){ toast('יש לבחור קונה'); return; }
-  const buyerOption = buyerSel.selectedOptions[0];
-  const buyerName = buyerOption.textContent.replace(' — ⚠️ אין אימייל', '');
-
-  const { data: buyerRow, error: buyerErr } = await window.supabaseClient
-    .from('leads').select('email, agreement_status').eq('id', buyerId).maybeSingle();
-  if (buyerErr || !buyerRow?.email){ toast('לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם'); return; }
-  // נשלף עכשיו מהשרת, לא מה-cache שנטען כשהמודל נפתח - למקרה שמצב ההסכם השתנה בינתיים
-  const signed = buyerRow.agreement_status === 'יש הסכם חתום';
-
-  const selected = Array.from(document.querySelectorAll('.sfSendFileChk:checked'));
-  if (!selected.length){ toast('יש לבחור לפחות קובץ אחד'); return; }
-
-  // הגנה כפולה: לא סומכים רק על ה-UI (checkbox מנוטרל) - גם כאן, ברגע השליחה
-  // בפועל, מסננים שוב כל קובץ חסוי אם אין הסכם חתום. אם ה-UI תקין זה תמיד
-  // no-op; זו רשת ביטחון למקרה של תקלת מצב ב-JS ולא ההגנה היחידה.
-  const blocked = signed ? [] : selected.filter(c => c.dataset.conf === '2');
-  const allowed = signed ? selected : selected.filter(c => c.dataset.conf !== '2');
-  if (!allowed.length){
-    toast('כל הקבצים שנבחרו חסויים ולקונה הזה אין הסכם חתום - לא ניתן לשלוח');
-    return;
-  }
-  if (blocked.length){
-    toast(`${blocked.length} קבצים חסויים הוסרו אוטומטית מהשליחה (אין הסכם חתום לקונה זה)`);
-  }
-
   const btn = document.getElementById('sfSendBtn');
   const statusEl = document.getElementById('sfSendStatus');
-  btn.disabled = true; btn.textContent = 'שולח...';
-  if (statusEl) statusEl.textContent = 'יוצר קישורים מאובטחים...';
-
+  if (btn){ btn.disabled = true; btn.textContent = 'שולח...'; }
   try {
+    const buyerSel = document.getElementById('sfSendBuyer');
+    const buyerId = buyerSel.value;
+    if (!buyerId){ throw new Error('יש לבחור קונה'); }
+    const buyerOption = buyerSel.selectedOptions[0];
+    const buyerName = buyerOption.textContent.replace(' — ⚠️ אין אימייל', '');
+
+    if (statusEl) statusEl.textContent = 'בודק פרטי קונה...';
+    const { data: buyerRow, error: buyerErr } = await window.supabaseClient
+      .from('leads').select('email, agreement_status').eq('id', buyerId).maybeSingle();
+    if (buyerErr) throw new Error('שגיאה בטעינת פרטי הקונה: ' + buyerErr.message);
+    if (!buyerRow?.email) throw new Error('לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם');
+    // נשלף עכשיו מהשרת, לא מה-cache שנטען כשהמודל נפתח - למקרה שמצב ההסכם השתנה בינתיים
+    const signed = buyerRow.agreement_status === 'יש הסכם חתום';
+
+    const selected = Array.from(document.querySelectorAll('.sfSendFileChk:checked'));
+    if (!selected.length) throw new Error('יש לבחור לפחות קובץ אחד');
+
+    // הגנה כפולה: לא סומכים רק על ה-UI (checkbox מנוטרל) - גם כאן, ברגע השליחה
+    // בפועל, מסננים שוב כל קובץ חסוי אם אין הסכם חתום. אם ה-UI תקין זה תמיד
+    // no-op; זו רשת ביטחון למקרה של תקלת מצב ב-JS ולא ההגנה היחידה.
+    const blocked = signed ? [] : selected.filter(c => c.dataset.conf === '2');
+    const allowed = signed ? selected : selected.filter(c => c.dataset.conf !== '2');
+    if (!allowed.length) throw new Error('כל הקבצים שנבחרו חסויים ולקונה הזה אין הסכם חתום - לא ניתן לשלוח');
+    if (blocked.length) toast(`${blocked.length} קבצים חסויים הוסרו אוטומטית מהשליחה (אין הסכם חתום לקונה זה)`);
+
+    if (statusEl) statusEl.textContent = 'יוצר קישורים מאובטחים...';
     const linkLines = [];
     const fileIds = [];
     for (const chk of allowed){
@@ -442,7 +438,7 @@ async function sfConfirmSend(bizId, bizName){
     if (sendErr || sendResult?.error){
       let detail = sendResult?.error || sendErr?.message || 'שגיאה לא ידועה';
       if (sendErr && sendErr.context && typeof sendErr.context.json === 'function'){
-        try { const b = await sendErr.context.json(); if (b?.error) detail = b.error; } catch(e){}
+        try { const b = await sendErr.context.json(); if (b?.error) detail = b.error; } catch(e2){}
       }
       throw new Error(detail);
     }
@@ -456,7 +452,10 @@ async function sfConfirmSend(bizId, bizName){
     toast('החומרים נשלחו בהצלחה');
     document.getElementById('sfSendOverlay').remove();
   } catch(e){
-    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(e.message || String(e))}</span>`;
-    btn.disabled = false; btn.textContent = 'שלח';
+    console.error('sfConfirmSend error:', e);
+    const msg = (e && e.message) ? e.message : String(e);
+    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
+    else toast('שגיאה: ' + msg);
+    if (btn){ btn.disabled = false; btn.textContent = 'שלח'; }
   }
 }
