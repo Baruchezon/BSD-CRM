@@ -82,13 +82,14 @@
   .field label{display:block;font-size:.78rem;color:#666;margin-bottom:4px;}
   .field input, .field select, .field textarea{width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
   .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
-  .toast{position:fixed;bottom:24px;left:24px;background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.3);}
+  .toast{position:fixed;bottom:24px;left:24px;background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.3);}  .src-filter-btn{border:none;background:transparent;color:#6b6558;font-size:.82rem;padding:6px 12px;border-radius:6px;cursor:pointer;font-family:inherit;}
+  .src-filter-btn.active{background:#fff;color:#0e1b34;font-weight:700;box-shadow:0 1px 3px rgba(14,27,52,.15);}
 </style>
 </head>
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 14.08.2026 10:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 14.08.2026 16:35</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
       <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -155,11 +156,12 @@
     <select id="fAssigned"><option value="all">כל המשתמשים</option></select>
     <input type="date" id="fDateFrom" title="מתאריך יעד">
     <input type="date" id="fDateTo" title="עד תאריך יעד">
-    <select id="fSource">
-      <option value="all">כל המקורות</option>
-      <option value="ai_meeting">🎙️ מהקלטות בלבד</option>
-      <option value="manual">הוזנו ידנית בלבד</option>
-    </select>
+    <div id="fSourceButtons" style="display:inline-flex;gap:4px;background:#f0ede4;border-radius:8px;padding:3px;">
+      <button type="button" class="src-filter-btn active" data-val="all" onclick="setSourceFilter('all')">הכל</button>
+      <button type="button" class="src-filter-btn" data-val="manual" onclick="setSourceFilter('manual')">📝 ידניות</button>
+      <button type="button" class="src-filter-btn" data-val="ai_meeting" onclick="setSourceFilter('ai_meeting')">🎙️ מהקלטות</button>
+    </div>
+    <input type="hidden" id="fSource" value="all">
   </div>
 
   <h3 style="margin:18px 0 8px;">📋 משימות לביצוע</h3>
@@ -433,9 +435,15 @@ function renderHistoryTable(){
     </tr>`).join('');
 }
 
-['fAssigned','fDateFrom','fDateTo','fSource'].forEach(id=>document.getElementById(id).addEventListener('change', renderTable));
+['fAssigned','fDateFrom','fDateTo'].forEach(id=>document.getElementById(id).addEventListener('change', renderTable));
 document.getElementById('fSearch').addEventListener('input', renderTable);
 ['fHistSearch'].forEach(id=>document.getElementById(id).addEventListener('input', renderHistoryTable));
+
+function setSourceFilter(val){
+  document.getElementById('fSource').value = val;
+  document.querySelectorAll('.src-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.val === val));
+  renderTable();
+}
 document.getElementById('fHistPeriod').addEventListener('change', renderHistoryTable);
 
 function userOptions(selected){
