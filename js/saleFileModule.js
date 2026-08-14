@@ -43,13 +43,6 @@ function sfCanManageFile(file){
   return !!CURRENT_PROFILE && !!CURRENT_PROFILE.can_upload_sale_files && file.uploaded_by === CURRENT_PROFILE.id;
 }
 
-function sfDisplayName(rawName){
-  const idx = rawName.indexOf('__');
-  if (idx === -1) return rawName;
-  try { return decodeURIComponent(rawName.slice(idx + 2)); }
-  catch(e){ return rawName.slice(idx + 2); }
-}
-
 let SF_CURRENT_BIZ = null;
 let SF_FILES_BY_CATEGORY = {};
 
@@ -131,12 +124,12 @@ function openSaleFileCategory(bizId, categoryKey){
 function sfFileRow(f, canManage){
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e5e1d5;font-size:.83rem;">
-      <span>📄 ${esc(sfDisplayName(f.file_name))} <span style="color:#8a93ab;font-size:.75rem;">${f.confidentiality_level === 1 ? '· אנונימי' : '· חסוי'}</span></span>
+      <span>📄 ${esc(f.file_name)} <span style="color:#8a93ab;font-size:.75rem;">${f.confidentiality_level === 1 ? '· אנונימי' : '· חסוי'}</span></span>
       <span style="display:flex;gap:4px;flex-wrap:wrap;">
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="viewSaleFile('${f.id}','${esc(f.storage_path)}')">👁️ צפייה</button>
-        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="downloadSaleFile('${esc(f.storage_path)}','${esc(sfDisplayName(f.file_name)).replace(/'/g,'')}')">📂 הורדה</button>
+        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="downloadSaleFile('${esc(f.storage_path)}','${esc(f.file_name).replace(/'/g,'')}')">📂 הורדה</button>
         ${canManage ? `
-        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="renameSaleFile('${f.id}','${esc(sfDisplayName(f.file_name)).replace(/'/g,'')}')">✏️ שינוי שם</button>
+        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="renameSaleFile('${f.id}','${esc(f.file_name).replace(/'/g,'')}')">✏️ שינוי שם</button>
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="changeSaleFileCategory('${f.id}','${f.category}')">🔀 שינוי קטגוריה</button>
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;color:#b3402c;" onclick="deleteSaleFile('${f.id}')">מחק</button>` : ''}
       </span>
@@ -201,7 +194,13 @@ async function uploadSaleFiles(bizId, categoryKey){
       catch(e){ /* אם הדחיסה נכשלת, מעלים את הקובץ המקורי במקום לחסום */ }
     }
     if (statusEl) statusEl.textContent = `מעלה את "${rawFile.name}"...`;
-    const path = `${bizId}/sale-file/${categoryKey}/${Date.now()}__${encodeURIComponent(rawFile.name)}`;
+    // מפתח האחסון חייב להיות ASCII בלבד (Supabase Storage דוחה "Invalid key" עבור
+    // שמות קבצים בעברית, גם אחרי encodeURIComponent) - אין בעיה, כי השם המקורי
+    // האמיתי כבר נשמר בעמודת file_name בטבלה ולא צריך להיגזר מהמפתח באחסון.
+    const extMatch = rawFile.name.match(/\.[A-Za-z0-9]+$/);
+    const safeExt = extMatch ? extMatch[0] : '';
+    const safeRand = Math.random().toString(36).slice(2, 8);
+    const path = `${bizId}/sale-file/${categoryKey}/${Date.now()}_${safeRand}${safeExt}`;
     try {
       const { error: upErr } = await window.supabaseClient.storage.from(SALE_FILE_BUCKET).upload(path, file);
       if (upErr){
