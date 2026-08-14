@@ -101,7 +101,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 14.08.2026 16:20</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 14.08.2026 18:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -214,6 +214,7 @@
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608132300"></script>
 <script src="js/saleFileModule2.js?v=7"></script>
+<script src="js/notesRecording.js?v=1"></script>
 <script>
 let ALL_BIZ = [];
 let ALL_SELLERS = [];
@@ -581,7 +582,10 @@ function openBizForm(id){
           <input type="text" id="sold_to" value="${esc(biz?.sold_to)}">
         </div>
 
-        <div class="section-h">הערות</div>
+        <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>הערות</span>
+          ${biz ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="openNotesRecording({recordId:'${biz.id}', label:'${esc((biz.internal_name||'עסק').replace(/'/g,''))}', textareaId:'notes', currentProfile:CURRENT_PROFILE})">🎙️ הקלט הערות</button>` : ''}
+        </div>
         <div class="field full">${textareaRow('notes','הערות חופשיות', biz?.notes, 180)}</div>
       </div>
 
