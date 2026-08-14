@@ -128,9 +128,9 @@ function sfFileRow(f, canManage){
       <span>📄 ${esc(f.file_name)} <span style="color:#8a93ab;font-size:.75rem;">${f.confidentiality_level === 1 ? '· אנונימי' : '· חסוי'}</span></span>
       <span style="display:flex;gap:4px;flex-wrap:wrap;">
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="viewSaleFile('${f.id}','${esc(f.storage_path)}')">👁️ צפייה</button>
-        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="downloadSaleFile('${esc(f.storage_path)}','${esc(f.file_name).replace(/'/g,'')}')">📂 הורדה</button>
+        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="downloadSaleFile('${esc(f.storage_path)}','${esc(f.file_name.replace(/'/g,''))}')">📂 הורדה</button>
         ${canManage ? `
-        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="renameSaleFile('${f.id}','${esc(f.file_name).replace(/'/g,'')}')">✏️ שינוי שם</button>
+        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="renameSaleFile('${f.id}','${esc(f.file_name.replace(/'/g,''))}')">✏️ שינוי שם</button>
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="changeSaleFileCategory('${f.id}','${f.category}')">🔀 שינוי קטגוריה</button>
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;color:#b3402c;" onclick="deleteSaleFile('${f.id}')">מחק</button>` : ''}
       </span>
@@ -355,7 +355,7 @@ async function openSendToBuyerModal(bizId, bizName){
       <div id="sfSendStatus" style="font-size:.8rem;min-height:18px;margin-top:6px;"></div>
       <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
         <button type="button" class="btn btn-ghost" onclick="document.getElementById('sfSendOverlay').remove()">ביטול</button>
-        <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend('${bizId}','${(bizName||'עסק').replace(/'/g,'')}')">שלח</button>
+        <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend('${bizId}','${esc((bizName || 'עסק').replace(/'/g,''))}')">שלח</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
