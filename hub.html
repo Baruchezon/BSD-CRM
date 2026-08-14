@@ -54,9 +54,11 @@
     text-decoration:none;
     box-shadow: 0 10px 24px -8px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.12) inset;
     position:relative; overflow:hidden;
-    transition: transform .15s ease;
+    transform:translateY(0);
+    transition: transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .18s ease;
   }
-  a.card:active{ transform: scale(0.97); }
+  a.card:hover{ transform:translateY(-3px); box-shadow: 0 16px 32px -8px rgba(0,0,0,.4), 0 1px 0 rgba(255,255,255,.14) inset; }
+  a.card:active{ transform:translateY(1px) scale(0.98); box-shadow: 0 4px 10px -4px rgba(0,0,0,.3), 0 1px 0 rgba(255,255,255,.1) inset; }
   a.card::after{ content:""; position:absolute; inset:0; background:linear-gradient(120deg, rgba(255,255,255,.13), transparent 60%); pointer-events:none; }
 
   .card.crm{ background:linear-gradient(135deg,#16264a,#0a1530); border:1px solid rgba(201,162,75,.4); }

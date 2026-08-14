@@ -88,7 +88,7 @@ function renderSaleFileCards(bizId){
   if (!document.getElementById('sfCardHoverStyle')){
     const style = document.createElement('style');
     style.id = 'sfCardHoverStyle';
-    style.textContent = '.sf-card:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(14,27,52,.16);}';
+    style.textContent = '.sf-card:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(14,27,52,.16);}.sf-card:active{transform:translateY(1px) scale(.97);box-shadow:0 2px 6px rgba(14,27,52,.14);}';
     document.head.appendChild(style);
   }
 }
