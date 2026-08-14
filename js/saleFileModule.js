@@ -312,6 +312,12 @@ function sfAllActiveFiles(){
 }
 
 async function openSendToBuyerModal(bizId, bizName){
+  // מגן הכרחי: אם ניסיון קודם השאיר overlay ישן בדף (למשל אחרי שגיאה שלא
+  // נסגרה), פתיחה חוזרת הייתה יוצרת שני אלמנטים עם אותם id - ואז
+  // getElementById בכל הפונקציות למטה היה עלול לתפוס בטעות את הישן/הנסתר
+  // במקום את זה שבאמת רואים, וגורם לתחושת "לא קורה כלום" בלחיצה על שלח.
+  document.querySelectorAll('#sfSendOverlay').forEach(el => el.remove());
+
   const files = sfAllActiveFiles();
   if (!files.length){ toast('אין עדיין קבצים בתיק המכירה לשליחה'); return; }
   const { data: buyers, error } = await window.supabaseClient
