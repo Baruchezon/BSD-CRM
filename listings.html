@@ -84,8 +84,12 @@
     display:block; width:100%; background:linear-gradient(135deg,var(--gold-light),var(--gold));
     color:var(--navy); font-weight:800; text-align:center; padding:11px; border:none;
     border-radius:9px; cursor:pointer; font-family:inherit; font-size:.88rem;
+    box-shadow:0 1px 0 rgba(255,255,255,.3) inset, 0 3px 0 rgba(14,27,52,.18), 0 6px 12px rgba(14,27,52,.14);
+    transform:translateY(0);
+    transition:transform .16s cubic-bezier(.34,1.56,.64,1), box-shadow .16s ease, filter .16s ease;
   }
-  .card-cta:hover{ filter:brightness(1.05); }
+  .card-cta:hover{ filter:brightness(1.05); transform:translateY(-2px); box-shadow:0 1px 0 rgba(255,255,255,.35) inset, 0 4px 0 rgba(14,27,52,.18), 0 10px 18px rgba(14,27,52,.18); }
+  .card-cta:active{ transform:translateY(1px); box-shadow:0 1px 0 rgba(255,255,255,.2) inset, 0 1px 0 rgba(14,27,52,.18), 0 2px 5px rgba(14,27,52,.12); }
 
   .empty{ text-align:center; padding:70px 20px; color:var(--muted); }
   .empty .big{ font-size:2.4rem; margin-bottom:10px; }
@@ -101,7 +105,14 @@
   }
   .modal textarea{ min-height:70px; resize:vertical; }
   .modal-actions{ display:flex; gap:8px; margin-top:6px; }
-  .modal-actions button{ flex:1; padding:11px; border-radius:9px; border:none; font-family:inherit; font-weight:700; cursor:pointer; font-size:.88rem; }
+  .modal-actions button{
+    flex:1; padding:11px; border-radius:9px; border:none; font-family:inherit; font-weight:700; cursor:pointer; font-size:.88rem;
+    box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 3px 0 rgba(14,27,52,.16), 0 5px 10px rgba(14,27,52,.12);
+    transform:translateY(0);
+    transition:transform .16s cubic-bezier(.34,1.56,.64,1), box-shadow .16s ease, filter .16s ease;
+  }
+  .modal-actions button:hover{ filter:brightness(1.05); transform:translateY(-2px); }
+  .modal-actions button:active{ transform:translateY(1px); box-shadow:0 1px 0 rgba(255,255,255,.15) inset, 0 1px 0 rgba(14,27,52,.16), 0 2px 4px rgba(14,27,52,.1); }
   .btn-send{ background:var(--navy); color:#fff; }
   .btn-cancel{ background:#f0eee6; color:var(--text); }
   .thankyou{ text-align:center; padding:10px 0; }
