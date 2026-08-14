@@ -427,8 +427,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
   }
 
   const submitBtn = document.getElementById('submitBtn');
-  submitBtn.disabled = true;
-  submitBtn.textContent = EXISTING_BUSINESS_ID ? 'שומר עדכון...' : 'שומר עסק...';
+  bsdSetButtonLoading(submitBtn, true, EXISTING_BUSINESS_ID ? 'שומר עדכון...' : 'שומר עסק...');
 
   const payload = {
     internal_name, owner_name, owner_phone,
@@ -458,8 +457,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
   if (EXISTING_BUSINESS_ID){
     const { error: updBizErr } = await window.supabaseClient.from('businesses').update(payload).eq('id', EXISTING_BUSINESS_ID);
     if (updBizErr){
-      submitBtn.disabled = false;
-      submitBtn.textContent = '✅ שמור טופס לעסק הקיים';
+      bsdSetButtonLoading(submitBtn, false);
       toast('שגיאה בעדכון העסק: ' + updBizErr.message);
       console.error(updBizErr);
       return;
@@ -468,8 +466,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
   } else {
     const { data: inserted, error } = await window.supabaseClient.from('businesses').insert(payload).select().single();
     if (error){
-      submitBtn.disabled = false;
-      submitBtn.textContent = '✅ הזן עסק למערכת + שמור טופס';
+      bsdSetButtonLoading(submitBtn, false);
       toast('שגיאה בשמירת העסק: ' + error.message);
       console.error(error);
       return;
@@ -477,7 +474,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
     bizId = inserted.id;
   }
 
-  submitBtn.textContent = 'יוצר ושומר קובץ סיכום...';
+  bsdSetButtonLoading(submitBtn, true, 'יוצר ושומר קובץ סיכום...');
   try{
     const { blob, filename } = await generatePdfBlob();
     const path = `${bizId}/intake-form.pdf`;
@@ -518,8 +515,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
   } catch(pdfErr){
     console.error(pdfErr);
     toast((EXISTING_BUSINESS_ID ? 'העדכון נשמר' : 'העסק נשמר') + ', אך שמירת קובץ הסיכום נכשלה: ' + (pdfErr.message || pdfErr));
-    submitBtn.disabled = false;
-    submitBtn.textContent = EXISTING_BUSINESS_ID ? '✅ שמור טופס לעסק הקיים' : '✅ הזן עסק למערכת + שמור טופס';
+    bsdSetButtonLoading(submitBtn, false);
   }
 });
 

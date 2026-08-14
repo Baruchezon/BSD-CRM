@@ -417,6 +417,9 @@ function openEditForm(id){
 
 async function saveEdit(e){
   e.preventDefault();
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  bsdSetButtonLoading(submitBtn, true, 'שומר...');
+  try {
   const id = e.target.dataset.userId;
   const g = k => document.getElementById(k).value;
   const payload = {
@@ -437,6 +440,9 @@ async function saveEdit(e){
   toast('נשמר בהצלחה');
   closeModal();
   await loadUsers();
+  } finally {
+    bsdSetButtonLoading(submitBtn, false);
+  }
 }
 
 async function toggleStatus(id, currentStatus){
@@ -565,10 +571,12 @@ function openCreateForm(){
 
 async function createUser(e){
   e.preventDefault();
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  bsdSetButtonLoading(submitBtn, true, 'יוצר...');
   const g = k => document.getElementById(k).value;
 
   const { data: { session } } = await window.supabaseClient.auth.getSession();
-  if (!session){ toast('פג תוקף החיבור, התחבר מחדש'); return; }
+  if (!session){ toast('פג תוקף החיבור, התחבר מחדש'); bsdSetButtonLoading(submitBtn, false); return; }
 
   const functionUrl = window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/create-user';
 
@@ -599,6 +607,8 @@ async function createUser(e){
     await loadUsers();
   } catch (err){
     toast('שגיאת רשת: ' + err.message + ' (יש לוודא שה-Edge Function נפרסה)');
+  } finally {
+    bsdSetButtonLoading(submitBtn, false);
   }
 }
 

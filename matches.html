@@ -603,6 +603,9 @@ async function loadHistory(matchId){
 async function saveMatch(e){
   e.preventDefault();
   const form = e.target;
+  const submitBtn = form.querySelector('button[type="submit"]');
+  bsdSetButtonLoading(submitBtn, true, 'שומר...');
+  try {
   const matchId = form.dataset.matchId;
   const g = id => document.getElementById(id) ? document.getElementById(id).value : null;
   const num = v => v === '' || v === null ? null : Number(v);
@@ -682,6 +685,9 @@ async function saveMatch(e){
   toast('נשמר בהצלחה');
   closeModal();
   await loadMatches();
+  } finally {
+    bsdSetButtonLoading(submitBtn, false);
+  }
 }
 
 async function deleteMatch(id){

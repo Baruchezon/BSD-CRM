@@ -398,8 +398,7 @@ document.getElementById('exportBtn').addEventListener('click', async function(){
 
   const btn = this;
   const statusEl = document.getElementById('exportStatus');
-  btn.disabled = true;
-  btn.textContent = 'מייצא...';
+  bsdSetButtonLoading(btn, true, 'מייצא...');
 
   try{
     const workbook = new ExcelJS.Workbook();
@@ -454,8 +453,7 @@ document.getElementById('exportBtn').addEventListener('click', async function(){
     statusEl.textContent = '';
     toast('שגיאה בהפקת הגיבוי: ' + (err.message || err));
   } finally {
-    btn.disabled = false;
-    btn.textContent = '📥 ייצא לאקסל';
+    bsdSetButtonLoading(btn, false);
   }
 });
 

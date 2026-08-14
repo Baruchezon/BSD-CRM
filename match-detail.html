@@ -338,7 +338,7 @@ function openMeetingModal(id, presetType, aiData, presetLocation){
 
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-      <button class="btn btn-primary" onclick="saveMeeting('${id||''}')">${aiData ? 'אשר ושמור' : 'שמירה'}</button>
+      <button class="btn btn-primary" onclick="saveMeeting('${id||''}', this)">${aiData ? 'אשר ושמור' : 'שמירה'}</button>
     </div>`;
   document.getElementById('overlay').classList.add('open');
   renderParticipantsLocal();
@@ -358,8 +358,9 @@ function addParticipantLocal(){
 }
 function removeParticipantLocal(i){ CURRENT_MEETING_PARTICIPANTS.splice(i,1); renderParticipantsLocal(); }
 
-async function saveMeeting(id){
-
+async function saveMeeting(id, btn){
+  bsdSetButtonLoading(btn, true, 'שומר...');
+  try {
   const payload = {
     match_id: MATCH_ID, business_id: MATCH.business_id, buyer_id: MATCH.buyer_id,
     meeting_type: document.getElementById('mType').value,
@@ -433,6 +434,9 @@ async function saveMeeting(id){
   toast('הסיכום נשמר' + autoAppliedNote);
   closeModal();
   await loadEverything();
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
 }
 
 // ---------- מסך אישור AI עשיר (הקלטה בלבד) - כל הפרטים, גרפיקה ברורה ----------
@@ -493,7 +497,7 @@ function openAiApprovalModal(aiData, meetingType, recLocation){
 
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-      <button class="btn btn-primary" onclick="saveAiApproval()">✅ אשר ושמור</button>
+      <button class="btn btn-primary" onclick="saveAiApproval(this)">✅ אשר ושמור</button>
     </div>`;
   document.getElementById('overlay').classList.add('open');
   renderParticipantsLocal();
@@ -515,7 +519,9 @@ function renderAiTasksRich(){
     </div>`).join('');
 }
 
-async function saveAiApproval(){
+async function saveAiApproval(btn){
+  bsdSetButtonLoading(btn, true, 'שומר...');
+  try {
   const meetingType = document.getElementById('aiType').value;
   const payload = {
     match_id: MATCH_ID, business_id: MATCH.business_id, buyer_id: MATCH.buyer_id,
@@ -578,6 +584,9 @@ async function saveAiApproval(){
   toast(`הסיכום נשמר${approvedTasks.length ? ` + ${approvedTasks.length} משימות` : ''}`);
   closeModal();
   await loadEverything();
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
 }
 
 async function deleteMeeting(id){
@@ -1084,7 +1093,7 @@ function openStatusModal(){
     <div class="field" id="dropReasonNoteField" style="display:none;"><label>הערה</label><textarea id="dropReasonNote"></textarea></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-      <button class="btn btn-primary" onclick="saveStatusChange()">שמירה</button>
+      <button class="btn btn-primary" onclick="saveStatusChange(this)">שמירה</button>
     </div>`;
   document.getElementById('overlay').classList.add('open');
   onStatusModalChange();
@@ -1110,7 +1119,9 @@ function onStatusModalChange(){
     warnBox.style.display = 'none';
   }
 }
-async function saveStatusChange(){
+async function saveStatusChange(btn){
+  bsdSetButtonLoading(btn, true, 'שומר...');
+  try {
   const newStatus = document.getElementById('newStatus').value;
   const newDisclosure = Number(document.getElementById('newDisclosure').value);
   const isDrop = newStatus === 'לא רלוונטי';
@@ -1138,6 +1149,9 @@ async function saveStatusChange(){
   toast('הסטטוס עודכן');
   closeModal();
   await loadEverything();
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
 }
 
 // ---------- פעולה הבאה ----------
@@ -1150,11 +1164,13 @@ function openNextActionModal(){
     <div class="field"><label>אחראי</label><select id="naOwner">${userOptions(MATCH.next_action_owner)}</select></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-      <button class="btn btn-primary" onclick="saveNextAction()">שמירה</button>
+      <button class="btn btn-primary" onclick="saveNextAction(this)">שמירה</button>
     </div>`;
   document.getElementById('overlay').classList.add('open');
 }
-async function saveNextAction(){
+async function saveNextAction(btn){
+  bsdSetButtonLoading(btn, true, 'שומר...');
+  try {
   const text = document.getElementById('naText').value.trim();
   const date = document.getElementById('naDate').value || null;
   const owner = document.getElementById('naOwner').value || null;
@@ -1166,6 +1182,9 @@ async function saveNextAction(){
   toast('פעולה הבאה עודכנה');
   closeModal();
   await loadEverything();
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
 }
 
 // ---------- הערות (record_notes) ----------
@@ -1176,13 +1195,15 @@ function openNoteModal(){
     <div class="field"><textarea id="noteText" placeholder="הערה חופשית..."></textarea></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-      <button class="btn btn-primary" onclick="saveNote()">שמירה</button>
+      <button class="btn btn-primary" onclick="saveNote(this)">שמירה</button>
     </div>`;
   document.getElementById('overlay').classList.add('open');
 }
-async function saveNote(){
+async function saveNote(btn){
   const text = document.getElementById('noteText').value.trim();
   if (!text){ toast('יש להזין טקסט'); return; }
+  bsdSetButtonLoading(btn, true, 'שומר...');
+  try {
   const { error } = await window.supabaseClient.from('record_notes').insert({
     table_name: 'matches', record_id: MATCH_ID, note_text: text, author_id: CURRENT_PROFILE.id
   });
@@ -1192,6 +1213,9 @@ async function saveNote(){
   toast('ההערה נשמרה');
   closeModal();
   await loadEverything();
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
 }
 async function loadNotes(){
   const { data, error } = await window.supabaseClient.from('record_notes').select('*').eq('table_name','matches').eq('record_id', MATCH_ID).order('created_at', {ascending:false});
@@ -1217,13 +1241,15 @@ function openTaskModal(){
     <div class="field"><label>עדיפות</label><select id="tPriority"><option value="רגילה">רגילה</option><option value="גבוהה">גבוהה</option><option value="דחופה">דחופה</option></select></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-      <button class="btn btn-primary" onclick="saveTask()">שמירה</button>
+      <button class="btn btn-primary" onclick="saveTask(this)">שמירה</button>
     </div>`;
   document.getElementById('overlay').classList.add('open');
 }
-async function saveTask(){
+async function saveTask(btn){
   const title = document.getElementById('tTitle').value.trim();
   if (!title){ toast('יש להזין כותרת'); return; }
+  bsdSetButtonLoading(btn, true, 'שומר...');
+  try {
   const payload = {
     title, description: document.getElementById('tDesc').value || null,
     assigned_to: document.getElementById('tAssignee').value || null,
@@ -1237,6 +1263,9 @@ async function saveTask(){
   toast('המשימה נוספה');
   closeModal();
   await loadEverything();
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
 }
 async function loadTasks(){
   const { data, error } = await window.supabaseClient.from('tasks').select('*').eq('match_id', MATCH_ID).order('due_date', {ascending:true});
