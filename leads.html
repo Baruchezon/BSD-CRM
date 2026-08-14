@@ -637,6 +637,9 @@ function switchLeadType(newType, leadId){
 async function saveLead(e){
   e.preventDefault();
   const form = e.target;
+  const submitBtn = form.querySelector('button[type="submit"]');
+  bsdSetButtonLoading(submitBtn, true, 'שומר...');
+  try {
   const leadId = form.dataset.leadId;
   const type = form.dataset.leadType;
 
@@ -691,6 +694,9 @@ async function saveLead(e){
   }
   closeModal();
   await loadLeads();
+  } finally {
+    bsdSetButtonLoading(submitBtn, false);
+  }
 }
 
 async function sendAgreementForLead(id){

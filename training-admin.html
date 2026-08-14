@@ -619,6 +619,9 @@ function fieldRow(id,label,value,type='text'){
 
 async function saveLeadCard(e){
   e.preventDefault();
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  bsdSetButtonLoading(submitBtn, true, 'שומר...');
+  try {
   const id = e.target.dataset.leadId;
   const lead = ALL_LEADS.find(l => l.id === id);
   const price_before_vat = Number(document.getElementById('cf_price').value) || 0;
@@ -648,6 +651,9 @@ async function saveLeadCard(e){
   toast('נשמר בהצלחה');
   closeModal();
   await loadLeads();
+  } finally {
+    bsdSetButtonLoading(submitBtn, false);
+  }
 }
 
 async function deleteLead(id){
@@ -731,6 +737,9 @@ function openTrainingSettings(){
 
 async function saveTrainingSettings(e){
   e.preventDefault();
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  bsdSetButtonLoading(submitBtn, true, 'שומר...');
+  try {
   const vat_rate = Number(document.getElementById('ts_vat').value) || 0;
   const training_curriculum = document.getElementById('ts_curriculum').value;
   const { error } = await window.supabaseClient.from('training_settings').update({ vat_rate, training_curriculum, updated_at: new Date().toISOString() }).eq('id', 1);
@@ -738,6 +747,9 @@ async function saveTrainingSettings(e){
   VAT_RATE = vat_rate; CURRICULUM = training_curriculum;
   toast('ההגדרות נשמרו');
   closeModal();
+  } finally {
+    bsdSetButtonLoading(submitBtn, false);
+  }
 }
 
 (async function init(){

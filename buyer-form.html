@@ -397,8 +397,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
   const buyer_name = buyerFullName();
 
   const submitBtn = document.getElementById('submitBtn');
-  submitBtn.disabled = true;
-  submitBtn.textContent = EXISTING_LEAD_ID ? 'שומר עדכון...' : 'שומר קונה...';
+  bsdSetButtonLoading(submitBtn, true, EXISTING_LEAD_ID ? 'שומר עדכון...' : 'שומר קונה...');
 
   const payload = {
     type: 'buyer',
@@ -427,8 +426,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
   if (EXISTING_LEAD_ID){
     const { error: updLeadErr } = await window.supabaseClient.from('leads').update(payload).eq('id', EXISTING_LEAD_ID);
     if (updLeadErr){
-      submitBtn.disabled = false;
-      submitBtn.textContent = '✅ שמור טופס לקונה הקיים';
+      bsdSetButtonLoading(submitBtn, false);
       toast('שגיאה בעדכון הקונה: ' + updLeadErr.message);
       console.error(updLeadErr);
       return;
@@ -437,8 +435,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
   } else {
     const { data: inserted, error } = await window.supabaseClient.from('leads').insert(payload).select().single();
     if (error){
-      submitBtn.disabled = false;
-      submitBtn.textContent = '✅ הזן קונה למערכת + שמור טופס';
+      bsdSetButtonLoading(submitBtn, false);
       toast('שגיאה בשמירת הקונה: ' + error.message);
       console.error(error);
       return;
@@ -446,7 +443,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
     leadId = inserted.id;
   }
 
-  submitBtn.textContent = 'יוצר ושומר קובץ סיכום...';
+  bsdSetButtonLoading(submitBtn, true, 'יוצר ושומר קובץ סיכום...');
   try{
     const { blob, filename } = await generatePdfBlob();
     const path = `leads/${leadId}/buyer-form.pdf`;
@@ -487,8 +484,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
   } catch(pdfErr){
     console.error(pdfErr);
     toast((EXISTING_LEAD_ID ? 'העדכון נשמר' : 'הקונה נשמר') + ', אך שמירת קובץ הסיכום נכשלה: ' + (pdfErr.message || pdfErr));
-    submitBtn.disabled = false;
-    submitBtn.textContent = EXISTING_LEAD_ID ? '✅ שמור טופס לקונה הקיים' : '✅ הזן קונה למערכת + שמור טופס';
+    bsdSetButtonLoading(submitBtn, false);
   }
 });
 

@@ -508,6 +508,9 @@ function openTaskForm(id){
 async function saveTask(e){
   e.preventDefault();
   const form = e.target;
+  const submitBtn = form.querySelector('button[type="submit"]');
+  bsdSetButtonLoading(submitBtn, true, 'שומר...');
+  try {
   const taskId = form.dataset.taskId;
   const g = id => document.getElementById(id).value;
   const relatedType = g('related_type') || null;
@@ -556,6 +559,9 @@ async function saveTask(e){
   toast('נשמר בהצלחה');
   closeModal();
   await loadTasks();
+  } finally {
+    bsdSetButtonLoading(submitBtn, false);
+  }
 }
 
 async function completeTask(id){

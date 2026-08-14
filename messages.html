@@ -306,7 +306,7 @@ async function openThread(key, adminAll){
         <textarea id="replyText" placeholder="כתוב הודעה..." style="width:100%;min-height:70px;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;resize:vertical;"></textarea>
         <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px;">
           <button onclick="document.getElementById('threadOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
-          <button onclick="sendReply('${otherId}')" style="background:#0e1b34;color:#fff;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">📤 שלח</button>
+          <button onclick="sendReply('${otherId}', this)" style="background:#0e1b34;color:#fff;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">📤 שלח</button>
         </div>` : `
         <div style="text-align:left;margin-top:10px;">
           <button onclick="document.getElementById('threadOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
@@ -334,9 +334,11 @@ function renderBubbles(conv, adminAll){
   box.scrollTop = box.scrollHeight;
 }
 
-async function sendReply(otherId){
+async function sendReply(otherId, btn){
   const text = document.getElementById('replyText').value.trim();
   if (!text) return;
+  bsdSetButtonLoading(btn, true, '');
+  try {
   const payload = { sender_id: CURRENT_PROFILE.id, recipient_id: otherId, body: text };
   const { data, error } = await window.supabaseClient.from('messages').insert(payload).select().single();
   if (error){ toast('שגיאה בשליחה: ' + error.message); return; }
@@ -347,6 +349,9 @@ async function sendReply(otherId){
   const conv = CONVERSATIONS.find(c => c.key === VIEWING_KEY) || CONVERSATIONS.find(c => (c.partnerA===CURRENT_PROFILE.id && c.partnerB===otherId) || (c.partnerB===CURRENT_PROFILE.id && c.partnerA===otherId));
   document.getElementById('replyText').value = '';
   if (conv) renderBubbles(conv, adminAll);
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
 }
 
 function openNewMessageModal(){
@@ -365,16 +370,18 @@ function openNewMessageModal(){
       <textarea id="newMsgBody" style="width:100%;min-height:90px;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;resize:vertical;"></textarea>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
         <button onclick="document.getElementById('newMsgOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
-        <button onclick="sendNewMessage()" style="background:#0e1b34;color:#fff;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">📤 שלח</button>
+        <button onclick="sendNewMessage(this)" style="background:#0e1b34;color:#fff;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">📤 שלח</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
 }
 
-async function sendNewMessage(){
+async function sendNewMessage(btn){
   const to = document.getElementById('newMsgTo').value;
   const text = document.getElementById('newMsgBody').value.trim();
   if (!to || !text) return;
+  bsdSetButtonLoading(btn, true, '');
+  try {
   const { data, error } = await window.supabaseClient.from('messages').insert({ sender_id: CURRENT_PROFILE.id, recipient_id: to, body: text }).select().single();
   if (error){ toast('שגיאה בשליחה: ' + error.message); return; }
   ALL_MESSAGES.push(data);
@@ -382,6 +389,9 @@ async function sendNewMessage(){
   buildConversations(false);
   renderConvList();
   toast('ההודעה נשלחה');
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
 }
 
 async function refreshNavBadge(){
