@@ -336,7 +336,7 @@ async function openSendToBuyerModal(bizId, bizName){
   }).join('');
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:inherit;">
-      <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">📤 שליחת חומרים לקונה</h3>
+      <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">📤 שליחת חומרים לקונה <span style="font-size:.6rem;color:#bbb;">v2</span></h3>
       <div class="field"><label>קונה</label>
         <select id="sfSendBuyer" onchange="sfOnBuyerChange()"><option value="">— בחר קונה —</option>${buyerOptions}</select>
       </div>
