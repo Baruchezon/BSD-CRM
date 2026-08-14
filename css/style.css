@@ -510,3 +510,19 @@ tbody tr:not(.empty-row),
 @media (prefers-reduced-motion: reduce){
   tbody tr, .sf-card, .card{ animation:none; }
 }
+
+/* ============================================================
+   מצב טעינה על כפתור פעולה (ר' bsdSetButtonLoading ב-js/auth.js) -
+   ספינר קטן + טקסט, במקום שהכפתור פשוט "ישתתק" עד שהשרת מסיים.
+   ============================================================ */
+.btn-loading{ cursor:wait !important; opacity:.85; pointer-events:none; display:inline-flex; align-items:center; gap:8px; justify-content:center; }
+.btn-spinner{
+  display:inline-block; width:14px; height:14px; flex:0 0 auto;
+  border:2px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%;
+  animation:bsdSpin .6s linear infinite;
+}
+.btn-ghost .btn-spinner{ border-color:rgba(14,27,52,.25); border-top-color:var(--navy); }
+@keyframes bsdSpin{ to{ transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce){
+  .btn-spinner{ animation:none; }
+}
