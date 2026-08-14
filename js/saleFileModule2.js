@@ -420,26 +420,46 @@ async function sfConfirmSend(bizId, bizName){
     if (blocked.length) toast(`${blocked.length} קבצים חסויים הוסרו אוטומטית מהשליחה (אין הסכם חתום לקונה זה)`);
 
     if (statusEl) statusEl.textContent = 'יוצר קישורים מאובטחים...';
-    const linkLines = [];
+    const linkItems = []; // [{cat, name, url}]
     const fileIds = [];
     for (const chk of allowed){
       const { data, error } = await window.supabaseClient.storage.from(SALE_FILE_BUCKET)
         .createSignedUrl(chk.dataset.path, SF_SIGNED_URL_SECONDS);
       if (error){ throw new Error(`יצירת קישור נכשלה עבור "${chk.dataset.name}": ${error.message}`); }
-      linkLines.push(`${chk.dataset.cat} - ${chk.dataset.name}:\n${data.signedUrl}`);
+      linkItems.push({ cat: chk.dataset.cat, name: chk.dataset.name, url: data.signedUrl });
       fileIds.push(chk.value);
     }
 
     const subject = `חומרי מכירה${signed ? ' - ' + bizName : ' (אנונימי)'}`;
+
+    // גרסת טקסט רגיל (fallback, לתוכנות מייל שלא מציגות HTML)
     const bodyText =
       `שלום ${buyerName},\n\n` +
       `מצורפים קישורים להורדת החומרים (בתוקף לשבוע):\n\n` +
-      linkLines.join('\n\n') +
+      linkItems.map(l => `${l.cat} - ${l.name}:\n${l.url}`).join('\n\n') +
       `\n\nבברכה,\nBSD Business Brokers Israel`;
+
+    // גרסת HTML - קישור לחיץ יפה במקום URL גולמי וארוך
+    const htmlBody = `
+      <div dir="rtl" style="font-family:Heebo,Rubik,Arial,sans-serif;color:#0e1b34;max-width:520px;">
+        <p style="font-size:15px;">שלום ${esc(buyerName)},</p>
+        <p style="font-size:14px;color:#444;">מצורפים קישורים להורדת החומרים (בתוקף לשבוע):</p>
+        <div style="margin:18px 0;">
+          ${linkItems.map(l => `
+            <div style="border:1px solid #e5e1d5;border-radius:10px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <div>
+                <div style="font-weight:700;font-size:14px;">${esc(l.name)}</div>
+                <div style="font-size:12px;color:#8a93ab;">${esc(l.cat)}</div>
+              </div>
+              <a href="${l.url}" style="background:#c9a24b;color:#1c2333;text-decoration:none;font-weight:700;font-size:13px;padding:8px 16px;border-radius:8px;white-space:nowrap;">📥 הורדה</a>
+            </div>`).join('')}
+        </div>
+        <p style="font-size:13px;color:#8a93ab;">בברכה,<br>BSD Business Brokers Israel</p>
+      </div>`;
 
     if (statusEl) statusEl.textContent = 'שולח מייל...';
     const { data: sendResult, error: sendErr } = await window.supabaseClient.functions.invoke('send-match-summary', {
-      body: { to: buyerRow.email, subject, body_text: bodyText, reply_to: CURRENT_PROFILE.email }
+      body: { to: buyerRow.email, subject, body_text: bodyText, html_body: htmlBody, reply_to: CURRENT_PROFILE.email }
     });
     if (sendErr || sendResult?.error){
       let detail = sendResult?.error || sendErr?.message || 'שגיאה לא ידועה';

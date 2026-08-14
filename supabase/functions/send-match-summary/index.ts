@@ -85,7 +85,7 @@ function assertOk(resp: string, step: string) {
 }
 
 async function sendMailViaGmailSmtp(opts: {
-  to: string; subject: string; bodyText: string; replyTo?: string;
+  to: string; subject: string; bodyText: string; htmlBody?: string; replyTo?: string;
   attachments?: { base64: string; filename: string; contentType?: string }[];
 }) {
   const conn = await Deno.connectTls({ hostname: 'smtp.gmail.com', port: 465 });
@@ -109,6 +109,13 @@ async function sendMailViaGmailSmtp(opts: {
     ].filter(Boolean).join('\r\n');
 
     const attachments = (opts.attachments || []).filter(a => a && a.base64 && a.filename);
+    const isHtml = !!opts.htmlBody;
+    const bodyContentType = isHtml ? 'text/html' : 'text/plain';
+    const bodyContent = isHtml ? opts.htmlBody! : opts.bodyText;
+    const bodyPart =
+      `Content-Type: ${bodyContentType}; charset="UTF-8"\r\n` +
+      `Content-Transfer-Encoding: base64\r\n\r\n` +
+      `${wrapBase64(utf8ToBase64(bodyContent))}\r\n\r\n`;
 
     let mime: string;
     if (attachments.length) {
@@ -123,17 +130,15 @@ async function sendMailViaGmailSmtp(opts: {
         `${headers}\r\n` +
         `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n` +
         `--${boundary}\r\n` +
-        `Content-Type: text/plain; charset="UTF-8"\r\n` +
-        `Content-Transfer-Encoding: base64\r\n\r\n` +
-        `${wrapBase64(utf8ToBase64(opts.bodyText))}\r\n\r\n` +
+        bodyPart +
         attachmentParts +
         `--${boundary}--\r\n`;
     } else {
       mime =
         `${headers}\r\n` +
-        `Content-Type: text/plain; charset="UTF-8"\r\n` +
+        `Content-Type: ${bodyContentType}; charset="UTF-8"\r\n` +
         `Content-Transfer-Encoding: base64\r\n\r\n` +
-        `${wrapBase64(utf8ToBase64(opts.bodyText))}\r\n`;
+        `${wrapBase64(utf8ToBase64(bodyContent))}\r\n`;
     }
 
     // dot-stuffing: a line consisting of a lone "." would prematurely end DATA
@@ -168,10 +173,13 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json();
     const { to, subject, html_body, body_text, reply_to, attachment_base64, attachment_filename, attachments } = body;
-    const bodyText = body_text || String(html_body || '').replace(/<[^>]+>/g, '');
+    // html_body: כשסופק, נשלח כ-HTML אמיתי (קישורים לחיצים וכו') - לא רק "טקסט עם תגיות שהוסרו".
+    // body_text עדיין נדרש כתוכן טקסטואלי כשאין html_body (התנהגות קיימת, לא משתנה).
+    const bodyText = body_text || '';
+    const htmlBody = html_body || '';
 
-    if (!to || !subject || !bodyText) {
-      return new Response(JSON.stringify({ error: 'חסרים שדות חובה: to, subject, ותוכן (body_text)' }), {
+    if (!to || !subject || (!bodyText && !htmlBody)) {
+      return new Response(JSON.stringify({ error: 'חסרים שדות חובה: to, subject, ותוכן (body_text או html_body)' }), {
         status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' }
       });
     }
@@ -183,7 +191,7 @@ Deno.serve(async (req: Request) => {
       : (attachment_base64 && attachment_filename ? [{ base64: attachment_base64, filename: attachment_filename }] : []);
 
     await sendMailViaGmailSmtp({
-      to, subject, bodyText, replyTo: reply_to,
+      to, subject, bodyText, htmlBody: htmlBody || undefined, replyTo: reply_to,
       attachments: resolvedAttachments,
     });
 
