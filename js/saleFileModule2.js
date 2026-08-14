@@ -184,6 +184,7 @@ async function uploadSaleFiles(bizId, categoryKey){
   const cat = sfCategoryMeta(categoryKey);
   let okCount = 0, failCount = 0;
   const errorMessages = [];
+  const uploadedNames = [];
   for (const rawFile of files){
     if (rawFile.size > SALE_FILE_MAX_MB * 1024 * 1024){
       const msg = `הקובץ "${rawFile.name}" גדול מדי (מקסימום ${SALE_FILE_MAX_MB}MB) - דולג`;
@@ -225,6 +226,7 @@ async function uploadSaleFiles(bizId, categoryKey){
         toast(msg); errorMessages.push(msg); failCount++; continue;
       }
       okCount++;
+      uploadedNames.push(rawFile.name);
     } catch(e){
       console.error('sale-file unexpected upload exception:', e, { bizId, categoryKey, fileName: rawFile.name });
       const msg = `שגיאה בלתי צפויה בהעלאת "${rawFile.name}": ${e && e.message ? e.message : String(e)}`;
@@ -235,6 +237,7 @@ async function uploadSaleFiles(bizId, categoryKey){
   if (okCount){
     if (statusEl) statusEl.textContent = '';
     toast(`הועלו בהצלחה ${okCount} קבצים${failCount ? `, ${failCount} נכשלו` : ''}`);
+    await sfLogAudit(bizId, 'upload_sale_files', { category: categoryKey, file_names: uploadedNames, count: okCount });
     await loadSaleFileModule(bizId);
     openSaleFileCategory(bizId, categoryKey);
   } else if (failCount){
@@ -263,6 +266,7 @@ async function renameSaleFile(fileId, currentName){
     .update({ file_name: newName.trim(), updated_at: new Date().toISOString() }).eq('id', fileId);
   if (error){ toast('שגיאה בשינוי שם: ' + error.message); return; }
   toast('שם הקובץ עודכן');
+  await sfLogAudit(SF_CURRENT_BIZ, 'rename_sale_file', { file_id: fileId, old_name: currentName, new_name: newName.trim() });
   await loadSaleFileModule(SF_CURRENT_BIZ);
 }
 
@@ -276,15 +280,19 @@ async function changeSaleFileCategory(fileId, currentCategory){
     .update({ category: newCat.key, confidentiality_level: newCat.confidentiality, updated_at: new Date().toISOString() }).eq('id', fileId);
   if (error){ toast('שגיאה בשינוי קטגוריה: ' + error.message); return; }
   toast('הקטגוריה עודכנה');
+  await sfLogAudit(SF_CURRENT_BIZ, 'change_sale_file_category', { file_id: fileId, old_category: currentCategory, new_category: newCat.key });
   await loadSaleFileModule(SF_CURRENT_BIZ);
 }
 
 async function deleteSaleFile(fileId){
   if (!confirm('למחוק קובץ זה מתיק המכירה?')) return;
+  // שולפים את שם הקובץ לפני המחיקה כדי שהתיעוד יהיה קריא (לא רק מזהה טכני)
+  const fileBeingDeleted = sfAllActiveFiles().find(f => f.id === fileId);
   const { error } = await window.supabaseClient.from('business_sale_files')
     .update({ status: 'deleted', deleted_at: new Date().toISOString() }).eq('id', fileId);
   if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
   toast('הקובץ נמחק');
+  await sfLogAudit(SF_CURRENT_BIZ, 'delete_sale_file', { file_id: fileId, file_name: fileBeingDeleted ? fileBeingDeleted.file_name : null, category: fileBeingDeleted ? fileBeingDeleted.category : null });
   await loadSaleFileModule(SF_CURRENT_BIZ);
 }
 
