@@ -76,10 +76,10 @@ function renderSaleFileCards(bizId){
       ${SALE_FILE_CATEGORIES.map(cat => {
         const count = (SF_FILES_BY_CATEGORY[cat.key] || []).length;
         return `
-        <div class="sf-card" onclick="openSaleFileCategory('${bizId}','${cat.key}')" style="cursor:pointer;background:#fff;border:1px solid #e5e1d5;border-radius:10px;padding:10px 6px;text-align:center;box-shadow:0 1px 4px rgba(14,27,52,.07);transition:transform .16s cubic-bezier(.34,1.56,.64,1),box-shadow .16s ease;">
+        <div class="sf-card" onclick="openSaleFileCategory('${bizId}','${cat.key}')" style="cursor:pointer;background:#fff;border:1px solid #e5e1d5;border-radius:10px;padding:10px 6px 12px;text-align:center;box-shadow:0 1px 4px rgba(14,27,52,.07);transition:transform .16s cubic-bezier(.34,1.56,.64,1),box-shadow .16s ease;min-height:70px;">
           <div style="font-size:1.15rem;margin-bottom:3px;">${cat.icon}</div>
-          <div style="font-weight:700;font-size:.72rem;color:#0e1b34;line-height:1.25;">${esc(cat.label)}</div>
-          <div style="font-size:.68rem;color:#8a93ab;margin-top:2px;">${count} ${count === 1 ? 'קובץ' : 'קבצים'}</div>
+          <div style="font-weight:700;font-size:.72rem;color:#0e1b34;line-height:1.3;">${esc(cat.label)}</div>
+          <div style="font-size:.68rem;color:#8a93ab;margin-top:3px;">${count} ${count === 1 ? 'קובץ' : 'קבצים'}</div>
         </div>`;
       }).join('')}
     </div>
