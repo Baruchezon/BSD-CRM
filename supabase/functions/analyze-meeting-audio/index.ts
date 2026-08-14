@@ -171,7 +171,21 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!transcript) {
-      return jsonResponse({ error: 'התמלול חזר ריק - ייתכן שההקלטה שקטה מדי', retryable: true }, 502);
+      // התמלול חזר ריק (הקלטה שקטה/ללא דיבור מזוהה) - זו לא כשלון טכני,
+      // אלא תוצאה תקינה של הקלטה בלי תוכן. במקום לזרוק שגיאה ולאבד את
+      // התיעוד שההקלטה בכלל בוצעה, ממשיכים למסך האישור עם רשומה שמסמנת
+      // זאת במפורש, כדי שיהיה ברור שההקלטה כן קרתה אך לא נמצא בה מלל.
+      await supabase.storage.from('temp-audio').remove([storage_path]);
+      return jsonResponse({
+        transcript: '',
+        analysis: {
+          summary: 'לא זוהה תוכן קולי (מלל) בהקלטה זו - ייתכן שההקלטה הייתה שקטה או קצרה מדי. ההקלטה תועדה בכל זאת כדי לשמור עדות שביצוע ההקלטה קרה.',
+          decisions: '', open_questions: '', requested_documents: '',
+          next_action: '', suggested_status: null, drop_reason_category: null,
+          tasks: [], follow_up_meeting_date: null,
+          suggested_title: 'הקלטה ללא תוכן מזוהה'
+        }
+      });
     }
 
     let analysis: Record<string, unknown>;

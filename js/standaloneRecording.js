@@ -3,7 +3,7 @@
 // דורש שהעמוד המארח יטען html2pdf.js וש-window.supabaseClient/toast()/esc()/fmtDate() קיימים.
 
 (function(){
-  const MEETING_TYPES = ['שיחת טלפון','שיחת וידאו','פגישה','פגישת נתונים','פגישת המשך','פגישת מו"מ','שיחה פנימית','אחר'];
+  const MEETING_TYPES = ['שיחה','שיחת וידאו','פגישה','פגישת נתונים','פגישת המשך','פגישת מו"מ','שיחה פנימית','אחר'];
 
   function ensurePrintTemplate(){
     if (document.getElementById('bsdRecCaptureOverlay')) return;
@@ -50,6 +50,11 @@
   let recorder=null, stream=null, chunks=[], startTime=null, timerHandle=null;
 
   window.openStandaloneRecording = function(c){
+    if (c.currentProfile && c.currentProfile.can_record === false){
+      if (typeof toast === 'function') toast('אין לך הרשאה להקליט - פנה למנהל המערכת');
+      else alert('אין לך הרשאה להקליט - פנה למנהל המערכת');
+      return;
+    }
     ctx = c;
     ensurePrintTemplate();
     const modal = document.getElementById('modalBox');
