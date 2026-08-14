@@ -114,7 +114,7 @@ function openSaleFileCategory(bizId, categoryKey){
       ${canUpload ? `
       <div style="margin-top:12px;border-top:1px solid #e5e1d5;padding-top:10px;">
         <input type="file" id="sfUploadInput" ${isPhotoCat ? 'accept="image/*" multiple' : 'multiple'}>
-        <button type="button" class="btn btn-ghost" style="margin-inline-start:8px;" onclick="uploadSaleFiles('${bizId}','${categoryKey}')">⬆️ העלה</button>
+        <button type="button" class="btn btn-ghost" id="sfUploadBtn" style="margin-inline-start:8px;" onclick="uploadSaleFiles('${bizId}','${categoryKey}')">⬆️ העלה</button>
         ${isPhotoCat ? `<div style="font-size:.75rem;color:#8a93ab;margin-top:4px;">עד ${SALE_FILE_MAX_PHOTOS} תמונות סה"כ (תמונות ידחסו אוטומטית)</div>` : ''}
         <div id="sfUploadStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
       </div>` : ''}
@@ -170,13 +170,16 @@ async function uploadSaleFiles(bizId, categoryKey){
   if (!sfCanUpload()){ toast('אין לך הרשאת העלאת קבצים'); return; }
   const input = document.getElementById('sfUploadInput');
   const statusEl = document.getElementById('sfUploadStatus');
+  const uploadBtn = document.getElementById('sfUploadBtn');
   const files = Array.from(input.files || []);
   if (!files.length){ toast('יש לבחור קובץ קודם'); return; }
+  bsdSetButtonLoading(uploadBtn, true, 'מעלה...');
 
   if (categoryKey === 'business_photo'){
     const existing = (SF_FILES_BY_CATEGORY['business_photo'] || []).length;
     if (existing + files.length > SALE_FILE_MAX_PHOTOS){
       toast(`ניתן להעלות עד ${SALE_FILE_MAX_PHOTOS} תמונות סה"כ (קיימות ${existing})`);
+      bsdSetButtonLoading(uploadBtn, false);
       return;
     }
   }
@@ -244,6 +247,7 @@ async function uploadSaleFiles(bizId, categoryKey){
     // כשל מוחלט: לא בונים מחדש את הפאנל (זה היה מוחק את הודעת השגיאה) -
     // משאירים את הטקסט האדום גלוי עד שהמשתמש ינסה שוב.
     if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${errorMessages.map(esc).join('<br>')}</span>`;
+    bsdSetButtonLoading(uploadBtn, false);
   }
 }
 
@@ -400,7 +404,7 @@ function sfOnBuyerChange(){
 async function sfConfirmSend(bizId, bizName){
   const btn = document.getElementById('sfSendBtn');
   const statusEl = document.getElementById('sfSendStatus');
-  if (btn){ btn.disabled = true; btn.textContent = 'שולח...'; }
+  if (btn) bsdSetButtonLoading(btn, true, 'שולח...');
   try {
     const buyerSel = document.getElementById('sfSendBuyer');
     const buyerId = buyerSel.value;
@@ -490,6 +494,6 @@ async function sfConfirmSend(bizId, bizName){
     const msg = (e && e.message) ? e.message : String(e);
     if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
     else toast('שגיאה: ' + msg);
-    if (btn){ btn.disabled = false; btn.textContent = 'שלח'; }
+    if (btn) bsdSetButtonLoading(btn, false);
   }
 }

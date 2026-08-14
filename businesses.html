@@ -209,11 +209,11 @@
 
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202608111530"></script>
+<script src="js/auth.js?v=202608141715"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608132300"></script>
-<script src="js/saleFileModule2.js?v=6"></script>
+<script src="js/saleFileModule2.js?v=7"></script>
 <script>
 let ALL_BIZ = [];
 let ALL_SELLERS = [];
@@ -990,6 +990,9 @@ function suggestShortDescription(){
 async function saveBiz(e){
   e.preventDefault();
   const form = e.target;
+  const submitBtn = form.querySelector('button[type="submit"]');
+  bsdSetButtonLoading(submitBtn, true, 'שומר...');
+  try {
   const bizId = form.dataset.bizId;
   const g = id => document.getElementById(id) ? document.getElementById(id).value : null;
   const num = v => v === '' || v === null ? null : Number(v);
@@ -1033,6 +1036,9 @@ async function saveBiz(e){
   }
   closeModal();
   await loadBusinesses();
+  } finally {
+    bsdSetButtonLoading(submitBtn, false);
+  }
 }
 
 async function sendAgreementForBiz(id){

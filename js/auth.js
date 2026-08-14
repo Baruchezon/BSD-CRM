@@ -638,3 +638,33 @@ function translateAuthError(error) {
 
   setInterval(checkIdle, 1000);
 })();
+
+// ============================================================
+// bsdSetButtonLoading — כפתור פעולה (שמור/שלח/מחק) שמראה מצב
+// טעינה ברור (ספינר + טקסט) במקום פשוט "להשתתק" עד שהשרת מסיים.
+// שימוש: bsdSetButtonLoading(btnEl, true, 'שומר...') לפני הקריאה
+// האסינכרונית, ו-bsdSetButtonLoading(btnEl, false) אחריה (בהצלחה
+// או בכשל - שני המסלולים צריכים לשחזר את הכפתור).
+// שומר את הטקסט/HTML המקורי על האלמנט כדי לשחזר בדיוק כמו שהיה.
+// ============================================================
+window.bsdSetButtonLoading = function(btn, isLoading, loadingText){
+  if (!btn) return;
+  if (isLoading){
+    if (btn.dataset.bsdOrigHtml === undefined) btn.dataset.bsdOrigHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.classList.add('btn-loading');
+    btn.innerHTML = `<span class="btn-spinner"></span>${loadingText ? esc(loadingText) : ''}`;
+  } else {
+    btn.disabled = false;
+    btn.classList.remove('btn-loading');
+    if (btn.dataset.bsdOrigHtml !== undefined){
+      btn.innerHTML = btn.dataset.bsdOrigHtml;
+      delete btn.dataset.bsdOrigHtml;
+    }
+  }
+};
+// esc() כבר מוגדר בכל דף שמשתמש בכפתורים (למניעת הזרקת HTML מטקסט הטעינה);
+// fallback זהיר למקרה שנקרא מדף שעדיין לא הגדיר את זה בשלב הזה בטעינה.
+if (typeof window.esc !== 'function'){
+  window.esc = function(s){ if (s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); };
+}
