@@ -78,14 +78,14 @@ function renderSaleFileCards(bizId){
   const box = document.getElementById('saleFileModuleBox');
   if (!box) return;
   box.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;">
       ${SALE_FILE_CATEGORIES.map(cat => {
         const count = (SF_FILES_BY_CATEGORY[cat.key] || []).length;
         return `
-        <div class="sf-card" onclick="openSaleFileCategory('${bizId}','${cat.key}')" style="cursor:pointer;background:#fff;border:1px solid #e5e1d5;border-radius:12px;padding:16px 12px;text-align:center;box-shadow:0 2px 8px rgba(14,27,52,.08);transition:transform .16s cubic-bezier(.34,1.56,.64,1),box-shadow .16s ease;">
-          <div style="font-size:1.8rem;margin-bottom:6px;">${cat.icon}</div>
-          <div style="font-weight:700;font-size:.85rem;color:#0e1b34;">${esc(cat.label)}</div>
-          <div style="font-size:.78rem;color:#8a93ab;margin-top:4px;">${count} ${count === 1 ? 'קובץ' : 'קבצים'}</div>
+        <div class="sf-card" onclick="openSaleFileCategory('${bizId}','${cat.key}')" style="cursor:pointer;background:#fff;border:1px solid #e5e1d5;border-radius:10px;padding:10px 6px;text-align:center;box-shadow:0 1px 4px rgba(14,27,52,.07);transition:transform .16s cubic-bezier(.34,1.56,.64,1),box-shadow .16s ease;">
+          <div style="font-size:1.15rem;margin-bottom:3px;">${cat.icon}</div>
+          <div style="font-weight:700;font-size:.72rem;color:#0e1b34;line-height:1.25;">${esc(cat.label)}</div>
+          <div style="font-size:.68rem;color:#8a93ab;margin-top:2px;">${count} ${count === 1 ? 'קובץ' : 'קבצים'}</div>
         </div>`;
       }).join('')}
     </div>
