@@ -304,9 +304,7 @@ async function loadLeads(){
     .from('leads')
     .select('*')
     .order('updated_at', { ascending: false });
-  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
-    q = q.eq('created_by', CURRENT_PROFILE.id);
-  }
+  // הסינון לפי created_by הוסר - RLS (leads_select) כבר מחזיר בשרת רק את מה שמותר.
   const { data, error } = await q;
   if (error){ toast('שגיאה בטעינת נתונים: ' + error.message); return; }
   // לידים ללא הסכם כלל מנוהלים כעת ב"לידים" — כאן מוצגים רק מי שנשלח אליו הסכם או שחתם
@@ -683,9 +681,12 @@ async function saveLead(e){
   let error;
   if (leadId){
     ({ error } = await window.supabaseClient.from('leads').update(payload).eq('id', leadId));
+    if (!error) bsdLogActivity('update', 'leads', leadId);
   } else {
     payload.created_by = CURRENT_PROFILE ? CURRENT_PROFILE.id : null;
-    ({ error } = await window.supabaseClient.from('leads').insert(payload));
+    const insertResult = await window.supabaseClient.from('leads').insert(payload).select('id').single();
+    error = insertResult.error;
+    if (!error && insertResult.data) bsdLogActivity('create', 'leads', insertResult.data.id);
   }
 
   if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
@@ -851,6 +852,9 @@ async function deleteLead(id){
   if (!CURRENT_PROFILE) return;
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
   refreshNavMsgBadge();
+  if (!canCreateBuyer(CURRENT_PROFILE)){
+    document.querySelectorAll('button[onclick^="openLeadForm(null"]').forEach(b => b.style.display = 'none');
+  }
   await loadUsers();
   await loadNotesSummary('leads');
   await loadLeads();

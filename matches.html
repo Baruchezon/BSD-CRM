@@ -324,37 +324,9 @@ function populateCreatedByFilter(){
   });
 }
 
-// "סוכן" = לקוח חיצוני שמקבל שירות מהמערכת - צריך לראות רק התאמות
-// שקשורות לעסקים/קונים שהוא עצמו הכניס, לא את כל ההתאמות במערכת
-async function loadAgentOwnIds(){
-  if (!CURRENT_PROFILE || CURRENT_PROFILE.role !== 'agent') return;
-  const [bizRes, leadRes] = await Promise.all([
-    window.supabaseClient.from('businesses').select('id').eq('created_by', CURRENT_PROFILE.id),
-    window.supabaseClient.from('leads').select('id').eq('created_by', CURRENT_PROFILE.id)
-  ]);
-  AGENT_OWN_BIZ_IDS = (bizRes.data || []).map(r => r.id);
-  AGENT_OWN_LEAD_IDS = (leadRes.data || []).map(r => r.id);
-}
-
 async function loadMatches(){
-  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
-    if (AGENT_OWN_BIZ_IDS.length === 0 && AGENT_OWN_LEAD_IDS.length === 0) {
-      // אין לסוכן אף עסק/ליד משלו - אין אפשרות שיהיו לו התאמות בכלל
-      ALL_MATCHES = [];
-      populateCreatedByFilter();
-      renderTable();
-      return;
-    }
-    const conditions = [];
-    if (AGENT_OWN_BIZ_IDS.length) conditions.push(`business_id.in.(${AGENT_OWN_BIZ_IDS.join(',')})`);
-    if (AGENT_OWN_LEAD_IDS.length) conditions.push(`buyer_id.in.(${AGENT_OWN_LEAD_IDS.join(',')})`);
-    const { data, error } = await window.supabaseClient.from('matches').select('*').order('updated_at',{ascending:false}).or(conditions.join(','));
-    if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
-    ALL_MATCHES = data || [];
-    populateCreatedByFilter();
-    renderTable();
-    return;
-  }
+  // הסינון הידני לפי AGENT_OWN_BIZ_IDS/AGENT_OWN_LEAD_IDS הוסר - RLS (matches_select)
+  // כבר מחזיר בשרת בדיוק את מה שמותר, כולל גישות שוחררו במפורש (business_access_grants).
   const { data, error } = await window.supabaseClient.from('matches').select('*').order('updated_at',{ascending:false});
   if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
   ALL_MATCHES = data || [];
@@ -701,7 +673,6 @@ async function deleteMatch(id){
   CURRENT_PROFILE = await requireAuth();
   if (!CURRENT_PROFILE) return;
   await loadLookups();
-  await loadAgentOwnIds();
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
   refreshNavMsgBadge();
   await loadMatches();
