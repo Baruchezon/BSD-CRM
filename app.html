@@ -115,9 +115,7 @@
     <div style="position:relative;display:inline-block;">
     <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">📋 טפסים ▾</button>
     <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
-      <a href="intake-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🧾 טופס סיכום עסק</a>
-      <a href="buyer-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🧍 טופס סיכום קונה</a>
-      <a id="navFormsAllLink" href="intake-forms.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 כל הטפסים שהוגשו</a>
+      <a id="navFormsAllLink" href="intake-forms.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">📁 כל הטפסים שהוגשו</a>
     </div>
   </div>
     <div style="position:relative;display:inline-block;">
@@ -159,13 +157,6 @@
       <div id="welcomeBlessing" style="font-family:'Gveret Levin',cursive;color:#0e1b34;background:#fdf1cf;display:inline-block;padding:3px 11px;border-radius:7px;border:1px solid var(--gold);font-size:1rem;font-weight:400;margin-top:6px;"></div>
     </div>
     <div>
-      <div style="position:relative;display:inline-block;margin-left:10px;">
-        <button type="button" onclick="toggleFormsMenu(event)" style="background:var(--success);color:#fff;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;">📋 טופס סיכום ▾</button>
-        <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
-          <a href="intake-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🧾 טופס סיכום עסק</a>
-          <a href="buyer-form.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🧍 טופס סיכום קונה</a>
-        </div>
-      </div>
       <button id="aiMatchBtn" onclick="runAiMatchSuggestions()" style="background:var(--gold);color:#1c2333;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;margin-left:10px;">
         🧠 קבל הצעות התאמה חכמות
       </button>
@@ -248,6 +239,7 @@
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202608151400"></script>
+<script src="js/permissions.js?v=202608151600"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script>
 let currentPeriod = 'week';
