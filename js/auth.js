@@ -496,15 +496,43 @@ function toggleFormsMenu(e){
   // positioned child that pokes out below it — the menu was opening, just
   // invisibly. `fixed` positioning escapes that clipping entirely.
   if (btn){
+    // Measure with display:block (but invisible) first — a menu that's still
+    // display:none reports a 0 height, which broke the vertical flip check below.
+    menu.style.visibility = 'hidden';
+    menu.style.display = 'block';
     const rect = btn.getBoundingClientRect();
-    const menuWidth = menu.getBoundingClientRect().width || 210;
+    const menuRect = menu.getBoundingClientRect();
+    const menuWidth = menuRect.width || 210;
+    const menuHeight = menuRect.height || 0;
+
     let left = rect.right - menuWidth;
     if (left < 8) left = 8;
     if (left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
+
+    // Flip above the button when there isn't room below (near the bottom of
+    // the screen / a row near the end of a scrolled list) but there IS room
+    // above — otherwise the menu got cut off by the bottom of the viewport.
+    const spaceBelow = window.innerHeight - rect.bottom - 4;
+    const spaceAbove = rect.top - 4;
+    let top;
+    if (menuHeight > spaceBelow && spaceAbove > spaceBelow){
+      top = Math.max(8, rect.top - menuHeight - 4);
+    } else {
+      top = rect.bottom + 4;
+      // Even opening downward, don't let it run off the bottom of the screen.
+      if (top + menuHeight > window.innerHeight - 8){
+        top = Math.max(8, window.innerHeight - menuHeight - 8);
+      }
+    }
+
     menu.style.position = 'fixed';
-    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.top = top + 'px';
     menu.style.left = left + 'px';
     menu.style.right = 'auto';
+    menu.style.maxHeight = (window.innerHeight - 16) + 'px';
+    menu.style.overflowY = 'auto';
+    menu.style.visibility = 'visible';
+    return;
   }
   menu.style.display = 'block';
 }

@@ -101,7 +101,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 14.08.2026 18:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 15.08.2026 12:30</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -635,7 +635,7 @@ function openBizForm(id){
       </div>
       <div class="section-h" style="margin-top:14px;">קבצים מצורפים</div>
       <div class="field full">
-        <input type="file" id="bizFileInput">
+        <input type="file" id="bizFileInput" multiple>
         <button type="button" class="btn btn-ghost" style="margin-inline-start:8px;" onclick="uploadBizFile('${biz.id}')">⬆️ העלה קובץ</button>
         <div id="bizUploadStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
         <div id="bizFilesList" style="margin-top:10px;font-size:.82rem;">טוען קבצים...</div>
@@ -712,34 +712,41 @@ async function loadBizFiles(bizId){
 async function uploadBizFile(bizId){
   const input = document.getElementById('bizFileInput');
   const statusEl = document.getElementById('bizUploadStatus');
-  const file = input.files[0];
-  if (!file){ toast('יש לבחור קובץ קודם'); return; }
-  if (file.size > MAX_FILE_MB * 1024 * 1024){
-    if (statusEl) statusEl.textContent = `הקובץ גדול מדי (מקסימום ${MAX_FILE_MB}MB)`;
-    toast(`הקובץ גדול מדי (מקסימום ${MAX_FILE_MB}MB)`);
-    input.value = '';
-    return;
+  const files = Array.from(input.files || []);
+  if (!files.length){ toast('יש לבחור קובץ קודם'); return; }
+
+  const tooBig = files.filter(f => f.size > MAX_FILE_MB * 1024 * 1024);
+  if (tooBig.length){
+    const msg = `${tooBig.length===files.length ? '' : tooBig.length + ' מתוך '}הקבצים גדולים מדי (מקסימום ${MAX_FILE_MB}MB): ${tooBig.map(f=>f.name).join(', ')}`;
+    if (statusEl) statusEl.textContent = msg;
+    toast(msg);
+    if (tooBig.length === files.length){ input.value = ''; return; }
   }
-  if (statusEl) statusEl.textContent = 'מעלה את "' + file.name + '"...';
-  // Encode the original name into the key so any characters (רווחים, סוגריים, עברית)
-  // are stored safely - the real name is decoded back for display in loadBizFiles().
-  const path = `${bizId}/${Date.now()}__${encodeURIComponent(file.name)}`;
-  let error;
-  try {
-    ({ error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).upload(path, file));
-  } catch (e){
-    if (statusEl) statusEl.textContent = '';
-    toast('שגיאה בהעלאה (חריגה): ' + (e && e.message ? e.message : String(e)));
-    console.error('uploadBizFile threw:', e);
-    return;
+  const toUpload = files.filter(f => f.size <= MAX_FILE_MB * 1024 * 1024);
+
+  let okCount = 0;
+  const failed = [];
+  for (let i = 0; i < toUpload.length; i++){
+    const file = toUpload[i];
+    if (statusEl) statusEl.textContent = `מעלה (${i+1}/${toUpload.length}): "${file.name}"...`;
+    // Encode the original name into the key so any characters (רווחים, סוגריים, עברית)
+    // are stored safely - the real name is decoded back for display in loadBizFiles().
+    // A per-file counter (not just Date.now()) avoids two files in the same
+    // batch colliding on an identical millisecond timestamp.
+    const path = `${bizId}/${Date.now()}_${i}__${encodeURIComponent(file.name)}`;
+    try {
+      const { error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).upload(path, file);
+      if (error){ failed.push(file.name + ' (' + error.message + ')'); }
+      else { okCount++; }
+    } catch (e){
+      failed.push(file.name + ' (' + (e && e.message ? e.message : String(e)) + ')');
+      console.error('uploadBizFile threw:', e);
+    }
   }
-  if (error){
-    if (statusEl) statusEl.textContent = '';
-    toast('שגיאה בהעלאה: ' + error.message);
-    return;
-  }
+
   if (statusEl) statusEl.textContent = '';
-  toast('הקובץ הועלה בהצלחה');
+  if (okCount) toast(okCount === 1 ? 'הקובץ הועלה בהצלחה' : `${okCount} קבצים הועלו בהצלחה`);
+  if (failed.length) toast('שגיאה בהעלאת: ' + failed.join(', '));
   input.value = '';
   loadBizFiles(bizId);
 }
