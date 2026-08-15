@@ -505,7 +505,15 @@ html, body{ overflow-x:hidden; max-width:100%; }
 tbody tr:not(.empty-row),
 .sf-card,
 .card{
-  animation:bsdRowFadeIn .2s ease-out both;
+  /* fill-mode "backwards" (NOT "both") on purpose: "both" would leave the
+     keyframe's transform:translateY(0) permanently applied to the row even
+     after the 0.2s animation finishes, which turns the row into a CSS
+     "containing block" for any position:fixed descendant inside it (e.g.
+     the ⋮ row-actions menu in businesses.html/leads.html) - that silently
+     broke the menu's fixed-to-viewport positioning, making it render far
+     off-screen. "backwards" keeps the identical fade-in look but drops the
+     transform once the animation ends, exactly like the row never had one. */
+  animation:bsdRowFadeIn .2s ease-out backwards;
 }
 @media (prefers-reduced-motion: reduce){
   tbody tr, .sf-card, .card{ animation:none; }
