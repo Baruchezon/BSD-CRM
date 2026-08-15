@@ -101,7 +101,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 15.08.2026 17:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 15.08.2026 18:30</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -160,6 +160,21 @@
     </div>
   </div>
 
+  <div style="display:flex;gap:8px;margin:0 0 12px;">
+    <button type="button" id="bizTabMine" class="btn btn-primary" onclick="switchBizTab('mine')">📋 עסקים למכירה</button>
+    <button type="button" id="bizTabAnon" class="btn btn-ghost" onclick="switchBizTab('anon')">🪪 עסקים אנונימיים</button>
+    <button type="button" id="bizTabRequests" class="btn btn-ghost" onclick="switchBizTab('requests')">🔓 בקשות גישה <span id="pendingReqBadge" style="display:none;background:#b3402c;color:#fff;border-radius:10px;padding:1px 7px;font-size:.7rem;margin-right:4px;"></span></button>
+  </div>
+
+  <div id="anonBizSection" style="display:none;">
+    <div id="anonBizGrid" style="max-width:640px;">טוען...</div>
+  </div>
+
+  <div id="requestsBizSection" style="display:none;">
+    <div id="accessRequestsList" style="max-width:720px;">טוען...</div>
+  </div>
+
+  <div id="mineBizSection">
   <div class="filters">
     <input type="text" id="fSearch" placeholder="חיפוש לפי שם עסק, עיר, תחום, מחיר, תיאור...">
     <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
@@ -196,6 +211,7 @@
   <div style="display:flex;justify-content:center;gap:10px;margin:8px 0 2px;">
     <button type="button" class="btn btn-ghost" onclick="scrollTableBy(this,-260)">⬅ גלול לעוד עמודות</button>
     <button type="button" class="btn btn-ghost" onclick="scrollTableBy(this,260)">➡ גלול חזרה</button>
+  </div>
   </div>
   </div>
 </div>
@@ -279,9 +295,8 @@ async function loadBusinesses(){
     .from('businesses')
     .select('*')
     .order('updated_at', { ascending: false });
-  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
-    q = q.eq('created_by', CURRENT_PROFILE.id);
-  }
+  // הסינון לפי created_by הוסר - ה-RLS בבסיס הנתונים (has_full_business_access)
+  // כבר מחזיר בדיוק את השורות שמותר לראות לכל תפקיד, כולל גישות ששוחררו.
   const { data, error } = await q;
   if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
   // עסקים ללא הסכם כלל מנוהלים כעת ב"לידים" — כאן מוצגים רק מי שנשלח אליו הסכם או שחתם
@@ -624,6 +639,35 @@ function openBizForm(id){
       </div>
       ` : ``}
 
+      ${biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz) ? `
+      <div class="section-h" style="margin-top:14px;">🪪 כרטיס אנונימי (רשימת עסקים אנונימיים)</div>
+      <div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer;">
+          <input type="checkbox" id="anon_card_active" style="width:auto;" ${biz.anon_card_active?'checked':''}>
+          הפץ עסק זה ככרטיס אנונימי לכל המשתמשים המורשים לצפייה בעסקים אנונימיים
+        </label>
+        <div style="font-size:.78rem;color:#665;margin-top:6px;">
+          הכרטיס יכלול רק: תחום, קטגוריה, אזור כללי, וותק, מחזור/רווח/עובדים, תיאור קצר.
+          הוא לעולם לא יכלול שם עסק, שם בעלים, טלפון, אימייל, כתובת מדויקת או קבצים - זה נאכף ברמת בסיס הנתונים, לא רק בממשק.
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;">
+          <input type="checkbox" id="anon_card_show_price" style="width:auto;" ${biz.anon_card_show_price?'checked':''}> הצג מחיר מבוקש בכרטיס
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:4px;cursor:pointer;">
+          <input type="checkbox" id="anon_card_show_reason" style="width:auto;" ${biz.anon_card_show_reason?'checked':''}> הצג סיבת מכירה בכרטיס
+        </label>
+      </div>
+      ` : ``}
+
+      ${biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz) ? `
+      <div class="section-h" style="margin-top:14px;">🔓 גישה שהוענקה לעסק זה</div>
+      <div class="field full">
+        <div id="bizAccessGrantsList" style="font-size:.82rem;margin-bottom:8px;">טוען...</div>
+        <button type="button" class="btn btn-ghost" onclick="openReleaseAccessModal('${biz.id}')">➕ שחרר גישה למשתמש</button>
+      </div>
+      ` : ``}
+
+
       ${biz ? `
       <div class="section-h" style="margin-top:14px;">🎙️ הקלטות ותמלולים</div>
       <div class="field full">
@@ -655,6 +699,197 @@ function openBizForm(id){
   if (biz) loadBizFiles(biz.id);
   if (biz) loadBizMeetings(biz.id);
   if (biz) loadSaleFileModule(biz.id);
+  if (biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz)) loadBizAccessGrants(biz.id);
+}
+
+// ============================================================
+// גישה שוחררה לעסק - רשימה + שחרור חדש + ביטול (סעיפים 7-9 באפיון)
+// ============================================================
+async function loadBizAccessGrants(bizId){
+  const box = document.getElementById('bizAccessGrantsList');
+  if (!box) return;
+  const { data, error } = await window.supabaseClient
+    .from('business_access_grants')
+    .select('*')
+    .eq('business_id', bizId)
+    .eq('active', true)
+    .order('granted_at', { ascending: false });
+  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה: ${esc(error.message)}</span>`; return; }
+  if (!data || !data.length){ box.innerHTML = '<span style="color:#999;">הגישה לעסק זה לא שוחררה כרגע לאף משתמש</span>'; return; }
+  box.innerHTML = data.map(g => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eee;">
+      <span><b>${esc(userName(g.granted_to))}</b> · ${g.access_level === 'files' ? 'כרטיס מלא + קבצים' : 'כרטיס מלא בלבד'} · שוחרר ע"י ${esc(userName(g.granted_by))} ב-${fmtDate(g.granted_at)}</span>
+      <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="revokeAccessGrant('${g.id}','${bizId}')">בטל גישה</button>
+    </div>
+  `).join('');
+}
+
+function openReleaseAccessModal(bizId){
+  const overlay = document.createElement('div');
+  overlay.id = 'releaseAccessOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:400;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
+      <h3 style="margin:0 0 16px;color:#0e1b34;border-right:4px solid #c9a24b;padding-right:10px;">שחרר גישה למשתמש</h3>
+      <label style="display:block;font-size:.8rem;color:#666;margin-bottom:4px;">משתמש</label>
+      <select id="releaseToUser" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;margin-bottom:10px;">${userOptions(null)}</select>
+      <label style="display:block;font-size:.8rem;color:#666;margin-bottom:4px;">רמת גישה</label>
+      <select id="releaseAccessLevel" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;">
+        <option value="full_view">צפייה בכרטיס המלא בלבד</option>
+        <option value="files">כרטיס מלא + קבצים</option>
+      </select>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;">
+        <button onclick="document.getElementById('releaseAccessOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
+        <button onclick="submitReleaseAccess('${bizId}')" style="background:#c9a24b;color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שחרר גישה</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function submitReleaseAccess(bizId){
+  const toUser = document.getElementById('releaseToUser').value;
+  const level = document.getElementById('releaseAccessLevel').value;
+  if (!toUser){ toast('בחר משתמש'); return; }
+  const { error } = await window.supabaseClient.from('business_access_grants').insert({
+    business_id: bizId, granted_to: toUser, granted_by: CURRENT_PROFILE.id, access_level: level
+  });
+  if (error){
+    if (error.code === '23505'){ toast('למשתמש הזה כבר יש גישה פעילה לעסק זה'); return; }
+    toast('שגיאה: ' + error.message); return;
+  }
+  bsdLogActivity('grant_access', 'businesses', bizId);
+  document.getElementById('releaseAccessOverlay').remove();
+  toast('הגישה שוחררה בהצלחה');
+  loadBizAccessGrants(bizId);
+}
+
+async function revokeAccessGrant(grantId, bizId){
+  if (!confirm('לבטל את הגישה שהוענקה?')) return;
+  const { error } = await window.supabaseClient.from('business_access_grants')
+    .update({ revoked_at: new Date().toISOString(), revoked_by: CURRENT_PROFILE.id })
+    .eq('id', grantId);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  bsdLogActivity('revoke_access', 'businesses', bizId);
+  toast('הגישה בוטלה');
+  loadBizAccessGrants(bizId);
+}
+
+// ============================================================
+// עסקים אנונימיים - טאב נפרד + בקשת פרטים (סעיפים 4-6 באפיון)
+// נשלף מ-view businesses_anonymous_card (לא מהטבלה businesses) - ה-view
+// מחזיר מראש רק את העמודות המותרות, כדי שמידע מזהה לא יגיע לדפדפן בכלל.
+// ============================================================
+let ALL_ANON_BIZ = [];
+let BIZ_TAB = 'mine';
+
+function switchBizTab(tab){
+  BIZ_TAB = tab;
+  document.getElementById('bizTabMine').className = 'btn ' + (tab==='mine' ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('bizTabAnon').className = 'btn ' + (tab==='anon' ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('bizTabRequests').className = 'btn ' + (tab==='requests' ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('mineBizSection').style.display = tab==='mine' ? '' : 'none';
+  document.getElementById('anonBizSection').style.display = tab==='anon' ? '' : 'none';
+  document.getElementById('requestsBizSection').style.display = tab==='requests' ? '' : 'none';
+  if (tab === 'anon' && !ALL_ANON_BIZ.length) loadAnonymousBusinesses();
+  if (tab === 'requests') loadAccessRequests();
+}
+
+async function loadAccessRequests(){
+  const box = document.getElementById('accessRequestsList');
+  box.innerHTML = 'טוען...';
+  const { data, error } = await window.supabaseClient
+    .from('business_access_requests').select('*, businesses(internal_name)')
+    .order('requested_at', { ascending: false });
+  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה: ${esc(error.message)}</span>`; return; }
+  const pending = (data || []).filter(r => r.status === 'pending');
+  const badge = document.getElementById('pendingReqBadge');
+  if (pending.length){ badge.style.display='inline-block'; badge.textContent = pending.length; } else { badge.style.display='none'; }
+  if (!data || !data.length){ box.innerHTML = '<div style="color:#999;padding:20px;">אין בקשות</div>'; return; }
+  box.innerHTML = data.map(r => `
+    <div style="background:#fff;border:1px solid #e5e1d5;border-radius:10px;padding:14px;margin-bottom:10px;">
+      <div><b>${esc(userName(r.requested_by))}</b> ביקש/ה גישה לעסק <b>${esc(r.businesses?.internal_name || r.business_id)}</b></div>
+      <div style="font-size:.78rem;color:#999;margin-top:4px;">${fmtDateTime(r.requested_at)} · סטטוס: ${
+        r.status==='pending' ? '⏳ ממתין' : r.status==='approved' ? '✅ אושר' : r.status==='rejected' ? '❌ נדחה (' + esc(r.decision_reason||'') + ')' : '↩️ בוטל'
+      }</div>
+      ${r.status==='pending' ? `
+      <div style="margin-top:10px;display:flex;gap:8px;">
+        <button type="button" class="btn btn-primary" style="padding:5px 14px;font-size:.8rem;" onclick="decideAccessRequest('${r.id}','${r.business_id}','${r.requested_by}',true)">✅ אשר</button>
+        <button type="button" class="btn btn-ghost" style="padding:5px 14px;font-size:.8rem;color:#b3402c;" onclick="decideAccessRequest('${r.id}','${r.business_id}','${r.requested_by}',false)">❌ דחה</button>
+      </div>` : ''}
+    </div>
+  `).join('');
+}
+
+async function decideAccessRequest(reqId, bizId, requestedBy, approve){
+  let reason = null;
+  if (!approve){
+    reason = prompt('סיבת הדחייה (תוצג למבקש):');
+    if (reason === null) return; // ביטל
+  }
+  const { error: reqErr } = await window.supabaseClient.from('business_access_requests').update({
+    status: approve ? 'approved' : 'rejected',
+    decided_by: CURRENT_PROFILE.id, decided_at: new Date().toISOString(),
+    decision_reason: reason
+  }).eq('id', reqId);
+  if (reqErr){ toast('שגיאה: ' + reqErr.message); return; }
+  if (approve){
+    const { error: grantErr } = await window.supabaseClient.from('business_access_grants').insert({
+      business_id: bizId, granted_to: requestedBy, granted_by: CURRENT_PROFILE.id,
+      access_level: 'full_view', source_request_id: reqId
+    });
+    if (grantErr && grantErr.code !== '23505'){ toast('הבקשה אושרה אך שחרור הגישה נכשל: ' + grantErr.message); }
+    bsdLogActivity('approve_access_request', 'businesses', bizId);
+  } else {
+    bsdLogActivity('reject_access_request', 'businesses', bizId);
+  }
+  toast(approve ? 'הבקשה אושרה והגישה שוחררה' : 'הבקשה נדחתה');
+  loadAccessRequests();
+}
+
+async function loadAnonymousBusinesses(){
+  const box = document.getElementById('anonBizGrid');
+  box.innerHTML = 'טוען...';
+  const { data, error } = await window.supabaseClient.from('businesses_anonymous_card').select('*').order('updated_at', { ascending: false });
+  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה: ${esc(error.message)}</span>`; return; }
+  ALL_ANON_BIZ = data || [];
+  renderAnonBizGrid();
+}
+
+function renderAnonBizGrid(){
+  const box = document.getElementById('anonBizGrid');
+  if (!ALL_ANON_BIZ.length){ box.innerHTML = '<div style="color:#999;padding:20px;">אין כרגע עסקים אנונימיים זמינים לצפייה</div>'; return; }
+  box.innerHTML = ALL_ANON_BIZ.map(b => `
+    <div style="background:#fff;border:1px solid #e5e1d5;border-radius:10px;padding:14px;margin-bottom:10px;">
+      <div style="font-weight:700;color:#0e1b34;">${esc(b.field || 'עסק')} ${b.category ? '· ' + esc(b.category) : ''}</div>
+      <div style="font-size:.82rem;color:#665;margin-top:4px;">
+        ${b.region ? '📍 ' + esc(b.region) + ' &nbsp; ' : ''}
+        ${b.years_active ? '🕐 ' + esc(b.years_active) + ' שנות פעילות &nbsp;' : ''}
+        ${b.employees_count ? '👥 ' + esc(b.employees_count) + ' עובדים' : ''}
+      </div>
+      ${b.short_description ? `<div style="font-size:.85rem;margin-top:8px;">${esc(b.short_description)}</div>` : ''}
+      <div style="font-size:.82rem;color:#665;margin-top:8px;">
+        ${b.annual_revenue ? 'מחזור: ' + Number(b.annual_revenue).toLocaleString() + ' ₪ &nbsp; ' : ''}
+        ${b.asking_price ? 'מחיר מבוקש: ' + Number(b.asking_price).toLocaleString() + ' ₪' : ''}
+      </div>
+      <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:.75rem;color:#999;">מטופל ע"י ${esc(userName(b.handled_by))}</span>
+        <button type="button" class="btn btn-ghost" onclick="requestBusinessAccess('${b.id}', this)">🔓 בקש פרטים</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function requestBusinessAccess(bizId, btn){
+  const { data: existing } = await window.supabaseClient.from('business_access_requests')
+    .select('id,status').eq('business_id', bizId).eq('requested_by', CURRENT_PROFILE.id).eq('status','pending').maybeSingle();
+  if (existing){ toast('כבר יש לך בקשה ממתינה לעסק זה'); return; }
+  const { error } = await window.supabaseClient.from('business_access_requests').insert({
+    business_id: bizId, requested_by: CURRENT_PROFILE.id
+  });
+  if (error){ toast('שגיאה בשליחת הבקשה: ' + error.message); return; }
+  bsdLogActivity('request_access', 'businesses', bizId);
+  toast('הבקשה נשלחה, תקבל עדכון כשיטופל');
+  if (btn){ btn.disabled = true; btn.textContent = '⏳ הבקשה נשלחה'; }
 }
 
 async function loadBizMeetings(bizId){
@@ -1026,14 +1261,28 @@ async function saveBiz(e){
     sold_to: g('listing_status') === 'sold' ? g('sold_to') : null
   };
 
+  const cb = id => document.getElementById(id) ? document.getElementById(id).checked : undefined;
+  if (document.getElementById('anon_card_active')){
+    payload.anon_card_active = cb('anon_card_active');
+    payload.anon_card_show_price = cb('anon_card_show_price');
+    payload.anon_card_show_reason = cb('anon_card_show_reason');
+    if (payload.anon_card_active){
+      payload.anon_card_generated_by = CURRENT_PROFILE.id;
+      payload.anon_card_generated_at = new Date().toISOString();
+    }
+  }
+
   if (!payload.internal_name){ toast('שם העסק הוא שדה חובה'); return; }
 
   let error;
   if (bizId){
     ({ error } = await window.supabaseClient.from('businesses').update(payload).eq('id', bizId));
+    if (!error) bsdLogActivity('update', 'businesses', bizId);
   } else {
     payload.created_by = CURRENT_PROFILE ? CURRENT_PROFILE.id : null;
-    ({ error } = await window.supabaseClient.from('businesses').insert(payload));
+    const insertResult = await window.supabaseClient.from('businesses').insert(payload).select('id').single();
+    error = insertResult.error;
+    if (!error && insertResult.data) bsdLogActivity('create', 'businesses', insertResult.data.id);
   }
   if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
   toast('נשמר בהצלחה');
@@ -1249,6 +1498,8 @@ async function deleteBiz(id){
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
   refreshNavMsgBadge();
   if (!canSendPresentations()){ const presoBtn = document.getElementById('sendPresoToolbarBtn'); if (presoBtn) presoBtn.style.display = 'none'; }
+  if (!canCreateBusiness(CURRENT_PROFILE)){ const newBizBtn = document.querySelector('button[onclick="openBizForm(null)"]'); if (newBizBtn) newBizBtn.style.display = 'none'; }
+  if (!canViewAnonymousBusinesses(CURRENT_PROFILE)){ document.getElementById('bizTabAnon').style.display = 'none'; }
   await loadNotesSummary('businesses');
   await loadBusinesses();
 })();

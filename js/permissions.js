@@ -116,3 +116,13 @@ const BSD_ROLE_DEFAULT_PERMISSIONS = {
 function bsdApplyRoleDefaults(role) {
   return Object.assign({}, BSD_ROLE_DEFAULT_PERMISSIONS[role] || BSD_ROLE_DEFAULT_PERMISSIONS.agent);
 }
+
+function bsdLogActivity(actionType, entityType, entityId){
+  if (!window.supabaseClient || !CURRENT_PROFILE) return;
+  window.supabaseClient.from('activity_log').insert({
+    user_id: CURRENT_PROFILE.id,
+    action_type: actionType,
+    entity_type: entityType,
+    entity_id: entityId
+  }).then(({error}) => { if (error) console.error('activity_log insert failed', error); });
+}
