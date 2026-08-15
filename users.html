@@ -389,9 +389,12 @@ function openEditForm(id){
         <div class="field"><label>תפקיד בחברה</label><input id="job_title" value="${esc(u.job_title)}"></div>
         <div class="field"><label>תחום התמחות</label><input id="specialization" value="${esc(u.specialization)}"></div>
         <div class="field"><label>מספר רישיון</label><input id="license_number" value="${esc(u.license_number)}"></div>
-        <div class="field"><label>תפקיד במערכת</label><select id="role">${roleOptions(u.role)}</select></div>
+        <div class="field"><label>תפקיד במערכת</label><select id="role" onchange="applyRoleDefaultsToForm('')">${roleOptions(u.role)}</select></div>
         <div class="field full">
           <label>הרשאות נוספות</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-left:18px;"><input type="checkbox" id="can_view_anon" style="width:auto;" ${u.can_view_anonymous_businesses?'checked':''}> צפייה בעסקים אנונימיים</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_create_biz" style="width:auto;" ${u.can_create_businesses?'checked':''}> יצירת עסקים</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_create_buyer" style="width:auto;" ${u.can_create_buyers?'checked':''}> יצירת קונים</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-left:18px;"><input type="checkbox" id="can_survey" style="width:auto;" ${u.can_use_survey?'checked':''}> אפשר כפתור "סקר"</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="can_ai_match" style="width:auto;" ${u.can_use_ai_match?'checked':''}> אפשר כפתור "הצעות התאמה חכמות"</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_agreement" style="width:auto;" ${u.can_send_agreement?'checked':''}> אפשר שליחת הסכם התקשרות</label>
@@ -427,6 +430,9 @@ async function saveEdit(e){
     specialization: g('specialization'), license_number: g('license_number'),
     role: g('role'), notes: g('notes'),
     can_use_survey: document.getElementById('can_survey').checked,
+    can_view_anonymous_businesses: document.getElementById('can_view_anon').checked,
+    can_create_businesses: document.getElementById('can_create_biz').checked,
+    can_create_buyers: document.getElementById('can_create_buyer').checked,
     can_use_ai_match: document.getElementById('can_ai_match').checked,
     can_send_agreement: document.getElementById('can_agreement').checked,
     can_send_presentations: document.getElementById('can_presentations').checked,
@@ -545,9 +551,12 @@ function openCreateForm(){
         <div class="field"><label>שם משפחה</label><input id="new_last_name"></div>
         <div class="field"><label>טלפון</label><input id="new_phone"></div>
         <div class="field"><label>עיר</label><input id="new_city"></div>
-        <div class="field"><label>תפקיד במערכת</label><select id="new_role">${roleOptions('agent')}</select></div>
+        <div class="field"><label>תפקיד במערכת</label><select id="new_role" onchange="applyRoleDefaultsToForm('new_')">${roleOptions('agent')}</select></div>
         <div class="field full">
-          <label>הרשאות נוספות</label>
+          <label>הרשאות נוספות <span style="font-weight:400;color:#888;">(מולאו אוטומטית לפי התפקיד שנבחר - אפשר לשנות ידנית)</span></label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-left:18px;"><input type="checkbox" id="new_can_view_anon" style="width:auto;"> צפייה בעסקים אנונימיים</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_create_biz" style="width:auto;"> יצירת עסקים</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_create_buyer" style="width:auto;"> יצירת קונים</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-left:18px;"><input type="checkbox" id="new_can_survey" style="width:auto;"> אפשר כפתור "סקר"</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="new_can_ai_match" style="width:auto;"> אפשר כפתור "הצעות התאמה חכמות"</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_agreement" style="width:auto;"> אפשר שליחת הסכם התקשרות</label>
@@ -566,6 +575,32 @@ function openCreateForm(){
   document.getElementById('overlay').classList.add('open');
   document.getElementById('overlay').scrollTop = 0;
   document.getElementById('createForm').addEventListener('submit', createUser);
+  applyRoleDefaultsToForm('new_'); // ממלא ברירת מחדל לתפקיד ההתחלתי (agent) מיד בפתיחה
+}
+
+// ============================================================
+// מחיל את ברירות המחדל (BSD_ROLE_DEFAULT_PERMISSIONS, js/permissions.js)
+// על תיבות הסימון בטופס, לפי התפקיד שנבחר כרגע. prefix='' לטופס עריכה,
+// prefix='new_' לטופס יצירה. האדמין יכול עדיין לשנות ידנית אחרי המילוי
+// האוטומטי - זו רק נקודת התחלה, לא נעילה.
+// ============================================================
+function applyRoleDefaultsToForm(prefix){
+  const roleSelect = document.getElementById(prefix + 'role');
+  if (!roleSelect) return;
+  const defaults = bsdApplyRoleDefaults(roleSelect.value);
+  const map = {
+    can_view_anon: 'can_view_anonymous_businesses',
+    can_create_biz: 'can_create_businesses',
+    can_create_buyer: 'can_create_buyers',
+    can_survey: 'can_use_survey',
+    can_record: 'can_record',
+    can_agreement: 'can_send_agreement',
+    can_presentations: 'can_send_presentations'
+  };
+  Object.entries(map).forEach(([elSuffix, permKey]) => {
+    const el = document.getElementById(prefix + elSuffix);
+    if (el && permKey in defaults) el.checked = !!defaults[permKey];
+  });
 }
 
 async function createUser(e){
@@ -591,6 +626,9 @@ async function createUser(e){
         first_name: g('new_first_name'), last_name: g('new_last_name'),
         phone: g('new_phone'), city: g('new_city'), role: g('new_role'),
         can_use_survey: document.getElementById('new_can_survey').checked,
+        can_view_anonymous_businesses: document.getElementById('new_can_view_anon').checked,
+        can_create_businesses: document.getElementById('new_can_create_biz').checked,
+        can_create_buyers: document.getElementById('new_can_create_buyer').checked,
         can_use_ai_match: document.getElementById('new_can_ai_match').checked,
         can_send_agreement: document.getElementById('new_can_agreement').checked,
         can_send_presentations: document.getElementById('new_can_presentations').checked,

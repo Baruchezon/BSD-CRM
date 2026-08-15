@@ -93,7 +93,7 @@ function canUseSurvey(profile) {
   return bsdIsAdminOrManager(profile) || !!(profile && profile.can_use_survey);
 }
 function canUseSalesFile(profile) {
-  return bsdIsAdminOrManager(profile) || !!(profile && profile.can_use_sale_file);
+  return bsdIsAdminOrManager(profile) || !!(profile && profile.can_upload_sale_files);
 }
 
 // ---- ניהול משתמשים/הרשאות (אדמין תמיד; מנהל רק אם הורשה במפורש) ----
