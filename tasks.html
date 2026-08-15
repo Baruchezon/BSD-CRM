@@ -298,7 +298,7 @@ async function loadUsers(){
   const { data } = await window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active');
   ALL_USERS = data || [];
   const sel = document.getElementById('fAssigned');
-  const isAdmin = CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin';
+  const isAdmin = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager');
 
   if (!isAdmin){
     // Regular users never get a picker — they only ever see their own tasks.
@@ -311,7 +311,7 @@ async function loadUsers(){
 }
 
 async function loadTasks(){
-  const isAdmin = CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin';
+  const isAdmin = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager');
   let q = window.supabaseClient.from('tasks').select('*').order('due_date', { ascending: true });
   if (!isAdmin && CURRENT_PROFILE){
     q = q.eq('assigned_to', CURRENT_PROFILE.id);
