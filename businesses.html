@@ -101,7 +101,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 16.08.2026 10:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 16.08.2026 11:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -250,7 +250,7 @@ function toast(msg){
   if (!box){
     box = document.createElement('div');
     box.id = 'toastBox';
-    box.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:200;display:flex;flex-direction:column;gap:8px;max-width:380px;';
+    box.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:500;display:flex;flex-direction:column;gap:8px;max-width:380px;';
     document.body.appendChild(box);
   }
   const isError = /שגיאה|error/i.test(msg);
@@ -757,9 +757,10 @@ function openReleaseAccessModal(bizId){
         <option value="full_view">צפייה בכרטיס המלא בלבד</option>
         <option value="files">כרטיס מלא + קבצים</option>
       </select>
+      <div id="releaseAccessError" style="display:none;color:#b00020;font-size:.82rem;margin-top:8px;"></div>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;">
         <button onclick="document.getElementById('releaseAccessOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
-        <button onclick="submitReleaseAccess('${bizId}')" style="background:#c9a24b;color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שחרר גישה</button>
+        <button id="releaseAccessSubmitBtn" onclick="submitReleaseAccess('${bizId}')" style="background:#c9a24b;color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שחרר גישה</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -768,13 +769,19 @@ function openReleaseAccessModal(bizId){
 async function submitReleaseAccess(bizId){
   const toUser = document.getElementById('releaseToUser').value;
   const level = document.getElementById('releaseAccessLevel').value;
-  if (!toUser){ toast('בחר משתמש'); return; }
+  const errEl = document.getElementById('releaseAccessError');
+  const showErr = msg => { if (errEl){ errEl.textContent = msg; errEl.style.display = 'block'; } toast(msg); };
+  if (errEl) errEl.style.display = 'none';
+  if (!toUser){ showErr('⚠️ יש לבחור משתמש מהרשימה'); return; }
+  const btn = document.getElementById('releaseAccessSubmitBtn');
+  if (btn){ btn.disabled = true; btn.textContent = 'משחרר...'; }
   const { error } = await window.supabaseClient.from('business_access_grants').insert({
     business_id: bizId, granted_to: toUser, granted_by: CURRENT_PROFILE.id, access_level: level
   });
   if (error){
-    if (error.code === '23505'){ toast('למשתמש הזה כבר יש גישה פעילה לעסק זה'); return; }
-    toast('שגיאה: ' + error.message); return;
+    if (btn){ btn.disabled = false; btn.textContent = 'שחרר גישה'; }
+    if (error.code === '23505'){ showErr('למשתמש הזה כבר יש גישה פעילה לעסק זה'); return; }
+    showErr('שגיאה: ' + error.message); return;
   }
   bsdLogActivity('grant_access', 'businesses', bizId);
   document.getElementById('releaseAccessOverlay').remove();
