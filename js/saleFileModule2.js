@@ -25,6 +25,38 @@ function sfCategoryMeta(key){
   return SALE_FILE_CATEGORIES.find(c => c.key === key) || { key, label: key, icon: '📁', confidentiality: 2 };
 }
 
+// אבחון אמיתי של כשל העלאה - לא מסתפק בהודעה שהמערכת מציגה למשתמש.
+// בודק: פרטי השגיאה המדויקים, האם יש session תקף בכלל, והאם יש חיבור רשת
+// חי לשרת Supabase באותו רגע - ומציג הכל על המסך (alert חוסם כדי שאפשר
+// לצלם מסך לפני שהוא נעלם) כי אין גישת Chrome Remote Debugging למכשיר.
+async function sfDiagnoseUploadFailure(err, rawFile){
+  const lines = ['--- אבחון שגיאת העלאה ---'];
+  lines.push(`קובץ: ${rawFile ? rawFile.name : '?'} | גודל: ${rawFile ? rawFile.size : '?'} bytes | type: ${rawFile ? (rawFile.type || '(ריק)') : '?'}`);
+  lines.push(`שם שגיאה (err.name): ${(err && err.name) || '?'}`);
+  lines.push(`הודעת שגיאה (err.message): ${(err && err.message) || '?'}`);
+  lines.push(`navigator.onLine: ${navigator.onLine}`);
+  try {
+    const { data: sessionData, error: sessErr } = await window.supabaseClient.auth.getSession();
+    const s = sessionData && sessionData.session;
+    lines.push(`יש session פעיל: ${!!s}`);
+    if (s) lines.push(`ה-session פג תוקף ב: ${new Date(s.expires_at * 1000).toLocaleString('he-IL')}`);
+    if (sessErr) lines.push(`שגיאת session: ${sessErr.message}`);
+  } catch(e){ lines.push(`שגיאה בבדיקת session: ${e.message}`); }
+  try {
+    const t0 = Date.now();
+    const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/auth/v1/health');
+    lines.push(`בדיקת חיבור לשרת (auth/v1/health): הצליחה - status ${res.status}, ${Date.now() - t0}ms`);
+  } catch(e){ lines.push(`בדיקת חיבור לשרת (auth/v1/health): נכשלה - ${e.name}: ${e.message}`); }
+  try {
+    const t0 = Date.now();
+    const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/storage/v1/bucket/' + SALE_FILE_BUCKET, {
+      headers: { 'apikey': window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY, 'Authorization': 'Bearer ' + window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY }
+    });
+    lines.push(`בדיקת חיבור ל-Storage bucket: status ${res.status}, ${Date.now() - t0}ms`);
+  } catch(e){ lines.push(`בדיקת חיבור ל-Storage bucket: נכשלה - ${e.name}: ${e.message}`); }
+  alert(lines.join('\n'));
+}
+
 function sfIsAdminOrManager(){
   return !!CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager');
 }
@@ -216,12 +248,8 @@ async function uploadSaleFiles(bizId, categoryKey){
     const safeRand = Math.random().toString(36).slice(2, 8);
     const path = `${bizId}/sale-file/${categoryKey}/${Date.now()}_${safeRand}${safeExt}`;
     try {
-      // קבצים שנבחרו ישירות מ-Google Drive (ולא מהגלריה/אחסון מקומי) לפעמים
-      // לא "יושבים" פיזית בטלפון - אנדרואיד/Chrome צריכים למשוך אותם מהענן
-      // ברגע ההעלאה, ולפעמים הניסיון הראשון נכשל עם TypeError "Failed to
-      // fetch" (זהו באג/מגבלה ידועים של Chrome-Android מול קבצי Drive,
-      // לא ספציפי למערכת שלנו - קורה גם ב-Dropbox ואפליקציות אחרות).
-      // ניסיון שני, אחרי השהיה קצרה, לרוב מצליח כי עד אז הקובץ כבר נמשך.
+      // ניסיון שני אוטומטי לכל שגיאת רשת חולפת (Failed to fetch) - לפעמים
+      // מספיק כדי לעבור תקלת רשת רגעית, בלי קשר למקור הקובץ.
       let upErr = null;
       for (let attempt = 1; attempt <= 2; attempt++){
         const res = await window.supabaseClient.storage.from(SALE_FILE_BUCKET).upload(path, file);
@@ -234,11 +262,10 @@ async function uploadSaleFiles(bizId, categoryKey){
       }
       if (upErr){
         console.error('sale-file storage upload error:', upErr, { bizId, categoryKey, fileName: rawFile.name });
-        const isNetworkGlitch = /failed to fetch/i.test(upErr.message || '');
-        const msg = isNetworkGlitch
-          ? `הקובץ "${rawFile.name}" נכשל בהעלאה מ-Google Drive (בעיית רשת מוכרת של אנדרואיד). נסה: פתח את הקובץ פעם אחת באפליקציית Drive (או לחץ שם על שלוש הנקודות ← "זמין ללא חיבור"), ואז בחר אותו כאן מחדש - או לחלופין בחר אותו מהגלריה/קבצים במקום ישירות מ-Drive.`
-          : `שגיאה בהעלאת "${rawFile.name}": ${upErr.message}`;
-        toast(msg); errorMessages.push(msg); failCount++; continue;
+        const msg = `שגיאה בהעלאת "${rawFile.name}": ${upErr.message}`;
+        toast(msg); errorMessages.push(msg); failCount++;
+        await sfDiagnoseUploadFailure(upErr, rawFile);
+        continue;
       }
       const { error: dbErr } = await window.supabaseClient.from('business_sale_files').insert({
         business_id: bizId,
