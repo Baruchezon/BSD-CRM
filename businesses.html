@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608161130';
+    var PAGE_BUILD = '202608161200';
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
       .then(function(r){ return r.json(); })
@@ -104,7 +104,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 16.08.2026 11:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 16.08.2026 12:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -827,26 +827,35 @@ async function loadAccessRequests(){
   const box = document.getElementById('accessRequestsList');
   box.innerHTML = 'טוען...';
   const { data, error } = await window.supabaseClient
-    .from('business_access_requests').select('*, businesses(internal_name)')
+    .from('business_access_requests').select('*, businesses(internal_name, created_by, handled_by)')
     .order('requested_at', { ascending: false });
   if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה: ${esc(error.message)}</span>`; return; }
   const pending = (data || []).filter(r => r.status === 'pending');
   const badge = document.getElementById('pendingReqBadge');
   if (pending.length){ badge.style.display='inline-block'; badge.textContent = pending.length; } else { badge.style.display='none'; }
   if (!data || !data.length){ box.innerHTML = '<div style="color:#999;padding:20px;">אין בקשות</div>'; return; }
-  box.innerHTML = data.map(r => `
+  box.innerHTML = data.map(r => {
+    // מי מורשה להחליט: אדמין/מנהל, או יוצר/מטפל של העסק הספציפי - ולעולם
+    // לא המבקש עצמו, גם אם הוא איכשהו גם בעל גישה מלאה לעסק (סעיף שביקש)
+    const isRequester = r.requested_by === CURRENT_PROFILE.id;
+    const canDecide = !isRequester && (
+      bsdIsAdminOrManager(CURRENT_PROFILE)
+      || (r.businesses && (r.businesses.created_by === CURRENT_PROFILE.id || r.businesses.handled_by === CURRENT_PROFILE.id))
+    );
+    return `
     <div style="background:#fff;border:1px solid #e5e1d5;border-radius:10px;padding:14px;margin-bottom:10px;">
       <div><b>${esc(userName(r.requested_by))}</b> ביקש/ה גישה לעסק <b>${esc(r.businesses?.internal_name || r.business_id)}</b></div>
       <div style="font-size:.78rem;color:#999;margin-top:4px;">${fmtDateTime(r.requested_at)} · סטטוס: ${
         r.status==='pending' ? '⏳ ממתין' : r.status==='approved' ? '✅ אושר' : r.status==='rejected' ? '❌ נדחה (' + esc(r.decision_reason||'') + ')' : '↩️ בוטל'
       }</div>
-      ${r.status==='pending' ? `
+      ${r.status==='pending' && canDecide ? `
       <div style="margin-top:10px;display:flex;gap:8px;">
         <button type="button" class="btn btn-primary" style="padding:5px 14px;font-size:.8rem;" onclick="decideAccessRequest('${r.id}','${r.business_id}','${r.requested_by}',true)">✅ אשר</button>
         <button type="button" class="btn btn-ghost" style="padding:5px 14px;font-size:.8rem;color:#b3402c;" onclick="decideAccessRequest('${r.id}','${r.business_id}','${r.requested_by}',false)">❌ דחה</button>
       </div>` : ''}
-    </div>
-  `).join('');
+      ${r.status==='pending' && isRequester ? `<div style="margin-top:8px;font-size:.78rem;color:#999;">ממתין לאישור מטפל/אדמין - לא ניתן לאשר לעצמך</div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 async function decideAccessRequest(reqId, bizId, requestedBy, approve){
