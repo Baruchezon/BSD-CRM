@@ -216,10 +216,28 @@ async function uploadSaleFiles(bizId, categoryKey){
     const safeRand = Math.random().toString(36).slice(2, 8);
     const path = `${bizId}/sale-file/${categoryKey}/${Date.now()}_${safeRand}${safeExt}`;
     try {
-      const { error: upErr } = await window.supabaseClient.storage.from(SALE_FILE_BUCKET).upload(path, file);
+      // קבצים שנבחרו ישירות מ-Google Drive (ולא מהגלריה/אחסון מקומי) לפעמים
+      // לא "יושבים" פיזית בטלפון - אנדרואיד/Chrome צריכים למשוך אותם מהענן
+      // ברגע ההעלאה, ולפעמים הניסיון הראשון נכשל עם TypeError "Failed to
+      // fetch" (זהו באג/מגבלה ידועים של Chrome-Android מול קבצי Drive,
+      // לא ספציפי למערכת שלנו - קורה גם ב-Dropbox ואפליקציות אחרות).
+      // ניסיון שני, אחרי השהיה קצרה, לרוב מצליח כי עד אז הקובץ כבר נמשך.
+      let upErr = null;
+      for (let attempt = 1; attempt <= 2; attempt++){
+        const res = await window.supabaseClient.storage.from(SALE_FILE_BUCKET).upload(path, file);
+        upErr = res.error;
+        if (!upErr) break;
+        const isNetworkGlitch = /failed to fetch/i.test(upErr.message || '');
+        if (!isNetworkGlitch || attempt === 2) break;
+        if (statusEl) statusEl.textContent = `בעיית רשת בהעלאת "${rawFile.name}" - מנסה שוב...`;
+        await new Promise(r => setTimeout(r, 1500));
+      }
       if (upErr){
         console.error('sale-file storage upload error:', upErr, { bizId, categoryKey, fileName: rawFile.name });
-        const msg = `שגיאה בהעלאת "${rawFile.name}": ${upErr.message}`;
+        const isNetworkGlitch = /failed to fetch/i.test(upErr.message || '');
+        const msg = isNetworkGlitch
+          ? `הקובץ "${rawFile.name}" נכשל בהעלאה מ-Google Drive (בעיית רשת מוכרת של אנדרואיד). נסה: פתח את הקובץ פעם אחת באפליקציית Drive (או לחץ שם על שלוש הנקודות ← "זמין ללא חיבור"), ואז בחר אותו כאן מחדש - או לחלופין בחר אותו מהגלריה/קבצים במקום ישירות מ-Drive.`
+          : `שגיאה בהעלאת "${rawFile.name}": ${upErr.message}`;
         toast(msg); errorMessages.push(msg); failCount++; continue;
       }
       const { error: dbErr } = await window.supabaseClient.from('business_sale_files').insert({
