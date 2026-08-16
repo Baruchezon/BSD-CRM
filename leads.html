@@ -843,6 +843,7 @@ async function deleteLead(id){
   if (!confirm('למחוק רשומה זו? הפעולה בלתי הפיכה.')) return;
   const { error } = await window.supabaseClient.from('leads').delete().eq('id', id);
   if (error){ toast('אין הרשאה למחוק, או שגיאה: ' + error.message); return; }
+  bsdLogActivity('delete', 'leads', id);
   toast('נמחק בהצלחה');
   await loadLeads();
 }

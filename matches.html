@@ -665,6 +665,7 @@ async function deleteMatch(id){
   if (!confirm('למחוק את ההתאמה הזו? הפעולה אינה הפיכה.')) return;
   const { error } = await window.supabaseClient.from('matches').delete().eq('id', id);
   if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
+  bsdLogActivity('delete', 'matches', id);
   toast('ההתאמה נמחקה');
   await loadMatches();
 }
