@@ -117,12 +117,13 @@ function bsdApplyRoleDefaults(role) {
   return Object.assign({}, BSD_ROLE_DEFAULT_PERMISSIONS[role] || BSD_ROLE_DEFAULT_PERMISSIONS.agent);
 }
 
-function bsdLogActivity(actionType, entityType, entityId){
+function bsdLogActivity(actionType, entityType, entityId, details){
   if (!window.supabaseClient || !CURRENT_PROFILE) return;
-  window.supabaseClient.from('activity_log').insert({
-    user_id: CURRENT_PROFILE.id,
-    action_type: actionType,
-    entity_type: entityType,
-    entity_id: entityId
-  }).then(({error}) => { if (error) console.error('activity_log insert failed', error); });
+  window.supabaseClient.from('audit_log').insert({
+    table_name: entityType,
+    record_id: entityId,
+    action: actionType,
+    actor_id: CURRENT_PROFILE.id,
+    details: details || null
+  }).then(({error}) => { if (error) console.error('audit_log insert failed', error); });
 }

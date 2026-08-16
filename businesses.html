@@ -101,7 +101,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 15.08.2026 20:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 15.08.2026 21:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -838,9 +838,9 @@ async function decideAccessRequest(reqId, bizId, requestedBy, approve){
       access_level: 'full_view', source_request_id: reqId
     });
     if (grantErr && grantErr.code !== '23505'){ toast('הבקשה אושרה אך שחרור הגישה נכשל: ' + grantErr.message); }
-    bsdLogActivity('approve_access_request', 'businesses', bizId);
+    bsdLogActivity('approve_access_request', 'businesses', bizId, { requested_by: requestedBy, request_id: reqId });
   } else {
-    bsdLogActivity('reject_access_request', 'businesses', bizId);
+    bsdLogActivity('reject_access_request', 'businesses', bizId, { requested_by: requestedBy, request_id: reqId, reason: reason });
   }
   toast(approve ? 'הבקשה אושרה והגישה שוחררה' : 'הבקשה נדחתה');
   loadAccessRequests();
@@ -977,7 +977,7 @@ async function uploadBizFile(bizId){
   }
 
   if (statusEl) statusEl.textContent = '';
-  if (okCount) toast(okCount === 1 ? 'הקובץ הועלה בהצלחה' : `${okCount} קבצים הועלו בהצלחה`);
+  if (okCount) { toast(okCount === 1 ? 'הקובץ הועלה בהצלחה' : `${okCount} קבצים הועלו בהצלחה`); bsdLogActivity('upload_file', 'businesses', bizId); }
   if (failed.length) toast('שגיאה בהעלאת: ' + failed.join(', '));
   input.value = '';
   loadBizFiles(bizId);
@@ -986,6 +986,7 @@ async function uploadBizFile(bizId){
 async function downloadBizFile(bizId, fileName){
   const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/${fileName}`, 60);
   if (error){ toast('שגיאה: ' + error.message); return; }
+  bsdLogActivity('download_file', 'businesses', bizId);
   window.open(data.signedUrl, '_blank');
 }
 
@@ -1034,6 +1035,7 @@ async function uploadAnonPresentation(bizId){
 
   if (statusEl) statusEl.textContent = '';
   input.value = '';
+  bsdLogActivity('upload_file', 'businesses', bizId);
   toast('המצגת האנונימית הועלתה בהצלחה');
   await loadBusinesses();
   openBizForm(bizId);
@@ -1059,6 +1061,7 @@ async function deleteAnonPresentation(bizId, path){
     anon_presentation_name: null
   }).eq('id', bizId);
   if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
+  bsdLogActivity('delete_file', 'businesses', bizId);
   toast('המצגת נמחקה');
   await loadBusinesses();
   openBizForm(bizId);
@@ -1180,6 +1183,7 @@ async function deleteBizFile(bizId, fileName){
   if (!confirm('למחוק קובץ זה?')) return;
   const { error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).remove([`${bizId}/${fileName}`]);
   if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
+  bsdLogActivity('delete_file', 'businesses', bizId);
   toast('הקובץ נמחק');
   loadBizFiles(bizId);
 }
