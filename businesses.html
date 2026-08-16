@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608161200';
+    var PAGE_BUILD = '202608161300';
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
       .then(function(r){ return r.json(); })
@@ -104,7 +104,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 16.08.2026 12:00</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 16.08.2026 13:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -304,9 +304,36 @@ async function loadBusinesses(){
   if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
   // עסקים ללא הסכם כלל מנוהלים כעת ב"לידים" — כאן מוצגים רק מי שנשלח אליו הסכם או שחתם
   ALL_BIZ = (data || []).filter(b => b.agreement_status === 'נשלח הסכם לחתימה' || b.agreement_status === 'יש הסכם חתום');
+  await loadGrantCounts();
   populateFilters();
   renderTable();
   await maybeHandleUrlParams();
+}
+
+// ============================================================
+// סטטוס הפצה בזמן אמת ברשימה: לא הופץ / הפצה אנונימית / גישה מלאה
+// למשתמשים ספציפיים (לא בהכרח מוציא זה את זה - עסק יכול להיות גם
+// אנונימי וגם עם גישה מלאה שהוענקה למישהו ספציפי בו-זמנית). מבוסס
+// אך ורק על מה שבפועל שמור בבסיס הנתונים (anon_card_active + ספירת
+// business_access_grants פעילים) - לא state זמני בדפדפן.
+// ============================================================
+let GRANT_COUNTS = {};
+async function loadGrantCounts(){
+  const ids = ALL_BIZ.map(b => b.id);
+  if (!ids.length){ GRANT_COUNTS = {}; return; }
+  const { data, error } = await window.supabaseClient
+    .from('business_access_grants').select('business_id').eq('active', true).in('business_id', ids);
+  GRANT_COUNTS = {};
+  if (error || !data) return;
+  data.forEach(g => { GRANT_COUNTS[g.business_id] = (GRANT_COUNTS[g.business_id] || 0) + 1; });
+}
+function distributionBadge(b){
+  const grantCount = GRANT_COUNTS[b.id] || 0;
+  const parts = [];
+  if (b.anon_card_active) parts.push(`<span style="background:#e8f0fe;color:#1a56db;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">🪪 הופץ אנונימית</span>`);
+  if (grantCount > 0) parts.push(`<span style="background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">🔓 גישה מלאה: ${grantCount}</span>`);
+  if (!parts.length) return `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">⚪ לא הופץ</span>`;
+  return parts.join(' ');
 }
 
 async function maybeHandleUrlParams(){
@@ -435,6 +462,7 @@ function renderTable(){
             <div class="primary-name" style="font-weight:700;">${statusEmoji}${esc(b.internal_name)}</div>
             ${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}
             ${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}
+            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${distributionBadge(b)}</div>
           </div>
         </div>
       </td>
@@ -517,6 +545,7 @@ function openBizForm(id){
   modal.innerHTML = `
     <h3>${biz ? 'עריכת עסק' : 'עסק חדש'}</h3>
     ${biz ? agreementBanner(biz.agreement_status, biz.agreement_number) : ''}
+    <div id="bizFormError" style="display:none;background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.85rem;color:#8a2c1f;"></div>
     <form id="bizForm">
       <div class="form-grid">
         <div class="section-h">זיהוי</div>
@@ -864,12 +893,16 @@ async function decideAccessRequest(reqId, bizId, requestedBy, approve){
     reason = prompt('סיבת הדחייה (תוצג למבקש):');
     if (reason === null) return; // ביטל
   }
-  const { error: reqErr } = await window.supabaseClient.from('business_access_requests').update({
+  // .eq('status','pending') מונע עיבוד כפול אם נלחץ פעמיים לפני שהרשימה התרעננה -
+  // אם הבקשה כבר טופלה, ה-update הזה פשוט לא יעדכן כלום (0 שורות)
+  const { data: updatedRows, error: reqErr } = await window.supabaseClient.from('business_access_requests').update({
     status: approve ? 'approved' : 'rejected',
     decided_by: CURRENT_PROFILE.id, decided_at: new Date().toISOString(),
     decision_reason: reason
-  }).eq('id', reqId);
+  }).eq('id', reqId).eq('status', 'pending').select();
   if (reqErr){ toast('שגיאה: ' + reqErr.message); return; }
+  if (!updatedRows || !updatedRows.length){ toast('הבקשה כבר טופלה קודם (כנראה ע"י מישהו אחר)'); loadAccessRequests(); return; }
+  const bizName = ALL_BIZ.find(b => b.id === bizId)?.internal_name || 'העסק';
   if (approve){
     const { error: grantErr } = await window.supabaseClient.from('business_access_grants').insert({
       business_id: bizId, granted_to: requestedBy, granted_by: CURRENT_PROFILE.id,
@@ -877,10 +910,19 @@ async function decideAccessRequest(reqId, bizId, requestedBy, approve){
     });
     if (grantErr && grantErr.code !== '23505'){ toast('הבקשה אושרה אך שחרור הגישה נכשל: ' + grantErr.message); }
     bsdLogActivity('approve_access_request', 'businesses', bizId, { requested_by: requestedBy, request_id: reqId });
+    // הודעה למבקש דרך תשתית ההודעות הקיימת (messages) - נשארת גם אם הוא לא מחובר כרגע
+    await window.supabaseClient.from('messages').insert({
+      sender_id: CURRENT_PROFILE.id, recipient_id: requestedBy,
+      body: `בקשת הגישה שלך לעסק "${bizName}" אושרה. ניתן כעת לצפות בפרטים המלאים: ${location.origin}${location.pathname}?open=${bizId}`
+    });
   } else {
     bsdLogActivity('reject_access_request', 'businesses', bizId, { requested_by: requestedBy, request_id: reqId, reason: reason });
+    await window.supabaseClient.from('messages').insert({
+      sender_id: CURRENT_PROFILE.id, recipient_id: requestedBy,
+      body: `בקשת הגישה שלך לעסק "${bizName}" נדחתה.${reason ? ' סיבה: ' + reason : ''}`
+    });
   }
-  toast(approve ? 'הבקשה אושרה והגישה שוחררה' : 'הבקשה נדחתה');
+  toast(approve ? 'הבקשה אושרה והגישה שוחררה, והמבקש קיבל הודעה' : 'הבקשה נדחתה, והמבקש קיבל הודעה');
   loadAccessRequests();
 }
 
@@ -1383,22 +1425,28 @@ async function saveBiz(e){
   };
 
   const cb = id => document.getElementById(id) ? document.getElementById(id).checked : undefined;
+  const showFormError = msg => {
+    const el = document.getElementById('bizFormError');
+    if (el){ el.textContent = msg; el.style.display = 'block'; el.scrollIntoView({behavior:'smooth', block:'nearest'}); }
+    toast(msg);
+  };
+  const existingBiz = ALL_BIZ.find(b => b.id === bizId);
+  const wasAnonActive = !!existingBiz?.anon_card_active;
   if (document.getElementById('anon_card_active')){
     payload.anon_card_active = cb('anon_card_active');
     payload.anon_card_show_price = cb('anon_card_show_price');
     payload.anon_card_show_reason = cb('anon_card_show_reason');
-    const existingBiz = ALL_BIZ.find(b => b.id === bizId);
     if (payload.anon_card_active && !existingBiz?.anon_summary && !existingBiz?.anon_display_name){
       // אין עדיין תקציר אנונימי שנוצר ע"י AI לעסק הזה - לא מפעילים הפצה על
       // כרטיס ריק (סעיף 4: עדיף לא להציג מאשר להמציא/להציג טקסט לא בטוח).
       // התיאור/סיבת המכירה הגולמיים כבר לא מוצגים בכרטיס האנונימי בכלל -
       // כל בדיקת האנונימיות מתבצעת בתוך Edge Function ייעודי בזמן היצירה.
-      toast('⚠️ יש ליצור תקציר אנונימי (כפתור "🔄 צור תקציר אנונימי") לפני הפעלת ההפצה');
+      showFormError('⚠️ יש ליצור תקציר אנונימי (כפתור "🔄 צור תקציר אנונימי") לפני הפעלת ההפצה - השמירה לא בוצעה');
       return;
     }
   }
 
-  if (!payload.internal_name){ toast('שם העסק הוא שדה חובה'); return; }
+  if (!payload.internal_name){ showFormError('שם העסק הוא שדה חובה - השמירה לא בוצעה'); return; }
 
   let error;
   if (bizId){
@@ -1410,8 +1458,15 @@ async function saveBiz(e){
     error = insertResult.error;
     if (!error && insertResult.data) bsdLogActivity('create', 'businesses', insertResult.data.id);
   }
-  if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
-  toast('נשמר בהצלחה');
+  if (error){ showFormError('❌ שגיאה בשמירה: ' + error.message); return; }
+  const nowAnonActive = document.getElementById('anon_card_active') ? cb('anon_card_active') : wasAnonActive;
+  if (!wasAnonActive && nowAnonActive){
+    toast('🪪 העסק הופץ אנונימית בהצלחה');
+  } else if (wasAnonActive && !nowAnonActive){
+    toast('העסק הוסר מההפצה האנונימית');
+  } else {
+    toast('✅ נשמר בהצלחה');
+  }
   if (payload.agreement_status !== 'יש הסכם חתום' && payload.agreement_status !== 'נשלח הסכם לחתימה'
       && new URLSearchParams(location.search).get('from') === 'leads-hub'){
     location.href = 'leads-hub.html';
