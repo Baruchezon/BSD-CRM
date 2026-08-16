@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608161345';
+    var PAGE_BUILD = '202608161400';
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
       .then(function(r){ return r.json(); })
@@ -104,7 +104,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 16.08.2026 13:45</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 16.08.2026 14:00</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -655,22 +655,6 @@ function openBizForm(id){
       </div>
       ` : ``}
 
-      ${biz ? `
-      <div class="section-h" style="margin-top:14px;">📋 מצגת אנונימית</div>
-      <div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;">
-        <div id="anonPresentationStatus" style="font-size:.85rem;margin-bottom:8px;">
-          ${biz.anon_presentation_name
-            ? `📄 קיימת מצגת: <b>${esc(biz.anon_presentation_name)}</b>
-               &nbsp; <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="downloadAnonPresentation('${esc(biz.anon_presentation_path)}')">📂 פתח / הורד</button>
-               &nbsp; <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="deleteAnonPresentation('${biz.id}','${esc(biz.anon_presentation_path)}')">מחק</button>`
-            : `<span style="color:#999;">אין מצגת אנונימית מועלית עדיין</span>`}
-        </div>
-        <input type="file" id="anonPresentationInput">
-        <button type="button" class="btn btn-ghost" style="margin-inline-start:8px;" onclick="uploadAnonPresentation('${biz.id}')">⬆️ העלה / החלף מצגת</button>
-        <div id="anonUploadStatusMsg" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
-      </div>
-      ` : ``}
-
       ${biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz) ? `
       <div class="section-h" style="margin-top:14px;">🪪 כרטיס אנונימי (רשימת עסקים אנונימיים)</div>
       <div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;">
@@ -1151,81 +1135,10 @@ async function downloadBizFile(bizId, fileName){
   window.open(data.signedUrl, '_blank');
 }
 
-const ANON_PRESENTATION_PREFIX = 'anon';
-
-async function uploadAnonPresentation(bizId){
-  const input = document.getElementById('anonPresentationInput');
-  const statusEl = document.getElementById('anonUploadStatusMsg');
-  const file = input.files[0];
-  if (!file){ toast('יש לבחור קובץ קודם'); return; }
-  if (file.size > MAX_FILE_MB * 1024 * 1024){
-    toast(`הקובץ גדול מדי (מקסימום ${MAX_FILE_MB}MB)`);
-    input.value = ''; return;
-  }
-  if (!file.name.includes('אנונימי')){
-    toast('⚠️ שם הקובץ חייב להכיל את המילה "אנונימי" (למשל: מצגת_אנונימי.pdf) — יש לשנות את שם הקובץ ולנסות שוב');
-    input.value = ''; return;
-  }
-  if (statusEl) statusEl.textContent = 'מעלה את "' + file.name + '"...';
-
-  // Remove any existing presentation for this business first, so there's always only one.
-  const { data: existing } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).list(`${bizId}/${ANON_PRESENTATION_PREFIX}`);
-  if (existing && existing.length){
-    await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).remove(existing.map(f => `${bizId}/${ANON_PRESENTATION_PREFIX}/${f.name}`));
-  }
-
-  const extMatch = file.name.match(/\.[A-Za-z0-9]+$/);
-  const ext = extMatch ? extMatch[0] : '';
-  const path = `${bizId}/${ANON_PRESENTATION_PREFIX}/${Date.now()}${ext}`;
-  const { error: upErr } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).upload(path, file);
-  if (upErr){
-    if (statusEl) statusEl.textContent = '';
-    toast('שגיאה בהעלאה: ' + upErr.message);
-    return;
-  }
-
-  const { error: dbErr } = await window.supabaseClient.from('businesses').update({
-    anon_presentation_path: path,
-    anon_presentation_name: file.name
-  }).eq('id', bizId);
-  if (dbErr){
-    if (statusEl) statusEl.textContent = '';
-    toast('הקובץ הועלה אך עדכון הרשומה נכשל: ' + dbErr.message);
-    return;
-  }
-
-  if (statusEl) statusEl.textContent = '';
-  input.value = '';
-  bsdLogActivity('upload_file', 'businesses', bizId);
-  toast('המצגת האנונימית הועלתה בהצלחה');
-  await loadBusinesses();
-  openBizForm(bizId);
-}
-
-async function downloadAnonPresentation(path){
-  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(path, 300);
-  if (error){ toast('שגיאה: ' + error.message); return; }
-  window.open(data.signedUrl, '_blank');
-}
-
 async function downloadIntakeForm(bizId, bizName){
   const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/intake-form.pdf`, 300);
   if (error){ toast('שגיאה: ' + error.message); return; }
   window.open(data.signedUrl, '_blank');
-}
-
-async function deleteAnonPresentation(bizId, path){
-  if (!confirm('למחוק את המצגת האנונימית של העסק?')) return;
-  await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).remove([path]);
-  const { error } = await window.supabaseClient.from('businesses').update({
-    anon_presentation_path: null,
-    anon_presentation_name: null
-  }).eq('id', bizId);
-  if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
-  bsdLogActivity('delete_file', 'businesses', bizId);
-  toast('המצגת נמחקה');
-  await loadBusinesses();
-  openBizForm(bizId);
 }
 
 function closeNotesPanel(){
