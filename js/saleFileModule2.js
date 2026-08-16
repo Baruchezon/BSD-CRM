@@ -248,18 +248,10 @@ async function uploadSaleFiles(bizId, categoryKey){
     const safeRand = Math.random().toString(36).slice(2, 8);
     const path = `${bizId}/sale-file/${categoryKey}/${Date.now()}_${safeRand}${safeExt}`;
     try {
-      // ניסיון שני אוטומטי לכל שגיאת רשת חולפת (Failed to fetch) - לפעמים
-      // מספיק כדי לעבור תקלת רשת רגעית, בלי קשר למקור הקובץ.
-      let upErr = null;
-      for (let attempt = 1; attempt <= 2; attempt++){
-        const res = await window.supabaseClient.storage.from(SALE_FILE_BUCKET).upload(path, file);
-        upErr = res.error;
-        if (!upErr) break;
-        const isNetworkGlitch = /failed to fetch/i.test(upErr.message || '');
-        if (!isNetworkGlitch || attempt === 2) break;
-        if (statusEl) statusEl.textContent = `בעיית רשת בהעלאת "${rawFile.name}" - מנסה שוב...`;
-        await new Promise(r => setTimeout(r, 1500));
-      }
+      const { error: upErr } = await bsdUploadFile(SALE_FILE_BUCKET, path, file, {
+        contentType: file.type || undefined,
+        onProgress: pct => { if (statusEl) statusEl.textContent = `מעלה את "${rawFile.name}" - ${pct}%`; }
+      });
       if (upErr){
         console.error('sale-file storage upload error:', upErr, { bizId, categoryKey, fileName: rawFile.name });
         const msg = `שגיאה בהעלאת "${rawFile.name}": ${upErr.message}`;

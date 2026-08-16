@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608161810';
+    var PAGE_BUILD = '202608161850';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -225,12 +225,12 @@
 
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202608151400"></script>
+<script src="js/auth.js?v=202608161850"></script>
 <script src="js/permissions.js?v=202608151600"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608132300"></script>
-<script src="js/saleFileModule2.js?v=10"></script>
+<script src="js/saleFileModule2.js?v=11"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script>
 let ALL_BIZ = [];
@@ -1142,7 +1142,10 @@ async function uploadBizFile(bizId){
     // batch colliding on an identical millisecond timestamp.
     const path = `${bizId}/${Date.now()}_${i}__${encodeURIComponent(file.name)}`;
     try {
-      const { error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).upload(path, file);
+      const { error } = await bsdUploadFile(BIZ_FILES_BUCKET, path, file, {
+        contentType: file.type || undefined,
+        onProgress: pct => { if (statusEl) statusEl.textContent = `מעלה (${i+1}/${toUpload.length}): "${file.name}" - ${pct}%`; }
+      });
       if (error){ failed.push(file.name + ' (' + error.message + ')'); }
       else { okCount++; }
     } catch (e){

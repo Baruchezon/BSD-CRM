@@ -696,3 +696,81 @@ window.bsdSetButtonLoading = function(btn, isLoading, loadingText){
 if (typeof window.esc !== 'function'){
   window.esc = function(s){ if (s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); };
 }
+
+// ============================================================================
+// bsdUploadFile - מנגנון העלאת קבצים אחד, משותף, יציב, לכל המערכת.
+// ----------------------------------------------------------------------------
+// רקע (16.08.2026): נמצא ש-storage.upload() של supabase-js שולח את הקובץ
+// כ-fetch() יחיד ללא retry אמיתי, ללא progress, וללא timeout מותאם לגודל -
+// ובדיקה בפועל באנדרואיד (session תקין, חיבור לשרת מאושר עם תשובות אמיתיות
+// מה-API) הראתה כשל TypeError "Failed to fetch" עקבי דווקא בקבצים גדולים
+// יותר (PDF 1.4MB נכשל, תמונה קטנה יותר לאחר דחיסה הצליחה) - כלומר בעיית
+// אמינות של חיבור לא יציב תחת עומס/משך זמן ארוך יותר, לא בעיית קוד/הרשאות.
+// XMLHttpRequest נבחר בכוונה במקום fetch(): הוא נתמך ויציב עשור+ להעלאות
+// קבצים גדולים, לא תלוי בסמנטיקת streaming/duplex החדשה של fetch, ומאפשר
+// מעקב התקדמות אמיתי (xhr.upload.onprogress) שגם עוזר להשאיר את הדפדפן
+// "ער" בזמן ההעלאה.
+//
+// שימוש:
+//   const { data, error } = await bsdUploadFile(bucket, path, file, {
+//     onProgress: pct => statusEl.textContent = `מעלה... ${pct}%`,
+//     contentType: file.type || undefined
+//   });
+//   if (error) { /* error.message, error.name */ }
+// ============================================================================
+async function bsdUploadFile(bucket, path, file, opts){
+  opts = opts || {};
+  const maxAttempts = 3;
+  // timeout מתואם לגודל הקובץ - מינימום 30 שניות, ועוד כ-20 שניות לכל MB,
+  // כדי לא לחתוך העלאה גדולה שעדיין מתקדמת בקצב רשת סלולרי/WiFi איטי.
+  const sizeMB = (file.size || 0) / (1024 * 1024);
+  const timeoutMs = Math.max(30000, 20000 * sizeMB);
+
+  const { data: sessionData } = await window.supabaseClient.auth.getSession();
+  const accessToken = sessionData && sessionData.session && sessionData.session.access_token;
+  if (!accessToken) return { data: null, error: { name: 'AuthSessionMissing', message: 'אין session פעיל - יש להתחבר מחדש' } };
+
+  const uploadUrl = `${window.BSD_CONFIG.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`;
+
+  function attemptOnce(){
+    return new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', uploadUrl, true);
+      xhr.setRequestHeader('apikey', window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY);
+      xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+      xhr.setRequestHeader('Content-Type', opts.contentType || file.type || 'application/octet-stream');
+      xhr.setRequestHeader('x-upsert', opts.upsert ? 'true' : 'false');
+      xhr.timeout = timeoutMs;
+      xhr.upload.onprogress = function(e){
+        if (opts.onProgress && e.lengthComputable) opts.onProgress(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = function(){
+        if (xhr.status >= 200 && xhr.status < 300){
+          resolve({ ok: true });
+        } else {
+          let serverMsg = xhr.responseText;
+          try { serverMsg = JSON.parse(xhr.responseText).message || serverMsg; } catch(e){}
+          resolve({ ok: false, retryable: false, error: { name: 'StorageApiError', message: `שגיאת שרת (${xhr.status}): ${serverMsg}` } });
+        }
+      };
+      xhr.onerror = function(){
+        resolve({ ok: false, retryable: true, error: { name: 'StorageUnknownError', message: 'Failed to fetch (network error)' } });
+      };
+      xhr.ontimeout = function(){
+        resolve({ ok: false, retryable: true, error: { name: 'StorageTimeout', message: `העלאה ארכה יותר מ-${Math.round(timeoutMs/1000)} שניות ונעצרה` } });
+      };
+      xhr.send(file);
+    });
+  }
+
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++){
+    const result = await attemptOnce();
+    if (result.ok) return { data: { path }, error: null };
+    lastError = result.error;
+    if (!result.retryable || attempt === maxAttempts) break;
+    if (opts.onProgress) opts.onProgress(0);
+    await new Promise(r => setTimeout(r, 1500 * attempt)); // backoff: 1.5s, 3s
+  }
+  return { data: null, error: lastError };
+}
