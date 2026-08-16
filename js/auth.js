@@ -381,7 +381,7 @@ async function refreshNavMsgBadge(){
 // we force one hard reload. The sessionStorage guard makes it
 // impossible to get stuck in a reload loop if something is off.
 // ============================================================
-window.BSD_BUILD = '202608161330';
+window.BSD_BUILD = '202608161345';
 
 (async function checkStalePage(){
   try {

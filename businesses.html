@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608161330';
+    var PAGE_BUILD = '202608161345';
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
       .then(function(r){ return r.json(); })
@@ -104,7 +104,7 @@
 <body>
 
 <div class="bsd-header">
-  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 16.08.2026 13:30</span></div></a>
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה 16.08.2026 13:45</span></div></a>
   <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
         <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
   <div class="nav">
@@ -963,7 +963,7 @@ async function generateAnonSummary(bizId){
   const btn = document.getElementById('genAnonSummaryBtn');
   const statusEl = document.getElementById('genAnonSummaryStatus');
   if (btn) btn.disabled = true;
-  if (statusEl) statusEl.textContent = '🤖 כותב תקציר אנונימי...';
+  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = '🤖 כותב תקציר אנונימי... (עשוי לקחת כמה שניות)'; }
   try {
     const { data, error } = await window.supabaseClient.functions.invoke('generate-anonymous-card', { body: { business_id: bizId } });
     if (error){
@@ -973,22 +973,24 @@ async function generateAnonSummary(bizId){
         const ctx = await error.context?.json?.();
         if (ctx?.error) msg = ctx.error + (ctx.concerns?.length ? ' — ' + ctx.concerns.join(', ') : '');
       } catch(_e){}
-      if (statusEl) statusEl.textContent = '';
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
       toast('⚠️ ' + msg);
       return;
     }
-    if (statusEl) statusEl.textContent = '';
     if (!data?.anon_summary && !data?.anon_display_name){
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ אין מספיק מידע ליצירת תקציר אמין - הוסף תיאור קצר או הערות לעסק ונסה שוב'; }
       toast('אין מספיק מידע ליצירת תקציר אמין - נסה להוסיף תיאור/הערות לעסק קודם');
-    } else {
-      toast('התקציר האנונימי נוצר ונשמר בהצלחה');
+      return;
     }
+    if (statusEl){ statusEl.style.color = '#1e7b34'; statusEl.textContent = '✅ נוצר ונשמר בהצלחה'; }
+    toast('התקציר האנונימי נוצר ונשמר בהצלחה');
     bsdLogActivity('generate_anon_summary', 'businesses', bizId);
     await loadBusinesses();
     openBizForm(bizId);
   } catch (e){
-    if (statusEl) statusEl.textContent = '';
-    toast('שגיאה: ' + (e && e.message ? e.message : String(e)));
+    const msg = e && e.message ? e.message : String(e);
+    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ שגיאה: ' + msg; }
+    toast('שגיאה: ' + msg);
   } finally {
     if (btn) btn.disabled = false;
   }
