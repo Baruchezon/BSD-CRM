@@ -5,18 +5,21 @@
 // בדיקת גרסה אוטומטית - עוקפת בעיות קאשינג של דפדפני מובייל (ראו הסבר ב-match-detail.html)
 (function(){
   try{
-    var KEY = 'bsd_ver_seen';
-    var seen = sessionStorage.getItem(KEY);
+    // PAGE_BUILD אפוי בתוך הדף עצמו (מתעדכן בכל push) - נבדק תמיד, גם
+    // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
+    // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
+    // לא תפסה בעיה כזו בטעינה ראשונה).
+    var PAGE_BUILD = '202608161130';
+    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
       .then(function(r){ return r.json(); })
       .then(function(v){
-        if (seen && seen !== v.version){
-          sessionStorage.setItem(KEY, v.version);
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
           var url = new URL(location.href);
           url.searchParams.set('_cb', Date.now());
           location.replace(url.toString());
-        } else if (!seen){
-          sessionStorage.setItem(KEY, v.version);
         }
       })
       .catch(function(){});
