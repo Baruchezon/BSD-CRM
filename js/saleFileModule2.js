@@ -113,7 +113,7 @@ function openSaleFileCategory(bizId, categoryKey){
       </div>
       ${canUpload ? `
       <div style="margin-top:12px;border-top:1px solid #e5e1d5;padding-top:10px;">
-        <input type="file" id="sfUploadInput" ${isPhotoCat ? 'accept="image/*" multiple' : 'multiple'}>
+        <input type="file" id="sfUploadInput" multiple>
         <button type="button" class="btn btn-ghost" id="sfUploadBtn" style="margin-inline-start:8px;" onclick="uploadSaleFiles('${bizId}','${categoryKey}')">⬆️ העלה</button>
         ${isPhotoCat ? `<div style="font-size:.75rem;color:#8a93ab;margin-top:4px;">עד ${SALE_FILE_MAX_PHOTOS} תמונות סה"כ (תמונות ידחסו אוטומטית)</div>` : ''}
         <div id="sfUploadStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
@@ -189,6 +189,15 @@ async function uploadSaleFiles(bizId, categoryKey){
   const errorMessages = [];
   const uploadedNames = [];
   for (const rawFile of files){
+    // בעבר הסינון "רק תמונות" נעשה ע"י accept="image/*" על ה-input, אבל זה
+    // גרם ל-Chrome באנדרואיד לפתוח את ה-Photo Picker המובנה של המערכת במקום
+    // הבורר הרגיל - וה-Photo Picker הזה לא מציג אפשרות "Browse"/Google Drive
+    // בכלל. לכן ה-input עכשיו פתוח לכל סוגי הקבצים, והסינון "רק תמונות"
+    // לקטגוריית תמונות עסק נעשה כאן, אחרי הבחירה, כדי לשמור על הבורר המלא.
+    if (categoryKey === 'business_photo' && rawFile.type && !rawFile.type.startsWith('image/')){
+      const msg = `"${rawFile.name}" אינו קובץ תמונה - דולג (קטגוריה זו מיועדת לתמונות בלבד)`;
+      toast(msg); errorMessages.push(msg); failCount++; continue;
+    }
     if (rawFile.size > SALE_FILE_MAX_MB * 1024 * 1024){
       const msg = `הקובץ "${rawFile.name}" גדול מדי (מקסימום ${SALE_FILE_MAX_MB}MB) - דולג`;
       toast(msg); errorMessages.push(msg); failCount++; continue;
