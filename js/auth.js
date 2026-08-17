@@ -407,6 +407,43 @@ async function refreshNavMsgBadge(){
 })();
 
 // ============================================================
+// רשת ביטחון גלובלית נגד כשלים שקטים (17.08.2026)
+// ------------------------------------------------------------
+// בעקבות דיווח על כפתור שנלחץ ולא קרה שום דבר, בלי הודעה ובלי
+// שורה ב-Console: תופס כל שגיאה שלא נתפסה וכל Promise שנדחה
+// ולא טופל, בכל עמוד באפליקציה - לא רק בתהליך שדווח עליו - ומציג
+// הודעת שגיאה גלויה למשתמש (toast אם קיים בעמוד, אחרת חלון קטן
+// משלו). המטרה: מעכשיו, אם קוד כלשהו זורק/נכשל, המשתמש תמיד רואה
+// את זה על המסך - הוא לא צריך לפתוח Console כדי לדעת שמשהו קרה.
+// ============================================================
+(function setupGlobalErrorNet(){
+  let lastShown = 0, lastMsg = '';
+  function show(msg){
+    const now = Date.now();
+    if (msg === lastMsg && now - lastShown < 4000) return; // לא מציף באותה שגיאה חוזרת
+    lastShown = now; lastMsg = msg;
+    if (typeof window.toast === 'function'){
+      try { window.toast('שגיאת מערכת לא צפויה: ' + msg); return; } catch(e){}
+    }
+    const d = document.createElement('div');
+    d.textContent = '⚠️ שגיאת מערכת לא צפויה: ' + msg;
+    d.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:99999;background:#b3402c;color:#fff;padding:12px 16px;border-radius:8px;font-size:.85rem;max-width:380px;box-shadow:0 6px 20px rgba(0,0,0,.3);';
+    document.body.appendChild(d);
+    setTimeout(() => d.remove(), 8000);
+  }
+  window.addEventListener('error', function(e){
+    console.error('[global-error-net] uncaught error', e.error || e.message, e);
+    show((e.error && e.error.message) || e.message || 'שגיאה לא ידועה');
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    const reason = e.reason;
+    const msg = (reason && (reason.message || reason.error_description || reason.error)) || (typeof reason === 'string' ? reason : JSON.stringify(reason)) || 'שגיאה לא ידועה';
+    console.error('[global-error-net] unhandled promise rejection', reason);
+    show(msg);
+  });
+})();
+
+// ============================================================
 // אנימציית לחיצה עדינה - לכל כפתור בכל מקום באפליקציה. מופעלת על
 // אירוע 'click' עצמו (שקורה רק אחרי שהלחיצה כבר נרשמה בהצלחה),
 // ולא על CSS :active/:hover עם transform - כדי לא לחזור על הבאג
