@@ -730,7 +730,15 @@ async function bsdUploadFile(bucket, path, file, opts){
   const accessToken = sessionData && sessionData.session && sessionData.session.access_token;
   if (!accessToken) return { data: null, error: { name: 'AuthSessionMissing', message: 'אין session פעיל - יש להתחבר מחדש' } };
 
-  const uploadUrl = `${window.BSD_CONFIG.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`;
+  // משתמשים בכתובת ה-Storage הישירה של Supabase (project-ref.storage.supabase.co)
+  // במקום הכתובת הכללית (project-ref.supabase.co) - הוכח באבחון בפועל על מכשיר
+  // Android אמיתי (16.08.2026): אותם 2MB לקחו 24.7 שניות ואז נכשלו עם ניתוק
+  // רשת דרך הכתובת הכללית, אבל עברו ב-2.1 שניות בהצלחה מלאה דרך הכתובת
+  // הישירה - בדיוק כפי שתיעוד Supabase ממליץ ("For optimal performance when
+  // uploading large files you should always use the direct storage hostname").
+  const projectRefMatch = window.BSD_CONFIG.SUPABASE_URL.match(/https:\/\/([a-z0-9]+)\.supabase\.co/);
+  const storageHost = projectRefMatch ? `https://${projectRefMatch[1]}.storage.supabase.co` : window.BSD_CONFIG.SUPABASE_URL;
+  const uploadUrl = `${storageHost}/storage/v1/object/${bucket}/${path}`;
 
   function attemptOnce(){
     return new Promise((resolve) => {
