@@ -119,13 +119,24 @@ async function sendMailViaGmailSmtp(opts: {
 
     let mime: string;
     if (attachments.length) {
-      const attachmentParts = attachments.map(a =>
-        `--${boundary}\r\n` +
-        `Content-Type: ${a.contentType || 'application/pdf'}; name="${a.filename}"\r\n` +
-        `Content-Disposition: attachment; filename="${a.filename}"\r\n` +
-        `Content-Transfer-Encoding: base64\r\n\r\n` +
-        `${wrapBase64(a.base64)}\r\n\r\n`
-      ).join('');
+      // שם קובץ מצורף עם עברית: "filename=" רגיל (ASCII בלבד) לא תומך בעברית -
+      // חלק מלקוחות המייל היו מציגים שם שבור. פותר עם RFC 2231/5987 -
+      // filename*=UTF-8''<percent-encoded> לצד fallback ASCII רגיל, כך שגם
+      // לקוחות ישנים שלא תומכים ב-filename* עדיין מקבלים שם קובץ תקין (ASCII).
+      const asciiFallback = (name: string) => {
+        const m = name.match(/\.[A-Za-z0-9]+$/);
+        const ext = m ? m[0] : '';
+        return /^[\x20-\x7E]+$/.test(name) ? name : `attachment${ext}`;
+      };
+      const attachmentParts = attachments.map(a => {
+        const fallback = asciiFallback(a.filename);
+        const encoded = encodeURIComponent(a.filename);
+        return `--${boundary}\r\n` +
+          `Content-Type: ${a.contentType || 'application/pdf'}; name="${fallback}"\r\n` +
+          `Content-Disposition: attachment; filename="${fallback}"; filename*=UTF-8''${encoded}\r\n` +
+          `Content-Transfer-Encoding: base64\r\n\r\n` +
+          `${wrapBase64(a.base64)}\r\n\r\n`;
+      }).join('');
       mime =
         `${headers}\r\n` +
         `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n` +
