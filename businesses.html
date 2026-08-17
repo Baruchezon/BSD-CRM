@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608171700';
+    var PAGE_BUILD = '202608171820';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1492,6 +1492,14 @@ function withTimeout(promise, ms, label){
   ]);
 }
 
+// כותב גם לתוך המודל עצמו (לא רק toast חיצוני) - כדי שההודעה תמיד תיראה
+// בדיוק במקום שבו המשתמש כבר מסתכל, גם אם למשל מקלדת נייד מכסה את
+// תחתית המסך ומסתירה toast שצף בתחתית הדף.
+function sendFilesStatus(msg, isError){
+  const el = document.getElementById('sendFilesStatus');
+  if (el){ el.textContent = msg; el.style.color = isError ? '#b00020' : '#0e1b34'; }
+}
+
 let SEND_FILES_CURRENT_BUYER = null;
 let SEND_FILES_BIZ_ID = null;
 
@@ -1537,6 +1545,7 @@ async function openSendFilesToBuyer(bizId){
       <textarea id="sendFilesBody" rows="4" style="width:100%;">שלום,\n\nמצורפים הקבצים הבאים${biz ? ' בנוגע ל' + biz.internal_name : ''}.\n\nבברכה,\n${(CURRENT_PROFILE && CURRENT_PROFILE.full_name) || 'BSD Business Brokers Israel'}</textarea>
     </div>
 
+    <div id="sendFilesStatus" style="min-height:20px;margin-bottom:8px;font-size:.85rem;font-weight:600;"></div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
       <button type="button" class="btn btn-primary" id="sendFilesBtn" style="opacity:.5;" onclick="confirmSendFilesToBuyer()">📤 שלח</button>
@@ -1606,21 +1615,29 @@ function renderSendFilesBuyerInfo(){
 }
 
 async function confirmSendFilesToBuyer(){
+  // מוריד פוקוס מכל שדה טקסט פתוח - כדי לסגור מקלדת וירטואלית בנייד מיד
+  // בלחיצה על "שלח". אם מקלדת פתוחה, היא עלולה לכסות הודעות שצפות
+  // בתחתית המסך (toast) ולגרום לתחושת "לא קרה כלום" למרות שבפועל כן
+  // קרה משהו - רק לא נראה.
+  if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
+
   const bizId = SEND_FILES_BIZ_ID;
   const buyer = SEND_FILES_CURRENT_BUYER;
+  sendFilesStatus('מתחיל...', false);
   // בכוונה בלי disabled על הכפתור - קליק על כפתור disabled לא מפעיל שום
   // אירוע ולא מציג שום הודעה, כך שאם המשתמש לא באמת בחר קונה מהרשימה
   // (רק הקליד וזז הלאה) הוא "לא יקרה כלום" בלי שום הסבר. במקום זה תמיד
   // מגיבים בפועל לקליק, עם הודעה מדויקת על מה חסר (17.08.2026, בעקבות
-  // דיווח על "לחצתי שלח ולא הייתה תגובה").
-  if (!buyer){ toast('יש לבחור קונה מהרשימה לפני השליחה (לחיצה על שם הקונה בתפריט הנפתח)'); console.warn('[confirmSendFilesToBuyer] no buyer selected'); return; }
-  if (!buyer.email){ toast('לקונה הנבחר אין כתובת אימייל שמורה - יש להוסיף אימייל בכרטיס הקונה תחילה'); return; }
+  // דיווח על "לחצתי שלח ולא הייתה תגובה"). כל הודעה נכתבת גם ל-toast וגם
+  // ישירות בתוך המודל (sendFilesStatus), כדי שתמיד תיראה בוודאות.
+  if (!buyer){ const m='יש לבחור קונה מהרשימה לפני השליחה (לחיצה על שם הקונה בתפריט הנפתח)'; toast(m); sendFilesStatus(m, true); console.warn('[confirmSendFilesToBuyer] no buyer selected'); return; }
+  if (!buyer.email){ const m='לקונה הנבחר אין כתובת אימייל שמורה - יש להוסיף אימייל בכרטיס הקונה תחילה'; toast(m); sendFilesStatus(m, true); return; }
 
   const selectedIdx = Array.from(document.querySelectorAll('.bizfSendCheck:checked')).map(el => el.getAttribute('data-idx'));
-  if (!selectedIdx.length){ toast('לא נבחרו קבצים לשליחה'); return; }
+  if (!selectedIdx.length){ const m='לא נבחרו קבצים לשליחה'; toast(m); sendFilesStatus(m, true); return; }
   const filesInfo = selectedIdx.map(idx => (BIZ_FILES_CACHE[bizId] || [])[idx]).filter(Boolean);
-  if (filesInfo.length !== selectedIdx.length){ toast('שגיאה: חלק מהקבצים שסומנו לא נמצאו יותר - סגור וטען מחדש'); return; }
-  if (!CURRENT_PROFILE || !CURRENT_PROFILE.email){ toast('שגיאה: פרופיל המשתמש הנוכחי לא נטען כראוי - רענן את הדף'); console.error('[confirmSendFilesToBuyer] CURRENT_PROFILE missing/invalid', CURRENT_PROFILE); return; }
+  if (filesInfo.length !== selectedIdx.length){ const m='שגיאה: חלק מהקבצים שסומנו לא נמצאו יותר - סגור וטען מחדש'; toast(m); sendFilesStatus(m, true); return; }
+  if (!CURRENT_PROFILE || !CURRENT_PROFILE.email){ const m='שגיאה: פרופיל המשתמש הנוכחי לא נטען כראוי - רענן את הדף'; toast(m); sendFilesStatus(m, true); console.error('[confirmSendFilesToBuyer] CURRENT_PROFILE missing/invalid', CURRENT_PROFILE); return; }
 
   const subject = document.getElementById('sendFilesSubject').value.trim() || 'קבצים מ-BSD Business Brokers Israel';
   const bodyText = document.getElementById('sendFilesBody').value;
@@ -1632,6 +1649,7 @@ async function confirmSendFilesToBuyer(){
     console.log('[confirmSendFilesToBuyer] starting', { bizId, to: buyer.email, fileCount: filesInfo.length, files: filesInfo.map(f=>f.displayName) });
     const attachments = [];
     for (const f of filesInfo){
+      sendFilesStatus(`מוריד את "${f.displayName}"...`, false);
       console.log('[confirmSendFilesToBuyer] downloading', f.storagePath);
       const { data: blob, error: dlErr } = await withTimeout(
         window.supabaseClient.storage.from(BIZ_FILES_BUCKET).download(f.storagePath), 20000, `הורדת "${f.displayName}"`
@@ -1642,6 +1660,7 @@ async function confirmSendFilesToBuyer(){
       attachments.push({ base64, filename: f.displayName, contentType: blob.type || undefined });
     }
 
+    sendFilesStatus('שולח את המייל...', false);
     console.log('[confirmSendFilesToBuyer] invoking send-match-summary', { to: buyer.email, subject, attachmentCount: attachments.length });
     const { data, error } = await withTimeout(
       window.supabaseClient.functions.invoke('send-match-summary', {
@@ -1661,13 +1680,17 @@ async function confirmSendFilesToBuyer(){
     }
 
     bsdLogActivity('send_files_email', 'businesses', bizId);
-    toast(`${filesInfo.length} קבצים נשלחו בהצלחה ל-${buyer.email}`);
-    closeModal();
+    const okMsg = `${filesInfo.length} קבצים נשלחו בהצלחה ל-${buyer.email}`;
+    sendFilesStatus('✅ ' + okMsg, false);
+    toast(okMsg);
     document.querySelectorAll('.bizfSendCheck:checked').forEach(el => el.checked = false);
     updateBizSendBtn(bizId);
+    setTimeout(closeModal, 900); // השהיה קצרה כדי שההודעה תיראה גם למי שהמודל שלו נסגר מיד
   } catch(e){
     console.error('[confirmSendFilesToBuyer] exception', e);
-    toast('שגיאה בשליחת המייל: ' + (e.message || e));
+    const errMsg = 'שגיאה בשליחת המייל: ' + (e.message || e);
+    sendFilesStatus('❌ ' + errMsg, true);
+    toast(errMsg);
     if (sendBtn){ sendBtn.disabled = false; sendBtn.textContent = '📤 שלח'; }
   }
 }
