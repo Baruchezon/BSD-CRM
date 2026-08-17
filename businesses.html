@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608170450';
+    var PAGE_BUILD = '202608170505';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -225,7 +225,7 @@
 
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202608170450"></script>
+<script src="js/auth.js?v=202608170505"></script>
 <script src="js/permissions.js?v=202608151600"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
@@ -480,7 +480,7 @@ function renderTable(){
             <div class="primary-name" style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
               <span>${statusEmoji}${esc(b.internal_name)}</span>
               ${filesIndicatorBadge(b.id)}
-              ${notesIconStyle(b.id) ? `<span onclick="event.stopPropagation();openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(b.id))}" style="cursor:pointer;font-size:.85rem;">📝🔵</span>` : ''}
+              ${notesIconStyle(b.id) ? `<span onclick="event.stopPropagation();openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(b.id))}" style="cursor:pointer;font-size:.72rem;color:#1a3d8f;font-weight:700;white-space:nowrap;">🔵 קיימת הערה</span>` : ''}
             </div>
             ${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}
             ${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}

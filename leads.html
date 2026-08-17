@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608170450';
+    var PAGE_BUILD = '202608170505';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -232,7 +232,7 @@
 
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202608170450"></script>
+<script src="js/auth.js?v=202608170505"></script>
 <script src="js/permissions.js?v=202608151600"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/standaloneRecording.js?v=202608132300"></script>
@@ -430,7 +430,7 @@ function renderTable(){
     const statusEmoji = rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
     nameCell = statusEmoji + nameCell;
     if (notesIconStyle(l.id)){
-      const noteDot = `<span onclick="event.stopPropagation();openNotesPanel('leads','${l.id}','${esc((personName||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(l.id))}" style="cursor:pointer;font-size:.85rem;margin-inline-start:6px;">📝🔵</span>`;
+      const noteDot = `<span onclick="event.stopPropagation();openNotesPanel('leads','${l.id}','${esc((personName||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(l.id))}" style="cursor:pointer;font-size:.72rem;color:#1a3d8f;font-weight:700;white-space:nowrap;margin-inline-start:6px;">🔵 קיימת הערה</span>`;
       nameCell = nameCell.replace('</div>', noteDot + '</div>');
     }
 
