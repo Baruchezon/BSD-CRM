@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608171820';
+    var PAGE_BUILD = '202608172210';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1502,6 +1502,14 @@ function sendFilesStatus(msg, isError){
 
 let SEND_FILES_CURRENT_BUYER = null;
 let SEND_FILES_BIZ_ID = null;
+// אינדקסי הקבצים שנבחרו נשמרים כאן ברגע שפותחים את החלון, ולא נבדקים
+// מחדש מתוך ה-DOM ברגע השליחה. הסיבה: רשימת הקבצים בכרטיס העסק מתעדכנת
+// מדי פעם ברקע (למשל אחרי שינוי כלשהו בעסק), וזה מאפס את כל תיבות
+// הסימון - כך שגם אם המשתמש בחר קובץ ופתח את החלון בהצלחה, בלחיצה על
+// "שלח" הקוד היה בודק מחדש אילו תיבות מסומנות כרגע ומוצא שאף אחת לא
+// מסומנת יותר - "לא נבחרו קבצים לשליחה", למרות שהקובץ כן נבחר במקור.
+// זוהתה בפועל ב-17.08.2026 22:00 הודות לשורת הסטטוס בתוך המודל.
+let SEND_FILES_SELECTED_IDX = [];
 
 async function openSendFilesToBuyer(bizId){
   // בכוונה עובדים לפי אינדקס (data-idx) ולא לפי שם קובץ שיושב ב-value של
@@ -1511,6 +1519,7 @@ async function openSendFilesToBuyer(bizId){
   if (!selectedIdx.length){ toast('יש לבחור לפחות קובץ אחד לשליחה'); return; }
   SEND_FILES_BIZ_ID = bizId;
   SEND_FILES_CURRENT_BUYER = null;
+  SEND_FILES_SELECTED_IDX = selectedIdx; // מוקפא כאן - לא נקרא שוב מה-DOM אחר כך
 
   const filesInfo = selectedIdx.map(idx => (BIZ_FILES_CACHE[bizId] || [])[idx]).filter(Boolean);
   if (filesInfo.length !== selectedIdx.length){
@@ -1633,7 +1642,7 @@ async function confirmSendFilesToBuyer(){
   if (!buyer){ const m='יש לבחור קונה מהרשימה לפני השליחה (לחיצה על שם הקונה בתפריט הנפתח)'; toast(m); sendFilesStatus(m, true); console.warn('[confirmSendFilesToBuyer] no buyer selected'); return; }
   if (!buyer.email){ const m='לקונה הנבחר אין כתובת אימייל שמורה - יש להוסיף אימייל בכרטיס הקונה תחילה'; toast(m); sendFilesStatus(m, true); return; }
 
-  const selectedIdx = Array.from(document.querySelectorAll('.bizfSendCheck:checked')).map(el => el.getAttribute('data-idx'));
+  const selectedIdx = SEND_FILES_SELECTED_IDX; // נשמר בזמן פתיחת החלון - לא נבדק מחדש מה-DOM (ראו הסבר למעלה)
   if (!selectedIdx.length){ const m='לא נבחרו קבצים לשליחה'; toast(m); sendFilesStatus(m, true); return; }
   const filesInfo = selectedIdx.map(idx => (BIZ_FILES_CACHE[bizId] || [])[idx]).filter(Boolean);
   if (filesInfo.length !== selectedIdx.length){ const m='שגיאה: חלק מהקבצים שסומנו לא נמצאו יותר - סגור וטען מחדש'; toast(m); sendFilesStatus(m, true); return; }
