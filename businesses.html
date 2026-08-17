@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608170505';
+    var PAGE_BUILD = '202608170545';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -225,7 +225,7 @@
 
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202608170505"></script>
+<script src="js/auth.js?v=202608170545"></script>
 <script src="js/permissions.js?v=202608151600"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
@@ -347,7 +347,7 @@ async function loadGrantCounts(){
 function distributionBadge(b){
   const grantCount = GRANT_COUNTS[b.id] || 0;
   const parts = [];
-  if (b.anon_summary || b.anon_display_name) parts.push(`<span title="קיים תקציר אנונימי שמור" style="background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">✓ אנונימי מוכן</span>`);
+  if (b.anon_summary || b.anon_display_name) parts.push(`<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="קיים תקציר אנונימי שמור - לחץ לצפייה/עריכה" style="cursor:pointer;background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">✓ אנונימי מוכן</span>`);
   if (b.anon_card_active) parts.push(`<span style="background:#e8f0fe;color:#1a56db;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">🪪 הופץ אנונימית</span>`);
   if (grantCount > 0) parts.push(`<span style="background:#fff8e6;color:#8a5a00;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">🔓 גישה מלאה: ${grantCount}</span>`);
   if (!parts.length) return `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">⚪ לא הופץ</span>`;
@@ -703,10 +703,10 @@ function openBizForm(id){
           <label style="display:block;font-size:.78rem;color:#665;margin-top:10px;">שם תצוגה אנונימי</label>
           <input type="text" id="anon_display_name" value="${esc(biz.anon_display_name)}" placeholder="לדוגמה: עסק בתחום המזון" style="width:100%;padding:8px 10px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;box-sizing:border-box;">
           <label style="display:block;font-size:.78rem;color:#665;margin-top:8px;">תקציר אנונימי (ניתן לעריכה ידנית)</label>
-          <textarea id="anon_summary" rows="3" placeholder="1-2 משפטים כלליים, בלי פרטים מזהים" style="width:100%;padding:8px 10px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;">${esc(biz.anon_summary)}</textarea>
-          <div style="font-size:.72rem;color:#999;margin-top:4px;">${biz.anon_summary_generated_at ? 'נוצר לאחרונה ע"י AI: ' + fmtDateTime(biz.anon_summary_generated_at) : 'טרם נוצר ע"י AI'} - עריכה ידנית ותישמר עם כפתור "שמירה" הרגיל בתחתית הטופס, ותעבור אותה בדיקת אנונימיות בזמן השמירה.</div>
+          <textarea id="anon_summary" rows="8" placeholder="נוצר אוטומטית או הוזן ידנית - בלי פרטים מזהים" style="width:100%;padding:8px 10px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;">${esc(biz.anon_summary)}</textarea>
+          <div style="font-size:.72rem;color:#999;margin-top:4px;">${biz.anon_summary_generated_at ? 'נוצר לאחרונה ע"י AI: ' + fmtDateTime(biz.anon_summary_generated_at) : 'טרם נוצר ע"י AI'} - עריכה ידנית כאן נשמרת עם כפתור "שמירה" הרגיל בתחתית הטופס, ותמיד עוברת בדיקת אנונימיות בזמן השמירה.</div>
           <div id="anonStaleWarning" style="display:none;font-size:.78rem;color:#b3402c;margin-top:6px;">⚠️ התיאור/ההערות עודכנו מאז יצירת התקציר - מומלץ ליצור תקציר חדש.</div>
-          <button type="button" class="btn btn-ghost" style="margin-top:8px;" onclick="generateAnonSummary('${biz.id}')" id="genAnonSummaryBtn">🔄 ${biz.anon_summary ? 'צור תקציר חדש (AI, מחליף את הטקסט למעלה)' : 'צור תקציר אנונימי (AI)'}</button>
+          <button type="button" class="btn btn-ghost" style="margin-top:8px;" onclick="generateAnonSummary('${biz.id}')" id="genAnonSummaryBtn">🔄 צור תקציר אנונימי (AI) - לתצוגה מקדימה</button>
           <div id="genAnonSummaryStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
         </div>
 
@@ -997,40 +997,98 @@ function renderAnonBizGrid(){
   `).join('');
 }
 
+function anonFunctionErrorMessage(error, ctx){
+  let msg = error?.message || 'שגיאה לא ידועה';
+  if (ctx?.error) msg = ctx.error + (ctx.concerns?.length ? ' — ' + ctx.concerns.join(', ') : '');
+  return msg;
+}
+async function invokeAnonCardFn(body){
+  const { data, error } = await window.supabaseClient.functions.invoke('generate-anonymous-card', { body });
+  if (error){
+    let ctx = null;
+    try { ctx = await error.context?.json?.(); } catch(_e){}
+    throw new Error(anonFunctionErrorMessage(error, ctx));
+  }
+  return data;
+}
+
+// שלב 1: יצירת טיוטה בלבד - לעולם לא שומרת, לעולם לא משנה את הטופס האמיתי.
+// פותחת תצוגה מקדימה נפרדת שבה יש לאשר במפורש לפני שמירה (סעיף 4).
 async function generateAnonSummary(bizId){
   const btn = document.getElementById('genAnonSummaryBtn');
   const statusEl = document.getElementById('genAnonSummaryStatus');
   if (btn) btn.disabled = true;
-  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = '🤖 כותב תקציר אנונימי... (עשוי לקחת כמה שניות)'; }
+  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = '🤖 כותב טיוטת תקציר אנונימי... (עשוי לקחת כמה שניות)'; }
   try {
-    const { data, error } = await window.supabaseClient.functions.invoke('generate-anonymous-card', { body: { business_id: bizId } });
-    if (error){
-      let msg = error.message || 'שגיאה לא ידועה';
-      // FunctionsHttpError - הגוף עם הפירוט האמיתי נמצא ב-error.context
-      try {
-        const ctx = await error.context?.json?.();
-        if (ctx?.error) msg = ctx.error + (ctx.concerns?.length ? ' — ' + ctx.concerns.join(', ') : '');
-      } catch(_e){}
-      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
-      toast('⚠️ ' + msg);
-      return;
-    }
+    const data = await invokeAnonCardFn({ business_id: bizId });
     if (!data?.anon_summary && !data?.anon_display_name){
       if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ אין מספיק מידע ליצירת תקציר אמין - הוסף תיאור קצר או הערות לעסק ונסה שוב'; }
-      toast('אין מספיק מידע ליצירת תקציר אמין - נסה להוסיף תיאור/הערות לעסק קודם');
       return;
     }
-    if (statusEl){ statusEl.style.color = '#1e7b34'; statusEl.textContent = '✅ נוצר ונשמר בהצלחה'; }
-    toast('התקציר האנונימי נוצר ונשמר בהצלחה');
+    if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = ''; }
+    openAnonDraftPreview(bizId, data);
+  } catch (e){
+    const msg = e && e.message ? e.message : String(e);
+    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
+    toast('⚠️ ' + msg);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function closeAnonDraftPreview(){
+  const el = document.getElementById('anonDraftOverlay');
+  if (el) el.remove();
+}
+
+// שלב 2: תצוגה מקדימה + עריכה + אישור מפורש. שום דבר לא נשמר עד שלוחצים
+// "אישור תקציר אנונימי" - ואז שלב האישור בשרת סורק שוב את הטקסט הסופי.
+function openAnonDraftPreview(bizId, draft){
+  closeAnonDraftPreview();
+  const overlay = document.createElement('div');
+  overlay.id = 'anonDraftOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:98;padding:40px 20px;';
+  const concernsHtml = (draft.concerns && draft.concerns.length)
+    ? `<div style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.8rem;color:#8a2c1f;">⚠️ ה-AI או הבדיקה האוטומטית סימנו חשש: ${draft.concerns.map(esc).join(' · ')} — תקן ידנית למטה לפני האישור.</div>`
+    : '';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:640px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">תצוגה מקדימה - תקציר אנונימי (AI)</h3>
+      <div style="font-size:.78rem;color:#999;margin-bottom:12px;">זו טיוטה בלבד - שום דבר לא נשמר עדיין. ניתן לערוך כל שדה למטה לפני האישור.</div>
+      ${concernsHtml}
+      <label style="display:block;font-size:.78rem;color:#665;">שם תצוגה אנונימי</label>
+      <input type="text" id="anonDraftName" value="${esc(draft.anon_display_name || '')}" style="width:100%;padding:8px 10px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;box-sizing:border-box;margin-bottom:10px;">
+      <label style="display:block;font-size:.78rem;color:#665;">תקציר אנונימי</label>
+      <textarea id="anonDraftSummary" rows="10" style="width:100%;padding:8px 10px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;">${esc(draft.anon_summary || '')}</textarea>
+      <div id="anonDraftStatus" style="font-size:.78rem;color:#999;margin-top:8px;min-height:1.2em;"></div>
+      <div style="display:flex;justify-content:space-between;gap:10px;margin-top:16px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-ghost" onclick="generateAnonSummary('${bizId}')">🔄 יצירה מחדש (AI)</button>
+        <div style="display:flex;gap:10px;">
+          <button type="button" class="btn btn-ghost" onclick="closeAnonDraftPreview()">ביטול</button>
+          <button type="button" class="btn btn-primary" onclick="confirmAnonDraft('${bizId}')">✅ אישור תקציר אנונימי</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+// שלב 3: אישור מפורש - רק כאן נשמר בפועל. שולח את הטקסט הסופי (אולי נערך
+// ידנית) ל-action:'confirm' בשרת, שסורק אותו שוב לפני שמירה.
+async function confirmAnonDraft(bizId){
+  const statusEl = document.getElementById('anonDraftStatus');
+  const anon_display_name = document.getElementById('anonDraftName').value.trim() || null;
+  const anon_summary = document.getElementById('anonDraftSummary').value.trim() || null;
+  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = 'שומר...'; }
+  try {
+    await invokeAnonCardFn({ business_id: bizId, action: 'confirm', anon_display_name, anon_summary });
+    toast('התקציר האנונימי אושר ונשמר בהצלחה');
     bsdLogActivity('generate_anon_summary', 'businesses', bizId);
+    closeAnonDraftPreview();
     await loadBusinesses();
     openBizForm(bizId);
   } catch (e){
     const msg = e && e.message ? e.message : String(e);
-    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ שגיאה: ' + msg; }
-    toast('שגיאה: ' + msg);
-  } finally {
-    if (btn) btn.disabled = false;
+    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
   }
 }
 
