@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608172210';
+    var PAGE_BUILD = '202608172225';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1661,7 +1661,7 @@ async function confirmSendFilesToBuyer(){
       sendFilesStatus(`מוריד את "${f.displayName}"...`, false);
       console.log('[confirmSendFilesToBuyer] downloading', f.storagePath);
       const { data: blob, error: dlErr } = await withTimeout(
-        window.supabaseClient.storage.from(BIZ_FILES_BUCKET).download(f.storagePath), 20000, `הורדת "${f.displayName}"`
+        window.supabaseClient.storage.from(BIZ_FILES_BUCKET).download(f.storagePath), 30000, `הורדת "${f.displayName}"`
       );
       if (dlErr) throw new Error(`הורדת "${f.displayName}" נכשלה: ${dlErr.message}`);
       if (!blob) throw new Error(`הורדת "${f.displayName}" החזירה קובץ ריק`);
@@ -1669,12 +1669,22 @@ async function confirmSendFilesToBuyer(){
       attachments.push({ base64, filename: f.displayName, contentType: blob.type || undefined });
     }
 
-    sendFilesStatus('שולח את המייל...', false);
+    sendFilesStatus('שולח את המייל... (עלול לקחת עד דקה עם קבצים מצורפים)', false);
     console.log('[confirmSendFilesToBuyer] invoking send-match-summary', { to: buyer.email, subject, attachmentCount: attachments.length });
+    // הטיימאאוט הקודם (30 שניות) התברר כקצר מדי בפועל: שליחת מייל עם קובץ
+    // מצורף עוברת בפונקציית Edge שמתחברת ל-SMTP של Gmail בעצמה (חיבור TLS
+    // חדש + כמה פקודות עם round-trip + העלאת הקובץ המקודד ל-base64) - זה
+    // באופן לגיטימי יכול לקחת יותר מ-30 שניות, בעיקר בהפעלה "קרה" של
+    // הפונקציה או עם קובץ גדול יותר. הטיימאאוט לא היה סימן לתקלה אמיתית -
+    // רק לזמן קצר מדי מדי שנבחר בלי בסיס אמיתי (17.08.2026 22:06).
+    // בנוסף: עכשיו מעבירים signal אמיתי (AbortSignal.timeout) כדי שאם
+    // בכל זאת נגמר הזמן, הבקשה תבוטל בפועל ולא תמשיך לרוץ בשרת ברקע -
+    // כדי למנוע מצב של מייל כפול אם המשתמש ינסה שוב אחרי טיימאאוט.
     const { data, error } = await withTimeout(
       window.supabaseClient.functions.invoke('send-match-summary', {
-        body: { to: buyer.email, subject, body_text: bodyText, reply_to: CURRENT_PROFILE.email, attachments }
-      }), 30000, 'שליחת המייל'
+        body: { to: buyer.email, subject, body_text: bodyText, reply_to: CURRENT_PROFILE.email, attachments },
+        signal: AbortSignal.timeout(90000)
+      }), 90000, 'שליחת המייל'
     );
     console.log('[confirmSendFilesToBuyer] invoke result', { data, error });
     if (error || data?.error){
