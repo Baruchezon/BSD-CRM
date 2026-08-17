@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608172235';
+    var PAGE_BUILD = '202608172245';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1669,26 +1669,23 @@ async function confirmSendFilesToBuyer(){
       attachments.push({ base64, filename: f.displayName, contentType: blob.type || undefined });
     }
 
-    sendFilesStatus('שולח את המייל... (עלול לקחת עד דקה עם קבצים מצורפים)', false);
+    sendFilesStatus('שולח את המייל...', false);
     console.log('[confirmSendFilesToBuyer] invoking send-match-summary', { to: buyer.email, subject, attachmentCount: attachments.length });
-    // הטיימאאוט הקודם (30 שניות) התברר כקצר מדי בפועל: שליחת מייל עם קובץ
-    // מצורף עוברת בפונקציית Edge שמתחברת ל-SMTP של Gmail בעצמה (חיבור TLS
-    // חדש + כמה פקודות עם round-trip + העלאת הקובץ המקודד ל-base64) - זה
-    // באופן לגיטימי יכול לקחת יותר מ-30 שניות, בעיקר בהפעלה "קרה" של
-    // הפונקציה או עם קובץ גדול יותר. הטיימאאוט לא היה סימן לתקלה אמיתית -
-    // רק לזמן קצר מדי מדי שנבחר בלי בסיס אמיתי (17.08.2026 22:06).
-    // הערה (17.08.2026 22:12): ניסיתי כאן קודם להעביר גם signal
-    // (AbortSignal.timeout) כדי שטיימאאוט יבטל בפועל את הבקשה בצד השרת -
-    // אבל התברר שזו תכונה שעדיין לא שוחררה בפועל בגרסה הרשמית של
-    // supabase-js (יש לה Pull Request פתוח וממתין ב-GitHub של Supabase,
-    // לא מוזג עדיין) - העברת האופציה הזו גרמה לשגיאה מיידית "Failed to
-    // send a request to the Edge Function" עוד לפני שהבקשה יצאה בכלל.
-    // הוסר. נשאר רק הטיימאאוט החיצוני (withTimeout) - בלי ביטול אמיתי של
-    // הבקשה בצד השרת, אבל לפחות לא שובר את השליחה.
+    // (17.08.2026 22:18) שני סבבים קודמים (30 שניות, ואז 90 שניות) נכשלו
+    // באותה צורה בדיוק - "נתקעה ולא הגיבה". זה כבר לא מסתדר עם "פשוט לוקח
+    // זמן" (90 שניות אמיתיות זה הרבה, ועדיין כלום). בדקתי את התיעוד הרשמי
+    // של Supabase: הפלטפורמה חוסמת חיבורי רשת יוצאים בפורטים 25, 465, 587
+    // - בדיוק הפורט (465) שהפונקציה הזו משתמשת בו כדי להתחבר ישירות ל-SMTP
+    // של Gmail. זה מסביר תקיעה מוחלטת בלי תשובה בכלל, בכל אורך טיימאאוט -
+    // לא בעיה בקוד הצד שלנו, אלא מגבלת רשת של הפלטפורמה. אין טעם להמשיך
+    // לחכות זמן ארוך יותר - זה לא ייפתר עם עוד שניות. הוחזר לזמן סביר
+    // (25 שניות) כדי שכישלון (אם יש) יתגלה מהר ולא יגרום להמתנה מיותרת -
+    // הפתרון האמיתי צריך להיות מעבר לשירות שליחת מייל שעובד דרך HTTPS
+    // רגיל ולא SMTP גולמי (ראו את ההודעה לברוך על כך).
     const { data, error } = await withTimeout(
       window.supabaseClient.functions.invoke('send-match-summary', {
         body: { to: buyer.email, subject, body_text: bodyText, reply_to: CURRENT_PROFILE.email, attachments }
-      }), 90000, 'שליחת המייל'
+      }), 25000, 'שליחת המייל'
     );
     console.log('[confirmSendFilesToBuyer] invoke result', { data, error });
     if (error || data?.error){
