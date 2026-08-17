@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608171310';
+    var PAGE_BUILD = '202608171340';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1517,7 +1517,7 @@ async function openSendFilesToBuyer(bizId){
 
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-      <button type="button" class="btn btn-primary" id="sendFilesBtn" disabled onclick="confirmSendFilesToBuyer()">📤 שלח</button>
+      <button type="button" class="btn btn-primary" id="sendFilesBtn" style="opacity:.5;" onclick="confirmSendFilesToBuyer()">📤 שלח</button>
     </div>
   `;
   document.getElementById('overlay').classList.add('open');
@@ -1550,7 +1550,7 @@ function renderSendFilesBuyerInfo(){
   const infoBox = document.getElementById('sendFilesBuyerInfo');
   const sendBtn = document.getElementById('sendFilesBtn');
   const buyer = SEND_FILES_CURRENT_BUYER;
-  if (!buyer){ infoBox.innerHTML = ''; sendBtn.disabled = true; return; }
+  if (!buyer){ infoBox.innerHTML = ''; sendBtn.style.opacity = '.5'; return; }
 
   const buyerLabel = buyer.full_name || [buyer.first_name,buyer.last_name].filter(Boolean).join(' ') || '';
   const missingEmail = !buyer.email;
@@ -1567,13 +1567,19 @@ function renderSendFilesBuyerInfo(){
           ? `<div style="background:#fff8e6;color:#8a5a00;border-radius:8px;padding:10px 12px;font-size:.85rem;">⚠️ לקונה הזה אין עדיין הסכם התקשרות חתום. ודא שהקבצים שנבחרו מתאימים לשליחה במצב הזה לפני שתשלח.</div>`
           : '')}
   `;
-  sendBtn.disabled = missingEmail;
+  sendBtn.style.opacity = missingEmail ? '.5' : '1';
 }
 
 async function confirmSendFilesToBuyer(){
   const bizId = SEND_FILES_BIZ_ID;
   const buyer = SEND_FILES_CURRENT_BUYER;
-  if (!buyer || !buyer.email){ toast('יש לבחור קונה עם כתובת אימייל'); return; }
+  // בכוונה בלי disabled על הכפתור - קליק על כפתור disabled לא מפעיל שום
+  // אירוע ולא מציג שום הודעה, כך שאם המשתמש לא באמת בחר קונה מהרשימה
+  // (רק הקליד וזז הלאה) הוא "לא יקרה כלום" בלי שום הסבר. במקום זה תמיד
+  // מגיבים בפועל לקליק, עם הודעה מדויקת על מה חסר (17.08.2026, בעקבות
+  // דיווח על "לחצתי שלח ולא הייתה תגובה").
+  if (!buyer){ toast('יש לבחור קונה מהרשימה לפני השליחה (לחיצה על שם הקונה בתפריט הנפתח)'); console.warn('[confirmSendFilesToBuyer] no buyer selected'); return; }
+  if (!buyer.email){ toast('לקונה הנבחר אין כתובת אימייל שמורה - יש להוסיף אימייל בכרטיס הקונה תחילה'); return; }
 
   const selected = Array.from(document.querySelectorAll('.bizfSendCheck:checked')).map(el => el.value);
   if (!selected.length){ toast('לא נבחרו קבצים לשליחה'); return; }
@@ -1586,17 +1592,21 @@ async function confirmSendFilesToBuyer(){
 
   try {
     const filesInfo = selected.map(rawName => (BIZ_FILES_CACHE[bizId] || []).find(f => f.rawName === rawName)).filter(Boolean);
+    console.log('[confirmSendFilesToBuyer] starting', { bizId, to: buyer.email, fileCount: filesInfo.length, files: filesInfo.map(f=>f.displayName) });
     const attachments = [];
     for (const f of filesInfo){
+      console.log('[confirmSendFilesToBuyer] downloading', f.storagePath);
       const { data: blob, error: dlErr } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).download(f.storagePath);
       if (dlErr) throw new Error(`הורדת "${f.displayName}" נכשלה: ${dlErr.message}`);
       const base64 = await blobToBase64(blob);
       attachments.push({ base64, filename: f.displayName, contentType: blob.type || undefined });
     }
 
+    console.log('[confirmSendFilesToBuyer] invoking send-match-summary', { to: buyer.email, subject, attachmentCount: attachments.length });
     const { data, error } = await window.supabaseClient.functions.invoke('send-match-summary', {
       body: { to: buyer.email, subject, body_text: bodyText, reply_to: CURRENT_PROFILE.email, attachments }
     });
+    console.log('[confirmSendFilesToBuyer] invoke result', { data, error });
     if (error || data?.error){
       // supabase-js מסתיר את גוף השגיאה האמיתי מה-Edge Function מאחורי הודעה
       // גנרית - מוציאים את הסיבה האמיתית מ-error.context (אותו דפוס כמו match-detail.html).
@@ -1604,6 +1614,7 @@ async function confirmSendFilesToBuyer(){
       if (error && error.context && typeof error.context.json === 'function'){
         try { const b = await error.context.json(); if (b?.error) detail = b.error; } catch(e){}
       }
+      console.error('[confirmSendFilesToBuyer] failed', detail);
       throw new Error(detail);
     }
 
@@ -1613,6 +1624,7 @@ async function confirmSendFilesToBuyer(){
     document.querySelectorAll('.bizfSendCheck:checked').forEach(el => el.checked = false);
     updateBizSendBtn(bizId);
   } catch(e){
+    console.error('[confirmSendFilesToBuyer] exception', e);
     toast('שגיאה בשליחת המייל: ' + (e.message || e));
     if (sendBtn){ sendBtn.disabled = false; sendBtn.textContent = '📤 שלח'; }
   }
