@@ -25,6 +25,38 @@ function sfCategoryMeta(key){
   return SALE_FILE_CATEGORIES.find(c => c.key === key) || { key, label: key, icon: '📁', confidentiality: 2 };
 }
 
+// אבחון אמיתי של כשל העלאה - לא מסתפק בהודעה שהמערכת מציגה למשתמש.
+// בודק: פרטי השגיאה המדויקים, האם יש session תקף בכלל, והאם יש חיבור רשת
+// חי לשרת Supabase באותו רגע - ומציג הכל על המסך (alert חוסם כדי שאפשר
+// לצלם מסך לפני שהוא נעלם) כי אין גישת Chrome Remote Debugging למכשיר.
+async function sfDiagnoseUploadFailure(err, rawFile){
+  const lines = ['--- אבחון שגיאת העלאה ---'];
+  lines.push(`קובץ: ${rawFile ? rawFile.name : '?'} | גודל: ${rawFile ? rawFile.size : '?'} bytes | type: ${rawFile ? (rawFile.type || '(ריק)') : '?'}`);
+  lines.push(`שם שגיאה (err.name): ${(err && err.name) || '?'}`);
+  lines.push(`הודעת שגיאה (err.message): ${(err && err.message) || '?'}`);
+  lines.push(`navigator.onLine: ${navigator.onLine}`);
+  try {
+    const { data: sessionData, error: sessErr } = await window.supabaseClient.auth.getSession();
+    const s = sessionData && sessionData.session;
+    lines.push(`יש session פעיל: ${!!s}`);
+    if (s) lines.push(`ה-session פג תוקף ב: ${new Date(s.expires_at * 1000).toLocaleString('he-IL')}`);
+    if (sessErr) lines.push(`שגיאת session: ${sessErr.message}`);
+  } catch(e){ lines.push(`שגיאה בבדיקת session: ${e.message}`); }
+  try {
+    const t0 = Date.now();
+    const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/auth/v1/health');
+    lines.push(`בדיקת חיבור לשרת (auth/v1/health): הצליחה - status ${res.status}, ${Date.now() - t0}ms`);
+  } catch(e){ lines.push(`בדיקת חיבור לשרת (auth/v1/health): נכשלה - ${e.name}: ${e.message}`); }
+  try {
+    const t0 = Date.now();
+    const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/storage/v1/bucket/' + SALE_FILE_BUCKET, {
+      headers: { 'apikey': window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY, 'Authorization': 'Bearer ' + window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY }
+    });
+    lines.push(`בדיקת חיבור ל-Storage bucket: status ${res.status}, ${Date.now() - t0}ms`);
+  } catch(e){ lines.push(`בדיקת חיבור ל-Storage bucket: נכשלה - ${e.name}: ${e.message}`); }
+  alert(lines.join('\n'));
+}
+
 function sfIsAdminOrManager(){
   return !!CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager');
 }
@@ -113,7 +145,7 @@ function openSaleFileCategory(bizId, categoryKey){
       </div>
       ${canUpload ? `
       <div style="margin-top:12px;border-top:1px solid #e5e1d5;padding-top:10px;">
-        <input type="file" id="sfUploadInput" ${isPhotoCat ? 'accept="image/*" multiple' : 'multiple'}>
+        <input type="file" id="sfUploadInput" multiple>
         <button type="button" class="btn btn-ghost" id="sfUploadBtn" style="margin-inline-start:8px;" onclick="uploadSaleFiles('${bizId}','${categoryKey}')">⬆️ העלה</button>
         ${isPhotoCat ? `<div style="font-size:.75rem;color:#8a93ab;margin-top:4px;">עד ${SALE_FILE_MAX_PHOTOS} תמונות סה"כ (תמונות ידחסו אוטומטית)</div>` : ''}
         <div id="sfUploadStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
@@ -189,6 +221,15 @@ async function uploadSaleFiles(bizId, categoryKey){
   const errorMessages = [];
   const uploadedNames = [];
   for (const rawFile of files){
+    // בעבר הסינון "רק תמונות" נעשה ע"י accept="image/*" על ה-input, אבל זה
+    // גרם ל-Chrome באנדרואיד לפתוח את ה-Photo Picker המובנה של המערכת במקום
+    // הבורר הרגיל - וה-Photo Picker הזה לא מציג אפשרות "Browse"/Google Drive
+    // בכלל. לכן ה-input עכשיו פתוח לכל סוגי הקבצים, והסינון "רק תמונות"
+    // לקטגוריית תמונות עסק נעשה כאן, אחרי הבחירה, כדי לשמור על הבורר המלא.
+    if (categoryKey === 'business_photo' && rawFile.type && !rawFile.type.startsWith('image/')){
+      const msg = `"${rawFile.name}" אינו קובץ תמונה - דולג (קטגוריה זו מיועדת לתמונות בלבד)`;
+      toast(msg); errorMessages.push(msg); failCount++; continue;
+    }
     if (rawFile.size > SALE_FILE_MAX_MB * 1024 * 1024){
       const msg = `הקובץ "${rawFile.name}" גדול מדי (מקסימום ${SALE_FILE_MAX_MB}MB) - דולג`;
       toast(msg); errorMessages.push(msg); failCount++; continue;
@@ -207,11 +248,16 @@ async function uploadSaleFiles(bizId, categoryKey){
     const safeRand = Math.random().toString(36).slice(2, 8);
     const path = `${bizId}/sale-file/${categoryKey}/${Date.now()}_${safeRand}${safeExt}`;
     try {
-      const { error: upErr } = await window.supabaseClient.storage.from(SALE_FILE_BUCKET).upload(path, file);
+      const { error: upErr } = await bsdUploadFile(SALE_FILE_BUCKET, path, file, {
+        contentType: file.type || undefined,
+        onProgress: pct => { if (statusEl) statusEl.textContent = `מעלה את "${rawFile.name}" - ${pct}%`; }
+      });
       if (upErr){
         console.error('sale-file storage upload error:', upErr, { bizId, categoryKey, fileName: rawFile.name });
         const msg = `שגיאה בהעלאת "${rawFile.name}": ${upErr.message}`;
-        toast(msg); errorMessages.push(msg); failCount++; continue;
+        toast(msg); errorMessages.push(msg); failCount++;
+        await sfDiagnoseUploadFailure(upErr, rawFile);
+        continue;
       }
       const { error: dbErr } = await window.supabaseClient.from('business_sale_files').insert({
         business_id: bizId,
