@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608171245';
+    var PAGE_BUILD = '202608171310';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1389,7 +1389,8 @@ async function loadBizFiles(bizId){
   box.innerHTML = merged.map((f, idx) => `
     <div id="bizfrow_${idx}" style="padding:8px 0;border-bottom:1px solid #f0ede4;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:180px;">
+        <div style="flex:1;min-width:180px;display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" class="bizfSendCheck" value="${esc(f.rawName)}" onchange="updateBizSendBtn('${bizId}')" style="cursor:pointer;">
           <span id="bizfname_${idx}">📄 ${esc(f.displayName)}</span>
           ${f.category ? `<span style="background:#eef2fb;color:#3a5cad;font-size:.68rem;font-weight:700;padding:1px 8px;border-radius:10px;margin-inline-start:6px;">${esc(f.category)}</span>` : ''}
         </div>
@@ -1402,7 +1403,10 @@ async function loadBizFiles(bizId){
       <div style="font-size:.7rem;color:#999;margin-top:2px;">
         ${f.createdAt ? fmtDateTime(f.createdAt) : ''}${f.uploadedBy ? ' · הועלה ע"י ' + esc(userName(f.uploadedBy)) : ''}${f.sizeBytes ? ' · ' + Math.round(f.sizeBytes/1024) + 'KB' : ''}
       </div>
-    </div>`).join('');
+    </div>`).join('')
+    + `<div style="margin-top:10px;">
+         <button type="button" class="btn btn-ghost" id="bizSendEmailBtn" disabled onclick="openSendFilesToBuyer('${bizId}')">📧 שלח לקונה במייל</button>
+       </div>`;
 }
 
 // עריכה מוטבעת (שינוי שם תצוגה + קטגוריה) - שורה הופכת לטופס קטן במקום.
@@ -1448,6 +1452,170 @@ async function downloadIntakeForm(bizId, bizName){
   const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/intake-form.pdf`, 300);
   if (error){ toast('שגיאה: ' + error.message); return; }
   window.open(data.signedUrl, '_blank');
+}
+
+// ============================================================================
+// שליחת קובץ/קבצים מצורפים לקונה במייל (17.08.2026)
+// משתמש ב-Edge Function הקיים send-match-summary (SMTP דרך Gmail, לא קשור
+// לספק ה-email שהערוץ "מצגות אנונימיות" למעלה מציין כמושבת - זה ערוץ נפרד
+// שכבר פעיל ועובד בפועל ב-match-detail.html).
+// ============================================================================
+function blobToBase64(blob){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function updateBizSendBtn(bizId){
+  const n = document.querySelectorAll('.bizfSendCheck:checked').length;
+  const btn = document.getElementById('bizSendEmailBtn');
+  if (!btn) return;
+  btn.disabled = n === 0;
+  btn.textContent = n ? `📧 שלח ${n} קבצים לקונה במייל` : '📧 שלח לקונה במייל';
+}
+
+let SEND_FILES_CURRENT_BUYER = null;
+let SEND_FILES_BIZ_ID = null;
+
+async function openSendFilesToBuyer(bizId){
+  const selected = Array.from(document.querySelectorAll('.bizfSendCheck:checked')).map(el => el.value);
+  if (!selected.length){ toast('יש לבחור לפחות קובץ אחד לשליחה'); return; }
+  SEND_FILES_BIZ_ID = bizId;
+  SEND_FILES_CURRENT_BUYER = null;
+
+  const filesInfo = selected.map(rawName => (BIZ_FILES_CACHE[bizId] || []).find(f => f.rawName === rawName)).filter(Boolean);
+  const biz = ALL_BIZ.find(b => b.id === bizId);
+
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>שליחת קבצים לקונה במייל</h3>
+
+    <div class="field full" style="margin-bottom:14px;">
+      <label>קבצים לשליחה</label>
+      <div style="background:#f7f5ef;border-radius:8px;padding:8px 12px;font-size:.85rem;">
+        ${filesInfo.map(f => `<div>📄 ${esc(f.displayName)}</div>`).join('') || '<span style="color:#999;">לא נבחרו קבצים</span>'}
+      </div>
+    </div>
+
+    <div class="field full" style="margin-bottom:10px;overflow:visible;">
+      <label>בחר קונה</label>
+      <div id="sendFilesBuyerBox" style="overflow:visible;">טוען קונים...</div>
+    </div>
+    <div id="sendFilesBuyerInfo"></div>
+
+    <div class="field full" style="margin-bottom:10px;">
+      <label>נושא</label>
+      <input type="text" id="sendFilesSubject" value="${esc('קבצים מ-BSD Business Brokers Israel' + (biz ? ' - ' + biz.internal_name : ''))}">
+    </div>
+    <div class="field full" style="margin-bottom:10px;">
+      <label>תוכן ההודעה</label>
+      <textarea id="sendFilesBody" rows="4" style="width:100%;">שלום,\n\nמצורפים הקבצים הבאים${biz ? ' בנוגע ל' + biz.internal_name : ''}.\n\nבברכה,\n${(CURRENT_PROFILE && CURRENT_PROFILE.full_name) || 'BSD Business Brokers Israel'}</textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button type="button" class="btn btn-primary" id="sendFilesBtn" disabled onclick="confirmSendFilesToBuyer()">📤 שלח</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+
+  let buyerQuery = window.supabaseClient
+    .from('leads')
+    .select('id,full_name,first_name,last_name,email,phone,agreement_status,created_by')
+    .eq('type', 'buyer')
+    .order('full_name', { ascending: true });
+  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
+    buyerQuery = buyerQuery.eq('created_by', CURRENT_PROFILE.id);
+  }
+  const { data: buyers, error } = await buyerQuery;
+  const box = document.getElementById('sendFilesBuyerBox');
+  if (error){ box.innerHTML = `<span style="color:#b3402c;">שגיאה בטעינת קונים: ${esc(error.message)}</span>`; return; }
+
+  box.innerHTML = window.searchSelectHTML({ boxId: 'sendFilesBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
+  window.initSearchSelect('sendFilesBuyerSelect', buyers || [], {
+    getId: b => b.id,
+    getLabel: b => b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || b.email || 'קונה ללא שם',
+    onChange: (buyerId) => {
+      SEND_FILES_CURRENT_BUYER = (buyers || []).find(b => b.id === buyerId) || null;
+      renderSendFilesBuyerInfo();
+    }
+  });
+}
+
+function renderSendFilesBuyerInfo(){
+  const infoBox = document.getElementById('sendFilesBuyerInfo');
+  const sendBtn = document.getElementById('sendFilesBtn');
+  const buyer = SEND_FILES_CURRENT_BUYER;
+  if (!buyer){ infoBox.innerHTML = ''; sendBtn.disabled = true; return; }
+
+  const buyerLabel = buyer.full_name || [buyer.first_name,buyer.last_name].filter(Boolean).join(' ') || '';
+  const missingEmail = !buyer.email;
+  const noAgreement = !buyer.agreement_status || buyer.agreement_status === 'אין הסכם';
+
+  infoBox.innerHTML = `
+    <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.85rem;">
+      <div><b>${esc(buyerLabel)}</b></div>
+      <div>📧 ${esc(buyer.email || 'אין אימייל')}</div>
+    </div>
+    ${missingEmail
+      ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:10px 12px;font-size:.85rem;">⚠️ לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אימייל בכרטיס הקונה תחילה.</div>`
+      : (noAgreement
+          ? `<div style="background:#fff8e6;color:#8a5a00;border-radius:8px;padding:10px 12px;font-size:.85rem;">⚠️ לקונה הזה אין עדיין הסכם התקשרות חתום. ודא שהקבצים שנבחרו מתאימים לשליחה במצב הזה לפני שתשלח.</div>`
+          : '')}
+  `;
+  sendBtn.disabled = missingEmail;
+}
+
+async function confirmSendFilesToBuyer(){
+  const bizId = SEND_FILES_BIZ_ID;
+  const buyer = SEND_FILES_CURRENT_BUYER;
+  if (!buyer || !buyer.email){ toast('יש לבחור קונה עם כתובת אימייל'); return; }
+
+  const selected = Array.from(document.querySelectorAll('.bizfSendCheck:checked')).map(el => el.value);
+  if (!selected.length){ toast('לא נבחרו קבצים לשליחה'); return; }
+
+  const subject = document.getElementById('sendFilesSubject').value.trim() || 'קבצים מ-BSD Business Brokers Israel';
+  const bodyText = document.getElementById('sendFilesBody').value;
+
+  const sendBtn = document.getElementById('sendFilesBtn');
+  if (sendBtn){ sendBtn.disabled = true; sendBtn.textContent = 'שולח...'; }
+
+  try {
+    const filesInfo = selected.map(rawName => (BIZ_FILES_CACHE[bizId] || []).find(f => f.rawName === rawName)).filter(Boolean);
+    const attachments = [];
+    for (const f of filesInfo){
+      const { data: blob, error: dlErr } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).download(f.storagePath);
+      if (dlErr) throw new Error(`הורדת "${f.displayName}" נכשלה: ${dlErr.message}`);
+      const base64 = await blobToBase64(blob);
+      attachments.push({ base64, filename: f.displayName, contentType: blob.type || undefined });
+    }
+
+    const { data, error } = await window.supabaseClient.functions.invoke('send-match-summary', {
+      body: { to: buyer.email, subject, body_text: bodyText, reply_to: CURRENT_PROFILE.email, attachments }
+    });
+    if (error || data?.error){
+      // supabase-js מסתיר את גוף השגיאה האמיתי מה-Edge Function מאחורי הודעה
+      // גנרית - מוציאים את הסיבה האמיתית מ-error.context (אותו דפוס כמו match-detail.html).
+      let detail = data?.error || error?.message || 'שגיאה לא ידועה';
+      if (error && error.context && typeof error.context.json === 'function'){
+        try { const b = await error.context.json(); if (b?.error) detail = b.error; } catch(e){}
+      }
+      throw new Error(detail);
+    }
+
+    bsdLogActivity('send_files_email', 'businesses', bizId);
+    toast(`${filesInfo.length} קבצים נשלחו בהצלחה ל-${buyer.email}`);
+    closeModal();
+    document.querySelectorAll('.bizfSendCheck:checked').forEach(el => el.checked = false);
+    updateBizSendBtn(bizId);
+  } catch(e){
+    toast('שגיאה בשליחת המייל: ' + (e.message || e));
+    if (sendBtn){ sendBtn.disabled = false; sendBtn.textContent = '📤 שלח'; }
+  }
 }
 
 function closeNotesPanel(){
