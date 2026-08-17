@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>אבחון העלאת קבצים - BSD CRM</title>
+<style>
+  body{font-family:system-ui,-apple-system,Arial,sans-serif;background:#0f1218;color:#e2e6ee;margin:0;padding:12px;font-size:14px;}
+  h1{font-size:1.1rem;color:#f0c14b;margin:0 0 4px;}
+  h2{font-size:0.95rem;color:#8ab4f8;margin:18px 0 6px;border-top:1px solid #333;padding-top:12px;}
+  p.sub{color:#8a93ab;font-size:.8rem;margin:0 0 12px;}
+  button{background:#1e2530;color:#e2e6ee;border:1px solid #3a4356;border-radius:6px;padding:10px 14px;margin:4px 4px 4px 0;font-size:.85rem;cursor:pointer;}
+  button:active{background:#2a3344;}
+  button:disabled{opacity:.4;}
+  button.primary{background:#f0c14b;color:#1a1a1a;font-weight:600;border:none;}
+  select,input[type=file]{background:#1e2530;color:#e2e6ee;border:1px solid #3a4356;border-radius:6px;padding:8px;font-size:.85rem;width:100%;box-sizing:border-box;margin:4px 0;}
+  #log{background:#000;color:#7fff9e;font-family:ui-monospace,Consolas,monospace;font-size:.72rem;line-height:1.5;padding:10px;border-radius:6px;white-space:pre-wrap;word-break:break-all;height:340px;overflow-y:auto;direction:ltr;text-align:left;border:1px solid #333;}
+  .line-ok{color:#7fff9e;}
+  .line-err{color:#ff6b6b;}
+  .line-warn{color:#ffd166;}
+  .line-info{color:#8ab4f8;}
+  .box{background:#161b24;border:1px solid #2a3344;border-radius:8px;padding:10px;margin-bottom:10px;}
+  .flex{display:flex;gap:6px;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<h1>🔬 אבחון העלאת קבצים - Android</h1>
+<p class="sub">עמוד עצמאי לבדיקה בלבד. לא נוגע ולא משנה שום מסך אחר במערכת. כל הבדיקות כאן מעלות לתיקייה נפרדת <code>__diagnostic/</code> באותו bucket האמיתי, עם אותה session אמיתית שלך.</p>
+
+<div class="box">
+  <div id="deviceInfo">טוען מידע מכשיר...</div>
+</div>
+
+<div class="box">
+  <div id="authStatus">בודק התחברות...</div>
+  <div id="bizPicker" style="display:none;">
+    <label style="font-size:.8rem;color:#8a93ab;">בחר עסק (לבדיקת RLS אמיתית, זהה לזרימה האמיתית):</label>
+    <select id="bizSelect"></select>
+  </div>
+</div>
+
+<h2>שלב 1 - חיבור בסיסי ל-Supabase (בלי קובץ)</h2>
+<div class="flex">
+  <button id="btnConnTest" onclick="runConnectivityTest()">בדוק חיבור</button>
+</div>
+
+<h2>שלב 2 - בדיקת גדלים מדורגת (Blob שנוצר בקוד, לא קובץ אמיתי)</h2>
+<div class="flex">
+  <button onclick="runStagedTest(10)">10KB</button>
+  <button onclick="runStagedTest(100)">100KB</button>
+  <button onclick="runStagedTest(500)">500KB</button>
+  <button onclick="runStagedTest(1024)">1MB</button>
+  <button onclick="runStagedTest(2048)">2MB</button>
+  <button class="primary" onclick="runAllStaged()">הרץ את כולם ברצף</button>
+</div>
+
+<h2>שלב 3 - קובץ אמיתי מהמכשיר</h2>
+<input type="file" id="realFileInput">
+<div class="flex">
+  <button onclick="runRealFileTest(false)">העלה עם השם המקורי</button>
+  <button onclick="runRealFileTest(true)">העלה בשם פשוט (test.pdf)</button>
+</div>
+
+<h2>שלב 5 - בדיקה מול שרת חיצוני (לא Supabase בכלל)</h2>
+<p class="sub">מעלה 2MB לשרת בדיקה ציבורי ונייטרלי (httpbin.org) - אם זה מצליח ורק Supabase נכשל, זה מבודד את הבעיה לניתוב/מרחק ל-Supabase ולא לרשת שלך באופן כללי.</p>
+<div class="flex">
+  <button class="primary" onclick="runExternalTest()">בדוק מול שרת חיצוני (2MB)</button>
+</div>
+
+<h2>שלב 6 - בדיקת Supabase Storage hostname ישיר (המלצת Supabase לקבצים גדולים)</h2>
+<p class="sub">Supabase ממליצים על subdomain נפרד וממוטב ל-Storage בקבצים גדולים. בודק אם זה משנה את התוצאה על אותם 2MB בדיוק.</p>
+<div class="flex">
+  <button class="primary" onclick="runDirectHostnameTest()">בדוק עם storage hostname ישיר (2MB)</button>
+</div>
+
+<h2>שלב 4 - Service Worker</h2>
+<div class="flex">
+  <button onclick="checkServiceWorker()">בדוק Service Worker</button>
+  <button onclick="unregisterServiceWorker()">בטל רישום זמנית (לבדיקה)</button>
+</div>
+
+<h2>יומן מלא (אפשר להעתיק/לצלם מסך)</h2>
+<div class="flex">
+  <button onclick="copyLog()">העתק הכל ללוח</button>
+  <button onclick="clearLog()">נקה יומן</button>
+</div>
+<div id="log"></div>
+
+<script src="js/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabaseClient.js"></script>
+<script>
+const DIAG_BUCKET = window.BSD_CONFIG.STORAGE_BUCKET || 'business-files';
+let CURRENT_BIZ_ID = null;
+
+function log(msg, cls){
+  const el = document.getElementById('log');
+  const ts = new Date().toISOString().split('T')[1].replace('Z','');
+  const line = document.createElement('div');
+  line.className = cls || '';
+  line.textContent = `[${ts}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  console.log(msg);
+}
+function clearLog(){ document.getElementById('log').innerHTML = ''; }
+function copyLog(){
+  const text = document.getElementById('log').innerText;
+  navigator.clipboard.writeText(text).then(()=>alert('הועתק ללוח')).catch(()=>alert('העתקה נכשלה - סמן ידנית והעתק'));
+}
+
+// ---------------------------------------------------------------------------
+// מידע מכשיר
+// ---------------------------------------------------------------------------
+function showDeviceInfo(){
+  const displayMode = window.matchMedia('(display-mode: standalone)').matches ? 'standalone (PWA מותקן)'
+    : window.matchMedia('(display-mode: minimal-ui)').matches ? 'minimal-ui'
+    : window.matchMedia('(display-mode: fullscreen)').matches ? 'fullscreen'
+    : 'browser (טאב רגיל)';
+  document.getElementById('deviceInfo').innerHTML =
+    `<b>User-Agent:</b> ${esc(navigator.userAgent)}<br>` +
+    `<b>מצב תצוגה:</b> ${displayMode}<br>` +
+    `<b>navigator.onLine:</b> ${navigator.onLine}<br>` +
+    `<b>connection type:</b> ${(navigator.connection && navigator.connection.effectiveType) || 'לא זמין בדפדפן זה'}`;
+  log(`DEVICE_INFO UA="${navigator.userAgent}" displayMode="${displayMode}" onLine=${navigator.onLine}`, 'line-info');
+}
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ---------------------------------------------------------------------------
+// אימות + בחירת עסק (read-only, לא נוגע בשום עמוד אחר)
+// ---------------------------------------------------------------------------
+async function initAuth(){
+  const { data: sessionData } = await window.supabaseClient.auth.getSession();
+  const session = sessionData && sessionData.session;
+  if (!session){
+    document.getElementById('authStatus').innerHTML = '❌ אין session פעיל - <a href="login.html" style="color:#8ab4f8;">התחבר קודם</a>';
+    log('AUTH: no active session', 'line-err');
+    return;
+  }
+  document.getElementById('authStatus').innerHTML = `✅ מחובר. session פג תוקף ב-${new Date(session.expires_at*1000).toLocaleString('he-IL')}`;
+  log(`AUTH_OK user_id=${session.user.id} expires=${new Date(session.expires_at*1000).toISOString()}`, 'line-ok');
+
+  const { data: bizList, error: bizErr } = await window.supabaseClient
+    .from('businesses').select('id, internal_name').order('updated_at', { ascending: false }).limit(20);
+  if (bizErr){ log(`BIZ_LIST_ERROR ${bizErr.message}`, 'line-err'); return; }
+  const sel = document.getElementById('bizSelect');
+  sel.innerHTML = (bizList || []).map(b => `<option value="${b.id}">${esc(b.internal_name || b.id)}</option>`).join('');
+  if (bizList && bizList.length){
+    CURRENT_BIZ_ID = bizList[0].id;
+    sel.onchange = () => { CURRENT_BIZ_ID = sel.value; log(`BIZ_SELECTED ${CURRENT_BIZ_ID}`, 'line-info'); };
+    document.getElementById('bizPicker').style.display = 'block';
+    log(`BIZ_LIST_OK ${bizList.length} businesses, using ${CURRENT_BIZ_ID} by default`, 'line-ok');
+  } else {
+    log('BIZ_LIST_EMPTY - אין עסק זמין לבדיקה, בדיקות ה-upload ידחו ב-RLS', 'line-warn');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// שלב 1: חיבור בסיסי
+// ---------------------------------------------------------------------------
+async function runConnectivityTest(){
+  log('--- CONNECTIVITY_TEST START ---', 'line-info');
+  const t0 = performance.now();
+  try {
+    const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/rest/v1/businesses?select=id&limit=1', {
+      headers: { 'apikey': window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY, 'Authorization': 'Bearer ' + window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY }
+    });
+    const ms = Math.round(performance.now() - t0);
+    const body = await res.text();
+    log(`CONNECTIVITY_OK status=${res.status} ${ms}ms body="${body.slice(0,200)}"`, res.ok ? 'line-ok' : 'line-warn');
+  } catch(e){
+    const ms = Math.round(performance.now() - t0);
+    log(`CONNECTIVITY_FAILED after ${ms}ms - ${e.name}: ${e.message}`, 'line-err');
+  }
+  log('--- CONNECTIVITY_TEST END ---', 'line-info');
+}
+
+// ---------------------------------------------------------------------------
+// ליבת האבחון: מעלה File/Blob אחד עם רישום מלא של כל checkpoint שביקשת
+// ---------------------------------------------------------------------------
+async function diagnosticUpload(fileOrBlob, label, forcedName){
+  if (!CURRENT_BIZ_ID){ log('NO_BIZ_SELECTED - לא ניתן להעלות בלי עסק לבדיקה', 'line-err'); return; }
+  const name = forcedName || (fileOrBlob.name || 'blob');
+  const ext = (name.match(/\.[A-Za-z0-9]+$/) || [''])[0];
+  const path = `${CURRENT_BIZ_ID}/__diagnostic/${Date.now()}_${Math.random().toString(36).slice(2,8)}${forcedName ? '_' + forcedName : ext}`;
+  const url = `${window.BSD_CONFIG.SUPABASE_URL}/storage/v1/object/${DIAG_BUCKET}/${path}`;
+
+  log(`=== TEST START: ${label} ===`, 'line-info');
+  log(`FILE_INFO name="${name}" size=${fileOrBlob.size} type="${fileOrBlob.type || '(none)'}" isFile=${fileOrBlob instanceof File} isBlob=${fileOrBlob instanceof Blob}`, 'line-info');
+
+  // שלב א: קריאת הקובץ בפועל (arrayBuffer) - מוודא שהבעיה לא כבר כאן
+  let bytesRead = 0, checksum = 0;
+  try {
+    const t0 = performance.now();
+    const buf = await fileOrBlob.arrayBuffer();
+    bytesRead = buf.byteLength;
+    const view = new Uint8Array(buf);
+    for (let i = 0; i < view.length; i += Math.max(1, Math.floor(view.length/2000))) checksum = (checksum + view[i]) % 100000;
+    log(`FILE_READ_OK bytesRead=${bytesRead} (expected ${fileOrBlob.size}) sampledChecksum=${checksum} ${Math.round(performance.now()-t0)}ms`, 'line-ok');
+    if (bytesRead !== fileOrBlob.size){ log(`WARNING: bytesRead != file.size !`, 'line-warn'); }
+  } catch(e){
+    log(`FILE_READ_FAILED - ${e.name}: ${e.message} - הבעיה היא לפני Supabase לגמרי, בקריאת הקובץ בדפדפן`, 'line-err');
+    log(`=== TEST END: ${label} (stopped at file read) ===`, 'line-info');
+    return;
+  }
+
+  // שלב ב-ד: בקשת HTTP מלאה עם כל checkpoint
+  const { data: sessionData } = await window.supabaseClient.auth.getSession();
+  const accessToken = sessionData && sessionData.session && sessionData.session.access_token;
+  log(`SESSION_CHECK hasToken=${!!accessToken} tokenPrefix=${accessToken ? accessToken.slice(0,12)+'...' : 'N/A'}`, accessToken ? 'line-ok' : 'line-err');
+  if (!accessToken){ log(`=== TEST END: ${label} (no token) ===`, 'line-info'); return; }
+
+  const headers = {
+    'apikey': window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY,
+    'Authorization': 'Bearer ' + accessToken.slice(0,12) + '...(truncated in log)',
+    'Content-Type': fileOrBlob.type || 'application/octet-stream',
+    'x-upsert': 'false'
+  };
+  log(`REQUEST_PLAN method=POST url="${url}"`, 'line-info');
+  log(`REQUEST_PLAN headers=${JSON.stringify(headers)}`, 'line-info');
+  log(`REQUEST_PLAN contentLength=${fileOrBlob.size}`, 'line-info');
+
+  await new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    const t0 = performance.now();
+    let lastReadyState = -1;
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('apikey', window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY);
+    xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+    xhr.setRequestHeader('Content-Type', fileOrBlob.type || 'application/octet-stream');
+    xhr.setRequestHeader('x-upsert', 'false');
+    xhr.timeout = 60000;
+    log('REQUEST_HEADERS_SENT (via setRequestHeader calls)', 'line-info');
+
+    xhr.onreadystatechange = function(){
+      if (xhr.readyState !== lastReadyState){
+        lastReadyState = xhr.readyState;
+        const names = ['UNSENT','OPENED','HEADERS_RECEIVED','LOADING','DONE'];
+        log(`XHR_READYSTATE_CHANGE readyState=${xhr.readyState} (${names[xhr.readyState]}) status=${xhr.status} ${Math.round(performance.now()-t0)}ms`, 'line-info');
+      }
+    };
+    xhr.upload.onloadstart = () => log('UPLOAD_STARTED (upload.onloadstart fired)', 'line-info');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) log(`UPLOAD_PROGRESS ${e.loaded}/${e.total} bytes (${Math.round(e.loaded/e.total*100)}%) ${Math.round(performance.now()-t0)}ms`, 'line-info');
+    };
+    xhr.upload.onload = () => log(`UPLOAD_BODY_FULLY_SENT (upload.onload) ${Math.round(performance.now()-t0)}ms - waiting for server response...`, 'line-info');
+    xhr.upload.onerror = () => log(`UPLOAD_ERROR (upload.onerror - failed WHILE SENDING body) ${Math.round(performance.now()-t0)}ms`, 'line-err');
+    xhr.upload.ontimeout = () => log(`UPLOAD_TIMEOUT (upload.ontimeout - timed out WHILE SENDING body) ${Math.round(performance.now()-t0)}ms`, 'line-err');
+
+    xhr.onload = function(){
+      const ms = Math.round(performance.now()-t0);
+      let headersRaw = '';
+      try { headersRaw = xhr.getAllResponseHeaders(); } catch(e){ headersRaw = '(unavailable)'; }
+      log(`SERVER_RESPONSE_RECEIVED status=${xhr.status} statusText="${xhr.statusText}" responseURL="${xhr.responseURL}" ${ms}ms`, xhr.status >= 200 && xhr.status < 300 ? 'line-ok' : 'line-err');
+      log(`RESPONSE_HEADERS: ${headersRaw.replace(/\r\n/g,' | ')}`, 'line-info');
+      log(`RESPONSE_BODY: ${(xhr.responseText||'').slice(0,500)}`, 'line-info');
+      if (xhr.status >= 200 && xhr.status < 300) log(`UPLOAD_SUCCESS path="${path}"`, 'line-ok');
+      resolve();
+    };
+    xhr.onerror = function(){
+      const ms = Math.round(performance.now()-t0);
+      log(`XHR_ONERROR readyState=${xhr.readyState} status=${xhr.status} statusText="${xhr.statusText}" responseURL="${xhr.responseURL}" ${ms}ms`, 'line-err');
+      log(`XHR_ONERROR_MEANING: status=0 means the browser never received any HTTP response at all (network/TLS/CORS-level failure, not a server rejection)`, 'line-warn');
+      resolve();
+    };
+    xhr.ontimeout = function(){
+      const ms = Math.round(performance.now()-t0);
+      log(`XHR_ONTIMEOUT after ${ms}ms readyState=${xhr.readyState} status=${xhr.status}`, 'line-err');
+      resolve();
+    };
+    xhr.onabort = function(){ log(`XHR_ONABORT readyState=${xhr.readyState}`, 'line-err'); resolve(); };
+
+    try {
+      xhr.send(fileOrBlob);
+      log(`REQUEST_STARTED (xhr.send called successfully, no synchronous exception)`, 'line-info');
+    } catch(e){
+      log(`XHR_SEND_THREW_EXCEPTION - ${e.name}: ${e.message}`, 'line-err');
+      resolve();
+    }
+  });
+  log(`=== TEST END: ${label} ===`, 'line-info');
+}
+
+// ---------------------------------------------------------------------------
+// שלב 2: Blob מדורג שנוצר בקוד (לא תלוי באנדרואיד/Drive בכלל)
+// ---------------------------------------------------------------------------
+function makeBlob(kb){
+  const bytes = new Uint8Array(kb * 1024);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = i % 256; // תוכן לא-אקראי, ניתן לבדיקה
+  return new Blob([bytes], { type: 'application/octet-stream' });
+}
+async function runStagedTest(kb){
+  const blob = makeBlob(kb);
+  blob.name = `synthetic_${kb}kb.bin`;
+  await diagnosticUpload(blob, `SYNTHETIC_BLOB_${kb}KB`);
+}
+async function runAllStaged(){
+  for (const kb of [10, 100, 500, 1024, 2048]){
+    await runStagedTest(kb);
+  }
+  log('--- ALL STAGED TESTS COMPLETE - חפש למעלה ביומן את הגודל הראשון שנכשל ---', 'line-warn');
+}
+
+// ---------------------------------------------------------------------------
+// שלב 3: קובץ אמיתי מהמכשיר
+// ---------------------------------------------------------------------------
+async function runRealFileTest(forceSimpleName){
+  const input = document.getElementById('realFileInput');
+  const file = input.files && input.files[0];
+  if (!file){ alert('בחר קובץ קודם'); return; }
+  await diagnosticUpload(file, forceSimpleName ? 'REAL_FILE_SIMPLE_NAME' : 'REAL_FILE_ORIGINAL_NAME', forceSimpleName ? 'test.pdf' : null);
+}
+
+// ---------------------------------------------------------------------------
+// שלב 4: Service Worker
+// ---------------------------------------------------------------------------
+async function checkServiceWorker(){
+  if (!('serviceWorker' in navigator)){ log('SERVICE_WORKER: not supported in this browser', 'line-info'); return; }
+  const regs = await navigator.serviceWorker.getRegistrations();
+  log(`SERVICE_WORKER_REGISTRATIONS count=${regs.length}`, regs.length ? 'line-warn' : 'line-ok');
+  regs.forEach((r,i) => log(`  [${i}] scope="${r.scope}" active=${!!r.active} scriptURL=${r.active ? r.active.scriptURL : 'N/A'}`, 'line-info'));
+}
+async function unregisterServiceWorker(){
+  if (!('serviceWorker' in navigator)) return;
+  const regs = await navigator.serviceWorker.getRegistrations();
+  for (const r of regs){ await r.unregister(); log(`SERVICE_WORKER_UNREGISTERED scope="${r.scope}"`, 'line-warn'); }
+  log('שים לב: זה זמני לבדיקה בלבד - רענן את הדף כדי לראות אם זה משנה משהו בהעלאה', 'line-warn');
+}
+
+// ---------------------------------------------------------------------------
+// שלב 6: אותו 2MB בדיוק, אבל דרך storage hostname ישיר (המלצת Supabase)
+// ---------------------------------------------------------------------------
+async function runDirectHostnameTest(){
+  if (!CURRENT_BIZ_ID){ log('NO_BIZ_SELECTED', 'line-err'); return; }
+  const projectRef = window.BSD_CONFIG.SUPABASE_URL.match(/https:\/\/([a-z0-9]+)\.supabase\.co/)[1];
+  const directUrl = `https://${projectRef}.storage.supabase.co/storage/v1/object/${DIAG_BUCKET}/${CURRENT_BIZ_ID}/__diagnostic/${Date.now()}_direct.bin`;
+  log(`=== TEST START: DIRECT_STORAGE_HOSTNAME_2MB (${directUrl.split('/storage/')[0]}) ===`, 'line-info');
+  const blob = makeBlob(2048);
+  const { data: sessionData } = await window.supabaseClient.auth.getSession();
+  const accessToken = sessionData && sessionData.session && sessionData.session.access_token;
+  await new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    const t0 = performance.now();
+    xhr.open('POST', directUrl, true);
+    xhr.setRequestHeader('apikey', window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY);
+    xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.setRequestHeader('x-upsert', 'false');
+    xhr.timeout = 60000;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) log(`DIRECT_HOSTNAME_PROGRESS ${e.loaded}/${e.total} bytes (${Math.round(e.loaded/e.total*100)}%) ${Math.round(performance.now()-t0)}ms`, 'line-info');
+    };
+    xhr.onload = function(){
+      const ms = Math.round(performance.now()-t0);
+      log(`DIRECT_HOSTNAME_RESPONSE status=${xhr.status} ${ms}ms (${Math.round(2048/(ms/1000))}KB/s)`, xhr.status>=200&&xhr.status<300 ? 'line-ok' : 'line-err');
+      resolve();
+    };
+    xhr.onerror = function(){
+      log(`DIRECT_HOSTNAME_XHR_ONERROR readyState=${xhr.readyState} status=${xhr.status} ${Math.round(performance.now()-t0)}ms`, 'line-err');
+      resolve();
+    };
+    xhr.ontimeout = function(){ log(`DIRECT_HOSTNAME_TIMEOUT ${Math.round(performance.now()-t0)}ms`, 'line-err'); resolve(); };
+    xhr.send(blob);
+  });
+  log('=== TEST END: DIRECT_STORAGE_HOSTNAME_2MB ===', 'line-info');
+}
+
+// ---------------------------------------------------------------------------
+// שלב 5: בדיקה מול שרת חיצוני נייטרלי (לא Supabase) - מבודד ניתוב/מרחק
+// ---------------------------------------------------------------------------
+async function runExternalTest(){
+  log('=== TEST START: EXTERNAL_SERVER_2MB (httpbin.org, לא Supabase) ===', 'line-info');
+  const blob = makeBlob(2048);
+  await new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    const t0 = performance.now();
+    xhr.open('POST', 'https://httpbin.org/post', true);
+    xhr.timeout = 60000;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) log(`EXTERNAL_UPLOAD_PROGRESS ${e.loaded}/${e.total} bytes (${Math.round(e.loaded/e.total*100)}%) ${Math.round(performance.now()-t0)}ms`, 'line-info');
+    };
+    xhr.onload = function(){
+      const ms = Math.round(performance.now()-t0);
+      log(`EXTERNAL_SERVER_RESPONSE status=${xhr.status} ${ms}ms`, xhr.status >= 200 && xhr.status < 300 ? 'line-ok' : 'line-err');
+      log(`EXTERNAL_UPLOAD_${xhr.status>=200&&xhr.status<300?'SUCCESS':'FAILED'} - ${xhr.status>=200&&xhr.status<300 ? 'שרת חיצוני הצליח' : 'נכשל גם כאן'} (${ms}ms ל-2MB = ${Math.round(2048/(ms/1000))}KB/s)`, 'line-ok');
+      resolve();
+    };
+    xhr.onerror = function(){
+      const ms = Math.round(performance.now()-t0);
+      log(`EXTERNAL_XHR_ONERROR readyState=${xhr.readyState} status=${xhr.status} ${ms}ms - נכשל גם מול שרת חיצוני! זה מצביע על בעיית רשת כללית, לא ספציפית ל-Supabase`, 'line-err');
+      resolve();
+    };
+    xhr.ontimeout = function(){ log(`EXTERNAL_XHR_TIMEOUT after ${Math.round(performance.now()-t0)}ms`, 'line-err'); resolve(); };
+    xhr.send(blob);
+  });
+  log('=== TEST END: EXTERNAL_SERVER_2MB ===', 'line-info');
+}
+
+showDeviceInfo();
+initAuth();
+</script>
+</body>
+</html>
