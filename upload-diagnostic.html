@@ -61,6 +61,12 @@
   <button onclick="runRealFileTest(true)">העלה בשם פשוט (test.pdf)</button>
 </div>
 
+<h2>שלב 5 - בדיקה מול שרת חיצוני (לא Supabase בכלל)</h2>
+<p class="sub">מעלה 2MB לשרת בדיקה ציבורי ונייטרלי (httpbin.org) - אם זה מצליח ורק Supabase נכשל, זה מבודד את הבעיה לניתוב/מרחק ל-Supabase ולא לרשת שלך באופן כללי.</p>
+<div class="flex">
+  <button class="primary" onclick="runExternalTest()">בדוק מול שרת חיצוני (2MB)</button>
+</div>
+
 <h2>שלב 4 - Service Worker</h2>
 <div class="flex">
   <button onclick="checkServiceWorker()">בדוק Service Worker</button>
@@ -313,6 +319,37 @@ async function unregisterServiceWorker(){
   const regs = await navigator.serviceWorker.getRegistrations();
   for (const r of regs){ await r.unregister(); log(`SERVICE_WORKER_UNREGISTERED scope="${r.scope}"`, 'line-warn'); }
   log('שים לב: זה זמני לבדיקה בלבד - רענן את הדף כדי לראות אם זה משנה משהו בהעלאה', 'line-warn');
+}
+
+// ---------------------------------------------------------------------------
+// שלב 5: בדיקה מול שרת חיצוני נייטרלי (לא Supabase) - מבודד ניתוב/מרחק
+// ---------------------------------------------------------------------------
+async function runExternalTest(){
+  log('=== TEST START: EXTERNAL_SERVER_2MB (httpbin.org, לא Supabase) ===', 'line-info');
+  const blob = makeBlob(2048);
+  await new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    const t0 = performance.now();
+    xhr.open('POST', 'https://httpbin.org/post', true);
+    xhr.timeout = 60000;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) log(`EXTERNAL_UPLOAD_PROGRESS ${e.loaded}/${e.total} bytes (${Math.round(e.loaded/e.total*100)}%) ${Math.round(performance.now()-t0)}ms`, 'line-info');
+    };
+    xhr.onload = function(){
+      const ms = Math.round(performance.now()-t0);
+      log(`EXTERNAL_SERVER_RESPONSE status=${xhr.status} ${ms}ms`, xhr.status >= 200 && xhr.status < 300 ? 'line-ok' : 'line-err');
+      log(`EXTERNAL_UPLOAD_${xhr.status>=200&&xhr.status<300?'SUCCESS':'FAILED'} - ${xhr.status>=200&&xhr.status<300 ? 'שרת חיצוני הצליח' : 'נכשל גם כאן'} (${ms}ms ל-2MB = ${Math.round(2048/(ms/1000))}KB/s)`, 'line-ok');
+      resolve();
+    };
+    xhr.onerror = function(){
+      const ms = Math.round(performance.now()-t0);
+      log(`EXTERNAL_XHR_ONERROR readyState=${xhr.readyState} status=${xhr.status} ${ms}ms - נכשל גם מול שרת חיצוני! זה מצביע על בעיית רשת כללית, לא ספציפית ל-Supabase`, 'line-err');
+      resolve();
+    };
+    xhr.ontimeout = function(){ log(`EXTERNAL_XHR_TIMEOUT after ${Math.round(performance.now()-t0)}ms`, 'line-err'); resolve(); };
+    xhr.send(blob);
+  });
+  log('=== TEST END: EXTERNAL_SERVER_2MB ===', 'line-info');
 }
 
 showDeviceInfo();
