@@ -381,14 +381,22 @@ async function refreshNavMsgBadge(){
 // we force one hard reload. The sessionStorage guard makes it
 // impossible to get stuck in a reload loop if something is off.
 // ============================================================
-window.BSD_BUILD = '202608161900';
-
 (async function checkStalePage(){
   try {
+    // window.PAGE_BUILD is the single source of truth (set inline near the
+    // top of every page that has real state worth protecting - this used to
+    // be a second, separate constant here that could drift from PAGE_BUILD,
+    // which is exactly the same bug class as the frozen "גרסה" label fixed
+    // earlier today - a stray mismatch here forces a silent, unexpected
+    // location.reload(true) on every load, which can abort an in-progress
+    // action (like a file upload) and make an unrelated fix look like it
+    // didn't work. A page without PAGE_BUILD (e.g. login.html) has no real
+    // build to compare against, so it skips this check rather than guessing.
+    if (typeof window.PAGE_BUILD !== 'string') return;
     const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
     const { version } = await res.json();
-    if (!version || version === window.BSD_BUILD) {
+    if (!version || version === window.PAGE_BUILD) {
       sessionStorage.removeItem('bsdReloadedFor');
       return;
     }
