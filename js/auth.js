@@ -760,19 +760,34 @@ async function bsdUploadFile(bucket, path, file, opts){
       xhr.upload.onprogress = function(e){
         if (opts.onProgress && e.lengthComputable) opts.onProgress(Math.round((e.loaded / e.total) * 100));
       };
+      // לוג אבחוני מפורט (זמני, לצורך איתור תקלת העלאת PDF, 17.08.2026) -
+      // מודפס בכל כשל, בין אם משרת Storage, רשת, או timeout, כדי שהתגובה
+      // האמיתית של Supabase תהיה גלויה תמיד ב-Console ולא רק הודעת "נכשל".
+      function logUploadDiagnostic(extra){
+        try {
+          console.error('[bsdUploadFile diagnostic]', Object.assign({
+            bucket, path, uploadUrl,
+            fileName: file.name, fileType: file.type || '(ריק)', fileSizeBytes: file.size,
+            fileSizeMB: (file.size / (1024*1024)).toFixed(2),
+          }, extra));
+        } catch(e){ /* לוג בלבד - לא אמור לחסום את ההעלאה */ }
+      }
       xhr.onload = function(){
         if (xhr.status >= 200 && xhr.status < 300){
           resolve({ ok: true });
         } else {
           let serverMsg = xhr.responseText;
           try { serverMsg = JSON.parse(xhr.responseText).message || serverMsg; } catch(e){}
+          logUploadDiagnostic({ httpStatus: xhr.status, rawResponse: xhr.responseText, parsedMessage: serverMsg });
           resolve({ ok: false, retryable: false, error: { name: 'StorageApiError', message: `שגיאת שרת (${xhr.status}): ${serverMsg}` } });
         }
       };
       xhr.onerror = function(){
+        logUploadDiagnostic({ httpStatus: xhr.status || '(אין - נחסם לפני תגובה)', note: 'xhr.onerror - כשל רשת/CORS, לא תגובת שרת' });
         resolve({ ok: false, retryable: true, error: { name: 'StorageUnknownError', message: 'Failed to fetch (network error)' } });
       };
       xhr.ontimeout = function(){
+        logUploadDiagnostic({ timeoutMs, note: 'xhr.ontimeout' });
         resolve({ ok: false, retryable: true, error: { name: 'StorageTimeout', message: `העלאה ארכה יותר מ-${Math.round(timeoutMs/1000)} שניות ונעצרה` } });
       };
       xhr.send(file);

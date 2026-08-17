@@ -257,7 +257,7 @@ function toast(msg){
     box.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:500;display:flex;flex-direction:column;gap:8px;max-width:380px;';
     document.body.appendChild(box);
   }
-  const isError = /שגיאה|error/i.test(msg);
+  const isError = /שגיאה|שגיאת|נכשל|error/i.test(msg);
   const el = document.createElement('div');
   el.style.cssText = `background:${isError ? '#b00020' : 'var(--navy,#0e1b34)'};color:#fff;padding:14px 18px;border-radius:10px;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.35);display:flex;align-items:flex-start;gap:10px;line-height:1.5;`;
   const textSpan = document.createElement('span');
@@ -1257,12 +1257,14 @@ async function processBizFiles(bizId, files){
   const rowIds = toUpload.map((f, i) => `bizq_${Date.now()}_${i}`);
   if (queueBox){
     queueBox.innerHTML += toUpload.map((f, i) => `
-      <div id="${rowIds[i]}" style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:.78rem;">
+      <div id="${rowIds[i]}" style="padding:5px 0;font-size:.78rem;">
+        <div style="display:flex;align-items:center;gap:8px;">
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 ${esc(f.name)}</span>
         <div style="flex:1;background:#eee;border-radius:4px;height:6px;overflow:hidden;max-width:120px;">
           <div class="bizq-bar" style="background:var(--gold);height:100%;width:0%;transition:width .15s;"></div>
         </div>
         <span class="bizq-status" style="min-width:70px;text-align:left;color:#999;">ממתין...</span>
+        </div>
       </div>`).join('');
   }
 
@@ -1283,7 +1285,14 @@ async function processBizFiles(bizId, files){
       });
       if (error){
         if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = 'נכשל'; }
-        if (rowEl) rowEl.title = error.message;
+        if (rowEl){
+          rowEl.title = error.message;
+          const errLine = document.createElement('div');
+          errLine.style.cssText = 'font-size:.72rem;color:#b3402c;padding-right:2px;word-break:break-word;';
+          errLine.textContent = error.message;
+          rowEl.appendChild(errLine);
+        }
+        console.error('[processBizFiles] upload failed:', { fileName: file.name, fileType: file.type, fileSizeBytes: file.size, path, error });
         toast(`"${file.name}" נכשל: ${error.message}`);
         continue;
       }
@@ -1309,7 +1318,19 @@ async function processBizFiles(bizId, files){
 
   if (okCount) bsdLogActivity('upload_file', 'businesses', bizId);
   await loadBizFiles(bizId);
-  setTimeout(() => { if (queueBox) queueBox.innerHTML = ''; }, 2500);
+  // שורות שהצליחו מתנקות אחרי 2.5 שניות כרגיל, אבל שורות שנכשלו נשארות
+  // גלויות (עם ההודעה המדויקת ב-title בעת ריחוף) עד שהמשתמש סוגר את
+  // הכרטיס - כך ששגיאה אמיתית לא נעלמת לפני שהספיק לקרוא/להעתיק אותה
+  // (17.08.2026, תיקון אבחוני להעלאת PDF).
+  if (queueBox){
+    setTimeout(() => {
+      Array.from(queueBox.children).forEach(rowEl => {
+        const statusEl = rowEl.querySelector('.bizq-status');
+        const failed = statusEl && (statusEl.textContent === 'נכשל' || statusEl.textContent === 'שגיאה');
+        if (!failed) rowEl.remove();
+      });
+    }, 2500);
+  }
 }
 
 // קאש קל של הקבצים הטעונים לכל עסק - משמש לבדיקת כפילות שם מול קבצים קיימים
