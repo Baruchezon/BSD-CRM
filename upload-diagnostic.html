@@ -67,6 +67,12 @@
   <button class="primary" onclick="runExternalTest()">בדוק מול שרת חיצוני (2MB)</button>
 </div>
 
+<h2>שלב 6 - בדיקת Supabase Storage hostname ישיר (המלצת Supabase לקבצים גדולים)</h2>
+<p class="sub">Supabase ממליצים על subdomain נפרד וממוטב ל-Storage בקבצים גדולים. בודק אם זה משנה את התוצאה על אותם 2MB בדיוק.</p>
+<div class="flex">
+  <button class="primary" onclick="runDirectHostnameTest()">בדוק עם storage hostname ישיר (2MB)</button>
+</div>
+
 <h2>שלב 4 - Service Worker</h2>
 <div class="flex">
   <button onclick="checkServiceWorker()">בדוק Service Worker</button>
@@ -319,6 +325,44 @@ async function unregisterServiceWorker(){
   const regs = await navigator.serviceWorker.getRegistrations();
   for (const r of regs){ await r.unregister(); log(`SERVICE_WORKER_UNREGISTERED scope="${r.scope}"`, 'line-warn'); }
   log('שים לב: זה זמני לבדיקה בלבד - רענן את הדף כדי לראות אם זה משנה משהו בהעלאה', 'line-warn');
+}
+
+// ---------------------------------------------------------------------------
+// שלב 6: אותו 2MB בדיוק, אבל דרך storage hostname ישיר (המלצת Supabase)
+// ---------------------------------------------------------------------------
+async function runDirectHostnameTest(){
+  if (!CURRENT_BIZ_ID){ log('NO_BIZ_SELECTED', 'line-err'); return; }
+  const projectRef = window.BSD_CONFIG.SUPABASE_URL.match(/https:\/\/([a-z0-9]+)\.supabase\.co/)[1];
+  const directUrl = `https://${projectRef}.storage.supabase.co/storage/v1/object/${DIAG_BUCKET}/${CURRENT_BIZ_ID}/__diagnostic/${Date.now()}_direct.bin`;
+  log(`=== TEST START: DIRECT_STORAGE_HOSTNAME_2MB (${directUrl.split('/storage/')[0]}) ===`, 'line-info');
+  const blob = makeBlob(2048);
+  const { data: sessionData } = await window.supabaseClient.auth.getSession();
+  const accessToken = sessionData && sessionData.session && sessionData.session.access_token;
+  await new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    const t0 = performance.now();
+    xhr.open('POST', directUrl, true);
+    xhr.setRequestHeader('apikey', window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY);
+    xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.setRequestHeader('x-upsert', 'false');
+    xhr.timeout = 60000;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) log(`DIRECT_HOSTNAME_PROGRESS ${e.loaded}/${e.total} bytes (${Math.round(e.loaded/e.total*100)}%) ${Math.round(performance.now()-t0)}ms`, 'line-info');
+    };
+    xhr.onload = function(){
+      const ms = Math.round(performance.now()-t0);
+      log(`DIRECT_HOSTNAME_RESPONSE status=${xhr.status} ${ms}ms (${Math.round(2048/(ms/1000))}KB/s)`, xhr.status>=200&&xhr.status<300 ? 'line-ok' : 'line-err');
+      resolve();
+    };
+    xhr.onerror = function(){
+      log(`DIRECT_HOSTNAME_XHR_ONERROR readyState=${xhr.readyState} status=${xhr.status} ${Math.round(performance.now()-t0)}ms`, 'line-err');
+      resolve();
+    };
+    xhr.ontimeout = function(){ log(`DIRECT_HOSTNAME_TIMEOUT ${Math.round(performance.now()-t0)}ms`, 'line-err'); resolve(); };
+    xhr.send(blob);
+  });
+  log('=== TEST END: DIRECT_STORAGE_HOSTNAME_2MB ===', 'line-info');
 }
 
 // ---------------------------------------------------------------------------
