@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608170545';
+    var PAGE_BUILD = '202608170630';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -225,7 +225,7 @@
 
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202608170545"></script>
+<script src="js/auth.js?v=202608170630"></script>
 <script src="js/permissions.js?v=202608151600"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
@@ -740,9 +740,13 @@ function openBizForm(id){
         <div style="color:#8a5a00;background:#fff8e6;border-radius:8px;padding:10px 12px;font-size:.82rem;margin-bottom:8px;">
           📱 העלאת קבצים זמינה כרגע מהמחשב בלבד
         </div>` : `
-        <input type="file" id="bizFileInput" multiple>
-        <button type="button" class="btn btn-ghost" style="margin-inline-start:8px;" onclick="uploadBizFile('${biz.id}')">⬆️ העלה קובץ</button>
-        <div id="bizUploadStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
+        <div id="bizDropzone" onclick="document.getElementById('bizFileInput').click()" style="border:2px dashed #d8d3c4;border-radius:10px;padding:22px 14px;text-align:center;cursor:pointer;background:#faf9f6;transition:border-color .15s,background .15s;">
+          <div style="font-size:1.4rem;">📁</div>
+          <div style="font-weight:700;color:#0e1b34;margin-top:4px;">גרור קבצים לכאן או לחץ לבחירת קבצים</div>
+          <div style="font-size:.72rem;color:#999;margin-top:4px;">כל סוגי הקבצים - PDF, Word, Excel, PowerPoint, תמונות ועוד · עד ${MAX_FILE_MB}MB לקובץ</div>
+          <input type="file" id="bizFileInput" multiple style="display:none;" onchange="handleBizFileInputChange(event,'${biz.id}')">
+        </div>
+        <div id="bizUploadQueue" style="margin-top:8px;"></div>
         `}
         <div id="bizFilesList" style="margin-top:10px;font-size:.82rem;">טוען קבצים...</div>
       </div>
@@ -761,7 +765,7 @@ function openBizForm(id){
   document.getElementById('overlay').scrollTop = 0;
   document.getElementById('bizForm').dataset.bizId = biz ? biz.id : '';
   document.getElementById('bizForm').addEventListener('submit', saveBiz);
-  if (biz) loadBizFiles(biz.id);
+  if (biz) { loadBizFiles(biz.id); initBizDropzone(biz.id); }
   if (biz) loadBizMeetings(biz.id);
   if (biz) loadSaleFileModule(biz.id);
   if (biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz)) loadBizAccessGrants(biz.id);
@@ -1169,15 +1173,147 @@ async function loadBizMeetings(bizId){
 
 const MAX_FILE_MB = 20;
 const BIZ_FILES_BUCKET = 'business-files';
+const BIZ_FILE_CATEGORIES = ['תקציר','מצגת','מצגת אנונימית','תיק מכירה','דוח כספי','הסכם','תמונה','מסמך כללי'];
+let BIZ_UPLOAD_IN_PROGRESS = false;
+window.addEventListener('beforeunload', function(e){
+  if (BIZ_UPLOAD_IN_PROGRESS){ e.preventDefault(); e.returnValue = ''; return ''; }
+});
 
 function displayFileName(rawName){
-  // Storage keys are saved as "<timestamp>__<encoded original name>" so that
+  // Storage keys are saved as "<timestamp>_<i>__<encoded original name>" so that
   // spaces / parentheses / Hebrew characters never break the storage key itself.
   const idx = rawName.indexOf('__');
   if (idx === -1) return rawName;
   try { return decodeURIComponent(rawName.slice(idx + 2)); }
   catch(e){ return rawName.slice(idx + 2); }
 }
+
+// מציע קטגוריה לפי שם הקובץ/סיומת - תמיד ניתן לשינוי ידני אחר כך, לא נכפה.
+function guessBizFileCategory(filename){
+  const lower = filename.toLowerCase();
+  if (/\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(filename)) return 'תמונה';
+  if (/תקציר|summary/i.test(lower)) return 'תקציר';
+  if (/מצגת.*אנונימ|anon.*presen/i.test(lower)) return 'מצגת אנונימית';
+  if (/מצגת|presentation|\.pptx?$/i.test(lower)) return 'מצגת';
+  if (/הסכם|agreement|חוזה|contract/i.test(lower)) return 'הסכם';
+  if (/דוח.*כספי|financ|מאזן|רווח.*הפסד/i.test(lower)) return 'דוח כספי';
+  if (/תיק.*מכיר/i.test(lower)) return 'תיק מכירה';
+  return 'מסמך כללי';
+}
+
+function initBizDropzone(bizId){
+  const zone = document.getElementById('bizDropzone');
+  if (!zone || zone.dataset.wired) return; // הטופס נטען מחדש בכל פתיחה - לא לרשום מאזינים כפולים
+  zone.dataset.wired = '1';
+  ['dragenter','dragover'].forEach(evt => zone.addEventListener(evt, e => {
+    e.preventDefault(); e.stopPropagation();
+    zone.style.borderColor = 'var(--gold)'; zone.style.background = '#fffaf0';
+  }));
+  ['dragleave','dragend'].forEach(evt => zone.addEventListener(evt, e => {
+    e.preventDefault(); e.stopPropagation();
+    zone.style.borderColor = '#d8d3c4'; zone.style.background = '#faf9f6';
+  }));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation();
+    zone.style.borderColor = '#d8d3c4'; zone.style.background = '#faf9f6';
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length) processBizFiles(bizId, files);
+  });
+}
+function handleBizFileInputChange(event, bizId){
+  const files = Array.from(event.target.files || []);
+  event.target.value = ''; // מאפשר לבחור שוב את אותו קובץ בפעם הבאה
+  if (files.length) processBizFiles(bizId, files);
+}
+
+async function processBizFiles(bizId, files){
+  const queueBox = document.getElementById('bizUploadQueue');
+
+  const tooBig = files.filter(f => f.size > MAX_FILE_MB * 1024 * 1024);
+  if (tooBig.length){
+    toast(`${tooBig.length===files.length ? '' : tooBig.length + ' מתוך '}הקבצים גדולים מדי (מקסימום ${MAX_FILE_MB}MB): ${tooBig.map(f=>f.name).join(', ')}`);
+  }
+  let toUpload = files.filter(f => f.size <= MAX_FILE_MB * 1024 * 1024);
+  if (!toUpload.length) return;
+
+  // כפילות בתוך אותה גרירה/בחירה (למשל אותו קובץ נבחר פעמיים בטעות)
+  const seenInBatch = new Set();
+  toUpload = toUpload.filter(f => {
+    const key = f.name + '|' + f.size;
+    if (seenInBatch.has(key)){ toast(`"${f.name}" נבחר פעמיים באותה פעולה - דולג`); return false; }
+    seenInBatch.add(key);
+    return true;
+  });
+
+  // כפילות מול קבצים שכבר קיימים לעסק הזה - שאלה אחת פר קובץ תואם
+  const existingNames = new Set((BIZ_FILES_CACHE[bizId] || []).map(f => f.displayName));
+  toUpload = toUpload.filter(f => {
+    if (existingNames.has(f.name) && !confirm(`קובץ בשם "${f.name}" כבר קיים בעסק הזה. להעלות בכל זאת כקובץ נוסף?`)) return false;
+    return true;
+  });
+  if (!toUpload.length) return;
+
+  BIZ_UPLOAD_IN_PROGRESS = true;
+  const rowIds = toUpload.map((f, i) => `bizq_${Date.now()}_${i}`);
+  if (queueBox){
+    queueBox.innerHTML += toUpload.map((f, i) => `
+      <div id="${rowIds[i]}" style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:.78rem;">
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 ${esc(f.name)}</span>
+        <div style="flex:1;background:#eee;border-radius:4px;height:6px;overflow:hidden;max-width:120px;">
+          <div class="bizq-bar" style="background:var(--gold);height:100%;width:0%;transition:width .15s;"></div>
+        </div>
+        <span class="bizq-status" style="min-width:70px;text-align:left;color:#999;">ממתין...</span>
+      </div>`).join('');
+  }
+
+  let okCount = 0;
+  for (let i = 0; i < toUpload.length; i++){
+    const file = toUpload[i];
+    const rowEl = document.getElementById(rowIds[i]);
+    const barEl = rowEl?.querySelector('.bizq-bar');
+    const statusEl = rowEl?.querySelector('.bizq-status');
+    // קידוד השם המקורי בתוך המפתח עצמו (לא רק במטא-דאטה) - כך שגם קובץ שהועלה
+    // לפני שהייתה טבלת מטא-דאטה עדיין קריא נכון (displayFileName). מונה פר-קובץ
+    // (לא רק Date.now()) מונע התנגשות אם שני קבצים עולים באותה מילישנייה.
+    const path = `${bizId}/${Date.now()}_${i}__${encodeURIComponent(file.name)}`;
+    try {
+      const { error } = await bsdUploadFile(BIZ_FILES_BUCKET, path, file, {
+        contentType: file.type || undefined,
+        onProgress: pct => { if (barEl) barEl.style.width = pct + '%'; if (statusEl) statusEl.textContent = pct + '%'; }
+      });
+      if (error){
+        if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = 'נכשל'; }
+        if (rowEl) rowEl.title = error.message;
+        toast(`"${file.name}" נכשל: ${error.message}`);
+        continue;
+      }
+      // שורת מטא-דאטה - best-effort: אם זה נכשל (למשל הרשאה חסרה, לא אמור
+      // לקרות כי היא זהה לזו של ה-Storage עצמו), הקובץ כבר הועלה בהצלחה
+      // ועדיין ייטען מ-Storage, פשוט בלי קטגוריה/שם תצוגה עד שיוגדרו ידנית.
+      await window.supabaseClient.from('business_file_meta').insert({
+        business_id: bizId, storage_path: path, original_filename: file.name,
+        display_name: file.name, category: guessBizFileCategory(file.name),
+        file_size: file.size, file_type: file.type || null,
+        uploaded_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null,
+      });
+      if (statusEl){ statusEl.style.color = '#1e7b34'; statusEl.textContent = '✓ הועלה'; }
+      if (barEl) barEl.style.width = '100%';
+      okCount++;
+    } catch (e){
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = 'שגיאה'; }
+      console.error('processBizFiles threw:', e);
+      toast(`"${file.name}" נכשל: ${e && e.message ? e.message : String(e)}`);
+    }
+  }
+  BIZ_UPLOAD_IN_PROGRESS = false;
+
+  if (okCount) bsdLogActivity('upload_file', 'businesses', bizId);
+  await loadBizFiles(bizId);
+  setTimeout(() => { if (queueBox) queueBox.innerHTML = ''; }, 2500);
+}
+
+// קאש קל של הקבצים הטעונים לכל עסק - משמש לבדיקת כפילות שם מול קבצים קיימים
+let BIZ_FILES_CACHE = {};
 
 async function loadBizFiles(bizId){
   const box = document.getElementById('bizFilesList');
@@ -1187,59 +1323,79 @@ async function loadBizFiles(bizId){
   // אותו bucket ואותה שורש-עסק - Storage.list() מחזיר אותן כפסאודו-רשומות בלי id.
   // קובץ אמיתי תמיד מקבל id; מסננים כל מה שאין לו id כדי שלא "יופיע" כקובץ.
   const data = (rawData || []).filter(f => f && f.id !== null);
-  if (!data || data.length === 0){ box.innerHTML = '<span style="color:#999;">אין קבצים מצורפים עדיין</span>'; return; }
-  box.innerHTML = data.map(f => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0ede4;">
-      <span>📄 ${esc(displayFileName(f.name))}</span>
-      <span>
-        <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="downloadBizFile('${bizId}','${esc(f.name)}')">📂 פתח / הורד</button>
-        <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="deleteBizFile('${bizId}','${esc(f.name)}')">מחק</button>
-      </span>
+
+  // Storage היא מקור האמת לאילו קבצים קיימים בפועל; טבלת המטא-דאטה מעשירה
+  // אותם כשיש שורה תואמת - קובץ בלי שורה (הועלה לפני המיגרציה הזו) עדיין
+  // מוצג כרגיל, פשוט עם ברירות מחדל.
+  const { data: metaRows } = await window.supabaseClient.from('business_file_meta').select('*').eq('business_id', bizId);
+  const metaByPath = {};
+  (metaRows || []).forEach(m => { metaByPath[m.storage_path] = m; });
+
+  const canManage = typeof canUseSalesFile === 'function' ? canUseSalesFile(CURRENT_PROFILE) : true;
+
+  const merged = data.map(f => {
+    const fullPath = `${bizId}/${f.name}`;
+    const meta = metaByPath[fullPath];
+    return {
+      storagePath: fullPath, rawName: f.name,
+      displayName: (meta && meta.display_name) || displayFileName(f.name),
+      category: (meta && meta.category) || null,
+      uploadedBy: meta ? meta.uploaded_by : null,
+      createdAt: f.created_at || (meta && meta.created_at),
+      sizeBytes: (f.metadata && f.metadata.size) || (meta && meta.file_size) || null,
+    };
+  });
+  BIZ_FILES_CACHE[bizId] = merged;
+
+  if (!merged.length){ box.innerHTML = '<span style="color:#999;">אין קבצים מצורפים עדיין</span>'; return; }
+  box.innerHTML = merged.map((f, idx) => `
+    <div id="bizfrow_${idx}" style="padding:8px 0;border-bottom:1px solid #f0ede4;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:180px;">
+          <span id="bizfname_${idx}">📄 ${esc(f.displayName)}</span>
+          ${f.category ? `<span style="background:#eef2fb;color:#3a5cad;font-size:.68rem;font-weight:700;padding:1px 8px;border-radius:10px;margin-inline-start:6px;">${esc(f.category)}</span>` : ''}
+        </div>
+        <span>
+          <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="downloadBizFile('${bizId}','${esc(f.rawName)}')">📂 פתח / הורד</button>
+          ${canManage ? `<button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="editBizFileMeta('${bizId}',${idx})">✏️ ערוך</button>` : ''}
+          ${canManage ? `<button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="deleteBizFile('${bizId}','${esc(f.rawName)}')">מחק</button>` : ''}
+        </span>
+      </div>
+      <div style="font-size:.7rem;color:#999;margin-top:2px;">
+        ${f.createdAt ? fmtDateTime(f.createdAt) : ''}${f.uploadedBy ? ' · הועלה ע"י ' + esc(userName(f.uploadedBy)) : ''}${f.sizeBytes ? ' · ' + Math.round(f.sizeBytes/1024) + 'KB' : ''}
+      </div>
     </div>`).join('');
 }
 
-async function uploadBizFile(bizId){
-  const input = document.getElementById('bizFileInput');
-  const statusEl = document.getElementById('bizUploadStatus');
-  const files = Array.from(input.files || []);
-  if (!files.length){ toast('יש לבחור קובץ קודם'); return; }
-
-  const tooBig = files.filter(f => f.size > MAX_FILE_MB * 1024 * 1024);
-  if (tooBig.length){
-    const msg = `${tooBig.length===files.length ? '' : tooBig.length + ' מתוך '}הקבצים גדולים מדי (מקסימום ${MAX_FILE_MB}MB): ${tooBig.map(f=>f.name).join(', ')}`;
-    if (statusEl) statusEl.textContent = msg;
-    toast(msg);
-    if (tooBig.length === files.length){ input.value = ''; return; }
-  }
-  const toUpload = files.filter(f => f.size <= MAX_FILE_MB * 1024 * 1024);
-
-  let okCount = 0;
-  const failed = [];
-  for (let i = 0; i < toUpload.length; i++){
-    const file = toUpload[i];
-    if (statusEl) statusEl.textContent = `מעלה (${i+1}/${toUpload.length}): "${file.name}"...`;
-    // Encode the original name into the key so any characters (רווחים, סוגריים, עברית)
-    // are stored safely - the real name is decoded back for display in loadBizFiles().
-    // A per-file counter (not just Date.now()) avoids two files in the same
-    // batch colliding on an identical millisecond timestamp.
-    const path = `${bizId}/${Date.now()}_${i}__${encodeURIComponent(file.name)}`;
-    try {
-      const { error } = await bsdUploadFile(BIZ_FILES_BUCKET, path, file, {
-        contentType: file.type || undefined,
-        onProgress: pct => { if (statusEl) statusEl.textContent = `מעלה (${i+1}/${toUpload.length}): "${file.name}" - ${pct}%`; }
-      });
-      if (error){ failed.push(file.name + ' (' + error.message + ')'); }
-      else { okCount++; }
-    } catch (e){
-      failed.push(file.name + ' (' + (e && e.message ? e.message : String(e)) + ')');
-      console.error('uploadBizFile threw:', e);
-    }
-  }
-
-  if (statusEl) statusEl.textContent = '';
-  if (okCount) { toast(okCount === 1 ? 'הקובץ הועלה בהצלחה' : `${okCount} קבצים הועלו בהצלחה`); bsdLogActivity('upload_file', 'businesses', bizId); }
-  if (failed.length) toast('שגיאה בהעלאת: ' + failed.join(', '));
-  input.value = '';
+// עריכה מוטבעת (שינוי שם תצוגה + קטגוריה) - שורה הופכת לטופס קטן במקום.
+function editBizFileMeta(bizId, idx){
+  const f = (BIZ_FILES_CACHE[bizId] || [])[idx];
+  if (!f) return;
+  const row = document.getElementById(`bizfrow_${idx}`);
+  if (!row) return;
+  row.innerHTML = `
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <input type="text" id="bizfEditName_${idx}" value="${esc(f.displayName)}" style="flex:1;min-width:160px;padding:4px 8px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;font-size:.8rem;">
+      <select id="bizfEditCat_${idx}" style="padding:4px 8px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;font-size:.8rem;">
+        ${BIZ_FILE_CATEGORIES.map(c => `<option value="${esc(c)}" ${f.category===c?'selected':''}>${esc(c)}</option>`).join('')}
+      </select>
+      <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="saveBizFileMeta('${bizId}',${idx})">שמירה</button>
+      <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="loadBizFiles('${bizId}')">ביטול</button>
+    </div>`;
+}
+async function saveBizFileMeta(bizId, idx){
+  const f = (BIZ_FILES_CACHE[bizId] || [])[idx];
+  if (!f) return;
+  const newName = document.getElementById(`bizfEditName_${idx}`).value.trim();
+  const newCat = document.getElementById(`bizfEditCat_${idx}`).value;
+  if (!newName){ toast('שם קובץ לא יכול להיות ריק'); return; }
+  const { error } = await window.supabaseClient.from('business_file_meta').upsert({
+    business_id: bizId, storage_path: f.storagePath, original_filename: f.displayName,
+    display_name: newName, category: newCat,
+    uploaded_by: f.uploadedBy || (CURRENT_PROFILE ? CURRENT_PROFILE.id : null),
+  }, { onConflict: 'storage_path' });
+  if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+  bsdLogActivity('update_file_meta', 'businesses', bizId);
   loadBizFiles(bizId);
 }
 
@@ -1372,6 +1528,7 @@ async function deleteBizFile(bizId, fileName){
   if (!confirm('למחוק קובץ זה?')) return;
   const { error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).remove([`${bizId}/${fileName}`]);
   if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
+  await window.supabaseClient.from('business_file_meta').delete().eq('storage_path', `${bizId}/${fileName}`);
   bsdLogActivity('delete_file', 'businesses', bizId);
   toast('הקובץ נמחק');
   loadBizFiles(bizId);
