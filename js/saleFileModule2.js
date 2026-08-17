@@ -130,7 +130,8 @@ function openSaleFileCategory(bizId, categoryKey){
   const files = SF_FILES_BY_CATEGORY[categoryKey] || [];
   const panel = document.getElementById('saleFileCategoryPanel');
   if (!panel) return;
-  const canUpload = sfCanUpload();
+  const hasUploadPermission = sfCanUpload();
+  const canUpload = hasUploadPermission && !isAndroidMobile();
   const isPhotoCat = categoryKey === 'business_photo';
   panel.innerHTML = `
     <div style="background:#f7f5ef;border-radius:12px;padding:14px 16px;">
@@ -149,7 +150,10 @@ function openSaleFileCategory(bizId, categoryKey){
         <button type="button" class="btn btn-ghost" id="sfUploadBtn" style="margin-inline-start:8px;" onclick="uploadSaleFiles('${bizId}','${categoryKey}')">⬆️ העלה</button>
         ${isPhotoCat ? `<div style="font-size:.75rem;color:#8a93ab;margin-top:4px;">עד ${SALE_FILE_MAX_PHOTOS} תמונות סה"כ (תמונות ידחסו אוטומטית)</div>` : ''}
         <div id="sfUploadStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
-      </div>` : ''}
+      </div>` : (hasUploadPermission && isAndroidMobile() ? `
+      <div style="margin-top:12px;border-top:1px solid #e5e1d5;padding-top:10px;color:#8a5a00;background:#fff8e6;border-radius:8px;padding:10px 12px;font-size:.82rem;">
+        📱 העלאת קבצים זמינה כרגע מהמחשב בלבד
+      </div>` : '')}
     </div>
   `;
 }

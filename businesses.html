@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608170410';
+    var PAGE_BUILD = '202608170430';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -225,12 +225,12 @@
 
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202608170410"></script>
+<script src="js/auth.js?v=202608170430"></script>
 <script src="js/permissions.js?v=202608151600"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608132300"></script>
-<script src="js/saleFileModule2.js?v=11"></script>
+<script src="js/saleFileModule2.js?v=12"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script>
 let ALL_BIZ = [];
@@ -306,6 +306,7 @@ async function loadBusinesses(){
   // עסקים ללא הסכם כלל מנוהלים כעת ב"לידים" — כאן מוצגים רק מי שנשלח אליו הסכם או שחתם
   ALL_BIZ = (data || []).filter(b => b.agreement_status === 'נשלח הסכם לחתימה' || b.agreement_status === 'יש הסכם חתום');
   await loadGrantCounts();
+  await loadFilesIndicator();
   populateFilters();
   renderTable();
   await maybeHandleUrlParams();
@@ -319,6 +320,21 @@ async function loadBusinesses(){
 // business_access_grants פעילים) - לא state זמני בדפדפן.
 // ============================================================
 let GRANT_COUNTS = {};
+let FILES_BIZ_IDS = new Set();
+async function loadFilesIndicator(){
+  FILES_BIZ_IDS = new Set();
+  // תיקיית שורש ה-bucket - כל תיקייה בשם business_id שמכילה משהו מופיעה כאן
+  // בקריאה אחת בלבד, בלי צורך ב-storage.list נפרד לכל עסק בנפרד.
+  const { data: rootFolders } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).list('', { limit: 1000 });
+  (rootFolders || []).forEach(f => { if (!f.id) FILES_BIZ_IDS.add(f.name); }); // תיקיות מוחזרות בלי id, קבצים בודדים עם id
+  const { data: sfRows } = await window.supabaseClient.from('business_sale_files').select('business_id');
+  (sfRows || []).forEach(r => FILES_BIZ_IDS.add(r.business_id));
+}
+function filesIndicatorBadge(bizId){
+  return FILES_BIZ_IDS.has(bizId)
+    ? `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="לעסק זה יש קבצים מצורפים" style="cursor:pointer;font-size:.85rem;">📎</span>`
+    : '';
+}
 async function loadGrantCounts(){
   const ids = ALL_BIZ.map(b => b.id);
   if (!ids.length){ GRANT_COUNTS = {}; return; }
@@ -461,7 +477,11 @@ function renderTable(){
             </div>
           </div>
           <div>
-            <div class="primary-name" style="font-weight:700;">${statusEmoji}${esc(b.internal_name)}</div>
+            <div class="primary-name" style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span>${statusEmoji}${esc(b.internal_name)}</span>
+              ${filesIndicatorBadge(b.id)}
+              ${notesIconStyle(b.id) ? `<span onclick="event.stopPropagation();openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(b.id))}" style="cursor:pointer;display:inline-block;width:9px;height:9px;${notesIconStyle(b.id)}"></span>` : ''}
+            </div>
             ${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}
             ${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}
             <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${distributionBadge(b)}</div>
@@ -600,7 +620,6 @@ function openBizForm(id){
         ${fieldRow('sale_reason','סיבת מכירה', biz?.sale_reason)}
         ${fieldRow('status','סטטוס העסק', biz?.status)}
         ${fieldRow('discretion_level','רמת דיסקרטיות', biz?.discretion_level)}
-        ${fieldRow('source','מקור העסק', biz?.source)}
         <div class="field"><label>סטטוס הסכם</label>
           <select id="agreement_status">
             <option value="אין הסכם" ${(!biz?.agreement_status || biz.agreement_status==='אין הסכם')?'selected':''}>אין הסכם</option>
@@ -717,9 +736,14 @@ function openBizForm(id){
       </div>
       <div class="section-h" style="margin-top:14px;">קבצים מצורפים</div>
       <div class="field full">
+        ${isAndroidMobile() ? `
+        <div style="color:#8a5a00;background:#fff8e6;border-radius:8px;padding:10px 12px;font-size:.82rem;margin-bottom:8px;">
+          📱 העלאת קבצים זמינה כרגע מהמחשב בלבד
+        </div>` : `
         <input type="file" id="bizFileInput" multiple>
         <button type="button" class="btn btn-ghost" style="margin-inline-start:8px;" onclick="uploadBizFile('${biz.id}')">⬆️ העלה קובץ</button>
         <div id="bizUploadStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
+        `}
         <div id="bizFilesList" style="margin-top:10px;font-size:.82rem;">טוען קבצים...</div>
       </div>
       ` : `
@@ -1365,7 +1389,7 @@ async function saveBiz(e){
     operating_profit: num(g('operating_profit')), net_profit: num(g('net_profit')),
     employees_count: num(g('employees_count')), years_active: num(g('years_active')),
     sale_reason: g('sale_reason'), status: g('status'),
-    discretion_level: g('discretion_level'), source: g('source'),
+    discretion_level: g('discretion_level'),
     agreement_status: g('agreement_status'), handled_by: g('handled_by') || null,
     listing_status: g('listing_status'),
     removal_reason: g('listing_status') === 'removed' ? g('removal_reason') : null,
