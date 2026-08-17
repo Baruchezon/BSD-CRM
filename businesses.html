@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608171215';
+    var PAGE_BUILD = '202608171245';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1226,6 +1226,17 @@ function handleBizFileInputChange(event, bizId){
   if (files.length) processBizFiles(bizId, files);
 }
 
+// מפתח Storage בטוח מתוך שם קובץ שרירותי (כולל עברית/רווחים/סימנים) - ראו
+// הערה ליד בניית ה-path ב-processBizFiles להסבר המלא (17.08.2026).
+function safeStorageSegment(name){
+  const ext = (name.match(/\.[A-Za-z0-9]+$/) || [''])[0];
+  const base = name.slice(0, name.length - ext.length)
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 60);
+  return (base || 'file') + ext;
+}
+
 async function processBizFiles(bizId, files){
   const queueBox = document.getElementById('bizUploadQueue');
 
@@ -1277,7 +1288,13 @@ async function processBizFiles(bizId, files){
     // קידוד השם המקורי בתוך המפתח עצמו (לא רק במטא-דאטה) - כך שגם קובץ שהועלה
     // לפני שהייתה טבלת מטא-דאטה עדיין קריא נכון (displayFileName). מונה פר-קובץ
     // (לא רק Date.now()) מונע התנגשות אם שני קבצים עולים באותה מילישנייה.
-    const path = `${bizId}/${Date.now()}_${i}__${encodeURIComponent(file.name)}`;
+    // מפתח ה-Storage חייב להיות ASCII בלבד - אומת בפועל (17.08.2026): קובץ
+    // עם שם בעברית נדחה ע"י Supabase עם "Invalid key" גם אחרי encodeURIComponent,
+    // כי Supabase מפענח את ה-URL ומאמת את התווים המקוריים (עברית לא מותרת
+    // במפתח, גם אם קודדנו אותה). לכן: מפתח ה-Storage עצמו נבנה מתווים בטוחים
+    // בלבד; השם האמיתי (כולל עברית) תמיד נשמר במלואו ב-business_file_meta
+    // (original_filename/display_name למטה) ומוצג משם - לא מהמפתח.
+    const path = `${bizId}/${Date.now()}_${i}__${safeStorageSegment(file.name)}`;
     try {
       const { error } = await bsdUploadFile(BIZ_FILES_BUCKET, path, file, {
         contentType: file.type || undefined,
