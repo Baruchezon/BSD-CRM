@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608171340';
+    var PAGE_BUILD = '202608171700';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1390,14 +1390,14 @@ async function loadBizFiles(bizId){
     <div id="bizfrow_${idx}" style="padding:8px 0;border-bottom:1px solid #f0ede4;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
         <div style="flex:1;min-width:180px;display:flex;align-items:center;gap:6px;">
-          <input type="checkbox" class="bizfSendCheck" value="${esc(f.rawName)}" onchange="updateBizSendBtn('${bizId}')" style="cursor:pointer;">
+          <input type="checkbox" class="bizfSendCheck" data-idx="${idx}" onchange="updateBizSendBtn('${bizId}')" style="cursor:pointer;">
           <span id="bizfname_${idx}">📄 ${esc(f.displayName)}</span>
           ${f.category ? `<span style="background:#eef2fb;color:#3a5cad;font-size:.68rem;font-weight:700;padding:1px 8px;border-radius:10px;margin-inline-start:6px;">${esc(f.category)}</span>` : ''}
         </div>
         <span>
-          <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="downloadBizFile('${bizId}','${esc(f.rawName)}')">📂 פתח / הורד</button>
+          <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="downloadBizFile('${bizId}',${idx})">📂 פתח / הורד</button>
           ${canManage ? `<button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="editBizFileMeta('${bizId}',${idx})">✏️ ערוך</button>` : ''}
-          ${canManage ? `<button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="deleteBizFile('${bizId}','${esc(f.rawName)}')">מחק</button>` : ''}
+          ${canManage ? `<button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="deleteBizFile('${bizId}',${idx})">מחק</button>` : ''}
         </span>
       </div>
       <div style="font-size:.7rem;color:#999;margin-top:2px;">
@@ -1441,8 +1441,13 @@ async function saveBizFileMeta(bizId, idx){
   loadBizFiles(bizId);
 }
 
-async function downloadBizFile(bizId, fileName){
-  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/${fileName}`, 60);
+async function downloadBizFile(bizId, idx){
+  // מקבל אינדקס (לא שם קובץ) ופותר אותו מול BIZ_FILES_CACHE - שם קובץ עברי
+  // שעובר דרך תכונת HTML (onclick="...('${rawName}')") עלול להישבר אם יש בו
+  // גרש/גרשיים (נפוץ בעברית), ולגרום לכשל שקט. אינדקס לא נתון לבעיה הזו.
+  const f = (BIZ_FILES_CACHE[bizId] || [])[idx];
+  if (!f){ toast('שגיאה: הקובץ לא נמצא (ייתכן שהרשימה התרעננה - טען מחדש ונסה שוב)'); return; }
+  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(f.storagePath, 60);
   if (error){ toast('שגיאה: ' + error.message); return; }
   bsdLogActivity('download_file', 'businesses', bizId);
   window.open(data.signedUrl, '_blank');
@@ -1477,16 +1482,33 @@ function updateBizSendBtn(bizId){
   btn.textContent = n ? `📧 שלח ${n} קבצים לקונה במייל` : '📧 שלח לקונה במייל';
 }
 
+// עוטף כל await ברשת/Supabase בטיימאאוט מפורש - כדי שאם קריאה כלשהי "נתקעת"
+// (למשל בעיית CORS/רשת שלא זורקת ולא חוזרת) הכפתור לא יישאר תקוע ב"שולח..."
+// לנצח בלי שום הודעה - הוא ייכשל בבירור אחרי 20 שניות במקום זה.
+function withTimeout(promise, ms, label){
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label}: הפעולה נתקעה ולא הגיבה תוך ${ms/1000} שניות (בעיית רשת/שרת)`)), ms))
+  ]);
+}
+
 let SEND_FILES_CURRENT_BUYER = null;
 let SEND_FILES_BIZ_ID = null;
 
 async function openSendFilesToBuyer(bizId){
-  const selected = Array.from(document.querySelectorAll('.bizfSendCheck:checked')).map(el => el.value);
-  if (!selected.length){ toast('יש לבחור לפחות קובץ אחד לשליחה'); return; }
+  // בכוונה עובדים לפי אינדקס (data-idx) ולא לפי שם קובץ שיושב ב-value של
+  // ה-checkbox - שם קובץ עברי שעובר קידוד ל-HTML attribute ובחזרה עלול
+  // להישבר אם יש בו גרש/גרשיים, וגורם לכשל שקט (הקובץ "נעלם" בלי הודעה).
+  const selectedIdx = Array.from(document.querySelectorAll('.bizfSendCheck:checked')).map(el => el.getAttribute('data-idx'));
+  if (!selectedIdx.length){ toast('יש לבחור לפחות קובץ אחד לשליחה'); return; }
   SEND_FILES_BIZ_ID = bizId;
   SEND_FILES_CURRENT_BUYER = null;
 
-  const filesInfo = selected.map(rawName => (BIZ_FILES_CACHE[bizId] || []).find(f => f.rawName === rawName)).filter(Boolean);
+  const filesInfo = selectedIdx.map(idx => (BIZ_FILES_CACHE[bizId] || [])[idx]).filter(Boolean);
+  if (filesInfo.length !== selectedIdx.length){
+    toast('שגיאה: חלק מהקבצים שסומנו לא נמצאו יותר ברשימה - רענן את הדף ונסה שוב');
+    return;
+  }
   const biz = ALL_BIZ.find(b => b.id === bizId);
 
   const modal = document.getElementById('modalBox');
@@ -1523,24 +1545,37 @@ async function openSendFilesToBuyer(bizId){
   document.getElementById('overlay').classList.add('open');
   document.getElementById('overlay').scrollTop = 0;
 
-  let buyerQuery = window.supabaseClient
-    .from('leads')
-    .select('id,full_name,first_name,last_name,email,phone,agreement_status,created_by')
-    .eq('type', 'buyer')
-    .order('full_name', { ascending: true });
-  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
-    buyerQuery = buyerQuery.eq('created_by', CURRENT_PROFILE.id);
-  }
-  const { data: buyers, error } = await buyerQuery;
   const box = document.getElementById('sendFilesBuyerBox');
-  if (error){ box.innerHTML = `<span style="color:#b3402c;">שגיאה בטעינת קונים: ${esc(error.message)}</span>`; return; }
+  let buyers = [];
+  try {
+    let buyerQuery = window.supabaseClient
+      .from('leads')
+      .select('id,full_name,first_name,last_name,email,phone,agreement_status,created_by')
+      .eq('type', 'buyer')
+      .order('full_name', { ascending: true });
+    if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
+      buyerQuery = buyerQuery.eq('created_by', CURRENT_PROFILE.id);
+    }
+    const { data, error } = await withTimeout(buyerQuery, 15000, 'טעינת רשימת קונים');
+    if (error) throw new Error(error.message);
+    buyers = data || [];
+  } catch(e){
+    console.error('[openSendFilesToBuyer] failed to load buyers', e);
+    box.innerHTML = `<span style="color:#b3402c;">שגיאה בטעינת רשימת הקונים: ${esc(e.message || String(e))} - אי אפשר לבחור קונה כרגע. סגור וחזור על הפעולה.</span>`;
+    toast('שגיאה בטעינת רשימת הקונים: ' + (e.message || e));
+    return;
+  }
+  if (!buyers.length){
+    box.innerHTML = `<span style="color:#8a5a00;">לא נמצאו קונים ברשימה (leads מסוג buyer) - אי אפשר לשלוח עד שיתווסף קונה עם אימייל.</span>`;
+    return;
+  }
 
   box.innerHTML = window.searchSelectHTML({ boxId: 'sendFilesBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
-  window.initSearchSelect('sendFilesBuyerSelect', buyers || [], {
+  window.initSearchSelect('sendFilesBuyerSelect', buyers, {
     getId: b => b.id,
     getLabel: b => b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || b.email || 'קונה ללא שם',
     onChange: (buyerId) => {
-      SEND_FILES_CURRENT_BUYER = (buyers || []).find(b => b.id === buyerId) || null;
+      SEND_FILES_CURRENT_BUYER = buyers.find(b => b.id === buyerId) || null;
       renderSendFilesBuyerInfo();
     }
   });
@@ -1581,8 +1616,11 @@ async function confirmSendFilesToBuyer(){
   if (!buyer){ toast('יש לבחור קונה מהרשימה לפני השליחה (לחיצה על שם הקונה בתפריט הנפתח)'); console.warn('[confirmSendFilesToBuyer] no buyer selected'); return; }
   if (!buyer.email){ toast('לקונה הנבחר אין כתובת אימייל שמורה - יש להוסיף אימייל בכרטיס הקונה תחילה'); return; }
 
-  const selected = Array.from(document.querySelectorAll('.bizfSendCheck:checked')).map(el => el.value);
-  if (!selected.length){ toast('לא נבחרו קבצים לשליחה'); return; }
+  const selectedIdx = Array.from(document.querySelectorAll('.bizfSendCheck:checked')).map(el => el.getAttribute('data-idx'));
+  if (!selectedIdx.length){ toast('לא נבחרו קבצים לשליחה'); return; }
+  const filesInfo = selectedIdx.map(idx => (BIZ_FILES_CACHE[bizId] || [])[idx]).filter(Boolean);
+  if (filesInfo.length !== selectedIdx.length){ toast('שגיאה: חלק מהקבצים שסומנו לא נמצאו יותר - סגור וטען מחדש'); return; }
+  if (!CURRENT_PROFILE || !CURRENT_PROFILE.email){ toast('שגיאה: פרופיל המשתמש הנוכחי לא נטען כראוי - רענן את הדף'); console.error('[confirmSendFilesToBuyer] CURRENT_PROFILE missing/invalid', CURRENT_PROFILE); return; }
 
   const subject = document.getElementById('sendFilesSubject').value.trim() || 'קבצים מ-BSD Business Brokers Israel';
   const bodyText = document.getElementById('sendFilesBody').value;
@@ -1591,21 +1629,25 @@ async function confirmSendFilesToBuyer(){
   if (sendBtn){ sendBtn.disabled = true; sendBtn.textContent = 'שולח...'; }
 
   try {
-    const filesInfo = selected.map(rawName => (BIZ_FILES_CACHE[bizId] || []).find(f => f.rawName === rawName)).filter(Boolean);
     console.log('[confirmSendFilesToBuyer] starting', { bizId, to: buyer.email, fileCount: filesInfo.length, files: filesInfo.map(f=>f.displayName) });
     const attachments = [];
     for (const f of filesInfo){
       console.log('[confirmSendFilesToBuyer] downloading', f.storagePath);
-      const { data: blob, error: dlErr } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).download(f.storagePath);
+      const { data: blob, error: dlErr } = await withTimeout(
+        window.supabaseClient.storage.from(BIZ_FILES_BUCKET).download(f.storagePath), 20000, `הורדת "${f.displayName}"`
+      );
       if (dlErr) throw new Error(`הורדת "${f.displayName}" נכשלה: ${dlErr.message}`);
+      if (!blob) throw new Error(`הורדת "${f.displayName}" החזירה קובץ ריק`);
       const base64 = await blobToBase64(blob);
       attachments.push({ base64, filename: f.displayName, contentType: blob.type || undefined });
     }
 
     console.log('[confirmSendFilesToBuyer] invoking send-match-summary', { to: buyer.email, subject, attachmentCount: attachments.length });
-    const { data, error } = await window.supabaseClient.functions.invoke('send-match-summary', {
-      body: { to: buyer.email, subject, body_text: bodyText, reply_to: CURRENT_PROFILE.email, attachments }
-    });
+    const { data, error } = await withTimeout(
+      window.supabaseClient.functions.invoke('send-match-summary', {
+        body: { to: buyer.email, subject, body_text: bodyText, reply_to: CURRENT_PROFILE.email, attachments }
+      }), 30000, 'שליחת המייל'
+    );
     console.log('[confirmSendFilesToBuyer] invoke result', { data, error });
     if (error || data?.error){
       // supabase-js מסתיר את גוף השגיאה האמיתי מה-Edge Function מאחורי הודעה
@@ -1742,11 +1784,13 @@ async function addNote(tableName, recordId){
   await markNotesRead(tableName, recordId);
 }
 
-async function deleteBizFile(bizId, fileName){
+async function deleteBizFile(bizId, idx){
+  const f = (BIZ_FILES_CACHE[bizId] || [])[idx];
+  if (!f){ toast('שגיאה: הקובץ לא נמצא (ייתכן שהרשימה התרעננה - טען מחדש ונסה שוב)'); return; }
   if (!confirm('למחוק קובץ זה?')) return;
-  const { error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).remove([`${bizId}/${fileName}`]);
+  const { error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).remove([f.storagePath]);
   if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
-  await window.supabaseClient.from('business_file_meta').delete().eq('storage_path', `${bizId}/${fileName}`);
+  await window.supabaseClient.from('business_file_meta').delete().eq('storage_path', f.storagePath);
   bsdLogActivity('delete_file', 'businesses', bizId);
   toast('הקובץ נמחק');
   loadBizFiles(bizId);
