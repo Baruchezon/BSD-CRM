@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608172225';
+    var PAGE_BUILD = '202608172235';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1677,13 +1677,17 @@ async function confirmSendFilesToBuyer(){
     // באופן לגיטימי יכול לקחת יותר מ-30 שניות, בעיקר בהפעלה "קרה" של
     // הפונקציה או עם קובץ גדול יותר. הטיימאאוט לא היה סימן לתקלה אמיתית -
     // רק לזמן קצר מדי מדי שנבחר בלי בסיס אמיתי (17.08.2026 22:06).
-    // בנוסף: עכשיו מעבירים signal אמיתי (AbortSignal.timeout) כדי שאם
-    // בכל זאת נגמר הזמן, הבקשה תבוטל בפועל ולא תמשיך לרוץ בשרת ברקע -
-    // כדי למנוע מצב של מייל כפול אם המשתמש ינסה שוב אחרי טיימאאוט.
+    // הערה (17.08.2026 22:12): ניסיתי כאן קודם להעביר גם signal
+    // (AbortSignal.timeout) כדי שטיימאאוט יבטל בפועל את הבקשה בצד השרת -
+    // אבל התברר שזו תכונה שעדיין לא שוחררה בפועל בגרסה הרשמית של
+    // supabase-js (יש לה Pull Request פתוח וממתין ב-GitHub של Supabase,
+    // לא מוזג עדיין) - העברת האופציה הזו גרמה לשגיאה מיידית "Failed to
+    // send a request to the Edge Function" עוד לפני שהבקשה יצאה בכלל.
+    // הוסר. נשאר רק הטיימאאוט החיצוני (withTimeout) - בלי ביטול אמיתי של
+    // הבקשה בצד השרת, אבל לפחות לא שובר את השליחה.
     const { data, error } = await withTimeout(
       window.supabaseClient.functions.invoke('send-match-summary', {
-        body: { to: buyer.email, subject, body_text: bodyText, reply_to: CURRENT_PROFILE.email, attachments },
-        signal: AbortSignal.timeout(90000)
+        body: { to: buyer.email, subject, body_text: bodyText, reply_to: CURRENT_PROFILE.email, attachments }
       }), 90000, 'שליחת המייל'
     );
     console.log('[confirmSendFilesToBuyer] invoke result', { data, error });
