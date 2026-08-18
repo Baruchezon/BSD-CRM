@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608181200';
+    var PAGE_BUILD = '202608181530';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -171,7 +171,7 @@
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202608170630"></script>
-<script src="js/permissions.js?v=202608181200"></script>
+<script src="js/permissions.js?v=202608181530"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script>
 let ALL_BUSINESSES = [];
@@ -179,6 +179,8 @@ let ALL_BUYERS = [];
 let ALL_PARTNERS = [];
 let ALL_USERS = [];
 let CURRENT_PROFILE = null;
+let RATING_LEVELS = [];
+let RATING_BY_ID = {};
 let CURRENT_TAB = 'business';
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -220,6 +222,42 @@ async function loadUsers(){
 function userName(id){
   const u = ALL_USERS.find(x=>x.id===id);
   return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
+}
+async function loadRatingLevels(){
+  if (!canViewBuyerRating(CURRENT_PROFILE)) { RATING_LEVELS = []; RATING_BY_ID = {}; return; }
+  const { data, error } = await window.supabaseClient
+    .from('buyer_rating_levels').select('*').eq('is_active', true).order('sort_order', { ascending: true });
+  if (error){ RATING_LEVELS = []; RATING_BY_ID = {}; return; }
+  RATING_LEVELS = data || [];
+  RATING_BY_ID = {};
+  RATING_LEVELS.forEach(r => { RATING_BY_ID[r.id] = r; });
+}
+function ratingLevelOptions(selectedId){
+  if (!RATING_LEVELS.length) return '<option value="">—</option>';
+  return RATING_LEVELS.map(r => `<option value="${r.id}" ${r.id===selectedId?'selected':''}>${esc(r.icon||'')} ${esc(r.name)}</option>`).join('');
+}
+function ratingBadge(r){
+  if (!canViewBuyerRating(CURRENT_PROFILE)) return '';
+  const level = r.rating_level_id ? RATING_BY_ID[r.rating_level_id] : null;
+  if (!level) return '';
+  const canEdit = canEditBuyerRating(CURRENT_PROFILE);
+  const c = esc(level.color || '#8a93ab');
+  const label = `${level.icon || ''} ${esc(level.name)}`;
+  if (!canEdit){
+    return `<span style="background:#fff !important;color:${c} !important;border:1px solid ${c};border-radius:10px;padding:1px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">${label}</span>`;
+  }
+  return `<select onclick="event.stopPropagation()" onchange="event.stopPropagation();quickChangeRating('${r.id}', this.value)"
+    style="border:1px solid ${c};color:${c} !important;background:#fff !important;border-radius:10px;padding:1px 6px;font-size:.7rem;font-weight:700;font-family:inherit;cursor:pointer;">
+    ${ratingLevelOptions(r.rating_level_id)}
+  </select>`;
+}
+async function quickChangeRating(leadId, newLevelId){
+  const { error } = await window.supabaseClient.from('leads').update({ rating_level_id: newLevelId || null }).eq('id', leadId);
+  if (error){ toast('שגיאה בעדכון דירוג: ' + error.message); return; }
+  const rec = [...ALL_BUYERS, ...ALL_PARTNERS].find(x => x.id === leadId);
+  if (rec) rec.rating_level_id = newLevelId || null;
+  toast('הדירוג עודכן');
+  renderTable();
 }
 function creatorColor(id){
   const u = ALL_USERS.find(x=>x.id===id);
@@ -278,7 +316,8 @@ function rowNameCell(r){
     return `<div class="primary-name">${esc(bizName)}</div><div class="sub-name">${esc(r.owner_name||'—')}</div>`;
   }
   const personName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || '—';
-  return `<div class="primary-name">${esc(personName)}</div>`;
+  const badge = ratingBadge(r);
+  return `<div class="primary-name">${esc(personName)}</div>${badge ? `<div style="margin-top:4px;" onclick="event.stopPropagation()">${badge}</div>` : ''}`;
 }
 function rowCityCell(r){
   if (CURRENT_TAB === 'business') return esc(r.city || '—');
@@ -536,6 +575,7 @@ async function addNote(tableName, recordId){
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
   refreshNavMsgBadge();
   await loadUsers();
+  await loadRatingLevels();
   await loadAll();
 })();
 </script>

@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608181200';
+    var PAGE_BUILD = '202608181530';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -235,7 +235,7 @@
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202608170630"></script>
-<script src="js/permissions.js?v=202608181200"></script>
+<script src="js/permissions.js?v=202608181530"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/standaloneRecording.js?v=202608132300"></script>
 <script src="js/notesRecording.js?v=2"></script>
@@ -319,13 +319,19 @@ function ratingBadge(leadId){
   if (!level) return '';
   const canEdit = canEditBuyerRating(CURRENT_PROFILE);
   const label = `${level.icon || ''} ${esc(level.name)}`;
+  const c = esc(level.color || '#8a93ab');
+  // רקע לבן מלא (לא שקוף) עם !important - שורות "הסכם חתום"/"נשלח לחתימה"
+  // כופות צבע רקע/טקסט על כל ה-td עם !important (ר' row-signed/row-sent
+  // ב-CSS למעלה), כך שתג עם רקע שקוף או צבע טקסט בלי !important פשוט נבלע
+  // ולא נראה בכלל על רקע ירוק/כתום. תג לבן מלא עם border+color בצבע הרמה,
+  // שניהם !important, נשאר קריא על כל רקע שורה.
   if (!canEdit){
-    return `<span style="background:${esc(level.color||'#8a93ab')}22;color:${esc(level.color||'#8a93ab')};border:1px solid ${esc(level.color||'#8a93ab')};border-radius:10px;padding:1px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">${label}</span>`;
+    return `<span style="background:#fff !important;color:${c} !important;border:1px solid ${c};border-radius:10px;padding:1px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">${label}</span>`;
   }
   // תג הניתן לשינוי ישירות מהרשימה, בלי לפתוח את הכרטיס - <select> קומפקטי
   // עם אותם צבעים, תואם מגע גם באנדרואיד.
   return `<select onclick="event.stopPropagation()" onchange="event.stopPropagation();quickChangeRating('${leadId}', this.value)"
-    style="border:1px solid ${esc(level.color||'#8a93ab')};color:${esc(level.color||'#8a93ab')};background:${esc(level.color||'#8a93ab')}15;border-radius:10px;padding:1px 6px;font-size:.7rem;font-weight:700;font-family:inherit;cursor:pointer;">
+    style="border:1px solid ${c};color:${c} !important;background:#fff !important;border-radius:10px;padding:1px 6px;font-size:.7rem;font-weight:700;font-family:inherit;cursor:pointer;">
     ${ratingLevelOptions(lead.rating_level_id)}
   </select>`;
 }
@@ -340,7 +346,7 @@ async function quickChangeRating(leadId, newLevelId){
 function matchCountBadge(leadId){
   const count = MATCH_COUNT_BY_BUYER[leadId] || 0;
   if (!count) return '';
-  return `<span onclick="event.stopPropagation();location.href='matches.html?view=by_buyer&buyer_id=${leadId}'" title="עסקים שהותאמו לקונה זה" style="cursor:pointer;font-size:.7rem;color:#3a5cad;font-weight:700;white-space:nowrap;background:#eef2fb;border-radius:10px;padding:1px 8px;">🔗 עסקים שהותאמו: ${count}</span>`;
+  return `<span onclick="event.stopPropagation();location.href='matches.html?view=by_buyer&buyer_id=${leadId}'" title="עסקים שהותאמו לקונה זה" style="cursor:pointer;font-size:.7rem;color:#3a5cad !important;font-weight:700;white-space:nowrap;background:#fff !important;border:1px solid #3a5cad;border-radius:10px;padding:1px 8px;">🔗 עסקים שהותאמו: ${count}</span>`;
 }
 function userName(id){
   const u = ALL_USERS.find(x=>x.id===id);
@@ -520,7 +526,7 @@ function renderTable(){
     const statusEmoji = rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
     nameCell = statusEmoji + nameCell;
     if (notesIconStyle(l.id)){
-      const noteDot = `<span onclick="event.stopPropagation();openNotesPanel('leads','${l.id}','${esc((personName||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(l.id))}" style="cursor:pointer;font-size:.72rem;color:#1a3d8f;font-weight:700;white-space:nowrap;margin-inline-start:6px;">🔵 קיימת הערה</span>`;
+      const noteDot = `<span onclick="event.stopPropagation();openNotesPanel('leads','${l.id}','${esc((personName||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(l.id))}" style="cursor:pointer;font-size:.72rem;color:#1a3d8f !important;font-weight:700;white-space:nowrap;margin-inline-start:6px;background:#fff !important;border-radius:8px;padding:1px 6px;">🔵 קיימת הערה</span>`;
       nameCell = nameCell.replace('</div>', noteDot + '</div>');
     }
 
