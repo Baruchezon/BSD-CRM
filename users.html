@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608180010';
+    var PAGE_BUILD = '202608181200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -192,7 +192,7 @@
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202608170630"></script>
-<script src="js/permissions.js?v=202608151600"></script>
+<script src="js/permissions.js?v=202608181200"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script>
 let ALL_USERS = [];
@@ -406,6 +406,8 @@ function openEditForm(id){
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_all_messages" style="width:auto;" ${u.can_view_all_messages?'checked':''}> אפשר צפייה בהודעות של כל המשתמשים (לא רק שלו)</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_record" style="width:auto;" ${u.can_record!==false?'checked':''}> אפשר הקלטה (ללא סימון - יוכל רק לצפות בהקלטות קיימות, לא להקליט)</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_upload_sale_files" style="width:auto;" ${u.can_upload_sale_files?'checked':''}> אפשר העלאת קבצים לתיק מכירה (ללא סימון - admin/manager תמיד מורשים)</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_view_buyer_rating" style="width:auto;" ${u.can_view_buyer_rating?'checked':''}> אפשר צפייה בדירוג רצינות קונים (ללא סימון - admin/manager תמיד מורשים)</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_edit_buyer_rating" style="width:auto;" ${u.can_edit_buyer_rating?'checked':''}> אפשר שינוי דירוג רצינות קונים (ללא סימון - admin/manager תמיד מורשים)</label>
         </div>
         <div class="field full"><label>הערות</label><textarea id="notes">${esc(u.notes)}</textarea></div>
       </div>
@@ -442,7 +444,9 @@ async function saveEdit(e){
     can_send_presentations: document.getElementById('can_presentations').checked,
     can_view_all_messages: document.getElementById('can_all_messages').checked,
     can_record: document.getElementById('can_record').checked,
-    can_upload_sale_files: document.getElementById('can_upload_sale_files').checked
+    can_upload_sale_files: document.getElementById('can_upload_sale_files').checked,
+    can_view_buyer_rating: document.getElementById('can_view_buyer_rating').checked,
+    can_edit_buyer_rating: document.getElementById('can_edit_buyer_rating').checked
   };
   const { error } = await window.supabaseClient.from('profiles').update(payload).eq('id', id);
   if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
@@ -568,6 +572,8 @@ function openCreateForm(){
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_all_messages" style="width:auto;"> אפשר צפייה בהודעות של כל המשתמשים (לא רק שלו)</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_record" style="width:auto;" checked> אפשר הקלטה (ללא סימון - יוכל רק לצפות בהקלטות קיימות, לא להקליט)</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_upload_sale_files" style="width:auto;"> אפשר העלאת קבצים לתיק מכירה (ללא סימון - admin/manager תמיד מורשים)</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_view_buyer_rating" style="width:auto;"> אפשר צפייה בדירוג רצינות קונים (ללא סימון - admin/manager תמיד מורשים)</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_edit_buyer_rating" style="width:auto;"> אפשר שינוי דירוג רצינות קונים (ללא סימון - admin/manager תמיד מורשים)</label>
         </div>
       </div>
       <div class="modal-actions">
@@ -599,7 +605,9 @@ function applyRoleDefaultsToForm(prefix){
     can_survey: 'can_use_survey',
     can_record: 'can_record',
     can_agreement: 'can_send_agreement',
-    can_presentations: 'can_send_presentations'
+    can_presentations: 'can_send_presentations',
+    can_view_buyer_rating: 'can_view_buyer_rating',
+    can_edit_buyer_rating: 'can_edit_buyer_rating'
   };
   Object.entries(map).forEach(([elSuffix, permKey]) => {
     const el = document.getElementById(prefix + elSuffix);
@@ -638,7 +646,9 @@ async function createUser(e){
         can_send_presentations: document.getElementById('new_can_presentations').checked,
         can_view_all_messages: document.getElementById('new_can_all_messages').checked,
         can_record: document.getElementById('new_can_record').checked,
-        can_upload_sale_files: document.getElementById('new_can_upload_sale_files').checked
+        can_upload_sale_files: document.getElementById('new_can_upload_sale_files').checked,
+        can_view_buyer_rating: document.getElementById('new_can_view_buyer_rating').checked,
+        can_edit_buyer_rating: document.getElementById('new_can_edit_buyer_rating').checked
       })
     });
     const result = await resp.json();
