@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608180010';
+    var PAGE_BUILD = '202608181200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -226,11 +226,10 @@
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202608170630"></script>
-<script src="js/permissions.js?v=202608151600"></script>
+<script src="js/permissions.js?v=202608181200"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608132300"></script>
-<script src="js/saleFileModule2.js?v=12"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script>
 let ALL_BIZ = [];
@@ -320,20 +319,27 @@ async function loadBusinesses(){
 // business_access_grants פעילים) - לא state זמני בדפדפן.
 // ============================================================
 let GRANT_COUNTS = {};
-let FILES_BIZ_IDS = new Set();
+// מספר קבצים בפועל לכל עסק - מבוסס אך ורק על אזור "קבצים מצורפים" המאוחד
+// (אותו מקור אמת בדיוק כמו loadBizFiles בכרטיס העסק: Storage.list() מסונן
+// לרשומות עם id בלבד, כי תיקיות משנה כמו sale-file/ מוחזרות בלי id ולא
+// נספרות כקובץ). כך המספר ברשימה תמיד תואם בדיוק את מה שמוצג בפועל בכרטיס.
+let FILES_COUNT_BY_BIZ = {};
 async function loadFilesIndicator(){
-  FILES_BIZ_IDS = new Set();
+  FILES_COUNT_BY_BIZ = {};
   // תיקיית שורש ה-bucket - כל תיקייה בשם business_id שמכילה משהו מופיעה כאן
-  // בקריאה אחת בלבד, בלי צורך ב-storage.list נפרד לכל עסק בנפרד.
+  // בקריאה אחת בלבד, כדי לדעת מראש לאילו עסקים בכלל שווה לבדוק (ולא לבצע
+  // storage.list נפרד לכל עסק ברשימה, כולל כאלה בלי שום קובץ).
   const { data: rootFolders } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).list('', { limit: 1000 });
-  (rootFolders || []).forEach(f => { if (!f.id) FILES_BIZ_IDS.add(f.name); }); // תיקיות מוחזרות בלי id, קבצים בודדים עם id
-  const { data: sfRows } = await window.supabaseClient.from('business_sale_files').select('business_id');
-  (sfRows || []).forEach(r => FILES_BIZ_IDS.add(r.business_id));
+  const bizIdsWithAnyFolder = (rootFolders || []).filter(f => !f.id).map(f => f.name); // תיקיות מוחזרות בלי id, קבצים בודדים עם id
+  await Promise.all(bizIdsWithAnyFolder.map(async bizId => {
+    const { data: rows } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).list(bizId);
+    FILES_COUNT_BY_BIZ[bizId] = (rows || []).filter(f => f && f.id !== null).length;
+  }));
 }
 function filesIndicatorBadge(bizId){
-  return FILES_BIZ_IDS.has(bizId)
-    ? `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="לעסק זה יש קבצים מצורפים" style="cursor:pointer;font-size:.85rem;">📎</span>`
-    : '';
+  const count = FILES_COUNT_BY_BIZ[bizId] || 0;
+  if (!count) return '';
+  return `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="לעסק זה יש ${count} קבצים מצורפים" style="cursor:pointer;font-size:.78rem;color:#3a5cad;font-weight:700;white-space:nowrap;">📎 קבצים: ${count}</span>`;
 }
 async function loadGrantCounts(){
   const ids = ALL_BIZ.map(b => b.id);
@@ -666,15 +672,6 @@ function openBizForm(id){
       </div>
       ` : ``}
 
-      ${biz ? `
-      <div class="section-h" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;">
-        <span>🗂️ תיק מכירה</span>
-        <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="openSendToBuyerModal('${biz.id}','${esc((biz.internal_name||'עסק').replace(/'/g,''))}')">📤 שלח לקונה</button>
-      </div>
-      <div class="field full">
-        <div id="saleFileModuleBox" style="font-size:.85rem;">טוען תיק מכירה...</div>
-      </div>
-      ` : ``}
 
       ${biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz) ? `
       <div class="section-h" style="margin-top:14px;">🪪 כרטיס אנונימי (רשימת עסקים אנונימיים)</div>
@@ -767,7 +764,6 @@ function openBizForm(id){
   document.getElementById('bizForm').addEventListener('submit', saveBiz);
   if (biz) { loadBizFiles(biz.id); initBizDropzone(biz.id); }
   if (biz) loadBizMeetings(biz.id);
-  if (biz) loadSaleFileModule(biz.id);
   if (biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz)) loadBizAccessGrants(biz.id);
   if (biz && biz.anon_summary && biz.anon_summary_generated_at && biz.updated_at > biz.anon_summary_generated_at){
     const warnEl = document.getElementById('anonStaleWarning');
@@ -1745,12 +1741,12 @@ let NOTES_READS = {};   // record_id -> last_read_at (של המשתמש הנוכ
 
 async function loadNotesSummary(tableName){
   const { data: notesData } = await window.supabaseClient
-    .from('record_notes').select('record_id, created_at').eq('table_name', tableName);
+    .from('record_notes').select('record_id, created_at, note_text').eq('table_name', tableName);
   NOTES_SUMMARY = {};
   (notesData || []).forEach(n => {
     const cur = NOTES_SUMMARY[n.record_id];
     if (!cur || n.created_at > cur.maxCreatedAt) {
-      NOTES_SUMMARY[n.record_id] = { count: (cur ? cur.count : 0) + 1, maxCreatedAt: n.created_at };
+      NOTES_SUMMARY[n.record_id] = { count: (cur ? cur.count : 0) + 1, maxCreatedAt: n.created_at, latestText: n.note_text };
     } else {
       cur.count += 1;
     }
@@ -1778,7 +1774,10 @@ function notesIconStyle(recordId){
 function notesTooltip(recordId){
   const summary = NOTES_SUMMARY[recordId];
   if (!summary || !summary.count) return 'הערות (אין הערות עדיין)';
-  return summary.count === 1 ? 'הערה אחת' : `${summary.count} הערות`;
+  const countLabel = summary.count === 1 ? 'הערה אחת' : `${summary.count} הערות`;
+  // תקציר קצר של ההערה האחרונה - מוצג ב-title (מעבר עכבר) בלי לפתוח את הכרטיס
+  const excerpt = (summary.latestText || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+  return excerpt ? `${countLabel} - אחרונה: "${excerpt}${summary.latestText.trim().length > 80 ? '…' : ''}"` : countLabel;
 }
 
 async function markNotesRead(tableName, recordId){
