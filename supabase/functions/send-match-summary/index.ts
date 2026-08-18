@@ -1,21 +1,32 @@
-// BSD CRM - send-match-summary Edge Function (raw SMTP, Gmail account)
+// BSD CRM - send-match-summary Edge Function (Resend HTTPS API)
 //
-// Sends email via a hand-rolled minimal SMTP client over TLS directly to
-// smtp.gmail.com - no third-party mail library (denomailer had unresolved
-// open bugs around encoding non-ASCII/Hebrew content: raw quoted-printable
-// escapes were left undecoded). This version builds the MIME message by
-// hand with explicit, correct headers: base64 for the body and RFC 2047
-// encoded-word (base64) for the subject - both are unambiguous, no
-// heuristics, no room for a "forgot to declare the encoding" bug.
+// 17.08.2026: replaced the previous raw-SMTP-to-Gmail approach. Root cause
+// of the "click send, nothing happens / times out" saga that evening:
+// Supabase Edge Functions block outbound connections on ports 25, 465 and
+// 587 (documented Supabase platform limitation) - the old code connected
+// directly to smtp.gmail.com:465, which explains an indefinite hang with
+// zero response, on any timeout length. Switched to Resend's HTTPS API
+// (https://api.resend.com/emails, port 443 - never blocked) instead of
+// raw SMTP. Same external contract as before (to/subject/body_text/
+// html_body/reply_to/attachment_base64+attachment_filename/attachments[])
+// so match-detail.html and businesses.html needed no changes at all.
 //
 // Requires these Edge Function secrets:
-//   GMAIL_USER            e.g. baruch.ezon@gmail.com
-//   GMAIL_APP_PASSWORD    the 16-character app password (no spaces)
+//   RESEND_API_KEY     from resend.com (Settings -> API Keys)
+//   RESEND_FROM_EMAIL   e.g. noreply@bsd-bbi.co.il - MUST be on a domain
+//                        verified in Resend (Settings -> Domains) to send
+//                        to arbitrary recipients. Until a domain is
+//                        verified, Resend only allows sending to the
+//                        account owner's own signup email address - fine
+//                        for a first test, not for real buyers. Falls back
+//                        to onboarding@resend.dev (Resend's own shared test
+//                        address) if this secret isn't set, which has the
+//                        same own-email-only restriction.
 //
-// Called from match-detail.html via:
+// Called from match-detail.html / businesses.html via:
 //   supabase.functions.invoke('send-match-summary', { body: {
 //     to, subject, body_text, reply_to,
-//     attachment_base64?, attachment_filename?
+//     attachment_base64?, attachment_filename?  (or attachments: [...])
 //   }})
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -24,8 +35,8 @@ function cleanEnv(v: string | undefined): string {
   return (v || '').trim();
 }
 
-const GMAIL_USER = cleanEnv(Deno.env.get('GMAIL_USER'));
-const GMAIL_APP_PASSWORD = cleanEnv(Deno.env.get('GMAIL_APP_PASSWORD'));
+const RESEND_API_KEY = cleanEnv(Deno.env.get('RESEND_API_KEY'));
+const RESEND_FROM_EMAIL = cleanEnv(Deno.env.get('RESEND_FROM_EMAIL')) || 'onboarding@resend.dev';
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -39,125 +50,49 @@ function corsHeaders() {
   };
 }
 
-// ---------- base64 helpers (UTF-8 safe) ----------
-function utf8ToBase64(str: string): string {
-  const bytes = new TextEncoder().encode(str);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
-}
-// wraps a base64 string into RFC-compliant 76-char lines joined by CRLF
-function wrapBase64(b64: string): string {
-  const lines: string[] = [];
-  for (let i = 0; i < b64.length; i += 76) lines.push(b64.slice(i, i + 76));
-  return lines.join('\r\n');
-}
-function encodedWordSubject(subject: string): string {
-  // RFC 2047 encoded-word, base64, for non-ASCII headers like a Hebrew subject
-  return `=?UTF-8?B?${utf8ToBase64(subject)}?=`;
-}
-
-// ---------- minimal raw SMTP client over implicit TLS ----------
-async function readSmtpResponse(conn: Deno.TlsConn): Promise<string> {
-  const decoder = new TextDecoder();
-  let text = '';
-  const buf = new Uint8Array(4096);
-  while (true) {
-    const n = await conn.read(buf);
-    if (n === null) break;
-    text += decoder.decode(buf.subarray(0, n), { stream: true });
-    const lines = text.split('\r\n').filter((l) => l.length > 0);
-    const last = lines[lines.length - 1] || '';
-    // a final (non-continuation) SMTP reply line has a SPACE after the 3-digit code, not a dash
-    if (/^\d{3} /.test(last)) break;
-  }
-  return text;
-}
-async function sendSmtpCommand(conn: Deno.TlsConn, cmd: string): Promise<string> {
-  await conn.write(new TextEncoder().encode(cmd + '\r\n'));
-  return await readSmtpResponse(conn);
-}
-function assertOk(resp: string, step: string) {
-  const code = parseInt(resp.slice(0, 3), 10);
-  if (!(code >= 200 && code < 400)) {
-    throw new Error(`SMTP ${step} נכשל: ${resp.trim()}`);
-  }
-}
-
-async function sendMailViaGmailSmtp(opts: {
+async function sendMailViaResend(opts: {
   to: string; subject: string; bodyText: string; htmlBody?: string; replyTo?: string;
   attachments?: { base64: string; filename: string; contentType?: string }[];
 }) {
-  const conn = await Deno.connectTls({ hostname: 'smtp.gmail.com', port: 465 });
-  try {
-    assertOk(await readSmtpResponse(conn), 'greeting');
-    assertOk(await sendSmtpCommand(conn, `EHLO bsd-crm.local`), 'EHLO');
-    assertOk(await sendSmtpCommand(conn, 'AUTH LOGIN'), 'AUTH LOGIN');
-    assertOk(await sendSmtpCommand(conn, btoa(GMAIL_USER)), 'AUTH USER');
-    assertOk(await sendSmtpCommand(conn, btoa(GMAIL_APP_PASSWORD)), 'AUTH PASSWORD (בדוק שהעתקת נכון את סיסמת האפליקציה בת 16 התווים)');
-    assertOk(await sendSmtpCommand(conn, `MAIL FROM:<${GMAIL_USER}>`), 'MAIL FROM');
-    assertOk(await sendSmtpCommand(conn, `RCPT TO:<${opts.to}>`), 'RCPT TO');
-    assertOk(await sendSmtpCommand(conn, 'DATA'), 'DATA');
+  const attachments = (opts.attachments || []).filter(a => a && a.base64 && a.filename);
+  const payload: Record<string, unknown> = {
+    from: `BSD Business Brokers Israel <${RESEND_FROM_EMAIL}>`,
+    to: [opts.to],
+    subject: opts.subject,
+    // עברית מוצגת נכון בשני הפורמטים בלי שום קידוד ידני - Resend שולח
+    // הכל כ-UTF-8 תקין מהצד שלו; זה מה שמחליף את כל טיפול ה-RFC 2047/
+    // base64 הידני שהיה נחוץ בגרסת ה-SMTP הגולמית.
+    text: opts.bodyText || undefined,
+    html: opts.htmlBody || undefined,
+  };
+  if (opts.replyTo) payload.reply_to = opts.replyTo;
+  if (attachments.length) {
+    // Resend מקבל attachments כ-base64 ישירות עם שם קובץ יוניקוד רגיל -
+    // לא צריך את כל ה-RFC 2231 filename*=UTF-8'' הידני שהיה ב-SMTP; ה-API
+    // כבר שולח multipart תקין בעצמו.
+    payload.attachments = attachments.map(a => ({
+      filename: a.filename,
+      content: a.base64,
+    }));
+  }
 
-    const boundary = `bsd-boundary-${crypto.randomUUID()}`;
-    const headers = [
-      `From: BSD Business Brokers Israel <${GMAIL_USER}>`,
-      `To: ${opts.to}`,
-      `Subject: ${encodedWordSubject(opts.subject)}`,
-      `MIME-Version: 1.0`,
-      opts.replyTo ? `Reply-To: ${opts.replyTo}` : null,
-    ].filter(Boolean).join('\r\n');
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
 
-    const attachments = (opts.attachments || []).filter(a => a && a.base64 && a.filename);
-    const isHtml = !!opts.htmlBody;
-    const bodyContentType = isHtml ? 'text/html' : 'text/plain';
-    const bodyContent = isHtml ? opts.htmlBody! : opts.bodyText;
-    const bodyPart =
-      `Content-Type: ${bodyContentType}; charset="UTF-8"\r\n` +
-      `Content-Transfer-Encoding: base64\r\n\r\n` +
-      `${wrapBase64(utf8ToBase64(bodyContent))}\r\n\r\n`;
-
-    let mime: string;
-    if (attachments.length) {
-      // שם קובץ מצורף עם עברית: "filename=" רגיל (ASCII בלבד) לא תומך בעברית -
-      // חלק מלקוחות המייל היו מציגים שם שבור. פותר עם RFC 2231/5987 -
-      // filename*=UTF-8''<percent-encoded> לצד fallback ASCII רגיל, כך שגם
-      // לקוחות ישנים שלא תומכים ב-filename* עדיין מקבלים שם קובץ תקין (ASCII).
-      const asciiFallback = (name: string) => {
-        const m = name.match(/\.[A-Za-z0-9]+$/);
-        const ext = m ? m[0] : '';
-        return /^[\x20-\x7E]+$/.test(name) ? name : `attachment${ext}`;
-      };
-      const attachmentParts = attachments.map(a => {
-        const fallback = asciiFallback(a.filename);
-        const encoded = encodeURIComponent(a.filename);
-        return `--${boundary}\r\n` +
-          `Content-Type: ${a.contentType || 'application/pdf'}; name="${fallback}"\r\n` +
-          `Content-Disposition: attachment; filename="${fallback}"; filename*=UTF-8''${encoded}\r\n` +
-          `Content-Transfer-Encoding: base64\r\n\r\n` +
-          `${wrapBase64(a.base64)}\r\n\r\n`;
-      }).join('');
-      mime =
-        `${headers}\r\n` +
-        `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n` +
-        `--${boundary}\r\n` +
-        bodyPart +
-        attachmentParts +
-        `--${boundary}--\r\n`;
-    } else {
-      mime =
-        `${headers}\r\n` +
-        `Content-Type: ${bodyContentType}; charset="UTF-8"\r\n` +
-        `Content-Transfer-Encoding: base64\r\n\r\n` +
-        `${wrapBase64(utf8ToBase64(bodyContent))}\r\n`;
-    }
-
-    // dot-stuffing: a line consisting of a lone "." would prematurely end DATA
-    const dataSafe = mime.split('\r\n').map(l => l.startsWith('.') ? '.' + l : l).join('\r\n');
-    assertOk(await sendSmtpCommand(conn, dataSafe + '\r\n.'), 'DATA body');
-    await sendSmtpCommand(conn, 'QUIT');
-  } finally {
-    try { conn.close(); } catch (_e) { /* already closed */ }
+  const respBody = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    // Resend מחזיר שגיאה ברורה (JSON עם message) - כולל המקרה השכיח ביותר:
+    // domain לא מאומת, שאז ההודעה בפועל אומרת שאפשר לשלוח רק לכתובת שאיתה
+    // נרשמת ל-Resend. מעבירים את זה כמו שהוא הלאה כדי שהמשתמש יראה סיבה
+    // אמיתית ולא הודעה גנרית.
+    const detail = (respBody && (respBody.message || respBody.error)) || `HTTP ${resp.status}`;
+    throw new Error(`שליחה דרך Resend נכשלה: ${detail}`);
   }
 }
 
@@ -167,8 +102,8 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
-      return new Response(JSON.stringify({ error: 'GMAIL_USER / GMAIL_APP_PASSWORD לא מוגדרים ב-Secrets' }), {
+    if (!RESEND_API_KEY) {
+      return new Response(JSON.stringify({ error: 'RESEND_API_KEY לא מוגדר ב-Secrets של הפונקציה' }), {
         status: 500, headers: { ...corsHeaders(), 'Content-Type': 'application/json' }
       });
     }
@@ -201,7 +136,7 @@ Deno.serve(async (req: Request) => {
       ? attachments
       : (attachment_base64 && attachment_filename ? [{ base64: attachment_base64, filename: attachment_filename }] : []);
 
-    await sendMailViaGmailSmtp({
+    await sendMailViaResend({
       to, subject, bodyText, htmlBody: htmlBody || undefined, replyTo: reply_to,
       attachments: resolvedAttachments,
     });
