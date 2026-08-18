@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608172245';
+    var PAGE_BUILD = '202608172315';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1624,25 +1624,15 @@ function renderSendFilesBuyerInfo(){
 }
 
 async function confirmSendFilesToBuyer(){
-  // מוריד פוקוס מכל שדה טקסט פתוח - כדי לסגור מקלדת וירטואלית בנייד מיד
-  // בלחיצה על "שלח". אם מקלדת פתוחה, היא עלולה לכסות הודעות שצפות
-  // בתחתית המסך (toast) ולגרום לתחושת "לא קרה כלום" למרות שבפועל כן
-  // קרה משהו - רק לא נראה.
   if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
 
   const bizId = SEND_FILES_BIZ_ID;
   const buyer = SEND_FILES_CURRENT_BUYER;
   sendFilesStatus('מתחיל...', false);
-  // בכוונה בלי disabled על הכפתור - קליק על כפתור disabled לא מפעיל שום
-  // אירוע ולא מציג שום הודעה, כך שאם המשתמש לא באמת בחר קונה מהרשימה
-  // (רק הקליד וזז הלאה) הוא "לא יקרה כלום" בלי שום הסבר. במקום זה תמיד
-  // מגיבים בפועל לקליק, עם הודעה מדויקת על מה חסר (17.08.2026, בעקבות
-  // דיווח על "לחצתי שלח ולא הייתה תגובה"). כל הודעה נכתבת גם ל-toast וגם
-  // ישירות בתוך המודל (sendFilesStatus), כדי שתמיד תיראה בוודאות.
   if (!buyer){ const m='יש לבחור קונה מהרשימה לפני השליחה (לחיצה על שם הקונה בתפריט הנפתח)'; toast(m); sendFilesStatus(m, true); console.warn('[confirmSendFilesToBuyer] no buyer selected'); return; }
   if (!buyer.email){ const m='לקונה הנבחר אין כתובת אימייל שמורה - יש להוסיף אימייל בכרטיס הקונה תחילה'; toast(m); sendFilesStatus(m, true); return; }
 
-  const selectedIdx = SEND_FILES_SELECTED_IDX; // נשמר בזמן פתיחת החלון - לא נבדק מחדש מה-DOM (ראו הסבר למעלה)
+  const selectedIdx = SEND_FILES_SELECTED_IDX;
   if (!selectedIdx.length){ const m='לא נבחרו קבצים לשליחה'; toast(m); sendFilesStatus(m, true); return; }
   const filesInfo = selectedIdx.map(idx => (BIZ_FILES_CACHE[bizId] || [])[idx]).filter(Boolean);
   if (filesInfo.length !== selectedIdx.length){ const m='שגיאה: חלק מהקבצים שסומנו לא נמצאו יותר - סגור וטען מחדש'; toast(m); sendFilesStatus(m, true); return; }
@@ -1671,17 +1661,6 @@ async function confirmSendFilesToBuyer(){
 
     sendFilesStatus('שולח את המייל...', false);
     console.log('[confirmSendFilesToBuyer] invoking send-match-summary', { to: buyer.email, subject, attachmentCount: attachments.length });
-    // (17.08.2026 22:18) שני סבבים קודמים (30 שניות, ואז 90 שניות) נכשלו
-    // באותה צורה בדיוק - "נתקעה ולא הגיבה". זה כבר לא מסתדר עם "פשוט לוקח
-    // זמן" (90 שניות אמיתיות זה הרבה, ועדיין כלום). בדקתי את התיעוד הרשמי
-    // של Supabase: הפלטפורמה חוסמת חיבורי רשת יוצאים בפורטים 25, 465, 587
-    // - בדיוק הפורט (465) שהפונקציה הזו משתמשת בו כדי להתחבר ישירות ל-SMTP
-    // של Gmail. זה מסביר תקיעה מוחלטת בלי תשובה בכלל, בכל אורך טיימאאוט -
-    // לא בעיה בקוד הצד שלנו, אלא מגבלת רשת של הפלטפורמה. אין טעם להמשיך
-    // לחכות זמן ארוך יותר - זה לא ייפתר עם עוד שניות. הוחזר לזמן סביר
-    // (25 שניות) כדי שכישלון (אם יש) יתגלה מהר ולא יגרום להמתנה מיותרת -
-    // הפתרון האמיתי צריך להיות מעבר לשירות שליחת מייל שעובד דרך HTTPS
-    // רגיל ולא SMTP גולמי (ראו את ההודעה לברוך על כך).
     const { data, error } = await withTimeout(
       window.supabaseClient.functions.invoke('send-match-summary', {
         body: { to: buyer.email, subject, body_text: bodyText, reply_to: CURRENT_PROFILE.email, attachments }
@@ -1689,8 +1668,6 @@ async function confirmSendFilesToBuyer(){
     );
     console.log('[confirmSendFilesToBuyer] invoke result', { data, error });
     if (error || data?.error){
-      // supabase-js מסתיר את גוף השגיאה האמיתי מה-Edge Function מאחורי הודעה
-      // גנרית - מוציאים את הסיבה האמיתית מ-error.context (אותו דפוס כמו match-detail.html).
       let detail = data?.error || error?.message || 'שגיאה לא ידועה';
       if (error && error.context && typeof error.context.json === 'function'){
         try { const b = await error.context.json(); if (b?.error) detail = b.error; } catch(e){}
@@ -1705,7 +1682,7 @@ async function confirmSendFilesToBuyer(){
     toast(okMsg);
     document.querySelectorAll('.bizfSendCheck:checked').forEach(el => el.checked = false);
     updateBizSendBtn(bizId);
-    setTimeout(closeModal, 900); // השהיה קצרה כדי שההודעה תיראה גם למי שהמודל שלו נסגר מיד
+    setTimeout(closeModal, 900);
   } catch(e){
     console.error('[confirmSendFilesToBuyer] exception', e);
     const errMsg = 'שגיאה בשליחת המייל: ' + (e.message || e);
@@ -1924,15 +1901,19 @@ async function saveBiz(e){
   };
   const existingBiz = ALL_BIZ.find(b => b.id === bizId);
   const wasAnonActive = !!existingBiz?.anon_card_active;
+
+  // תיקון 17.08.2026: כשל בבדיקת הכרטיס האנונימי (מידע מזהה בטעות בטקסט,
+  // או ניסיון להפעיל הפצה בלי תקציר מוכן) חייב לחסום רק את השדות
+  // האנונימיים עצמם - לא את שמירת שאר הטופס. לפני התיקון, כל כשל כזה
+  // עשה return מוקדם ומנע את כל קריאת ה-update(), כך שגם שינויים
+  // תמימים לגמרי בשדות אחרים (עיר, תיאור, סטטוס וכו') לא נשמרו בשקט,
+  // עם רק הודעת שגיאה קטנה למעלה שקל לפספס.
+  let anonBlocked = false;
   if (document.getElementById('anon_card_active')){
     payload.anon_card_active = cb('anon_card_active');
     payload.anon_card_show_price = cb('anon_card_show_price');
     payload.anon_card_show_reason = cb('anon_card_show_reason');
 
-    // עריכה ידנית של התקציר/שם התצוגה - אם השדות האלה בטופס (רק למי שיש
-    // הרשאה), הם תמיד נשמרים, ותמיד עוברים את אותה בדיקת אנונימיות מקומית
-    // לפני שמירה - לא רק כשמפעילים הפצה. כך שגם אם מישהו יפעיל "הפץ"
-    // בהמשך בלי לערוך שוב את הטקסט, הוא כבר עבר בדיקה בזמן השמירה הזו.
     if (document.getElementById('anon_summary')){
       const manualDisplayName = g('anon_display_name');
       const manualSummary = g('anon_summary');
@@ -1950,33 +1931,43 @@ async function saveBiz(e){
       scanText('שם תצוגה אנונימי', manualDisplayName);
       scanText('תקציר אנונימי', manualSummary);
       if (leaks.length){
-        showFormError('⚠️ התקציר/שם התצוגה האנונימי מכיל מידע מזהה: ' + leaks.join(', ') + ' - יש לתקן לפני השמירה');
-        return;
+        showFormError('⚠️ התקציר/שם התצוגה האנונימי מכיל מידע מזהה: ' + leaks.join(', ') + ' - השדות האנונימיים לא נשמרו, אך שאר הטופס כן יישמר. תקן ונסה שוב להפעיל את ההפצה.');
+        anonBlocked = true;
+      } else {
+        payload.anon_display_name = manualDisplayName || null;
+        payload.anon_summary = manualSummary || null;
       }
-      payload.anon_display_name = manualDisplayName || null;
-      payload.anon_summary = manualSummary || null;
     }
 
-    if (payload.anon_card_active){
-      // בדיקה ישירות מול בסיס הנתונים ברגע השמירה עצמה - לא סומכים על
-      // ALL_BIZ בזיכרון הדפדפן, כדי שלא יהיה מצב שבו תקציר שנוצר ממש
-      // עכשיו (בטאב הזה או במקום אחר) ייחסם בטעות בגלל נתון מיושן בצד לקוח.
-      // אם ערכנו עכשיו ידנית, נבדוק את הערך שעומד להישמר; אחרת נבדוק מול ה-DB.
+    if (!anonBlocked && payload.anon_card_active){
       const summaryToCheck = payload.anon_summary !== undefined ? payload.anon_summary : undefined;
       const displayNameToCheck = payload.anon_display_name !== undefined ? payload.anon_display_name : undefined;
       let hasSummary = !!(summaryToCheck || displayNameToCheck);
       if (summaryToCheck === undefined && displayNameToCheck === undefined){
         const { data: freshBiz, error: freshErr } = await window.supabaseClient
           .from('businesses').select('anon_summary, anon_display_name').eq('id', bizId).maybeSingle();
-        if (freshErr){ showFormError('❌ שגיאה בבדיקת התקציר האנונימי: ' + freshErr.message + ' - השמירה לא בוצעה'); return; }
-        hasSummary = !!(freshBiz?.anon_summary || freshBiz?.anon_display_name);
+        if (freshErr){
+          showFormError('❌ שגיאה בבדיקת התקציר האנונימי: ' + freshErr.message + ' - ההפצה לא הופעלה, אך שאר הטופס כן יישמר.');
+          anonBlocked = true;
+        } else {
+          hasSummary = !!(freshBiz?.anon_summary || freshBiz?.anon_display_name);
+        }
       }
-      if (!hasSummary){
-        // אין עדיין תקציר אנונימי לעסק הזה - לא מפעילים הפצה על כרטיס ריק
-        // (סעיף 4: עדיף לא להציג מאשר להמציא/להציג טקסט לא בטוח).
-        showFormError('⚠️ יש ליצור או להזין תקציר אנונימי לפני הפעלת ההפצה - השמירה לא בוצעה');
-        return;
+      if (!anonBlocked && !hasSummary){
+        showFormError('⚠️ יש ליצור או להזין תקציר אנונימי לפני הפעלת ההפצה - ההפצה לא הופעלה, אך שאר הטופס כן יישמר.');
+        anonBlocked = true;
       }
+    }
+
+    // אם נחסם - לא נוגעים בעמודות האנונימיות בכלל, כדי שהערך הקיים
+    // בבסיס הנתונים יישאר כמו שהוא (לא נכתוב מעל תקציר תקין ישן בטעות,
+    // ולא נפעיל הפצה בלי תקציר מוכן).
+    if (anonBlocked){
+      delete payload.anon_card_active;
+      delete payload.anon_card_show_price;
+      delete payload.anon_card_show_reason;
+      delete payload.anon_display_name;
+      delete payload.anon_summary;
     }
   }
 
@@ -1993,11 +1984,13 @@ async function saveBiz(e){
     if (!error && insertResult.data) bsdLogActivity('create', 'businesses', insertResult.data.id);
   }
   if (error){ showFormError('❌ שגיאה בשמירה: ' + error.message); return; }
-  const nowAnonActive = document.getElementById('anon_card_active') ? cb('anon_card_active') : wasAnonActive;
+  const nowAnonActive = (document.getElementById('anon_card_active') && !anonBlocked) ? cb('anon_card_active') : wasAnonActive;
   if (!wasAnonActive && nowAnonActive){
     toast('🪪 העסק הופץ אנונימית בהצלחה');
   } else if (wasAnonActive && !nowAnonActive){
     toast('העסק הוסר מההפצה האנונימית');
+  } else if (anonBlocked){
+    toast('✅ שאר הטופס נשמר בהצלחה (השדות האנונימיים לא עודכנו - ראה הודעה למעלה)');
   } else {
     toast('✅ נשמר בהצלחה');
   }
@@ -2166,8 +2159,6 @@ async function confirmSendPresentations(){
   const businessIds = getSelectedPresoBusinessIds();
   if (!businessIds.length){ toast('יש לבחור לפחות עסק אחד עם מצגת'); return; }
 
-  // Open the WhatsApp window synchronously (before any await) so the browser
-  // doesn't treat it as an unrequested popup once the async call resolves.
   let waWindow = null;
   if (needsWhatsapp) waWindow = window.open('', '_blank');
 
