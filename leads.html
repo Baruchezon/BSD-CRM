@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608180010';
+    var PAGE_BUILD = '202608181200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -192,12 +192,14 @@
       <option value="יש הסכם חתום">יש הסכם חתום</option>
     </select>
     <select id="fCreatedBy"><option value="all">כל מי שהזין</option></select>
+    <select id="fRating" style="display:none;"><option value="all">כל רמות הרצינות</option></select>
     <select id="fSort">
       <option value="updated_desc">עודכן לאחרונה</option>
       <option value="created_desc">נוצר לאחרונה</option>
       <option value="name_asc">שם (א-ת)</option>
       <option value="city_asc">עיר (א-ת)</option>
       <option value="created_by_asc">הוזן ע"י (א-ת)</option>
+      <option value="rating_desc">רמת רצינות (מהגבוה לנמוך)</option>
       <option value="agreement_asc">סטטוס הסכם</option>
     </select>
   </div>
@@ -233,7 +235,7 @@
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202608170630"></script>
-<script src="js/permissions.js?v=202608151600"></script>
+<script src="js/permissions.js?v=202608181200"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/standaloneRecording.js?v=202608132300"></script>
 <script src="js/notesRecording.js?v=2"></script>
@@ -241,6 +243,9 @@
 let ALL_LEADS = [];
 let ALL_USERS = [];
 let CURRENT_PROFILE = null;
+let RATING_LEVELS = [];           // רשימת הרמות הפעילות, ממוינות לפי sort_order
+let RATING_BY_ID = {};            // id -> אובייקט הרמה
+let MATCH_COUNT_BY_BUYER = {};    // buyer_id (leads.id) -> מספר התאמות בפועל
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
@@ -285,6 +290,58 @@ async function loadUsers(){
   const { data } = await window.supabaseClient.from('profiles').select('id, full_name, email, role').eq('status','active');
   ALL_USERS = data || [];
 }
+async function loadRatingLevels(){
+  if (!canViewBuyerRating(CURRENT_PROFILE)) { RATING_LEVELS = []; RATING_BY_ID = {}; return; }
+  const { data, error } = await window.supabaseClient
+    .from('buyer_rating_levels').select('*').eq('is_active', true).order('sort_order', { ascending: true });
+  if (error){ RATING_LEVELS = []; RATING_BY_ID = {}; return; }
+  RATING_LEVELS = data || [];
+  RATING_BY_ID = {};
+  RATING_LEVELS.forEach(r => { RATING_BY_ID[r.id] = r; });
+}
+async function loadMatchCounts(){
+  // סופר מכל ההתאמות הקיימות בפועל (matches.buyer_id) - לא שדה ידני. RLS על
+  // matches כבר מגביל לשורות שהמשתמש הנוכחי רשאי לראות, בדיוק כמו בכל מקום
+  // אחר במערכת.
+  const { data, error } = await window.supabaseClient.from('matches').select('buyer_id');
+  MATCH_COUNT_BY_BUYER = {};
+  if (error || !data) return;
+  data.forEach(m => { if (m.buyer_id) MATCH_COUNT_BY_BUYER[m.buyer_id] = (MATCH_COUNT_BY_BUYER[m.buyer_id] || 0) + 1; });
+}
+function ratingLevelOptions(selectedId){
+  if (!RATING_LEVELS.length) return '<option value="">—</option>';
+  return RATING_LEVELS.map(r => `<option value="${r.id}" ${r.id===selectedId?'selected':''}>${esc(r.icon||'')} ${esc(r.name)}</option>`).join('');
+}
+function ratingBadge(leadId){
+  if (!canViewBuyerRating(CURRENT_PROFILE)) return '';
+  const lead = ALL_LEADS.find(l => l.id === leadId);
+  const level = lead && lead.rating_level_id ? RATING_BY_ID[lead.rating_level_id] : null;
+  if (!level) return '';
+  const canEdit = canEditBuyerRating(CURRENT_PROFILE);
+  const label = `${level.icon || ''} ${esc(level.name)}`;
+  if (!canEdit){
+    return `<span style="background:${esc(level.color||'#8a93ab')}22;color:${esc(level.color||'#8a93ab')};border:1px solid ${esc(level.color||'#8a93ab')};border-radius:10px;padding:1px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">${label}</span>`;
+  }
+  // תג הניתן לשינוי ישירות מהרשימה, בלי לפתוח את הכרטיס - <select> קומפקטי
+  // עם אותם צבעים, תואם מגע גם באנדרואיד.
+  return `<select onclick="event.stopPropagation()" onchange="event.stopPropagation();quickChangeRating('${leadId}', this.value)"
+    style="border:1px solid ${esc(level.color||'#8a93ab')};color:${esc(level.color||'#8a93ab')};background:${esc(level.color||'#8a93ab')}15;border-radius:10px;padding:1px 6px;font-size:.7rem;font-weight:700;font-family:inherit;cursor:pointer;">
+    ${ratingLevelOptions(lead.rating_level_id)}
+  </select>`;
+}
+async function quickChangeRating(leadId, newLevelId){
+  const { error } = await window.supabaseClient.from('leads').update({ rating_level_id: newLevelId || null }).eq('id', leadId);
+  if (error){ toast('שגיאה בעדכון דירוג: ' + error.message); return; }
+  const lead = ALL_LEADS.find(l => l.id === leadId);
+  if (lead) lead.rating_level_id = newLevelId || null;
+  toast('הדירוג עודכן');
+  renderTable();
+}
+function matchCountBadge(leadId){
+  const count = MATCH_COUNT_BY_BUYER[leadId] || 0;
+  if (!count) return '';
+  return `<span onclick="event.stopPropagation();location.href='matches.html?view=by_buyer&buyer_id=${leadId}'" title="עסקים שהותאמו לקונה זה" style="cursor:pointer;font-size:.7rem;color:#3a5cad;font-weight:700;white-space:nowrap;background:#eef2fb;border-radius:10px;padding:1px 8px;">🔗 עסקים שהותאמו: ${count}</span>`;
+}
 function userName(id){
   const u = ALL_USERS.find(x=>x.id===id);
   return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
@@ -315,6 +372,7 @@ async function loadLeads(){
   ALL_LEADS = (data || []).filter(l => l.agreement_status === 'נשלח הסכם לחתימה' || l.agreement_status === 'יש הסכם חתום');
   populateStatusFilter();
   populateCreatedByFilter();
+  populateRatingFilter();
   renderTable();
   await maybeHandleUrlParams();
 }
@@ -362,12 +420,24 @@ function populateCreatedByFilter(){
   });
 }
 
+function populateRatingFilter(){
+  const sel = document.getElementById('fRating');
+  if (!sel) return;
+  if (!canViewBuyerRating(CURRENT_PROFILE) || !RATING_LEVELS.length){ sel.style.display = 'none'; return; }
+  // בונים מחדש בכל טעינה (הרמות עצמן עלולות להשתנות בעתיד דרך מסך ההגדרות)
+  sel.innerHTML = '<option value="all">כל רמות הרצינות</option>'
+    + '<option value="serious_plus">קונים פעילים ורציניים ומעלה</option>'
+    + RATING_LEVELS.map(r => `<option value="${r.id}">${esc(r.icon||'')} ${esc(r.name)} בלבד</option>`).join('');
+}
+
 function switchLeadTypeTab(type){
   document.getElementById('fType').value = type;
   document.getElementById('tabBuyerBtn').style.borderBottomColor = type === 'buyer' ? 'var(--gold)' : 'transparent';
   document.getElementById('tabBuyerBtn').style.color = type === 'buyer' ? 'var(--navy)' : '#8a8578';
   document.getElementById('tabPartnerBtn').style.borderBottomColor = type === 'partner' ? 'var(--gold)' : 'transparent';
   document.getElementById('tabPartnerBtn').style.color = type === 'partner' ? 'var(--navy)' : '#8a8578';
+  const ratingSel = document.getElementById('fRating');
+  if (ratingSel) ratingSel.style.display = canViewBuyerRating(CURRENT_PROFILE) && RATING_LEVELS.length ? '' : 'none';
   renderTable();
 }
 
@@ -378,12 +448,22 @@ function renderTable(){
   const agreement = document.getElementById('fAgreement').value;
   const createdBy = document.getElementById('fCreatedBy').value;
   const sort = document.getElementById('fSort').value;
+  const ratingFilter = document.getElementById('fRating') ? document.getElementById('fRating').value : 'all';
+  const activeBuyerLevel = RATING_LEVELS.find(r => r.level_key === 'active_buyer');
 
   let rows = ALL_LEADS.filter(l=>{
     if (type !== 'all' && l.type !== type) return false;
     if (status !== 'all' && l.status !== status) return false;
     if (agreement !== 'all' && (l.agreement_status || 'אין הסכם') !== agreement) return false;
     if (createdBy !== 'all' && l.created_by !== createdBy) return false;
+    if (ratingFilter && ratingFilter !== 'all' && (l.type === 'buyer' || l.type === 'partner')){
+      if (ratingFilter === 'serious_plus'){
+        const lvl = l.rating_level_id ? RATING_BY_ID[l.rating_level_id] : null;
+        if (!lvl || !activeBuyerLevel || lvl.sort_order < activeBuyerLevel.sort_order) return false;
+      } else if (l.rating_level_id !== ratingFilter){
+        return false;
+      }
+    }
     if (search){
       const hay = [l.full_name, l.first_name, l.last_name, l.phone, l.phone2, l.city, l.source, l.status, l.email,
         l.business_name, l.business_field, l.business_city, l.requested_field, l.requested_area,
@@ -399,6 +479,11 @@ function renderTable(){
     if (sort === 'created_desc') return new Date(b.created_at) - new Date(a.created_at);
     if (sort === 'created_by_asc') return userName(a.created_by).localeCompare(userName(b.created_by), 'he');
     if (sort === 'agreement_asc') return (a.agreement_status||'').localeCompare(b.agreement_status||'', 'he');
+    if (sort === 'rating_desc'){
+      const oa = a.rating_level_id && RATING_BY_ID[a.rating_level_id] ? RATING_BY_ID[a.rating_level_id].sort_order : -1;
+      const ob = b.rating_level_id && RATING_BY_ID[b.rating_level_id] ? RATING_BY_ID[b.rating_level_id].sort_order : -1;
+      return ob - oa;
+    }
     return new Date(b.updated_at) - new Date(a.updated_at);
   });
 
@@ -423,6 +508,11 @@ function renderTable(){
     } else {
       nameCell = `<div class="primary-name">${esc(personName)}</div>`;
       cityCell = esc(l.requested_area || l.city || '—');
+    }
+
+    if (l.type === 'buyer' || l.type === 'partner'){
+      const extras = [ratingBadge(l.id), l.type === 'buyer' ? matchCountBadge(l.id) : ''].filter(Boolean).join(' ');
+      if (extras) nameCell += `<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;" onclick="event.stopPropagation()">${extras}</div>`;
     }
 
     const agrStatus = l.agreement_status || 'אין הסכם';
@@ -494,7 +584,7 @@ function agreementBanner(status, agreementNumber){
   return `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(agreementShortLabel(s))}${numPart}</div>`;
 }
 
-['fSearch','fType','fStatus','fAgreement','fCreatedBy','fSort'].forEach(id=>{
+['fSearch','fType','fStatus','fAgreement','fCreatedBy','fSort','fRating'].forEach(id=>{
   document.getElementById(id).addEventListener('input', renderTable);
   document.getElementById(id).addEventListener('change', renderTable);
 });
@@ -563,6 +653,12 @@ function openLeadForm(id, forcedType){
 
         ${(type==='buyer' || type==='partner') ? `
           <div class="section-h">${type==='partner' ? 'פרטי שותפות/השקעה' : 'פרטי קונה'}</div>
+          ${canViewBuyerRating(CURRENT_PROFILE) ? `
+          <div class="field"><label>רמת רצינות</label>
+            <select id="rating_level_id" ${canEditBuyerRating(CURRENT_PROFILE) ? '' : 'disabled'}>
+              ${ratingLevelOptions(lead?.rating_level_id)}
+            </select>
+          </div>` : ''}
           ${fieldRow('buyer_type','סוג הקונה', lead?.buyer_type)}
           ${fieldRow('requested_field','תחום עסקי מבוקש', lead?.requested_field)}
           ${fieldRow('requested_categories','קטגוריות מבוקשות', lead?.requested_categories)}
@@ -675,6 +771,12 @@ async function saveLead(e){
       requested_revenue: num(g('requested_revenue')), requested_profit: num(g('requested_profit')),
       involvement_level: g('involvement_level'), partnership_willingness: g('partnership_willingness')
     });
+    // רמת הרצינות נשלחת רק אם השדה בפועל מוצג וניתן לעריכה בטופס הזה - אם
+    // אין הרשאת עריכה השדה disabled וכלל לא נשלח, כדי לא לדרוס בטעות דירוג
+    // קיים בעדכון של שדה אחר. leads_update+הטריגר בשרת חוסמים בכל מקרה שינוי
+    // בפועל ללא הרשאה, זו רק מניעה נוספת בצד הלקוח.
+    const ratingEl = document.getElementById('rating_level_id');
+    if (ratingEl && !ratingEl.disabled) payload.rating_level_id = ratingEl.value || null;
   } else {
     Object.assign(payload, {
       business_name: g('business_name'), business_field: g('business_field'),
@@ -745,12 +847,12 @@ let NOTES_READS = {};   // record_id -> last_read_at (של המשתמש הנוכ
 
 async function loadNotesSummary(tableName){
   const { data: notesData } = await window.supabaseClient
-    .from('record_notes').select('record_id, created_at').eq('table_name', tableName);
+    .from('record_notes').select('record_id, created_at, note_text').eq('table_name', tableName);
   NOTES_SUMMARY = {};
   (notesData || []).forEach(n => {
     const cur = NOTES_SUMMARY[n.record_id];
     if (!cur || n.created_at > cur.maxCreatedAt) {
-      NOTES_SUMMARY[n.record_id] = { count: (cur ? cur.count : 0) + 1, maxCreatedAt: n.created_at };
+      NOTES_SUMMARY[n.record_id] = { count: (cur ? cur.count : 0) + 1, maxCreatedAt: n.created_at, latestText: n.note_text };
     } else {
       cur.count += 1;
     }
@@ -778,7 +880,10 @@ function notesIconStyle(recordId){
 function notesTooltip(recordId){
   const summary = NOTES_SUMMARY[recordId];
   if (!summary || !summary.count) return 'הערות (אין הערות עדיין)';
-  return summary.count === 1 ? 'הערה אחת' : `${summary.count} הערות`;
+  const countLabel = summary.count === 1 ? 'הערה אחת' : `${summary.count} הערות`;
+  // תקציר קצר של ההערה האחרונה - מוצג ב-title (מעבר עכבר) בלי לפתוח את הכרטיס
+  const excerpt = (summary.latestText || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+  return excerpt ? `${countLabel} - אחרונה: "${excerpt}${summary.latestText.trim().length > 80 ? '…' : ''}"` : countLabel;
 }
 
 async function markNotesRead(tableName, recordId){
@@ -865,6 +970,8 @@ async function deleteLead(id){
     document.querySelectorAll('button[onclick^="openLeadForm(null"]').forEach(b => b.style.display = 'none');
   }
   await loadUsers();
+  await loadRatingLevels();
+  await loadMatchCounts();
   await loadNotesSummary('leads');
   await loadLeads();
   switchLeadTypeTab('buyer');

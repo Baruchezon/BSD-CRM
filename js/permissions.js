@@ -95,6 +95,14 @@ function canUseSurvey(profile) {
 function canUseSalesFile(profile) {
   return bsdIsAdminOrManager(profile) || !!(profile && profile.can_upload_sale_files);
 }
+// דירוג רצינות קונים - מידע מקצועי פנימי, לא לחשיפה כללית. admin/manager
+// תמיד מורשים; מעבר לזה, רק דגל מפורש (ר' migrations/2026-08-18).
+function canViewBuyerRating(profile) {
+  return bsdIsAdminOrManager(profile) || !!(profile && profile.can_view_buyer_rating);
+}
+function canEditBuyerRating(profile) {
+  return bsdIsAdminOrManager(profile) || !!(profile && profile.can_edit_buyer_rating);
+}
 
 // ---- ניהול משתמשים/הרשאות (אדמין תמיד; מנהל רק אם הורשה במפורש) ----
 function canManageUsers(profile) {
@@ -107,10 +115,10 @@ function canManageUsers(profile) {
 // זהו רק ה-preset שמוצג ב-UI כשבוחרים רמה — לא מחליף את ה-DB defaults
 // שנקבעו ב-migration. אדמין יכול לשנות כל דגל ידנית אחרי הבחירה.
 const BSD_ROLE_DEFAULT_PERMISSIONS = {
-  admin:   { can_view_anonymous_businesses: true, can_create_businesses: true, can_create_buyers: true, can_record: true, can_use_survey: true, can_use_sale_file: true, can_send_agreement: true, can_send_presentations: true },
-  manager: { can_view_anonymous_businesses: true, can_create_businesses: true, can_create_buyers: true, can_record: true, can_use_survey: true, can_use_sale_file: true, can_send_agreement: true, can_send_presentations: true },
-  agent_authorized: { can_view_anonymous_businesses: true, can_create_businesses: true, can_create_buyers: true, can_record: true, can_use_survey: false, can_use_sale_file: false, can_send_agreement: false, can_send_presentations: false },
-  agent:   { can_view_anonymous_businesses: false, can_create_businesses: false, can_create_buyers: false, can_record: false, can_use_survey: false, can_use_sale_file: false, can_send_agreement: false, can_send_presentations: false }
+  admin:   { can_view_anonymous_businesses: true, can_create_businesses: true, can_create_buyers: true, can_record: true, can_use_survey: true, can_use_sale_file: true, can_send_agreement: true, can_send_presentations: true, can_view_buyer_rating: true, can_edit_buyer_rating: true },
+  manager: { can_view_anonymous_businesses: true, can_create_businesses: true, can_create_buyers: true, can_record: true, can_use_survey: true, can_use_sale_file: true, can_send_agreement: true, can_send_presentations: true, can_view_buyer_rating: true, can_edit_buyer_rating: true },
+  agent_authorized: { can_view_anonymous_businesses: true, can_create_businesses: true, can_create_buyers: true, can_record: true, can_use_survey: false, can_use_sale_file: false, can_send_agreement: false, can_send_presentations: false, can_view_buyer_rating: true, can_edit_buyer_rating: true },
+  agent:   { can_view_anonymous_businesses: false, can_create_businesses: false, can_create_buyers: false, can_record: false, can_use_survey: false, can_use_sale_file: false, can_send_agreement: false, can_send_presentations: false, can_view_buyer_rating: false, can_edit_buyer_rating: false }
 };
 
 function bsdApplyRoleDefaults(role) {
