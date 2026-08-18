@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608172315';
+    var PAGE_BUILD = '202608180010';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1646,8 +1646,30 @@ async function confirmSendFilesToBuyer(){
 
   try {
     console.log('[confirmSendFilesToBuyer] starting', { bizId, to: buyer.email, fileCount: filesInfo.length, files: filesInfo.map(f=>f.displayName) });
+    // (17.08.2026 22:40) גילינו שקובץ אחד בגודל 10.2MB היה הגורם האמיתי
+    // ל"נתקע ולא הגיב" - Supabase Edge Functions דוחות בקשות מעל בסביבות
+    // 10MB, וזה כולל את כל גוף הבקשה (JSON+base64, לא רק הקובץ עצמו).
+    // base64 מנפח קובץ בכ-33% - כך שגם קובץ "רק" 7-8MB כבר עלול לחצות את
+    // הגבול. הפתרון: קובץ גדול מהסף לא מצורף ישירות - יוצרים לו קישור
+    // הורדה מאובטח וזמני (Signed URL, בתוקף ל-7 ימים) ומוסיפים אותו לגוף
+    // ההודעה כטקסט/קישור במקום כקובץ מצורף. קבצים קטנים ממשיכים כרגיל
+    // כצרופה רגילה - שינוי הזה לא פוגע בהתנהגות עבורם.
+    const LARGE_FILE_THRESHOLD = 4 * 1024 * 1024; // 4MB - שולי ביטחון נוחים מתחת ל-10MB, גם עם כמה קבצים יחד
     const attachments = [];
+    const largeFileLinks = [];
     for (const f of filesInfo){
+      const knownLarge = typeof f.sizeBytes === 'number' && f.sizeBytes > LARGE_FILE_THRESHOLD;
+      if (knownLarge){
+        sendFilesStatus(`יוצר קישור הורדה עבור "${f.displayName}" (קובץ גדול)...`, false);
+        console.log('[confirmSendFilesToBuyer] creating signed URL for large file', f.storagePath, f.sizeBytes);
+        const { data: signed, error: linkErr } = await withTimeout(
+          window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(f.storagePath, 60 * 60 * 24 * 7), 20000, `יצירת קישור עבור "${f.displayName}"`
+        );
+        if (linkErr) throw new Error(`יצירת קישור הורדה עבור "${f.displayName}" נכשלה: ${linkErr.message}`);
+        if (!signed?.signedUrl) throw new Error(`יצירת קישור הורדה עבור "${f.displayName}" לא החזירה קישור תקין`);
+        largeFileLinks.push({ name: f.displayName, url: signed.signedUrl });
+        continue;
+      }
       sendFilesStatus(`מוריד את "${f.displayName}"...`, false);
       console.log('[confirmSendFilesToBuyer] downloading', f.storagePath);
       const { data: blob, error: dlErr } = await withTimeout(
@@ -1655,15 +1677,36 @@ async function confirmSendFilesToBuyer(){
       );
       if (dlErr) throw new Error(`הורדת "${f.displayName}" נכשלה: ${dlErr.message}`);
       if (!blob) throw new Error(`הורדת "${f.displayName}" החזירה קובץ ריק`);
+      if (blob.size > LARGE_FILE_THRESHOLD){
+        // גודל לא היה ידוע מראש (קובץ ישן בלי sizeBytes) אבל התברר כגדול
+        // בפועל אחרי ההורדה - אותו טיפול: קישור במקום צרופה, לא שגיאה.
+        sendFilesStatus(`יוצר קישור הורדה עבור "${f.displayName}" (התברר כקובץ גדול)...`, false);
+        const { data: signed, error: linkErr } = await withTimeout(
+          window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(f.storagePath, 60 * 60 * 24 * 7), 20000, `יצירת קישור עבור "${f.displayName}"`
+        );
+        if (linkErr) throw new Error(`יצירת קישור הורדה עבור "${f.displayName}" נכשלה: ${linkErr.message}`);
+        if (!signed?.signedUrl) throw new Error(`יצירת קישור הורדה עבור "${f.displayName}" לא החזירה קישור תקין`);
+        largeFileLinks.push({ name: f.displayName, url: signed.signedUrl });
+        continue;
+      }
       const base64 = await blobToBase64(blob);
       attachments.push({ base64, filename: f.displayName, contentType: blob.type || undefined });
     }
 
+    // קישורי קבצים גדולים מתווספים כטקסט רגיל בסוף גוף ההודעה - כתובת URL
+    // חשופה (לא בתוך תג HTML) כי body_text הוא טקסט רגיל; רוב לקוחות המייל
+    // הופכים אותה ללחיצה אוטומטית בכל זאת.
+    let finalBodyText = bodyText;
+    if (largeFileLinks.length){
+      finalBodyText += '\n\n---\nקבצים הבאים גדולים מדי לצירוף ישיר למייל - קישור הורדה מאובטח (בתוקף ל-7 ימים):\n' +
+        largeFileLinks.map(l => `${l.name}: ${l.url}`).join('\n');
+    }
+
     sendFilesStatus('שולח את המייל...', false);
-    console.log('[confirmSendFilesToBuyer] invoking send-match-summary', { to: buyer.email, subject, attachmentCount: attachments.length });
+    console.log('[confirmSendFilesToBuyer] invoking send-match-summary', { to: buyer.email, subject, attachmentCount: attachments.length, largeFileLinkCount: largeFileLinks.length });
     const { data, error } = await withTimeout(
       window.supabaseClient.functions.invoke('send-match-summary', {
-        body: { to: buyer.email, subject, body_text: bodyText, reply_to: CURRENT_PROFILE.email, attachments }
+        body: { to: buyer.email, subject, body_text: finalBodyText, reply_to: CURRENT_PROFILE.email, attachments }
       }), 25000, 'שליחת המייל'
     );
     console.log('[confirmSendFilesToBuyer] invoke result', { data, error });
