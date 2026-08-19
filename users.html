@@ -73,6 +73,13 @@
   .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
   .toast{position:fixed;bottom:24px;left:24px;background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.3);}
   .role-note{background:#fbf8ee;border:1px solid #e6dfc7;padding:14px 16px;border-radius:10px;font-size:.78rem;color:#665;margin-bottom:16px;line-height:1.6;}
+  @media (max-width:640px){
+    .overlay{padding:0;align-items:stretch;}
+    .modal{max-width:100%;width:100%;min-height:100%;border-radius:0;padding:16px 14px 100px;}
+    .modal h3{margin:0 0 8px;font-size:1.1rem;}
+    .form-grid{gap:8px;}
+    .modal-actions{position:fixed;bottom:0;right:0;left:0;background:#fff;padding:12px 16px;box-shadow:0 -4px 16px rgba(0,0,0,.12);margin-top:0;z-index:5;}
+  }
 </style>
 </head>
 <body>
