@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192145';
+    var PAGE_BUILD = '202608192200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1514,24 +1514,85 @@ function guessBizFileCategory(filename){
   return 'מסמך כללי';
 }
 
+// אזור הגרירה (Drop Zone) לקבצי עסק - 18.08.2026
+// עיצוב: הקופסה הקטנה (#bizDropzone) היא רק התצוגה במצב רגיל. אזור הזיהוי בפועל
+// של הגרירה הוא כל חלון העריכה של העסק (#overlay, שמכסה את כל המסך כל עוד
+// המודאל פתוח - ראו .overlay{position:fixed;inset:0} ב-css/style.css) כדי שלא
+// יהיה צורך לכוון בדיוק לקופסה הקטנה. ברגע שמתחילה גרירה מוצגת מסגרת גדולה
+// וברורה עם ההודעה "שחרר כאן להעלאת הקובץ", ובשחרור מופעל בדיוק אותו מנגנון
+// שמירה קיים (processBizFiles) - לא נגעתי בו כלל.
+let BIZ_DRAG_COUNTER = 0;
+
+function bizDropHintEl(){
+  let el = document.getElementById('bizDropHint');
+  if (!el){
+    el = document.createElement('div');
+    el.id = 'bizDropHint';
+    el.style.cssText = 'display:none;position:fixed;inset:16px;z-index:70;pointer-events:none;border:4px dashed var(--gold);border-radius:18px;background:rgba(255,250,240,.94);align-items:center;justify-content:center;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.25);';
+    el.innerHTML = `
+      <div>
+        <div style="font-size:3rem;line-height:1;">📁</div>
+        <div style="font-weight:800;color:var(--navy);font-size:1.3rem;margin-top:10px;">שחרר כאן להעלאת הקובץ</div>
+        <div style="font-size:.85rem;color:#8a8370;margin-top:6px;">PDF, Word, Excel, PowerPoint, תמונות ועוד</div>
+      </div>`;
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function showBizDropHint(){
+  const el = bizDropHintEl();
+  el.style.display = 'flex';
+  const zone = document.getElementById('bizDropzone');
+  if (zone){ zone.style.borderColor = 'var(--gold)'; zone.style.background = '#fffaf0'; }
+}
+function hideBizDropHint(){
+  const el = document.getElementById('bizDropHint');
+  if (el) el.style.display = 'none';
+  const zone = document.getElementById('bizDropzone');
+  if (zone){ zone.style.borderColor = '#d8d3c4'; zone.style.background = '#faf9f6'; }
+}
+
 function initBizDropzone(bizId){
   const zone = document.getElementById('bizDropzone');
-  if (!zone || zone.dataset.wired) return; // הטופס נטען מחדש בכל פתיחה - לא לרשום מאזינים כפולים
-  zone.dataset.wired = '1';
-  ['dragenter','dragover'].forEach(evt => zone.addEventListener(evt, e => {
+  if (!zone) return; // אין אזור קבצים (למשל עסק חדש שטרם נשמר) - אין מה לחווט
+  const overlayEl = document.getElementById('overlay');
+  if (!overlayEl || overlayEl.dataset.dropWired) return; // מחווט פעם אחת בלבד לכל חיי הדף
+  overlayEl.dataset.dropWired = '1';
+
+  // עוזר: פעיל רק כאשר טופס עריכת עסק עם אזור קבצים פתוח כרגע (ולא כל מודאל אחר
+  // באתר שמשתמש באותו #overlay/#modalBox, כמו עריכת ליד/התאמה וכו').
+  const bizFormActive = () => !!document.getElementById('bizDropzone');
+
+  overlayEl.addEventListener('dragenter', e => {
+    if (!bizFormActive()) return;
     e.preventDefault(); e.stopPropagation();
-    zone.style.borderColor = 'var(--gold)'; zone.style.background = '#fffaf0';
-  }));
-  ['dragleave','dragend'].forEach(evt => zone.addEventListener(evt, e => {
-    e.preventDefault(); e.stopPropagation();
-    zone.style.borderColor = '#d8d3c4'; zone.style.background = '#faf9f6';
-  }));
-  zone.addEventListener('drop', e => {
-    e.preventDefault(); e.stopPropagation();
-    zone.style.borderColor = '#d8d3c4'; zone.style.background = '#faf9f6';
-    const files = Array.from(e.dataTransfer.files || []);
-    if (files.length) processBizFiles(bizId, files);
+    BIZ_DRAG_COUNTER++;
+    showBizDropHint();
   });
+  overlayEl.addEventListener('dragover', e => {
+    if (!bizFormActive()) return;
+    e.preventDefault(); e.stopPropagation();
+  });
+  overlayEl.addEventListener('dragleave', e => {
+    if (!bizFormActive()) return;
+    e.preventDefault(); e.stopPropagation();
+    BIZ_DRAG_COUNTER = Math.max(0, BIZ_DRAG_COUNTER - 1);
+    if (BIZ_DRAG_COUNTER === 0) hideBizDropHint();
+  });
+  overlayEl.addEventListener('drop', e => {
+    if (!bizFormActive()) return;
+    e.preventDefault(); e.stopPropagation();
+    BIZ_DRAG_COUNTER = 0;
+    hideBizDropHint();
+    const files = Array.from(e.dataTransfer.files || []);
+    const activeBizId = document.getElementById('bizForm')?.dataset.bizId || bizId;
+    if (files.length) processBizFiles(activeBizId, files);
+  });
+
+  // רשת ביטחון: כל עוד טופס עריכת עסק עם אזור קבצים פתוח, לא לתת לדפדפן לפתוח
+  // קובץ שנגרר ושוחרר בטעות מחוץ ל-overlay עצמו (למשל בקצה החלון/פס גלילה).
+  document.addEventListener('dragover', e => { if (bizFormActive()) e.preventDefault(); });
+  document.addEventListener('drop', e => { if (bizFormActive() && e.target === document.body) e.preventDefault(); });
 }
 function handleBizFileInputChange(event, bizId){
   const files = Array.from(event.target.files || []);
