@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608200045';
+    var PAGE_BUILD = '202608200115';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -388,6 +388,22 @@ function anonFileIndicatorBadge(bizId){
   const count = ANON_FILE_COUNT_BY_BIZ[bizId] || 0;
   if (!count) return '';
   return `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="נמצאו ${count} קבצים ששמם מזהה אותם כאנונימיים - זמינים גם בטאב עסקים אנונימיים" style="cursor:pointer;background:#e8f0fe;color:#1a56db;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">📎 יש קובץ אנונימי${count > 1 ? ' (' + count + ')' : ''}</span>`;
+}
+// כל עדכון לכרטיס עסק (העלאת קובץ חדש, שינוי שם קובץ שמוסיף/מסיר "אנונימי",
+// מחיקת קובץ) חייב לעדכן מייד את הסימונים ברשימה - לא לחכות לרענון דף מלא.
+// נקרא מתוך loadBizFiles() בכל שלושת המקרים (processBizFiles/saveBizFileMeta/
+// deleteBizFile כולם מסתיימים בקריאה ל-loadBizFiles), כך שמקום אחד מכסה הכול.
+// לא שאילתה נוספת ל-DB - נעשה שימוש ברשימת הקבצים שכבר נטענה הרגע (merged).
+function refreshAnonFileIndicatorForBiz(bizId, files){
+  const count = (files || []).filter(f => isAnonFileName(f.displayName)).length;
+  if (count > 0) ANON_FILE_COUNT_BY_BIZ[bizId] = count;
+  else delete ANON_FILE_COUNT_BY_BIZ[bizId];
+  // הרשימה עצמה יכולה להיות מוסתרת מאחורי המודאל של הטופס כרגע - זה בסדר,
+  // rerender כאן מבטיח שהיא כבר מעודכנת ברגע שהמודאל ייסגר, בלי לחכות
+  // לרענון דף מלא. renderTable תלוי ב-ALL_BIZ/DOM שכבר קיימים בדף הזה תמיד.
+  if (typeof renderTable === 'function' && Array.isArray(ALL_BIZ) && document.getElementById('bizBody')){
+    renderTable();
+  }
 }
 // עמודת "חומר אנונימי" בטבלה הראשית - עד 19.08.2026 הסתמכה אך ורק על עמודת
 // ה-DB הישנה anon_presentation_name (סלוט מצגת בודד וישן, לא מתעדכן יותר
@@ -1918,6 +1934,7 @@ async function loadBizFiles(bizId){
     };
   });
   BIZ_FILES_CACHE[bizId] = merged;
+  refreshAnonFileIndicatorForBiz(bizId, merged);
 
   if (!merged.length){ box.innerHTML = '<span style="color:#999;">אין קבצים מצורפים עדיין</span>'; return; }
   box.innerHTML = merged.map((f, idx) => `
