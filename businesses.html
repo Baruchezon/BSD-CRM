@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192010';
+    var PAGE_BUILD = '202608192045';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -352,13 +352,22 @@ async function loadGrantCounts(){
   if (error || !data) return;
   data.forEach(g => { GRANT_COUNTS[g.business_id] = (GRANT_COUNTS[g.business_id] || 0) + 1; });
 }
+function agreementListBadge(status){
+  return status === 'יש הסכם חתום'
+    ? `<span style="background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">✅ הסכם חתום</span>`
+    : `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">⭕ אין הסכם חתום</span>`;
+}
+function anonStatusBadge(b){
+  return b.anon_card_active
+    ? `<span style="background:#e8f0fe;color:#1a56db;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">🪪 אנונימי: כן</span>`
+    : `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">🪪 אנונימי: לא</span>`;
+}
 function distributionBadge(b){
   const grantCount = GRANT_COUNTS[b.id] || 0;
   const parts = [];
   if (b.anon_summary || b.anon_display_name) parts.push(`<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="קיים תקציר אנונימי שמור - לחץ לצפייה/עריכה" style="cursor:pointer;background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">✓ אנונימי מוכן</span>`);
-  if (b.anon_card_active) parts.push(`<span style="background:#e8f0fe;color:#1a56db;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">🪪 הופץ אנונימית</span>`);
   if (grantCount > 0) parts.push(`<span style="background:#fff8e6;color:#8a5a00;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">🔓 גישה מלאה: ${grantCount}</span>`);
-  if (!parts.length) return `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">⚪ לא הופץ</span>`;
+  if (!parts.length) return '';
   return parts.join(' ');
 }
 
@@ -522,7 +531,7 @@ function renderTable(){
             </div>
             ${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}
             ${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}
-            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${distributionBadge(b)}</div>
+            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${anonStatusBadge(b)}${distributionBadge(b)}</div>
           </div>
         </div>
       </td>
