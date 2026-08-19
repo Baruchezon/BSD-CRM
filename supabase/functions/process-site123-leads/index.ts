@@ -23,7 +23,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { ImapFlow } from 'npm:imapflow@1';
 import { simpleParser } from 'npm:mailparser@3';
 import webpush from 'npm:web-push@3';
-import { parseSite123Body, classifyPurpose, findDuplicate, last9Digits, stripPipes, isSite123LeadEmail } from './lib.ts';
+import { parseSite123Body, classifyPurpose, findDuplicate, last9Digits, stripPipes, isSite123LeadEmail, resolveDisplayName } from './lib.ts';
 
 const SITE123_SENDER = 'info@site123.com';
 const SUBJECT_MARK = 'קיבלת הודעה חדשה מהאתר';
@@ -109,11 +109,18 @@ async function processOneEmail(row: {
   }
 
   const adminId = await getAdminProfileId();
-  const displayName = parsed.fullName || '(ללא שם)';
+  // שם התצוגה של הליד: אף פעם לא שם בעל התיבה/BSD, ואף פעם לא מומצא - אם
+  // אין שם ברור בשדה "שם ושם משפחה" של הטופס, "שם לא זוהה" בלבד.
+  const displayName = resolveDisplayName(parsed.fullName);
 
   if (existing) {
     // ---- מיזוג לתוך ליד קיים - לא נוצר כרטיס כפול ----
-    const addNote = `\n\n[קליטה אוטומטית מהאתר ${nowStr}] פנייה נוספת מ-${displayName}. מטרה: ${parsed.purpose || '—'}. הודעה: ${parsed.message || '—'} (תאריך בטופס: ${parsed.dateField || '—'})`;
+    // שני השמות מוצגים בנפרד ובבירור בהערה, כדי שלעולם לא ייראה כאילו שם
+    // הפונה החדש "התחלף" בשם הרשומה הקיימת - הרשומה הקיימת לא משנה שם.
+    const sameName = (existing.full_name || '').trim() === displayName.trim();
+    const addNote = `\n\n[קליטה אוטומטית מהאתר ${nowStr}] התקבלה פנייה נוספת בטלפון/מייל התואמים לרשומה זו.\n`
+      + `שם הפונה בטופס הנוכחי: ${displayName}${sameName ? '' : ` (שונה משם הרשומה הקיימת: ${existing.full_name || 'שם לא זוהה'})`}\n`
+      + `מטרה: ${parsed.purpose || '—'} | הודעה: ${parsed.message || '—'} | תאריך בטופס: ${parsed.dateField || '—'}`;
     const { error: updErr } = await supabase.from('leads').update({
       notes: (existing.notes || '') + addNote
     }).eq('id', existing.id);
@@ -121,21 +128,21 @@ async function processOneEmail(row: {
 
     await supabase.from('audit_log').insert({
       table_name: 'leads', record_id: existing.id, action: 'update',
-      actor_id: adminId, details: { source: 'site123_email_intake', kind: 'repeat_contact', gmail_message_id: row.gmail_message_id }
+      actor_id: adminId, details: { source: 'site123_email_intake', kind: 'repeat_contact', gmail_message_id: row.gmail_message_id, submitted_name: displayName }
     });
 
     const { data: task } = await supabase.from('tasks').insert({
-      title: `פנייה חוזרת מ-${displayName} - בדוק ליד קיים`,
-      description: `התקבלה פנייה נוספת מהאתר מאדם שכבר קיים במערכת (${existing.full_name || displayName}). מטרה: ${parsed.purpose || '—'}. הודעה: ${parsed.message || '—'}`,
+      title: `פנייה חוזרת מ-${displayName} - בדוק ליד קיים (${existing.full_name || 'שם לא זוהה'})`,
+      description: `התקבלה פנייה נוספת מהאתר בשם "${displayName}", בטלפון/מייל שכבר שייכים לרשומה קיימת בשם "${existing.full_name || 'שם לא זוהה'}". מטרה: ${parsed.purpose || '—'}. הודעה: ${parsed.message || '—'}`,
       priority: 'גבוהה', assigned_to: adminId, status: 'פתוחה',
       related_type: 'lead', related_id: existing.id
     }).select('id').single();
 
     await sendPushToAdmins({
       title: '🔁 פנייה חוזרת מהאתר',
-      body: `${displayName} כבר קיים במערכת - התקבלה פנייה נוספת (${parsed.purpose || 'ללא ציון מטרה'})`,
+      body: `${displayName} - הטלפון/מייל כבר שייכים לרשומה קיימת (${existing.full_name || 'שם לא זוהה'})`,
       kind: 'morning',
-      url: `leads.html?open=${existing.id}`,
+      url: `lead-alert.html?id=${existing.id}&kind=repeat`,
       tag: `bsd-site123-${row.id}`
     });
 
@@ -147,7 +154,7 @@ async function processOneEmail(row: {
   }
 
   // ---- ליד חדש ----
-  const nameParts = displayName.split(/\s+/).filter(Boolean);
+  const nameParts = displayName === 'שם לא זוהה' ? [] : displayName.split(/\s+/).filter(Boolean);
   const firstName = nameParts[0] || null;
   const lastName = nameParts.slice(1).join(' ') || null;
 
@@ -192,7 +199,7 @@ async function processOneEmail(row: {
     title: '🆕 ליד חדש התקבל מהאתר',
     body: `${displayName} | ${typeLabel}${parsed.phone ? ' | ' + parsed.phone : ''}${needsReview ? ' | ⚠️ נדרש סיווג' : ''}`,
     kind: 'morning',
-    url: `leads.html?open=${newLead.id}`,
+    url: `lead-alert.html?id=${newLead.id}&kind=new`,
     tag: `bsd-site123-${row.id}`
   });
 

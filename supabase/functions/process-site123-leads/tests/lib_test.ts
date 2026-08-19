@@ -203,3 +203,71 @@ Deno.test('last9Digits normalizes different Israeli phone formats to the same va
   const normalized = forms.map(last9Digits);
   for (const n of normalized) assertEquals(n, '525245601');
 });
+
+// ============================================================================
+// בדיקות נוספות (19.08.2026, בעקבות הדרישה לבדוק את כל שרשרת זיהוי השם):
+// מכסות במפורש את התרחישים שהוא ביקש לבדוק בעצמי: שם שולח טכני הוא BSD/ברוך
+// איזון אבל בטופס יש שם לקוח אחר, ליד ללא שם בכלל, ואי-החלפה בשם בעל התיבה.
+// ============================================================================
+import { resolveDisplayName, isForbiddenName } from '../lib.ts';
+
+Deno.test('resolveDisplayName never returns the mailbox owner name, even if somehow extracted', () => {
+  assertEquals(resolveDisplayName('ברוך איזון'), 'שם לא זוהה');
+  assertEquals(resolveDisplayName('BSD'), 'שם לא זוהה');
+  assertEquals(resolveDisplayName('BSD-Business Brokers Israel'), 'שם לא זוהה');
+});
+
+Deno.test('resolveDisplayName keeps a real customer name untouched, even when it shares a word with a forbidden name', () => {
+  // "ברוך" בלבד (שם פרטי נפוץ) לא אמור להיחסם - רק ההתאמה המלאה לשם בעל התיבה
+  assertEquals(resolveDisplayName('ברוך כהן'), 'ברוך כהן');
+  assertEquals(resolveDisplayName('יבגני אריה'), 'יבגני אריה');
+});
+
+Deno.test('resolveDisplayName: no name in the form at all -> "שם לא זוהה", never invented', () => {
+  assertEquals(resolveDisplayName(''), 'שם לא זוהה');
+  assertEquals(resolveDisplayName('   '), 'שם לא זוהה');
+});
+
+Deno.test('scenario: technical sender is BSD/Baruch but the form itself names a different customer - the customer name wins', () => {
+  // מדמה בדיוק את התרחיש שהתבקש: מייל שמגיע מ-info@site123.com (ה"שולח
+  // הטכני" תמיד זהה, לא קשור לפונה) אך בגוף הטופס יש שם לקוח אחר לגמרי -
+  // הפרסינג קורא רק מהשדה "שם ושם משפחה" בגוף הטופס, לעולם לא מכותרת השולח.
+  const email = `שלום, קיבלת הודעה חדשה! שם ושם משפחה: משה לוי כתובת מגורים, עיר: אשדוד טלפון: 0521112222 כתובת הדואר האלקטרוני שלך: moshe@example.com מטרת הפנייה: לקנות עסק, הודעה (מומלץ לרשום כמה מילים): מחפש עסק בתחום המזון שדה תאריך: 19/08/2026`;
+  const p = parseSite123Body(email);
+  const display = resolveDisplayName(p.fullName);
+  assertEquals(display, 'משה לוי');
+  assertEquals(isForbiddenName(display), false);
+});
+
+Deno.test('scenario: lead with no name field filled -> displays as שם לא זוהה, not blank and not the mailbox owner', () => {
+  const email = `שלום, קיבלת הודעה חדשה! שם ושם משפחה: כתובת מגורים, עיר: ראשון לציון טלפון: 0538889999 כתובת הדואר האלקטרוני שלך: noname@example.com מטרת הפנייה: לקנות עסק, הודעה (מומלץ לרשום כמה מילים): מתעניין שדה תאריך:`;
+  const p = parseSite123Body(email);
+  assertEquals(p.fullName, '');
+  const display = resolveDisplayName(p.fullName);
+  assertEquals(display, 'שם לא זוהה');
+});
+
+Deno.test('scenario: buyer lead end-to-end field extraction matches classification', () => {
+  const email = `שם ושם משפחה: דנה כץ כתובת מגורים, עיר: רעננה טלפון: 0541234567 כתובת הדואר האלקטרוני שלך: dana@example.com מטרת הפנייה: לקנות עסק, הודעה (מומלץ לרשום כמה מילים): מחפשת עסק ברשתות שיווק שדה תאריך: 19/08/2026`;
+  const p = parseSite123Body(email);
+  const c = classifyPurpose(p.purpose);
+  assertEquals(resolveDisplayName(p.fullName), 'דנה כץ');
+  assertEquals(c.type, 'buyer');
+});
+
+Deno.test('scenario: seller lead end-to-end field extraction matches classification', () => {
+  const email = `שם ושם משפחה: אבי לוי כתובת מגורים, עיר: נתניה טלפון: 0549876543 כתובת הדואר האלקטרוני שלך: avi.seller@example.com מטרת הפנייה: למכור עסק, הודעה (מומלץ לרשום כמה מילים): מוכר מסעדה שדה תאריך: 19/08/2026`;
+  const p = parseSite123Body(email);
+  const c = classifyPurpose(p.purpose);
+  assertEquals(resolveDisplayName(p.fullName), 'אבי לוי');
+  assertEquals(c.type, 'seller');
+});
+
+Deno.test('scenario: duplicate lead by phone is correctly identified as a merge candidate, keeping the existing record\'s own name unchanged', () => {
+  const existingCandidates = [
+    { id: 'existing-1', full_name: 'לקוח קיים', phone: '054-1112222', phone2: null, email: 'old@example.com', updated_at: '2026-01-01T00:00:00Z' }
+  ];
+  const dup = findDuplicate('0541112222', 'newemail@example.com', existingCandidates);
+  assertEquals(dup?.id, 'existing-1');
+  assertEquals(dup?.full_name, 'לקוח קיים'); // השם של הרשומה הקיימת לא משתנה במיזוג
+});
