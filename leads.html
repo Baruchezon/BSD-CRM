@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608191900';
+    var PAGE_BUILD = '202608191945';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -154,6 +154,7 @@
       <a href="messages.html?admin_view=1" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ כל ההודעות במערכת</a>
       <a href="stats.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 סטטיסטיקה</a>
       <a href="users.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👥 משתמשים</a>
+      <a href="anon-distributions.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 דוח הפצת אנונימי</a>
     </div>
   </div>
     <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
@@ -656,6 +657,7 @@ function openLeadForm(id, forcedType){
   modal.innerHTML = `
     <h3>${lead ? 'עריכת' : 'הוספת'} ${typeLabel}</h3>
     ${lead ? agreementBanner(lead.agreement_status, lead.agreement_number, 'leads', lead.id, lead.agreement_pdf_path, lead.agreement_pdf_uploaded_at) : ''}
+    ${lead && type === 'buyer' ? '<div id="anonReceivedBox" style="margin-bottom:10px;"></div>' : ''}
     ${lead ? '' : `<div class="type-toggle">
       <button type="button" class="${type==='buyer'?'active buyer':''}" onclick="switchLeadType('buyer', null)">קונה</button>
       <button type="button" class="${type==='partner'?'active partner':''}" onclick="switchLeadType('partner', null)">שותפות/השקעה</button>
@@ -749,6 +751,40 @@ function openLeadForm(id, forcedType){
   document.getElementById('leadForm').dataset.leadType = type;
   document.getElementById('leadForm').addEventListener('submit', saveLead);
   if (lead) loadLeadMeetings(lead.id);
+  if (lead && type === 'buyer') loadAnonReceived(lead.id);
+}
+
+// סעיף 6 באפיון: מה קיבל הקונה - אילו עסקים אנונימיים, מתי, ממי, ובאיזה סטטוס
+async function loadAnonReceived(buyerId){
+  const box = document.getElementById('anonReceivedBox');
+  if (!box) return;
+  const { data, error } = await window.supabaseClient
+    .from('anon_distributions')
+    .select('id, business_id, sender_user_id, followup_status, delivery_status, sent_at')
+    .eq('buyer_id', buyerId)
+    .order('sent_at', { ascending: false });
+  if (error || !data || !data.length){ box.innerHTML = ''; return; }
+  box.innerHTML = `
+    <div style="background:#eef4fb;border:1px solid #cddcef;border-radius:8px;padding:10px 12px;font-size:.8rem;">
+      <b>📥 חומר אנונימי שהתקבל:</b>
+      <div style="margin-top:6px;">
+        ${data.map(d => `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:.78rem;">
+            <span>${fmtDate(d.sent_at)} · נשלח ע"י ${esc(userName(d.sender_user_id))}${d.delivery_status==='failed' ? ' (שליחה נכשלה)' : ''}</span>
+            <select onchange="updateAnonFollowup('${d.id}', this.value)" style="font-size:.75rem;padding:2px 4px;">
+              ${['נשלח','התקבל','נוצר קשר','הקונה מתעניין','מבקש פרטים מלאים','בקשת שחרור נשלחה','פרטים שוחררו','פגישה נקבעה','לא רלוונטי','נדחה']
+                .map(s => `<option value="${esc(s)}" ${d.followup_status===s?'selected':''}>${esc(s)}</option>`).join('')}
+            </select>
+          </div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+async function updateAnonFollowup(distId, status){
+  const { error } = await window.supabaseClient.from('anon_distributions').update({ followup_status: status }).eq('id', distId);
+  if (error){ toast('שגיאה בעדכון סטטוס: ' + error.message); return; }
+  toast('סטטוס עודכן');
 }
 
 async function loadLeadMeetings(leadId){

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<script>
+(function(){
+  try{
+    var PAGE_BUILD = '202608191945';
+    window.PAGE_BUILD = PAGE_BUILD;
+    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - דוח הפצת חומר אנונימי</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=202608141700">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+  .toolbar h2{margin:0;color:var(--navy);font-size:1.3rem;}
+  .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px;}
+  .kpi{background:#fff;border-radius:12px;padding:14px 10px;text-align:center;box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 4px 12px rgba(14,27,52,.08);}
+  .kpi .num{font-size:1.4rem;font-weight:800;color:var(--navy);}
+  .kpi .lbl{font-size:.68rem;color:#888;margin-top:2px;}
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .filters input, .filters select{padding:9px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .filters input[type=text]{min-width:180px;}
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 8px 20px rgba(14,27,52,.10), 0 2px 6px rgba(14,27,52,.06);}
+  thead th{background:var(--navy);color:#fff;padding:10px 12px;font-size:.76rem;text-align:right;white-space:nowrap;}
+  tbody td{padding:9px 12px;border-bottom:1px solid #f0ede4;font-size:.8rem;}
+  tbody tr:hover{background:#faf8f2;}
+  .empty-row td{text-align:center;color:#999;padding:30px;}
+  .badge{padding:3px 9px;border-radius:12px;font-size:.7rem;font-weight:700;white-space:nowrap;}
+  .badge-sent{background:#e6f4ea;color:#1e7b34;}
+  .badge-failed{background:#fbe9e7;color:#b3402c;}
+  .badge-pending{background:#fff8e6;color:#8a5a00;}
+  .no-access{max-width:520px;margin:80px auto;text-align:center;background:#fff;border-radius:14px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,.15);}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span id="bsdVerLabel" style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה</span><script>(function(){var e=document.getElementById('bsdVerLabel');var b=window.PAGE_BUILD;if(e&&b&&b.length>=12){e.textContent='גרסה '+b.slice(6,8)+'.'+b.slice(4,6)+'.'+b.slice(0,4)+' '+b.slice(8,10)+':'+b.slice(10,12);}})();</script></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+  <div class="nav">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+    <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+  </div>
+</div>
+
+<div class="wrap" id="mainWrap" style="display:none;">
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <div class="toolbar">
+    <h2>📊 דוח הפצת חומר אנונימי</h2>
+  </div>
+
+  <div class="filters">
+    <select id="fUser"><option value="">כל המשתמשים</option></select>
+    <select id="fBusiness"><option value="">כל העסקים</option></select>
+    <select id="fBuyer"><option value="">כל הקונים</option></select>
+    <input type="date" id="fDateFrom" title="מתאריך">
+    <input type="date" id="fDateTo" title="עד תאריך">
+    <select id="fStatus"><option value="">כל סטטוסי התהליך</option></select>
+    <select id="fDelivery">
+      <option value="">כל סטטוסי השליחה</option>
+      <option value="sent">נשלח בהצלחה</option>
+      <option value="failed">נכשל</option>
+      <option value="pending">ממתין</option>
+    </select>
+    <select id="fAccessReq">
+      <option value="">גישה מלאה - הכל</option>
+      <option value="yes">רק עם בקשת שחרור</option>
+      <option value="no">רק בלי בקשת שחרור</option>
+    </select>
+    <button class="btn btn-ghost" onclick="applyFilters()">🔍 סנן</button>
+    <button class="btn btn-ghost" onclick="clearFilters()">נקה סינון</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>תאריך ושעה</th>
+        <th>עסק אנונימי</th>
+        <th>קובץ</th>
+        <th>קונה</th>
+        <th>נשלח ע"י</th>
+        <th>ערוץ</th>
+        <th>סטטוס שליחה</th>
+        <th>סטטוס תהליך</th>
+        <th>בקשת שחרור</th>
+      </tr>
+    </thead>
+    <tbody id="tblBody"><tr class="empty-row"><td colspan="9">טוען...</td></tr></tbody>
+  </table>
+</div>
+
+<div class="no-access" id="noAccess" style="display:none;">
+  <h2>אין הרשאה</h2>
+  <p>דף זה זמין למנהלי המערכת בלבד.</p>
+  <a href="app.html" class="btn btn-primary" style="text-decoration:none;display:inline-block;margin-top:10px;">חזרה ללוח הבקרה</a>
+</div>
+
+<div id="toastBox"></div>
+
+<script src="js/config.js?v=202608111530"></script>
+<script src="js/supabaseClient.js?v=202608111530"></script>
+<script src="js/auth.js?v=202608181530"></script>
+<script>
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
+function toast(msg){
+  const box = document.getElementById('toastBox');
+  const el = document.createElement('div');
+  el.textContent = msg;
+  el.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#0e1b34;color:#fff;padding:10px 16px;border-radius:8px;font-size:.85rem;z-index:9999;box-shadow:0 8px 20px rgba(0,0,0,.3);';
+  box.appendChild(el);
+  setTimeout(()=>el.remove(), 3500);
+}
+
+const FOLLOWUP_STATUSES = ['נשלח','התקבל','נוצר קשר','הקונה מתעניין','מבקש פרטים מלאים','בקשת שחרור נשלחה','פרטים שוחררו','פגישה נקבעה','לא רלוונטי','נדחה'];
+
+let ALL_ROWS = [];
+let USERS_MAP = {}, BIZ_MAP = {}, BUYER_MAP = {};
+
+async function loadReport(){
+  const { data: dist, error } = await window.supabaseClient
+    .from('anon_distributions')
+    .select('*')
+    .order('sent_at', { ascending: false });
+  if (error){
+    document.getElementById('tblBody').innerHTML = `<tr class="empty-row"><td colspan="9" style="color:#b3402c;">שגיאה: ${esc(error.message)}</td></tr>`;
+    return;
+  }
+  ALL_ROWS = dist || [];
+
+  const bizIds = [...new Set(ALL_ROWS.map(r => r.business_id))];
+  const buyerIds = [...new Set(ALL_ROWS.map(r => r.buyer_id))];
+  const fileIds = [...new Set(ALL_ROWS.map(r => r.anon_file_id))];
+  const userIds = [...new Set(ALL_ROWS.map(r => r.sender_user_id))];
+
+  const [{ data: bizData }, { data: buyerData }, { data: fileData }, { data: userData }] = await Promise.all([
+    bizIds.length ? window.supabaseClient.from('businesses').select('id, internal_name, anon_display_name').in('id', bizIds) : { data: [] },
+    buyerIds.length ? window.supabaseClient.from('leads').select('id, full_name, first_name, last_name').in('id', buyerIds) : { data: [] },
+    fileIds.length ? window.supabaseClient.from('business_sale_files').select('id, file_name').in('id', fileIds) : { data: [] },
+    userIds.length ? window.supabaseClient.from('profiles').select('id, full_name, email').in('id', userIds) : { data: [] },
+  ]);
+  BIZ_MAP = {}; (bizData||[]).forEach(b => BIZ_MAP[b.id] = b);
+  BUYER_MAP = {}; (buyerData||[]).forEach(b => BUYER_MAP[b.id] = b);
+  const FILE_MAP = {}; (fileData||[]).forEach(f => FILE_MAP[f.id] = f);
+  USERS_MAP = {}; (userData||[]).forEach(u => USERS_MAP[u.id] = u);
+  window.FILE_MAP = FILE_MAP;
+
+  populateFilterOptions();
+  renderKpis(ALL_ROWS);
+  renderTable(ALL_ROWS);
+}
+
+function populateFilterOptions(){
+  const userSel = document.getElementById('fUser');
+  const bizSel = document.getElementById('fBusiness');
+  const buyerSel = document.getElementById('fBuyer');
+  const statusSel = document.getElementById('fStatus');
+  Object.values(USERS_MAP).forEach(u => {
+    const o = document.createElement('option'); o.value = u.id; o.textContent = u.full_name || u.email;
+    userSel.appendChild(o);
+  });
+  Object.values(BIZ_MAP).forEach(b => {
+    const o = document.createElement('option'); o.value = b.id; o.textContent = b.internal_name || b.anon_display_name || 'עסק';
+    bizSel.appendChild(o);
+  });
+  Object.values(BUYER_MAP).forEach(b => {
+    const o = document.createElement('option'); o.value = b.id; o.textContent = b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || 'קונה';
+    buyerSel.appendChild(o);
+  });
+  FOLLOWUP_STATUSES.forEach(s => {
+    const o = document.createElement('option'); o.value = s; o.textContent = s;
+    statusSel.appendChild(o);
+  });
+}
+
+function renderKpis(rows){
+  const total = rows.length;
+  const uniqueBuyers = new Set(rows.map(r=>r.buyer_id)).size;
+  const uniqueSenders = new Set(rows.map(r=>r.sender_user_id)).size;
+  const interested = rows.filter(r => ['הקונה מתעניין','מבקש פרטים מלאים','בקשת שחרור נשלחה','פרטים שוחררו','פגישה נקבעה'].includes(r.followup_status)).length;
+  const failed = rows.filter(r => r.delivery_status === 'failed').length;
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi"><div class="num">${total}</div><div class="lbl">סה"כ הפצות</div></div>
+    <div class="kpi"><div class="num">${uniqueBuyers}</div><div class="lbl">קונים שונים</div></div>
+    <div class="kpi"><div class="num">${uniqueSenders}</div><div class="lbl">סוכנים פעילים</div></div>
+    <div class="kpi"><div class="num">${interested}</div><div class="lbl">מתעניינים</div></div>
+    <div class="kpi"><div class="num">${failed}</div><div class="lbl">שליחות שנכשלו</div></div>
+  `;
+}
+
+function deliveryBadge(status){
+  if (status === 'sent') return `<span class="badge badge-sent">נשלח בהצלחה</span>`;
+  if (status === 'failed') return `<span class="badge badge-failed">נכשל</span>`;
+  return `<span class="badge badge-pending">ממתין</span>`;
+}
+
+function renderTable(rows){
+  const body = document.getElementById('tblBody');
+  if (!rows.length){ body.innerHTML = `<tr class="empty-row"><td colspan="9">לא נמצאו הפצות תואמות</td></tr>`; return; }
+  body.innerHTML = rows.map(r => {
+    const biz = BIZ_MAP[r.business_id];
+    const buyer = BUYER_MAP[r.buyer_id];
+    const sender = USERS_MAP[r.sender_user_id];
+    const file = window.FILE_MAP[r.anon_file_id];
+    return `<tr>
+      <td>${fmtDateTime(r.sent_at)}</td>
+      <td>${esc(biz ? (biz.internal_name || biz.anon_display_name) : '—')}</td>
+      <td>${esc(file ? file.file_name : '—')}</td>
+      <td>${esc(buyer ? (buyer.full_name || [buyer.first_name,buyer.last_name].filter(Boolean).join(' ')) : '—')}</td>
+      <td>${esc(sender ? (sender.full_name || sender.email) : '—')}</td>
+      <td>${r.channel === 'whatsapp' ? '📱 WhatsApp' : '📧 מייל'}</td>
+      <td>${deliveryBadge(r.delivery_status)}${r.delivery_error ? `<div style="font-size:.68rem;color:#b3402c;margin-top:2px;">${esc(r.delivery_error)}</div>` : ''}</td>
+      <td>${esc(r.followup_status)}</td>
+      <td>${r.access_request_id ? '🔓 כן' : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function applyFilters(){
+  const user = document.getElementById('fUser').value;
+  const biz = document.getElementById('fBusiness').value;
+  const buyer = document.getElementById('fBuyer').value;
+  const dateFrom = document.getElementById('fDateFrom').value;
+  const dateTo = document.getElementById('fDateTo').value;
+  const status = document.getElementById('fStatus').value;
+  const delivery = document.getElementById('fDelivery').value;
+  const accessReq = document.getElementById('fAccessReq').value;
+
+  let filtered = ALL_ROWS.filter(r => {
+    if (user && r.sender_user_id !== user) return false;
+    if (biz && r.business_id !== biz) return false;
+    if (buyer && r.buyer_id !== buyer) return false;
+    if (status && r.followup_status !== status) return false;
+    if (delivery && r.delivery_status !== delivery) return false;
+    if (accessReq === 'yes' && !r.access_request_id) return false;
+    if (accessReq === 'no' && r.access_request_id) return false;
+    if (dateFrom && r.sent_at < dateFrom) return false;
+    if (dateTo && r.sent_at > dateTo + 'T23:59:59') return false;
+    return true;
+  });
+  renderKpis(filtered);
+  renderTable(filtered);
+}
+
+function clearFilters(){
+  ['fUser','fBusiness','fBuyer','fDateFrom','fDateTo','fStatus','fDelivery','fAccessReq'].forEach(id => document.getElementById(id).value = '');
+  renderKpis(ALL_ROWS);
+  renderTable(ALL_ROWS);
+}
+
+(async function init(){
+  const profile = await requireAuth();
+  if (!profile) return;
+  if (!['admin','manager'].includes(profile.role)){
+    document.getElementById('noAccess').style.display = 'block';
+    return;
+  }
+  document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+  document.getElementById('mainWrap').style.display = 'block';
+  await loadReport();
+})();
+</script>
+</body>
+</html>
