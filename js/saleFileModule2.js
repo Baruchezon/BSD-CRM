@@ -98,6 +98,10 @@ async function loadSaleFileModule(bizId){
     (SF_FILES_BY_CATEGORY[f.category] = SF_FILES_BY_CATEGORY[f.category] || []).push(f);
   });
   renderSaleFileCards(bizId);
+  // רענון הסימון "מצגת אנונימית: יש/אין" ברשימה הראשית של עסקים, אם היא טעונה כרגע
+  if (typeof loadAnonPresentationIndicator === 'function' && typeof renderTable === 'function'){
+    loadAnonPresentationIndicator().then(renderTable).catch(()=>{});
+  }
 }
 
 function renderSaleFileCards(bizId){

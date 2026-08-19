@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192045';
+    var PAGE_BUILD = '202608192100';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -231,7 +231,7 @@
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608132300"></script>
-<script src="js/saleFileModule2.js?v=202608192010"></script>
+<script src="js/saleFileModule2.js?v=202608192100"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script>
 let ALL_BIZ = [];
@@ -308,6 +308,7 @@ async function loadBusinesses(){
   ALL_BIZ = (data || []).filter(b => b.agreement_status === 'נשלח הסכם לחתימה' || b.agreement_status === 'יש הסכם חתום');
   await loadGrantCounts();
   await loadFilesIndicator();
+  await loadAnonPresentationIndicator();
   populateFilters();
   renderTable();
   await maybeHandleUrlParams();
@@ -321,6 +322,25 @@ async function loadBusinesses(){
 // business_access_grants פעילים) - לא state זמני בדפדפן.
 // ============================================================
 let GRANT_COUNTS = {};
+let ANON_PRESENTATION_MAP = {}; // business_id -> true if a category='anon_presentation' file exists (confidentiality 1, active)
+async function loadAnonPresentationIndicator(){
+  ANON_PRESENTATION_MAP = {};
+  const ids = ALL_BIZ.map(b => b.id);
+  if (!ids.length) return;
+  const { data, error } = await window.supabaseClient
+    .from('business_sale_files')
+    .select('business_id')
+    .eq('category', 'anon_presentation')
+    .eq('status', 'active')
+    .in('business_id', ids);
+  if (error){ console.warn('טעינת מצב מצגת אנונימית נכשלה:', error.message); return; }
+  (data || []).forEach(f => { ANON_PRESENTATION_MAP[f.business_id] = true; });
+}
+function anonPresentationBadge(bizId){
+  return ANON_PRESENTATION_MAP[bizId]
+    ? `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="קיימת מצגת אנונימית מוכנה לשליחה - לחץ לצפייה" style="cursor:pointer;background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">📊 מצגת אנונימית: יש</span>`
+    : `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">📊 מצגת אנונימית: אין</span>`;
+}
 // מספר קבצים בפועל לכל עסק - מבוסס אך ורק על אזור "קבצים מצורפים" המאוחד
 // (אותו מקור אמת בדיוק כמו loadBizFiles בכרטיס העסק: Storage.list() מסונן
 // לרשומות עם id בלבד, כי תיקיות משנה כמו sale-file/ מוחזרות בלי id ולא
@@ -531,7 +551,7 @@ function renderTable(){
             </div>
             ${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}
             ${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}
-            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${anonStatusBadge(b)}${distributionBadge(b)}</div>
+            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${anonStatusBadge(b)}${anonPresentationBadge(b.id)}${distributionBadge(b)}</div>
           </div>
         </div>
       </td>
