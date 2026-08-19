@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192200';
+    var PAGE_BUILD = '202608192330';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1042,23 +1042,69 @@ async function loadAnonymousBusinesses(){
   renderAnonBizGrid();
 }
 
-// קבצים אנונימיים (confidentiality_level=1) לכל העסקים המוצגים במסך האנונימי -
-// נטענים כאן בבת אחת (לא per-card) כדי לא ליצור עשרות שאילתות. ה-RLS כבר
-// מוודא שרק קבצים שסומנו כאנונימיים ועסק פעיל-אנונימית מוחזרים בפועל.
+// זיהוי "קובץ אנונימי" לפי שם בלבד - תואם בדיוק ל-is_anon_filename() ב-DB
+// (2026-08-19j_anon_files_by_filename.sql). "אנונימי" הוא תת-מחרוזת של
+// "אנונימית", אז תבנית אחת מכסה את שתי הצורות מסעיף 2 באפיון.
+function isAnonFileName(name){ return /אנונימי/.test(name || ''); }
+// סיווג תצוגה לפי סעיפים 3-4 באפיון - "מצגת אנונימית"/"תקציר אנונימי"/כללי.
+function classifyAnonFileName(name){
+  const n = name || '';
+  if (/מצגת/.test(n)) return 'מצגת אנונימית';
+  if (/תקציר/.test(n)) return 'תקציר אנונימי';
+  return 'קובץ אנונימי';
+}
+
+// קבצים אנונימיים לכל העסקים המוצגים במסך האנונימי - נטענים כאן בבת אחת
+// (לא per-card) כדי לא ליצור עשרות שאילתות. שני מקורות אפשריים, ה-RLS
+// בכל אחד מהם דואג בעצמו שרק קבצים תקינים מוחזרים:
+//  1. business_sale_files עם confidentiality_level=1 (תיק מכירה, סימון ידני)
+//  2. business_file_meta שבשם שלו מופיעה "אנונימי"/"אנונימית" (זיהוי אוטומטי
+//     לפי שם, ראו 2026-08-19j) - זה מה שחושף בפועל את התקצירים/מצגות
+//     שהאדמין כבר מעלה דרך אזור "קבצים מצורפים" הכללי, בלי סימון ידני נוסף.
 let ANON_BIZ_FILES = {}; // business_id -> [files]
 async function loadAnonBizFiles(){
   ANON_BIZ_FILES = {};
   if (!ALL_ANON_BIZ.length) return;
   const ids = ALL_ANON_BIZ.map(b => b.id);
-  const { data, error } = await window.supabaseClient
-    .from('business_sale_files')
-    .select('id, business_id, file_name, storage_path, file_type, file_size, category')
-    .in('business_id', ids)
-    .eq('confidentiality_level', 1)
-    .eq('status', 'active');
-  if (error){ console.warn('טעינת קבצים אנונימיים נכשלה:', error.message); return; }
-  (data || []).forEach(f => {
-    (ANON_BIZ_FILES[f.business_id] = ANON_BIZ_FILES[f.business_id] || []).push(f);
+
+  const [saleFilesRes, metaFilesRes] = await Promise.all([
+    window.supabaseClient
+      .from('business_sale_files')
+      .select('id, business_id, file_name, storage_path, file_type, file_size, category, created_at')
+      .in('business_id', ids)
+      .eq('confidentiality_level', 1)
+      .eq('status', 'active'),
+    window.supabaseClient
+      .from('business_file_meta')
+      .select('id, business_id, display_name, original_filename, storage_path, file_type, file_size, category, created_at')
+      .in('business_id', ids),
+  ]);
+
+  if (saleFilesRes.error) console.warn('טעינת קבצי תיק מכירה אנונימיים נכשלה:', saleFilesRes.error.message);
+  (saleFilesRes.data || []).forEach(f => {
+    (ANON_BIZ_FILES[f.business_id] = ANON_BIZ_FILES[f.business_id] || []).push({
+      id: f.id, business_id: f.business_id, file_name: f.file_name, storage_path: f.storage_path,
+      file_type: f.file_type, file_size: f.file_size, created_at: f.created_at,
+      source: 'sale_file', label: 'קובץ אנונימי',
+    });
+  });
+
+  if (metaFilesRes.error) console.warn('טעינת קבצים אנונימיים (זיהוי לפי שם) נכשלה:', metaFilesRes.error.message);
+  // סינון בצד הלקוח כהגנת עומק בלבד - ה-RLS כבר לא מחזיר שורות שלא תואמות
+  // (סעיף 7 באפיון: לעולם לא לחשוף קובץ שאין "אנונימי"/"אנונימית" בשמו).
+  (metaFilesRes.data || [])
+    .filter(f => isAnonFileName(f.display_name || f.original_filename))
+    .forEach(f => {
+      const name = f.display_name || f.original_filename;
+      (ANON_BIZ_FILES[f.business_id] = ANON_BIZ_FILES[f.business_id] || []).push({
+        id: f.id, business_id: f.business_id, file_name: name, storage_path: f.storage_path,
+        file_type: f.file_type, file_size: f.file_size, created_at: f.created_at,
+        source: 'file_meta', label: classifyAnonFileName(name),
+      });
+    });
+
+  Object.keys(ANON_BIZ_FILES).forEach(bizId => {
+    ANON_BIZ_FILES[bizId].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   });
 }
 
@@ -1073,8 +1119,9 @@ function renderAnonBizGrid(){
       : `<span style="background:#f0f0ea;color:#888;border-radius:6px;padding:2px 8px;font-size:.72rem;font-weight:700;">⭕ אין הסכם חתום</span>`;
     const filesHtml = files.length
       ? files.map(f => `
-          <div style="display:flex;justify-content:space-between;align-items:center;background:#f7f5ef;border-radius:6px;padding:6px 10px;margin-top:6px;font-size:.8rem;">
-            <span>📄 ${esc(f.file_name)}</span>
+          <div style="background:#f7f5ef;border-radius:6px;padding:6px 10px;margin-top:6px;font-size:.8rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">
+            <span>📄 ${esc(f.file_name)} <span style="background:#e8f0fe;color:#1a56db;border-radius:6px;padding:1px 7px;font-size:.68rem;font-weight:700;margin-inline-start:4px;">${esc(f.label)}</span></span>
             <span style="white-space:nowrap;">
               <a href="javascript:void(0)" onclick="viewAnonFile('${f.id}','${f.storage_path.replace(/'/g,"\\'")}')">צפייה</a>
               &nbsp;·&nbsp;
@@ -1082,6 +1129,10 @@ function renderAnonBizGrid(){
               &nbsp;·&nbsp;
               <a href="javascript:void(0)" onclick="openSendAnonFileModal('${b.id}','${f.id}')">📧 שלח לקונה</a>
             </span>
+          </div>
+          <div style="font-size:.7rem;color:#999;margin-top:2px;">
+            ${f.file_type ? esc(f.file_type) + ' · ' : ''}${f.created_at ? 'הועלה ' + fmtDateTime(f.created_at) : ''}
+          </div>
           </div>`).join('')
       : `<div style="font-size:.78rem;color:#999;margin-top:6px;">אין עדיין קובץ אנונימי מאושר להפצה לעסק זה</div>`;
 
@@ -1102,7 +1153,7 @@ function renderAnonBizGrid(){
         ${b.asking_price ? 'מחיר מבוקש: ' + Number(b.asking_price).toLocaleString() + ' ₪' : ''}
       </div>
       <div style="margin-top:8px;">
-        <div style="font-size:.75rem;color:#999;font-weight:700;">📎 קובץ אנונימי</div>
+        <div style="font-size:.75rem;color:#999;font-weight:700;">📎 ${files.length > 1 ? 'קבצים אנונימיים (' + files.length + ')' : 'קובץ אנונימי'}</div>
         ${filesHtml}
       </div>
       <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;">
@@ -1158,6 +1209,13 @@ async function openSendAnonFileModal(bizId, fileId){
     </div>
     <div id="sendAnonBuyerInfo"></div>
     <div class="field full" style="margin-bottom:10px;">
+      <label>אמצעי שליחה</label>
+      <div style="display:flex;gap:16px;margin-top:4px;align-items:center;">
+        <label style="display:flex;align-items:center;gap:5px;font-weight:400;"><input type="radio" name="sendAnonChannel" value="email" checked onchange="renderSendAnonBuyerInfo()"> 📧 מייל</label>
+        <label style="display:flex;align-items:center;gap:5px;font-weight:400;"><input type="radio" name="sendAnonChannel" value="whatsapp" onchange="renderSendAnonBuyerInfo()"> 💬 וואטסאפ</label>
+      </div>
+    </div>
+    <div class="field full" style="margin-bottom:10px;">
       <label>נושא</label>
       <input type="text" id="sendAnonSubject" value="${esc('חומר אנונימי מ-BSD Business Brokers Israel - ' + (biz.anon_display_name || biz.field || ''))}">
     </div>
@@ -1179,7 +1237,7 @@ async function openSendAnonFileModal(bizId, fileId){
   try {
     let buyerQuery = window.supabaseClient
       .from('leads')
-      .select('id,full_name,first_name,last_name,email,created_by,handled_by')
+      .select('id,full_name,first_name,last_name,email,phone,created_by,handled_by')
       .eq('type', 'buyer')
       .order('full_name', { ascending: true });
     // סעיף 3+8 באפיון: קונה מתוך הרשימה של הסוכן בלבד - תמיד, לא רק לתפקיד agent.
@@ -1209,21 +1267,28 @@ async function openSendAnonFileModal(bizId, fileId){
   });
 }
 
+function getSelectedSendAnonChannel(){
+  const checked = document.querySelector('input[name="sendAnonChannel"]:checked');
+  return checked ? checked.value : 'email';
+}
+
 function renderSendAnonBuyerInfo(){
   const infoBox = document.getElementById('sendAnonBuyerInfo');
   const sendBtn = document.getElementById('sendAnonBtn');
   const buyer = SEND_ANON_BUYER;
-  if (!buyer){ infoBox.innerHTML = ''; sendBtn.style.opacity = '.5'; return; }
+  if (!buyer){ if (infoBox) infoBox.innerHTML = ''; if (sendBtn) sendBtn.style.opacity = '.5'; return; }
   const buyerLabel = buyer.full_name || [buyer.first_name,buyer.last_name].filter(Boolean).join(' ') || '';
-  const missingEmail = !buyer.email;
+  const channel = getSelectedSendAnonChannel();
+  const missing = channel === 'whatsapp' ? !buyer.phone : !buyer.email;
   infoBox.innerHTML = `
     <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.85rem;">
       <div><b>${esc(buyerLabel)}</b></div>
       <div>📧 ${esc(buyer.email || 'אין אימייל')}</div>
+      <div>📞 ${esc(buyer.phone || 'אין טלפון')}</div>
     </div>
-    ${missingEmail ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:10px 12px;font-size:.85rem;">⚠️ לקונה הזה אין כתובת אימייל שמורה.</div>` : ''}
+    ${missing ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:10px 12px;font-size:.85rem;">⚠️ לקונה הזה אין ${channel === 'whatsapp' ? 'טלפון שמור' : 'כתובת אימייל שמורה'}.</div>` : ''}
   `;
-  sendBtn.style.opacity = missingEmail ? '.5' : '1';
+  sendBtn.style.opacity = missing ? '.5' : '1';
 }
 
 function sendAnonStatus(msg, isError){
@@ -1233,12 +1298,43 @@ function sendAnonStatus(msg, isError){
   el.style.color = isError ? '#b3402c' : '#1e7b34';
 }
 
+// תיעוד הפצה משותף לשני הערוצים - נשמר תמיד, גם אם השליחה נכשלה (סעיף 4+9
+// באפיון: לא לאבד מידע). anon_file_source מציין מאיזו טבלה הגיע הקובץ
+// (sale_file/file_meta) - ראו 2026-08-19j; מדיניות ה-INSERT ב-DB בודקת בפועל
+// שהקובץ אכן אנונימי ותקין לפי המקור המדווח, לא רק מסתמכת על מה שנשלח כאן.
+async function recordAnonDistribution({ bizId, file, buyer, channel, subject, message, deliveryOk, deliveryError }){
+  let matchId = null;
+  try {
+    const { data: existingMatch } = await window.supabaseClient
+      .from('matches').select('id').eq('business_id', bizId).eq('buyer_id', buyer.id).maybeSingle();
+    if (existingMatch){
+      matchId = existingMatch.id;
+    } else {
+      const { data: newMatch, error: matchErr } = await window.supabaseClient
+        .from('matches').insert({ business_id: bizId, buyer_id: buyer.id, status: 'נשלח לקונה - ממתין לתגובה (אנונימי)', created_by: CURRENT_PROFILE.id })
+        .select('id').single();
+      if (!matchErr) matchId = newMatch.id;
+    }
+  } catch(e){ console.warn('קישור להתאמה נכשל (לא חוסם את התיעוד):', e); }
+
+  const { error: distErr } = await window.supabaseClient.from('anon_distributions').insert({
+    business_id: bizId, anon_file_id: file.id, anon_file_source: file.source || 'sale_file',
+    buyer_id: buyer.id, sender_user_id: CURRENT_PROFILE.id, match_id: matchId,
+    subject, message, channel,
+    delivery_status: deliveryOk ? 'sent' : 'failed',
+    delivery_error: deliveryError || null,
+  });
+  if (distErr) console.warn('שמירת תיעוד ההפצה נכשלה (השליחה בכל זאת בוצעה/נכשלה כפי שדווח):', distErr.message);
+}
+
 async function confirmSendAnonFile(){
   if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
   const bizId = SEND_ANON_BIZ_ID, file = SEND_ANON_FILE, buyer = SEND_ANON_BUYER;
+  const channel = getSelectedSendAnonChannel();
   sendAnonStatus('מתחיל...', false);
   if (!buyer){ const m='יש לבחור קונה מהרשימה'; toast(m); sendAnonStatus(m, true); return; }
-  if (!buyer.email){ const m='לקונה הנבחר אין כתובת אימייל שמורה'; toast(m); sendAnonStatus(m, true); return; }
+  if (channel === 'whatsapp' && !buyer.phone){ const m='לקונה הנבחר אין טלפון שמור'; toast(m); sendAnonStatus(m, true); return; }
+  if (channel === 'email' && !buyer.email){ const m='לקונה הנבחר אין כתובת אימייל שמורה'; toast(m); sendAnonStatus(m, true); return; }
   if (!CURRENT_PROFILE){ const m='שגיאה: פרופיל המשתמש לא נטען - רענן את הדף'; toast(m); sendAnonStatus(m, true); return; }
 
   const subject = document.getElementById('sendAnonSubject').value.trim() || 'חומר אנונימי מ-BSD Business Brokers Israel';
@@ -1246,7 +1342,32 @@ async function confirmSendAnonFile(){
   const sendBtn = document.getElementById('sendAnonBtn');
   if (sendBtn){ sendBtn.disabled = true; sendBtn.textContent = 'שולח...'; }
 
+  // וואטסאפ נפתח מיד בלחיצה (סינכרוני, לפני await) - אחרת חוסמי Pop-up
+  // (בעיקר במובייל) חוסמים אותו בשקט, אותה בעיה שכבר תוקנה ב-viewAnonFile.
+  let waWindow = null;
+  if (channel === 'whatsapp') waWindow = window.open('', '_blank');
+
   try {
+    if (channel === 'whatsapp'){
+      sendAnonStatus('יוצר קישור מאובטח לקובץ...', false);
+      const { data: signed, error: linkErr } = await withTimeout(
+        window.supabaseClient.storage.from(window.BSD_CONFIG.STORAGE_BUCKET).createSignedUrl(file.storage_path, 60*60*24*7), 20000, 'יצירת קישור');
+      if (linkErr){ if (waWindow) waWindow.close(); throw new Error('יצירת קישור לקובץ נכשלה: ' + linkErr.message); }
+
+      const lines = [bodyText, '', `קישור לקובץ (בתוקף ל-7 ימים): ${signed.signedUrl}`];
+      const text = encodeURIComponent(lines.join('\n'));
+      const phoneDigits = (buyer.phone || '').replace(/\D/g,'').replace(/^0/, '972');
+      if (waWindow) waWindow.location.href = `https://wa.me/${phoneDigits}?text=${text}`;
+
+      await recordAnonDistribution({ bizId, file, buyer, channel, subject, message: bodyText, deliveryOk: true });
+      const okMsg = `נפתח חלון וואטסאפ לשליחה ל-${buyer.phone}`;
+      sendAnonStatus('✅ ' + okMsg, false);
+      toast(okMsg);
+      setTimeout(closeModal, 900);
+      return;
+    }
+
+    // ערוץ מייל - כמו קודם: קובץ קטן מצורף ישירות, קובץ גדול נשלח כקישור.
     const LARGE_FILE_THRESHOLD = 4 * 1024 * 1024;
     let attachments = [], finalBodyText = bodyText;
     const knownLarge = typeof file.file_size === 'number' && file.file_size > LARGE_FILE_THRESHOLD;
@@ -1276,29 +1397,7 @@ async function confirmSendAnonFile(){
       deliveryErrorMsg = data?.error || error?.message || 'שגיאה לא ידועה';
     }
 
-    // תיעוד ההפצה - נשמר תמיד, גם אם השליחה נכשלה (סעיף 4+9 באפיון: לא לאבד מידע)
-    let matchId = null;
-    try {
-      const { data: existingMatch } = await window.supabaseClient
-        .from('matches').select('id').eq('business_id', bizId).eq('buyer_id', buyer.id).maybeSingle();
-      if (existingMatch){
-        matchId = existingMatch.id;
-      } else {
-        const { data: newMatch, error: matchErr } = await window.supabaseClient
-          .from('matches').insert({ business_id: bizId, buyer_id: buyer.id, status: 'נשלח לקונה - ממתין לתגובה (אנונימי)', created_by: CURRENT_PROFILE.id })
-          .select('id').single();
-        if (!matchErr) matchId = newMatch.id;
-      }
-    } catch(e){ console.warn('קישור להתאמה נכשל (לא חוסם את התיעוד):', e); }
-
-    const { error: distErr } = await window.supabaseClient.from('anon_distributions').insert({
-      business_id: bizId, anon_file_id: file.id, buyer_id: buyer.id,
-      sender_user_id: CURRENT_PROFILE.id, match_id: matchId,
-      subject, message: bodyText,
-      delivery_status: deliveryOk ? 'sent' : 'failed',
-      delivery_error: deliveryErrorMsg
-    });
-    if (distErr) console.warn('שמירת תיעוד ההפצה נכשלה (המייל בכל זאת נשלח/נכשל כפי שדווח):', distErr.message);
+    await recordAnonDistribution({ bizId, file, buyer, channel, subject, message: bodyText, deliveryOk, deliveryError: deliveryErrorMsg });
 
     if (!deliveryOk) throw new Error(deliveryErrorMsg);
 
@@ -1744,6 +1843,26 @@ async function loadBizFiles(bizId){
   (metaRows || []).forEach(m => { metaByPath[m.storage_path] = m; });
 
   const canManage = typeof canUseSalesFile === 'function' ? canUseSalesFile(CURRENT_PROFILE) : true;
+
+  // השלמת שורות מטא-דאטה חסרות (קבצים שהועלו לפני 2026-08-17, לפני שהייתה
+  // טבלת business_file_meta כלל) - best-effort, בלי לחסום את הרינדור. חשוב
+  // לזיהוי אנונימי-לפי-שם: בלי שורה בטבלה, לא ניתן לבדוק את שם הקובץ ב-RLS
+  // בכלל (ראו 2026-08-19j_anon_files_by_filename.sql). זה קורה ממילא בכל
+  // פתיחה של כרטיס עסק ע"י אדמין/בעל-גישה-מלאה - בלי שום פעולה נוספת שלו.
+  const missingMeta = data.filter(f => !metaByPath[`${bizId}/${f.name}`]);
+  if (missingMeta.length){
+    Promise.all(missingMeta.map(f => {
+      const decoded = displayFileName(f.name);
+      return window.supabaseClient.from('business_file_meta').insert({
+        business_id: bizId, storage_path: `${bizId}/${f.name}`,
+        original_filename: decoded, display_name: decoded,
+        category: guessBizFileCategory(decoded),
+        file_size: (f.metadata && f.metadata.size) || null,
+        file_type: (f.metadata && f.metadata.mimetype) || null,
+        uploaded_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null,
+      });
+    })).catch(() => {}); // best-effort בלבד - כשל כאן לא אמור לחסום כלום
+  }
 
   const merged = data.map(f => {
     const fullPath = `${bizId}/${f.name}`;
