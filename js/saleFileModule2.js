@@ -306,15 +306,18 @@ async function uploadSaleFiles(bizId, categoryKey){
 }
 
 async function viewSaleFile(fileId, path){
+  // חלון נפתח מיד ולא אחרי await, כדי שחוסמי pop-up לא יבלמו אותו בשקט
+  const win = window.open('', '_blank');
   const { data, error } = await window.supabaseClient.storage.from(SALE_FILE_BUCKET).createSignedUrl(path, 300);
-  if (error){ toast('שגיאה: ' + error.message); return; }
-  window.open(data.signedUrl, '_blank');
+  if (error){ toast('שגיאה: ' + error.message); if (win) win.close(); return; }
+  if (win) win.location.href = data.signedUrl; else window.open(data.signedUrl, '_blank');
 }
 
 async function downloadSaleFile(path, suggestedName){
+  const win = window.open('', '_blank');
   const { data, error } = await window.supabaseClient.storage.from(SALE_FILE_BUCKET).createSignedUrl(path, 300, { download: suggestedName });
-  if (error){ toast('שגיאה: ' + error.message); return; }
-  window.open(data.signedUrl, '_blank');
+  if (error){ toast('שגיאה: ' + error.message); if (win) win.close(); return; }
+  if (win) win.location.href = data.signedUrl; else window.open(data.signedUrl, '_blank');
 }
 
 async function renameSaleFile(fileId, currentName){

@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192010';
+    var PAGE_BUILD = '202608192145';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -613,12 +613,14 @@ async function _agreementSignedUrl(tableName, recordId, download){
   return data.signedUrl;
 }
 async function viewAgreementPdf(tableName, recordId){
+  const win = window.open('', '_blank');
   const url = await _agreementSignedUrl(tableName, recordId, false);
-  if (url) window.open(url, '_blank');
+  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
 }
 async function downloadAgreementPdf(tableName, recordId){
+  const win = window.open('', '_blank');
   const url = await _agreementSignedUrl(tableName, recordId, true);
-  if (url) window.open(url, '_blank');
+  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
 }
 
 ['fSearch','fType','fStatus','fAgreement','fCreatedBy','fSort','fRating'].forEach(id=>{
