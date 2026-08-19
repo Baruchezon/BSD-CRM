@@ -1,6 +1,30 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
+<script>
+// בדיקת גרסה אוטומטית - אותו מנגנון בדיוק כמו בכל שאר דפי המערכת (ראו הסבר
+// ב-match-detail.html) - נוסף כאן כדי שהדף החדש הזה לא יסבול מאותה בעיה
+// שהתגלתה היום בדפים אחרים (PAGE_BUILD לא מתעדכן = לא נתפס דף מקאש ישן).
+(function(){
+  try{
+    var PAGE_BUILD = '202608192351';
+    window.PAGE_BUILD = PAGE_BUILD;
+    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">

@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192343';
+    var PAGE_BUILD = '202608192351';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -147,6 +147,7 @@
 
   <div class="lead-tabs">
     <button type="button" class="lead-tab active" data-tab="business" onclick="switchTab('business')">עסקים <span class="count" id="countBusiness">0</span></button>
+    <button type="button" class="lead-tab" data-tab="seller" onclick="switchTab('seller')">מוכרים (טרם עסק) <span class="count" id="countSeller">0</span></button>
     <button type="button" class="lead-tab" data-tab="buyer" onclick="switchTab('buyer')">קונים <span class="count" id="countBuyer">0</span></button>
     <button type="button" class="lead-tab" data-tab="partner" onclick="switchTab('partner')">שותפות/השקעה <span class="count" id="countPartner">0</span></button>
   </div>
@@ -181,6 +182,7 @@
 <script src="js/push.js?v=202608122320"></script>
 <script>
 let ALL_BUSINESSES = [];
+let ALL_SELLERS = [];
 let ALL_BUYERS = [];
 let ALL_PARTNERS = [];
 let ALL_USERS = [];
@@ -289,10 +291,12 @@ async function loadAll(){
 
   const noAgreement = r => !r.agreement_status || r.agreement_status === 'אין הסכם';
   ALL_BUSINESSES = (bizData || []).filter(noAgreement);
+  ALL_SELLERS = (leadData || []).filter(l => l.type === 'seller' && noAgreement(l));
   ALL_BUYERS = (leadData || []).filter(l => l.type === 'buyer' && noAgreement(l));
   ALL_PARTNERS = (leadData || []).filter(l => l.type === 'partner' && noAgreement(l));
 
   document.getElementById('countBusiness').textContent = ALL_BUSINESSES.length;
+  document.getElementById('countSeller').textContent = ALL_SELLERS.length;
   document.getElementById('countBuyer').textContent = ALL_BUYERS.length;
   document.getElementById('countPartner').textContent = ALL_PARTNERS.length;
 
@@ -308,6 +312,7 @@ function switchTab(tab){
 
 function currentRows(){
   if (CURRENT_TAB === 'business') return ALL_BUSINESSES;
+  if (CURRENT_TAB === 'seller') return ALL_SELLERS;
   if (CURRENT_TAB === 'buyer') return ALL_BUYERS;
   return ALL_PARTNERS;
 }
@@ -322,11 +327,15 @@ function rowNameCell(r){
     return `<div class="primary-name">${esc(bizName)}</div><div class="sub-name">${esc(r.owner_name||'—')}</div>`;
   }
   const personName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || '—';
+  if (CURRENT_TAB === 'seller' && r.business_name){
+    return `<div class="primary-name">${esc(personName)}</div><div class="sub-name">${esc(r.business_name)}</div>`;
+  }
   const badge = ratingBadge(r);
   return `<div class="primary-name">${esc(personName)}</div>${badge ? `<div style="margin-top:4px;" onclick="event.stopPropagation()">${badge}</div>` : ''}`;
 }
 function rowCityCell(r){
   if (CURRENT_TAB === 'business') return esc(r.city || '—');
+  if (CURRENT_TAB === 'seller') return esc(r.business_city || r.city || '—');
   return esc(r.requested_area || r.city || '—');
 }
 function rowPhoneCell(r){
@@ -342,7 +351,7 @@ function renderTable(){
   let rows = currentRows().filter(r=>{
     if (!search) return true;
     const hay = [r.full_name, r.first_name, r.last_name, r.phone, r.city, r.internal_name, r.owner_name,
-      r.owner_phone, r.requested_field, r.requested_area, r.notes].join(' ').toLowerCase();
+      r.owner_phone, r.requested_field, r.requested_area, r.business_name, r.business_field, r.business_city, r.notes].join(' ').toLowerCase();
     return hay.includes(search);
   });
 
@@ -411,6 +420,10 @@ function openReadOnly(id){
   if (CURRENT_TAB === 'business'){
     rows.push(['שם עסק', r.internal_name], ['בעלים', r.owner_name], ['טלפון', r.owner_phone],
       ['עיר', r.city], ['תחום', r.field], ['הערות', r.notes]);
+  } else if (CURRENT_TAB === 'seller'){
+    const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
+    rows.push(['שם', personName], ['טלפון', r.phone], ['שם העסק', r.business_name],
+      ['תחום העסק', r.business_field], ['עיר העסק', r.business_city || r.city], ['הערות', r.notes]);
   } else {
     const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
     rows.push(['שם', personName], ['טלפון', r.phone], ['אזור מבוקש', r.requested_area || r.city],
@@ -456,9 +469,12 @@ async function sendAgreement(id){
   if (!r){ toast('רשומה לא נמצאה'); return; }
   const personName = CURRENT_TAB === 'business' ? (r.owner_name || '') : (r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || '');
   const phone = CURRENT_TAB === 'business' ? r.owner_phone : r.phone;
-  const bizField = CURRENT_TAB === 'business' ? (r.internal_name || '') : (r.requested_field || '');
+  const bizField = CURRENT_TAB === 'business' ? (r.internal_name || '') : (CURRENT_TAB === 'seller' ? (r.business_name || '') : (r.requested_field || ''));
   const params = new URLSearchParams({
-    type: CURRENT_TAB === 'business' ? 'seller' : 'buyer',
+    // סוג ההסכם שנשלח חייב לשקף את הטאב האמיתי (מוכר/קונה/שותף), לא להניח
+    // "קונה" באופן גורף לכל מה שאינו הטאב "עסקים" - זו הייתה תקלה סמויה עד
+    // עכשיו כי לא היה בכלל טאב "מוכרים" נפרד שיחשוף אותה.
+    type: CURRENT_TAB === 'business' ? 'seller' : CURRENT_TAB,
     name: personName, phone: phone || '', biz: bizField
   });
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
