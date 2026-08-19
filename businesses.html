@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192100';
+    var PAGE_BUILD = '202608192145';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -231,7 +231,7 @@
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608132300"></script>
-<script src="js/saleFileModule2.js?v=202608192100"></script>
+<script src="js/saleFileModule2.js?v=202608192145"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script>
 let ALL_BIZ = [];
@@ -481,12 +481,14 @@ async function _agreementSignedUrl(tableName, recordId, download){
   return data.signedUrl;
 }
 async function viewAgreementPdf(tableName, recordId){
+  const win = window.open('', '_blank');
   const url = await _agreementSignedUrl(tableName, recordId, false);
-  if (url) window.open(url, '_blank');
+  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
 }
 async function downloadAgreementPdf(tableName, recordId){
+  const win = window.open('', '_blank');
   const url = await _agreementSignedUrl(tableName, recordId, true);
-  if (url) window.open(url, '_blank');
+  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
 }
 
 function renderTable(){
@@ -1113,14 +1115,19 @@ function renderAnonBizGrid(){
 }
 
 async function viewAnonFile(fileId, storagePath){
+  // נפתח חלון ריק מיד בלחיצה (סינכרוני) ולא אחרי await - אחרת חוסמי
+  // Pop-up (בעיקר בדפדפן מובייל) חוסמים אותו בשקט, בלי שום שגיאה נראית -
+  // בדיוק התסמין שדווח: "רואה שיש קובץ אבל לחיצה לא עושה כלום".
+  const win = window.open('', '_blank');
   const { data, error } = await window.supabaseClient.storage.from(window.BSD_CONFIG.STORAGE_BUCKET).createSignedUrl(storagePath, 300);
-  if (error || !data){ toast('שגיאה בפתיחת הקובץ: ' + (error?.message || '')); return; }
-  window.open(data.signedUrl, '_blank');
+  if (error || !data){ toast('שגיאה בפתיחת הקובץ: ' + (error?.message || '')); if (win) win.close(); return; }
+  if (win) win.location.href = data.signedUrl; else window.open(data.signedUrl, '_blank');
 }
 async function downloadAnonFile(fileId, storagePath, fileName){
+  const win = window.open('', '_blank');
   const { data, error } = await window.supabaseClient.storage.from(window.BSD_CONFIG.STORAGE_BUCKET).createSignedUrl(storagePath, 300, { download: fileName });
-  if (error || !data){ toast('שגיאה בהורדת הקובץ: ' + (error?.message || '')); return; }
-  window.open(data.signedUrl, '_blank');
+  if (error || !data){ toast('שגיאה בהורדת הקובץ: ' + (error?.message || '')); if (win) win.close(); return; }
+  if (win) win.location.href = data.signedUrl; else window.open(data.signedUrl, '_blank');
 }
 
 // שליחת קובץ אנונימי לקונה - הקונה נבחר רק מתוך הקונים של הסוכן עצמו
