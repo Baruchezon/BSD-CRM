@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608191945';
+    var PAGE_BUILD = '202608192010';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -231,6 +231,7 @@
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608132300"></script>
+<script src="js/saleFileModule2.js?v=202608192010"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script>
 let ALL_BIZ = [];
@@ -740,6 +741,8 @@ function openBizForm(id){
 
         <button type="button" class="btn btn-ghost" style="margin-top:10px;" onclick="previewAnonCard('${biz.id}')">👁️ תצוגה מקדימה - איך זה נראה אנונימי</button>
       </div>
+      <div class="section-h" style="margin-top:14px;">📁 תיק מכירה (כולל מצגת אנונימית להעלאה)</div>
+      <div id="saleFileModuleBox" style="margin-bottom:6px;"></div>
       <div id="anonDistSummaryBox" style="margin-top:10px;"></div>
       ` : ``}
 
@@ -798,6 +801,7 @@ function openBizForm(id){
   if (biz) loadBizMeetings(biz.id);
   if (biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz)) loadBizAccessGrants(biz.id);
   if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadAnonDistSummary(biz.id);
+  if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadSaleFileModule(biz.id);
   if (biz && biz.anon_summary && biz.anon_summary_generated_at && biz.updated_at > biz.anon_summary_generated_at){
     const warnEl = document.getElementById('anonStaleWarning');
     if (warnEl) warnEl.style.display = 'block';
