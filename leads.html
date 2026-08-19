@@ -583,11 +583,41 @@ function agreementBadge(status){
   return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>`;
 }
 // שורת מידע פשוטה בלבד (לא באנר בולט) - השדה האמיתי הניתן לעריכה נמצא בטופס עצמו למטה
-function agreementBanner(status, agreementNumber){
+function agreementBanner(status, agreementNumber, tableName, recordId, pdfPath, pdfUploadedAt){
   const s = status || 'אין הסכם';
   const icon = s === 'יש הסכם חתום' ? '✅' : (s === 'נשלח הסכם לחתימה' ? '📤' : '⭕');
   const numPart = (s === 'יש הסכם חתום' && agreementNumber) ? ` &nbsp;·&nbsp; מס' הסכם: ${esc(agreementNumber)}` : '';
-  return `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(agreementShortLabel(s))}${numPart}</div>`;
+  const statusLine = `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(agreementShortLabel(s))}${numPart}</div>`;
+  if (!tableName || !recordId) return statusLine;
+  const pdfLine = pdfPath
+    ? `<div class="agr-note" style="margin-top:6px;">
+         📄 הסכם התקשרות חתום ${pdfUploadedAt ? `&nbsp;·&nbsp; הועלה ${fmtDate(pdfUploadedAt)}` : ''}
+         &nbsp;·&nbsp;
+         <a href="javascript:void(0)" onclick="viewAgreementPdf('${tableName}','${recordId}')">צפייה</a>
+         &nbsp;·&nbsp;
+         <a href="javascript:void(0)" onclick="downloadAgreementPdf('${tableName}','${recordId}')">הורדה</a>
+       </div>`
+    : (s === 'יש הסכם חתום'
+        ? `<div class="agr-note" style="margin-top:6px;color:#8a6d1f;">⚠️ מסומן כחתום, אך קובץ ה-PDF החתום עדיין לא נשמר במערכת</div>`
+        : '');
+  return statusLine + pdfLine;
+}
+
+async function _agreementSignedUrl(tableName, recordId, download){
+  const path = `agreements/${tableName}/${recordId}.pdf`;
+  const opts = download ? { download: true } : {};
+  const { data, error } = await window.supabaseClient.storage
+    .from(window.BSD_CONFIG.STORAGE_BUCKET).createSignedUrl(path, 300, opts);
+  if (error || !data){ toast('שגיאה בפתיחת ההסכם: ' + (error?.message || '')); return null; }
+  return data.signedUrl;
+}
+async function viewAgreementPdf(tableName, recordId){
+  const url = await _agreementSignedUrl(tableName, recordId, false);
+  if (url) window.open(url, '_blank');
+}
+async function downloadAgreementPdf(tableName, recordId){
+  const url = await _agreementSignedUrl(tableName, recordId, true);
+  if (url) window.open(url, '_blank');
 }
 
 ['fSearch','fType','fStatus','fAgreement','fCreatedBy','fSort','fRating'].forEach(id=>{
@@ -625,7 +655,7 @@ function openLeadForm(id, forcedType){
   const typeLabel = type==='buyer' ? 'קונה' : type==='partner' ? 'שותפות/השקעה' : 'מוכר';
   modal.innerHTML = `
     <h3>${lead ? 'עריכת' : 'הוספת'} ${typeLabel}</h3>
-    ${lead ? agreementBanner(lead.agreement_status, lead.agreement_number) : ''}
+    ${lead ? agreementBanner(lead.agreement_status, lead.agreement_number, 'leads', lead.id, lead.agreement_pdf_path, lead.agreement_pdf_uploaded_at) : ''}
     ${lead ? '' : `<div class="type-toggle">
       <button type="button" class="${type==='buyer'?'active buyer':''}" onclick="switchLeadType('buyer', null)">קונה</button>
       <button type="button" class="${type==='partner'?'active partner':''}" onclick="switchLeadType('partner', null)">שותפות/השקעה</button>
