@@ -659,6 +659,27 @@ function fmtPhone(phone){
   if (/^0\d{8}$/.test(p)) return p.slice(0,2) + '-' + p.slice(2);
   return p;
 }
+function last9Digits(phone){
+  const d = (phone || '').replace(/\D/g, '');
+  return d.length >= 9 ? d.slice(-9) : d;
+}
+async function findPossibleDuplicateLead(phone, email){
+  const last9 = last9Digits(phone);
+  const emailNorm = email ? email.trim().toLowerCase() : '';
+  if (!last9 && !emailNorm) return null;
+  const orParts = [];
+  if (last9) { orParts.push(`phone.ilike.%${last9}%`); orParts.push(`phone2.ilike.%${last9}%`); }
+  if (emailNorm) orParts.push(`email.ilike.${emailNorm}`);
+  const { data } = await window.supabaseClient.from('leads').select('id, full_name, phone, phone2, email, updated_at').or(orParts.join(','));
+  const verified = (data || []).filter(c => {
+    const phoneMatch = last9 && (last9Digits(c.phone) === last9 || last9Digits(c.phone2) === last9);
+    const emailMatch = emailNorm && (c.email || '').trim().toLowerCase() === emailNorm;
+    return phoneMatch || emailMatch;
+  });
+  if (!verified.length) return null;
+  verified.sort((a,b) => new Date(b.updated_at||0) - new Date(a.updated_at||0));
+  return verified[0];
+}
 function truncate(s, n){
   if (!s) return '—';
   return s.length > n ? esc(s.slice(0,n)) + '…' : esc(s);
@@ -891,6 +912,21 @@ async function saveLead(e){
     ({ error } = await window.supabaseClient.from('leads').update(payload).eq('id', leadId));
     if (!error) bsdLogActivity('update', 'leads', leadId);
   } else {
+    // מניעת כפילויות: לפני יצירת ליד חדש, בודקים אם כבר קיים ליד עם אותו
+    // טלפון (מנורמל, בלי קשר לפורמט) או אותו מייל. אם כן - לא יוצרים אוטומטית
+    // כפילות; נותנים לבחור בין פתיחת הרשומה הקיימת לבין יצירה בכל זאת.
+    const dup = await findPossibleDuplicateLead(payload.phone, payload.email);
+    if (dup){
+      const proceedAnyway = confirm(
+        `ייתכן שהליד כבר קיים במערכת:\n"${dup.full_name || 'שם לא זוהה'}"${dup.phone ? ' · ' + dup.phone : ''}${dup.email ? ' · ' + dup.email : ''}\n\n` +
+        `אישור (OK) = פתח את הליד הקיים\nביטול (Cancel) = צור בכל זאת ליד חדש נפרד`
+      );
+      if (!proceedAnyway){
+        closeModal();
+        openLeadForm(dup.id);
+        return;
+      }
+    }
     payload.created_by = CURRENT_PROFILE ? CURRENT_PROFILE.id : null;
     const insertResult = await window.supabaseClient.from('leads').insert(payload).select('id').single();
     error = insertResult.error;

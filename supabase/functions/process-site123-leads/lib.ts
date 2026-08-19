@@ -76,6 +76,7 @@ export function classifyPurpose(purpose: string): { type: 'buyer' | 'seller' | '
 // לפי or() על טלפון/מייל) ומחזיר את המועמד שבאמת תואם, אם יש.
 export interface DupCandidate {
   id: string;
+  full_name?: string | null;
   phone?: string | null;
   phone2?: string | null;
   email?: string | null;
@@ -99,4 +100,25 @@ export function isSite123LeadEmail(fromAddr: string, subject: string): boolean {
   const SITE123_SENDER = 'info@site123.com';
   const SUBJECT_MARK = 'קיבלת הודעה חדשה מהאתר';
   return (fromAddr || '').toLowerCase().trim() === SITE123_SENDER && (subject || '').includes(SUBJECT_MARK);
+}
+
+// שמות שאסור בשום מקרה שייצגו את "שם הליד" - אם החילוץ בטעות תפס אותם (למשל
+// מטקסט כללי במייל, לא משדה השם עצמו), עדיף "שם לא זוהה" על פני שם שגוי.
+// זו רשת ביטחון נוספת - חילוץ השם תמיד קורא מהשדה "שם ושם משפחה:" בטופס
+// עצמו, לא מכותרת השולח/הנמען, אז זה לא אמור להתרחש - אבל אם כן, לא לתת לזה
+// לעבור בשקט.
+const FORBIDDEN_NAMES = ['ברוך איזון', 'ברוך עזון', 'baruch ezon', 'bsd', 'bsd-business brokers israel', 'bsd business brokers israel'];
+
+export function isForbiddenName(name: string): boolean {
+  const n = (name || '').trim().toLowerCase();
+  if (!n) return false;
+  return FORBIDDEN_NAMES.some(f => n === f || n.includes(f));
+}
+
+// שם התצוגה הסופי של הליד: לעולם לא שם בעל התיבה/העסק, ולעולם לא מומצא -
+// אם אין שם ברור בטופס, "שם לא זוהה" בלבד (לא ממציאים).
+export function resolveDisplayName(extractedName: string): string {
+  const n = (extractedName || '').trim();
+  if (!n || isForbiddenName(n)) return 'שם לא זוהה';
+  return n;
 }
