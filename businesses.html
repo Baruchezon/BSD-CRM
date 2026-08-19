@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192330';
+    var PAGE_BUILD = '202608192355';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -309,6 +309,7 @@ async function loadBusinesses(){
   await loadGrantCounts();
   await loadFilesIndicator();
   await loadAnonPresentationIndicator();
+  await loadAnonFileIndicator();
   populateFilters();
   renderTable();
   await maybeHandleUrlParams();
@@ -362,6 +363,29 @@ function filesIndicatorBadge(bizId){
   const count = FILES_COUNT_BY_BIZ[bizId] || 0;
   if (!count) return '';
   return `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="לעסק זה יש ${count} קבצים מצורפים" style="cursor:pointer;font-size:.78rem;color:#3a5cad;font-weight:700;white-space:nowrap;">📎 קבצים: ${count}</span>`;
+}
+// סימון "יש קובץ אנונימי" ברשימת העסקים - מבוסס על אותו זיהוי-לפי-שם בדיוק
+// כמו בטאב "עסקים אנונימיים" (isAnonFileName, ראו 2026-08-19j) ולא על שאילתת
+// טקסט חופשי נפרדת, כדי ששני המקומות באפליקציה תמיד יסכימו זה עם זה.
+let ANON_FILE_COUNT_BY_BIZ = {};
+async function loadAnonFileIndicator(){
+  ANON_FILE_COUNT_BY_BIZ = {};
+  const ids = ALL_BIZ.map(b => b.id);
+  if (!ids.length) return;
+  const { data, error } = await window.supabaseClient
+    .from('business_file_meta')
+    .select('business_id, display_name, original_filename')
+    .in('business_id', ids);
+  if (error){ console.warn('טעינת סימון קבצים אנונימיים נכשלה:', error.message); return; }
+  (data || []).forEach(f => {
+    if (!isAnonFileName(f.display_name || f.original_filename)) return;
+    ANON_FILE_COUNT_BY_BIZ[f.business_id] = (ANON_FILE_COUNT_BY_BIZ[f.business_id] || 0) + 1;
+  });
+}
+function anonFileIndicatorBadge(bizId){
+  const count = ANON_FILE_COUNT_BY_BIZ[bizId] || 0;
+  if (!count) return '';
+  return `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="נמצאו ${count} קבצים ששמם מזהה אותם כאנונימיים - זמינים גם בטאב עסקים אנונימיים" style="cursor:pointer;background:#e8f0fe;color:#1a56db;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">📎 יש קובץ אנונימי${count > 1 ? ' (' + count + ')' : ''}</span>`;
 }
 async function loadGrantCounts(){
   const ids = ALL_BIZ.map(b => b.id);
@@ -549,6 +573,7 @@ function renderTable(){
             <div class="primary-name" style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
               <span>${statusEmoji}${esc(b.internal_name)}</span>
               ${filesIndicatorBadge(b.id)}
+              ${anonFileIndicatorBadge(b.id)}
               ${notesIconStyle(b.id) ? `<span onclick="event.stopPropagation();openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(b.id))}" style="cursor:pointer;font-size:.72rem;color:#1a3d8f;font-weight:700;white-space:nowrap;">🔵 קיימת הערה</span>` : ''}
             </div>
             ${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}
