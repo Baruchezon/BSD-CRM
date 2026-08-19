@@ -112,6 +112,22 @@
   .section-h{grid-column:1/3;font-size:.8rem;font-weight:700;color:var(--gold);margin:10px 0 -4px;text-transform:uppercase;letter-spacing:.5px;}
   .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
   .toast{position:fixed;bottom:24px;left:24px;background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.3);}
+  /* מסך מובייל: אותה בעיה שכבר תוקנה פעם ב-match-detail.html ולא הופצה לכאן -
+     ה-overlay דוחף 40px padding מלמעלה, וה-.modal לא מנצל את גובה המסך אלא
+     נשאר "מרחף" עם המון ריפוד/מרווח מעליו ומתחתיו. הפתרון הזהה שכבר עובד:
+     במובייל המודאל הופך למסך מלא (בלי padding על ה-overlay, בלי עיגול
+     פינות), וכפתורי שמירה/ביטול מוצמדים לתחתית המסך במקום לצוף איפשהו
+     באמצע אחרי השדות - כך השדות הראשונים (שם פרטי/שם משפחה) עולים מיד
+     לתחילת המסך הנגיש, בלי לגעת בתוכן או בלוגיקה. */
+  @media (max-width:640px){
+    .overlay{padding:0;align-items:stretch;}
+    .modal{max-width:100%;width:100%;min-height:100%;border-radius:0;padding:16px 14px 100px;}
+    .modal h3{margin:0 0 8px;font-size:1.1rem;}
+    .agr-note{padding:2px 2px 4px;margin-bottom:0;}
+    .form-grid{gap:8px;}
+    .section-h{margin:6px 0 -2px;}
+    .modal-actions{position:fixed;bottom:0;right:0;left:0;background:#fff;padding:12px 16px;box-shadow:0 -4px 16px rgba(0,0,0,.12);margin-top:0;z-index:5;}
+  }
 </style>
 </head>
 <body>
@@ -395,9 +411,17 @@ async function maybeHandleUrlParams(){
       if (lead) ALL_LEADS.push(lead);
     }
     if (lead) openLeadForm(lead.id);
+    // מסירים את open= מה-URL מיד אחרי שהשתמשנו בו: אחרת בכל loadLeads() הבא
+    // (למשל אחרי שמירה מוצלחת, ש-saveLead קורא לה) maybeHandleUrlParams רץ שוב,
+    // עדיין רואה open=<id> באותו URL, ופותח את אותו הטופס מחדש - לולאה אינסופית
+    // שנראית כאילו "שמירה" תמיד מחזירה לאותו מסך בדיוק, ורק "ביטול" יוצא ממנה.
+    params.delete('open');
+    history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params.toString() : ''));
   } else if (params.get('new') === '1'){
     const t = params.get('type') === 'partner' ? 'partner' : 'buyer';
     openLeadForm(null, t);
+    params.delete('new'); params.delete('type');
+    history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params.toString() : ''));
   }
 }
 
