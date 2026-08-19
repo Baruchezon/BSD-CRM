@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192355';
+    var PAGE_BUILD = '202608200015';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -205,7 +205,7 @@
   <table>
     <thead>
       <tr>
-        <th>שם פנימי</th><th>טלפון בעלים</th><th>תחום</th><th>עיר</th><th>מחיר מבוקש</th><th>סטטוס</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>📋 מצגת</th><th>📋 טופס פגישה</th><th>נוצר</th><th>עודכן</th>
+        <th>שם פנימי</th><th>טלפון בעלים</th><th>תחום</th><th>עיר</th><th>מחיר מבוקש</th><th>סטטוס</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>📋 חומר אנונימי</th><th>📋 טופס פגישה</th><th>נוצר</th><th>עודכן</th>
       </tr>
     </thead>
     <tbody id="bizBody">
@@ -386,6 +386,22 @@ function anonFileIndicatorBadge(bizId){
   const count = ANON_FILE_COUNT_BY_BIZ[bizId] || 0;
   if (!count) return '';
   return `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="נמצאו ${count} קבצים ששמם מזהה אותם כאנונימיים - זמינים גם בטאב עסקים אנונימיים" style="cursor:pointer;background:#e8f0fe;color:#1a56db;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">📎 יש קובץ אנונימי${count > 1 ? ' (' + count + ')' : ''}</span>`;
+}
+// עמודת "חומר אנונימי" בטבלה הראשית - עד 19.08.2026 הסתמכה אך ורק על עמודת
+// ה-DB הישנה anon_presentation_name (סלוט מצגת בודד וישן, לא מתעדכן יותר
+// בפועל), ולכן המשיכה להראות "אין" גם לעסקים שכבר יש להם תקציר/מצגת אנונימיים
+// אמיתיים דרך אזור "קבצים מצורפים" - בלבול אמיתי שדווח בפועל (19.08.2026).
+// מאוחדת עכשיו עם שני המקורות: הסלוט הישן (להיסטוריה) + הזיהוי-לפי-שם החדש.
+function anonMaterialCell(b){
+  const legacyName = b.anon_presentation_name;
+  const newCount = ANON_FILE_COUNT_BY_BIZ[b.id] || 0;
+  if (!legacyName && !newCount){
+    return `<span style="display:inline-block;background:#f2f0e8;color:#999;font-weight:600;font-size:.75rem;padding:4px 10px;border-radius:20px;white-space:nowrap;">אין</span>`;
+  }
+  const tipParts = [];
+  if (legacyName) tipParts.push('מצגת ישנה (סלוט בודד): ' + legacyName);
+  if (newCount) tipParts.push(newCount + ' קובץ' + (newCount > 1 ? 'ים' : '') + ' מזוה' + (newCount > 1 ? 'ים' : 'ה') + ' לפי שם (תקציר/מצגת אנונימיים)');
+  return `<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="${esc(tipParts.join(' · '))}" style="cursor:pointer;display:inline-block;background:#e3f5e9;color:#1f7a45;font-weight:700;font-size:.75rem;padding:4px 10px;border-radius:20px;white-space:nowrap;">📄 יש</span>`;
 }
 async function loadGrantCounts(){
   const ids = ALL_BIZ.map(b => b.id);
@@ -590,9 +606,7 @@ function renderTable(){
       <td data-label="הוזן ע&quot;י">${b.created_by ? `<b style="color:${creatorColor(b.created_by) || '#333'};">${esc(userName(b.created_by))}</b>` : 'לא ידוע'}</td>
       <td data-label="מטופל ע&quot;י">${b.handled_by ? esc(userName(b.handled_by)) : '—'}</td>
       <td data-label="סטטוס הסכם">${agreementBadge(b.agreement_status)}</td>
-      <td data-label="מצגת" style="text-align:center;">${b.anon_presentation_name
-        ? `<span title="${esc(b.anon_presentation_name)}" style="display:inline-block;background:#e3f5e9;color:#1f7a45;font-weight:700;font-size:.75rem;padding:4px 10px;border-radius:20px;white-space:nowrap;">📄 יש מצגת</span>`
-        : `<span style="display:inline-block;background:#f2f0e8;color:#999;font-weight:600;font-size:.75rem;padding:4px 10px;border-radius:20px;white-space:nowrap;">אין מצגת</span>`}</td>
+      <td data-label="חומר אנונימי" style="text-align:center;">${anonMaterialCell(b)}</td>
       <td data-label="טופס פגישה" style="text-align:center;" onclick="event.stopPropagation()">${b.intake_form_path
         ? `<button title="${esc('מולא ע"י ' + userName(b.intake_form_filled_by) + ' · ' + fmtDate(b.intake_form_filled_at))}" onclick="downloadIntakeForm('${b.id}', '${esc((b.internal_name||'עסק').replace(/'/g,''))}')" style="background:#dff0e4;color:#1a5c38;border:1px solid #7fc79a;font-weight:700;font-size:.75rem;padding:5px 10px;border-radius:20px;white-space:nowrap;cursor:pointer;">📋 יש טופס</button>`
         : `<a href="intake-form.html?business_id=${b.id}" title="מלא טופס פגישה לעסק זה" style="display:inline-block;background:#f2f0e8;color:#7a6a2a;font-weight:600;font-size:.75rem;padding:4px 10px;border-radius:20px;white-space:nowrap;text-decoration:none;border:1px dashed #c9a24b;">📋 אין טופס - מלא כעת</a>`}</td>
