@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608200115';
+    var PAGE_BUILD = '202608191247';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1956,7 +1956,7 @@ async function loadBizFiles(bizId){
       </div>
     </div>`).join('')
     + `<div style="margin-top:10px;">
-         <button type="button" class="btn btn-ghost" id="bizSendEmailBtn" disabled onclick="openSendFilesToBuyer('${bizId}')">📧 שלח לקונה במייל</button>
+         <button type="button" class="btn btn-ghost" id="bizSendEmailBtn" disabled title="סמן קובץ אחד לפחות למעלה כדי להפעיל" onclick="openSendFilesToBuyer('${bizId}')">📧 שלח לקונה במייל</button>
        </div>`;
 }
 
@@ -2031,6 +2031,7 @@ function updateBizSendBtn(bizId){
   if (!btn) return;
   btn.disabled = n === 0;
   btn.textContent = n ? `📧 שלח ${n} קבצים לקונה במייל` : '📧 שלח לקונה במייל';
+  btn.title = n === 0 ? 'סמן קובץ אחד לפחות למעלה כדי להפעיל' : '';
 }
 
 // עוטף כל await ברשת/Supabase בטיימאאוט מפורש - כדי שאם קריאה כלשהי "נתקעת"
