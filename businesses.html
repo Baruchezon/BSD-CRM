@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608200015';
+    var PAGE_BUILD = '202608200045';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -338,8 +338,10 @@ async function loadAnonPresentationIndicator(){
   (data || []).forEach(f => { ANON_PRESENTATION_MAP[f.business_id] = true; });
 }
 function anonPresentationBadge(bizId){
-  return ANON_PRESENTATION_MAP[bizId]
-    ? `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="קיימת מצגת אנונימית מוכנה לשליחה - לחץ לצפייה" style="cursor:pointer;background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">📊 מצגת אנונימית: יש</span>`
+  const hasLegacy = !!ANON_PRESENTATION_MAP[bizId];
+  const hasNewFile = (ANON_FILE_COUNT_BY_BIZ[bizId] || 0) > 0;
+  return (hasLegacy || hasNewFile)
+    ? `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="קיים חומר אנונימי מוכן לשליחה - לחץ לצפייה, או עבור לטאב 'עסקים אנונימיים' כדי לצפות/להוריד/לשלוח" style="cursor:pointer;background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">📊 מצגת אנונימית: יש</span>`
     : `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">📊 מצגת אנונימית: אין</span>`;
 }
 // מספר קבצים בפועל לכל עסק - מבוסס אך ורק על אזור "קבצים מצורפים" המאוחד
