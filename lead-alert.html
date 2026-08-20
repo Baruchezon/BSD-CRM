@@ -7,7 +7,7 @@
 // שהתגלתה היום בדפים אחרים (PAGE_BUILD לא מתעדכן = לא נתפס דף מקאש ישן).
 (function(){
   try{
-    var PAGE_BUILD = '202608192351';
+    var PAGE_BUILD = '202608201900';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -185,25 +185,24 @@ function renderLead(lead){
       ${notesPreview ? `<div class="msg-box">${esc(notesPreview)}</div>` : ''}
       ${(lead.notes || '').includes('⚠️ לא ניתן היה לסווג') ? '<div class="review-flag">⚠️ המערכת לא הצליחה לסווג את הפנייה בוודאות (קונה/מוכר/משקיע) - נדרשת בדיקה ידנית לפני שממשיכים.</div>' : ''}
       ${kind === 'repeat' ? `<div class="duplicate-note">🔁 הטלפון/מייל של הפנייה הזו כבר שייכים לרשומה קיימת - הפנייה החדשה צורפה כהערה לרשומה הזו, לא נוצר כרטיס כפול.</div>` : ''}
-      <div class="saved-note">✅ הליד שמור במערכת</div>
+      <div class="saved-note">✅ הליד שמור במערכת — ממתין בתיבת "לידים מהאתר" עד שתסמן ששוחחת עם הלקוח</div>
     </div>
     <div class="actions">
-      <button class="action btn-confirm" onclick="confirmAndClose()">✅ אשר - הליד ברשימה</button>
-      <button class="action btn-edit" onclick="editLead()">✏️ ערוך את הליד</button>
+      <button class="action btn-confirm" onclick="talkToCustomer()">💬 שוחחתי עם הלקוח</button>
+      <button class="action btn-edit" onclick="editLead()">📋 פתח בתיבת הלידים מהאתר</button>
       <button class="action btn-reject" onclick="rejectLead()">🗑️ דחה ומחק ליד</button>
     </div>
   `;
 }
 
-function confirmAndClose(){
-  // הליד כבר שמור בפועל בבסיס הנתונים ברגע שההתראה נשלחה - "אישור" כאן הוא
-  // רק מעבר לרשימת הלידים כדי לראות אותו שם, בלי ?open= בכתובת (כדי לא
-  // לגרום לטופס העריכה להיפתח שוב אוטומטית).
-  location.href = 'leads.html';
+function talkToCustomer(){
+  // פותח ישירות את מסך "לידים מהאתר" עם הליד הזה - שם נמצא כפתור "שוחחתי
+  // עם הלקוח" האמיתי (שמעדכן סטטוס בפועל) ואחריו טופס תיעוד השיחה.
+  location.href = `leads-hub.html?open=${encodeURIComponent(leadId)}`;
 }
 
 function editLead(){
-  location.href = `leads.html?open=${encodeURIComponent(leadId)}`;
+  location.href = `leads-hub.html?open=${encodeURIComponent(leadId)}`;
 }
 
 async function rejectLead(){
