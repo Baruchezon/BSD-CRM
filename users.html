@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192351';
+    var PAGE_BUILD = '202608202235';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -417,6 +417,10 @@ function openEditForm(id){
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_edit_buyer_rating" style="width:auto;" ${u.can_edit_buyer_rating?'checked':''}> אפשר שינוי דירוג רצינות קונים (ללא סימון - admin/manager תמיד מורשים)</label>
         </div>
         <div class="field full"><label>הערות</label><textarea id="notes">${esc(u.notes)}</textarea></div>
+        <div class="field full" style="background:#fff8e6;border:1px solid #e8d18a;border-radius:8px;padding:10px 12px;">
+          <label style="font-weight:700;color:#8a5a00;">🔐 עסקים שהופצו למשתמש זה במפורש</label>
+          <div id="userAccessGrantsList" style="font-size:.82rem;margin-top:6px;">טוען...</div>
+        </div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
@@ -428,6 +432,47 @@ function openEditForm(id){
   document.getElementById('overlay').scrollTop = 0;
   document.getElementById('editForm').dataset.userId = id;
   document.getElementById('editForm').addEventListener('submit', saveEdit);
+  loadUserAccessGrants(id);
+}
+
+// ============================================================
+// תצוגה הפוכה: אילו עסקים שוחררו למשתמש הזה במפורש (business_access_grants
+// שבהם granted_to = המשתמש הנוכחי) - כרטיס משתמש, סעיף באפיון ההפצה 20.08.2026.
+// ============================================================
+const ACCESS_LEVEL_LABEL_USR = { none: '⛔ ללא גישה', anonymous: '🪪 אנונימי בלבד', full: '🔓 גישה מלאה' };
+
+async function loadUserAccessGrants(userId){
+  const box = document.getElementById('userAccessGrantsList');
+  if (!box) return;
+  const { data, error } = await window.supabaseClient
+    .from('business_access_grants')
+    .select('id, access_level, granted_at, granted_by, business_id, businesses(internal_name)')
+    .eq('granted_to', userId).eq('active', true)
+    .order('granted_at', { ascending: false });
+  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה: ${esc(error.message)}</span>`; return; }
+  if (!data || !data.length){ box.innerHTML = '<span style="color:#999;">אין למשתמש זה הרשאות מפורשות פר-עסק כרגע</span>'; return; }
+  box.innerHTML = data.map(g => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f1e9c8;flex-wrap:wrap;gap:6px;">
+      <span><b>${esc(g.businesses ? g.businesses.internal_name : 'עסק שנמחק')}</b> · ${ACCESS_LEVEL_LABEL_USR[g.access_level] || g.access_level} · נקבע ב-${fmtDateTime(g.granted_at)}${g.granted_by ? ' ע"י ' + esc(userNameFromCache(g.granted_by)) : ''}</span>
+      <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="revokeUserAccessGrant('${g.id}','${userId}')">הסר גישה</button>
+    </div>
+  `).join('');
+}
+
+function userNameFromCache(id){
+  const u = ALL_USERS.find(x => x.id === id);
+  return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
+}
+
+async function revokeUserAccessGrant(grantId, userId){
+  if (!confirm('להסיר את הגישה המפורשת של המשתמש לעסק זה?')) return;
+  const { error } = await window.supabaseClient.from('business_access_grants')
+    .update({ revoked_at: new Date().toISOString(), revoked_by: CURRENT_PROFILE.id })
+    .eq('id', grantId);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  bsdLogActivity('revoke_access', 'business_access_grants', grantId);
+  toast('הגישה הוסרה');
+  loadUserAccessGrants(userId);
 }
 
 async function saveEdit(e){

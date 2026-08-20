@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192351';
+    var PAGE_BUILD = '202608202235';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -454,9 +454,23 @@ function distributionBadge(b){
   const grantCount = GRANT_COUNTS[b.id] || 0;
   const parts = [];
   if (b.anon_summary || b.anon_display_name) parts.push(`<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="קיים תקציר אנונימי שמור - לחץ לצפייה/עריכה" style="cursor:pointer;background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">✓ אנונימי מוכן</span>`);
-  if (grantCount > 0) parts.push(`<span style="background:#fff8e6;color:#8a5a00;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">🔓 גישה מלאה: ${grantCount}</span>`);
-  if (!parts.length) return '';
+  parts.push(distributionModeBadge(b, grantCount));
   return parts.join(' ');
+}
+
+// תקציר מצב ההפצה בכרטיס העסק/ברשימה (סעיף "תצוגת אדמין" באפיון) - נגזר
+// אך ורק ממה שבפועל שמור ב-DB (distribution_status + ספירת הרשאות מפורשות
+// פעילות), לא state זמני בדפדפן.
+function distributionModeBadge(b, grantCount){
+  grantCount = grantCount != null ? grantCount : (GRANT_COUNTS[b.id] || 0);
+  if (b.distribution_status === 'selective'){
+    return `<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="לחץ לרשימת המשתמשים וההרשאות המדויקות" style="cursor:pointer;background:#fff8e6;color:#8a5a00;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">🎯 הפצה סלקטיבית: ${grantCount} משתמשים</span>`;
+  }
+  if (b.distribution_status === 'all_authorized'){
+    const extra = grantCount > 0 ? ` (+${grantCount} הרשאות מפורשות)` : '';
+    return `<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="לחץ לפרטים" style="cursor:pointer;background:#e8f0fe;color:#1a56db;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">📡 הפצה: כל הסוכנים המורשים${extra}</span>`;
+  }
+  return `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">⚪ לא מופץ</span>`;
 }
 
 async function maybeHandleUrlParams(){
@@ -622,7 +636,7 @@ function renderTable(){
             </div>
             ${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}
             ${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}
-            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${anonStatusBadge(b)}${anonPresentationBadge(b.id)}${distributionBadge(b)}</div>
+            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${anonPresentationBadge(b.id)}${distributionBadge(b)}</div>
           </div>
         </div>
       </td>
@@ -808,7 +822,7 @@ function openBizForm(id){
       <div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;">
         <label style="display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer;">
           <input type="checkbox" id="anon_card_active" style="width:auto;" ${biz.anon_card_active?'checked':''}>
-          הפץ עסק זה ככרטיס אנונימי לכל המשתמשים המורשים לצפייה בעסקים אנונימיים
+          הכן תוכן אנונימי לעסק זה (מי בפועל רואה אותו נקבע באזור "הפצה והרשאות" למטה)
         </label>
         <div style="font-size:.78rem;color:#665;margin-top:6px;">
           הכרטיס יכלול רק: תחום, קטגוריה, עיר, וותק, מחזור/רווח/עובדים, ותקציר. הוא לעולם לא יכלול שם עסק, שם בעלים, טלפון, אימייל, כתובת מדויקת או קבצים - זה נאכף ברמת בסיס הנתונים, לא רק בממשק.
@@ -845,13 +859,37 @@ function openBizForm(id){
       ` : ``}
 
       ${biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz) ? `
-      <div style="margin-top:16px;background:#fff8e6;border:1px solid #e8d18a;border-radius:8px;padding:2px 12px 10px;">
-      <div class="section-h" style="margin-top:12px;font-size:.95rem;color:#8a5a00;">🔓 גישה שהוענקה לעסק זה</div>
+      <div style="margin-top:16px;background:#fff8e6;border:1px solid #e8d18a;border-radius:8px;padding:2px 12px 12px;">
+      <div class="section-h" style="margin-top:12px;font-size:.95rem;color:#8a5a00;">🔐 הפצה והרשאות</div>
       <div class="field full">
-        <div id="bizAccessGrantsList" style="font-size:.82rem;margin-bottom:8px;">טוען...</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button type="button" class="btn btn-ghost" onclick="openReleaseAccessModal('${biz.id}')">➕ שחרר גישה למשתמש</button>
-          <button type="button" class="btn btn-ghost" style="color:#b3402c;" onclick="revokeAllAccessGrants('${biz.id}')" id="revokeAllBtn">🚫 בטל את כל הגישות המלאות לעסק</button>
+        <div style="display:flex;flex-direction:column;gap:6px;background:#fff;border:1px solid #e8d18a;border-radius:8px;padding:10px 12px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="radio" name="distributionMode" value="not_distributed" style="width:auto;" ${biz.distribution_status==='not_distributed'||!biz.distribution_status?'checked':''} onchange="setDistributionMode('${biz.id}','not_distributed')">
+            <span><b>לא מופץ</b> — רק יוצר/מטפל/אדמין רואים את העסק</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="radio" name="distributionMode" value="all_authorized" style="width:auto;" ${biz.distribution_status==='all_authorized'?'checked':''} onchange="setDistributionMode('${biz.id}','all_authorized')">
+            <span><b>הפצה לכל הסוכנים המורשים</b> — כל סוכן מורשה יראה אוטומטית את הגרסה האנונימית</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="radio" name="distributionMode" value="selective" style="width:auto;" ${biz.distribution_status==='selective'?'checked':''} onchange="setDistributionMode('${biz.id}','selective')">
+            <span><b>הפצה למשתמשים נבחרים בלבד</b> — רק מי שמסומן ברשימה למטה רואה משהו</span>
+          </label>
+        </div>
+        <div style="font-size:.72rem;color:#8a5a00;margin-top:6px;">גישה מלאה = צפייה והורדה בלבד, לא עריכה. ניתן גם ב\"כל הסוכנים המורשים\" לחסום או לשדרג משתמש ספציפי - הרשאה מפורשת תמיד גוברת על ברירת המחדל.</div>
+
+        <div style="margin-top:12px;padding-top:10px;border-top:1px dashed #e8d18a;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <b style="font-size:.85rem;">הרשאות פר-משתמש</b>
+            <button type="button" class="btn btn-ghost" onclick="openReleaseAccessModal('${biz.id}')">➕ הוסף / שנה הרשאה למשתמש</button>
+          </div>
+          <div id="bizAccessGrantsList" style="font-size:.82rem;margin-top:8px;">טוען...</div>
+          <button type="button" class="btn btn-ghost" style="margin-top:8px;color:#b3402c;" onclick="revokeAllAccessGrants('${biz.id}')" id="revokeAllBtn">🚫 בטל את כל ההרשאות המפורשות לעסק זה</button>
+        </div>
+
+        <div style="margin-top:12px;padding-top:10px;border-top:1px dashed #e8d18a;">
+          <button type="button" class="btn btn-ghost" style="font-size:.75rem;" onclick="toggleBizAccessAudit('${biz.id}')">📜 היסטוריית שינויי הרשאה</button>
+          <div id="bizAccessAuditList" style="display:none;font-size:.78rem;margin-top:8px;color:#665;"></div>
         </div>
       </div>
       </div>
@@ -907,8 +945,26 @@ function openBizForm(id){
 }
 
 // ============================================================
-// גישה שוחררה לעסק - רשימה + שחרור חדש + ביטול (סעיפים 7-9 באפיון)
+// הפצה והרשאות פר-עסק (none/anonymous/full) - שדרוג 20.08.2026.
+// distribution_status קובע ברירת מחדל (not_distributed/all_authorized/
+// selective); business_access_grants.access_level (none/anonymous/full)
+// היא הרשאה מפורשת פר-משתמש שתמיד גוברת על ברירת המחדל - זהה בדיוק
+// ללוגיקה ב-get_business_access_level() ב-DB (מקור אמת יחיד).
 // ============================================================
+const ACCESS_LEVEL_LABEL = { none: '⛔ ללא גישה', anonymous: '🪪 אנונימי בלבד', full: '🔓 גישה מלאה' };
+
+async function setDistributionMode(bizId, mode){
+  const { error } = await window.supabaseClient.from('businesses')
+    .update({ distribution_status: mode }).eq('id', bizId);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  bsdLogActivity('set_distribution_mode', 'businesses', bizId, { mode });
+  const biz = ALL_BIZ.find(b => b.id === bizId);
+  if (biz) biz.distribution_status = mode;
+  toast(mode === 'not_distributed' ? 'העסק אינו מופץ' : mode === 'all_authorized' ? 'הופץ לכל הסוכנים המורשים' : 'הועבר להפצה סלקטיבית');
+  loadBizAccessGrants(bizId);
+  loadGrantCounts();
+}
+
 async function loadBizAccessGrants(bizId){
   const box = document.getElementById('bizAccessGrantsList');
   if (!box) return;
@@ -919,90 +975,121 @@ async function loadBizAccessGrants(bizId){
     .eq('active', true)
     .order('granted_at', { ascending: false });
   if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה: ${esc(error.message)}</span>`; return; }
-  if (!data || !data.length){ box.innerHTML = '<span style="color:#999;">הגישה לעסק זה לא שוחררה כרגע לאף משתמש</span>'; return; }
+  if (!data || !data.length){ box.innerHTML = '<span style="color:#999;">אין כרגע הרשאות מפורשות פר-משתמש - הגישה נקבעת לפי מצב ההפצה הכללי בלבד</span>'; return; }
   box.innerHTML = data.map(g => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eee;">
-      <span><b>${esc(userName(g.granted_to))}</b> · ${g.access_level === 'files' ? 'כרטיס מלא + קבצים' : 'כרטיס מלא בלבד'} · שוחרר ע"י ${esc(userName(g.granted_by))} ב-${fmtDate(g.granted_at)}</span>
-      <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="revokeAccessGrant('${g.id}','${bizId}')">בטל גישה</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eee;flex-wrap:wrap;gap:6px;">
+      <span><b>${esc(userName(g.granted_to))}</b> · ${ACCESS_LEVEL_LABEL[g.access_level] || g.access_level} · נקבע ע"י ${esc(userName(g.granted_by))} ב-${fmtDate(g.granted_at)}</span>
+      <div style="display:flex;gap:6px;">
+        <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="openReleaseAccessModal('${bizId}','${g.granted_to}','${g.access_level}')">שנה רמה</button>
+        <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="revokeAccessGrant('${g.id}','${bizId}')">הסר לגמרי</button>
+      </div>
     </div>
   `).join('');
 }
 
-function openReleaseAccessModal(bizId){
+function openReleaseAccessModal(bizId, presetUser, presetLevel){
   const overlay = document.createElement('div');
   overlay.id = 'releaseAccessOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:400;padding:20px;';
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
-      <h3 style="margin:0 0 16px;color:#0e1b34;border-right:4px solid #c9a24b;padding-right:10px;">שחרר גישה למשתמש</h3>
+      <h3 style="margin:0 0 16px;color:#0e1b34;border-right:4px solid #c9a24b;padding-right:10px;">הרשאת משתמש לעסק</h3>
       <label style="display:block;font-size:.8rem;color:#666;margin-bottom:4px;">משתמש</label>
-      <select id="releaseToUser" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;margin-bottom:10px;">${userOptions(null)}</select>
+      <select id="releaseToUser" ${presetUser?'disabled':''} style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;margin-bottom:10px;">${userOptions(presetUser || null)}</select>
       <label style="display:block;font-size:.8rem;color:#666;margin-bottom:4px;">רמת גישה</label>
       <select id="releaseAccessLevel" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;">
-        <option value="full_view">צפייה בכרטיס המלא בלבד</option>
-        <option value="files">כרטיס מלא + קבצים</option>
+        <option value="none" ${presetLevel==='none'?'selected':''}>⛔ ללא גישה (חסימה מפורשת)</option>
+        <option value="anonymous" ${presetLevel==='anonymous'?'selected':''}>🪪 אנונימי בלבד</option>
+        <option value="full" ${presetLevel==='full'?'selected':''}>🔓 גישה מלאה (צפייה + הורדה, לא עריכה)</option>
       </select>
       <div id="releaseAccessError" style="display:none;color:#b00020;font-size:.82rem;margin-top:8px;"></div>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;">
         <button onclick="document.getElementById('releaseAccessOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
-        <button id="releaseAccessSubmitBtn" onclick="submitReleaseAccess('${bizId}')" style="background:#c9a24b;color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שחרר גישה</button>
+        <button id="releaseAccessSubmitBtn" onclick="submitReleaseAccess('${bizId}',${presetUser?`'${presetUser}'`:'null'})" style="background:#c9a24b;color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שמור הרשאה</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
 }
 
-async function submitReleaseAccess(bizId){
-  const toUser = document.getElementById('releaseToUser').value;
+async function submitReleaseAccess(bizId, presetUser){
+  const toUser = presetUser || document.getElementById('releaseToUser').value;
   const level = document.getElementById('releaseAccessLevel').value;
   const errEl = document.getElementById('releaseAccessError');
   const showErr = msg => { if (errEl){ errEl.textContent = msg; errEl.style.display = 'block'; } toast(msg); };
   if (errEl) errEl.style.display = 'none';
   if (!toUser){ showErr('⚠️ יש לבחור משתמש מהרשימה'); return; }
   const btn = document.getElementById('releaseAccessSubmitBtn');
-  if (btn){ btn.disabled = true; btn.textContent = 'משחרר...'; }
-  const { error } = await window.supabaseClient.from('business_access_grants').insert({
-    business_id: bizId, granted_to: toUser, granted_by: CURRENT_PROFILE.id, access_level: level
-  });
+  if (btn){ btn.disabled = true; btn.textContent = 'שומר...'; }
+  // upsert: אם כבר קיימת הרשאה פעילה למשתמש הזה על העסק הזה - עדכן במקום להכשל על unique constraint
+  const { data: existing } = await window.supabaseClient.from('business_access_grants')
+    .select('id').eq('business_id', bizId).eq('granted_to', toUser).eq('active', true).maybeSingle();
+  let error;
+  if (existing){
+    ({ error } = await window.supabaseClient.from('business_access_grants')
+      .update({ access_level: level, granted_by: CURRENT_PROFILE.id })
+      .eq('id', existing.id));
+  } else {
+    ({ error } = await window.supabaseClient.from('business_access_grants').insert({
+      business_id: bizId, granted_to: toUser, granted_by: CURRENT_PROFILE.id, access_level: level
+    }));
+  }
   if (error){
-    if (btn){ btn.disabled = false; btn.textContent = 'שחרר גישה'; }
-    if (error.code === '23505'){ showErr('למשתמש הזה כבר יש גישה פעילה לעסק זה'); return; }
+    if (btn){ btn.disabled = false; btn.textContent = 'שמור הרשאה'; }
     showErr('שגיאה: ' + error.message); return;
   }
-  bsdLogActivity('grant_access', 'businesses', bizId);
+  bsdLogActivity('set_access_level', 'businesses', bizId, { user: toUser, level });
   document.getElementById('releaseAccessOverlay').remove();
-  toast('הגישה שוחררה בהצלחה');
+  toast('ההרשאה נשמרה');
   loadBizAccessGrants(bizId);
+  loadGrantCounts();
 }
 
 async function revokeAccessGrant(grantId, bizId){
-  if (!confirm('לבטל את הגישה שהוענקה?')) return;
+  if (!confirm('להסיר לגמרי את המשתמש מרשימת ההרשאות המפורשות? הוא יחזור לרמת הגישה שנקבעת ע"י מצב ההפצה הכללי של העסק (ולא ל-none, אלא אם ההפצה במצב סלקטיבי).')) return;
   const { error } = await window.supabaseClient.from('business_access_grants')
     .update({ revoked_at: new Date().toISOString(), revoked_by: CURRENT_PROFILE.id })
     .eq('id', grantId);
   if (error){ toast('שגיאה: ' + error.message); return; }
   bsdLogActivity('revoke_access', 'businesses', bizId);
-  toast('הגישה בוטלה');
+  toast('ההרשאה הוסרה');
   loadBizAccessGrants(bizId);
   loadGrantCounts();
 }
 
 async function revokeAllAccessGrants(bizId){
-  if (!confirm('לבטל את כל הגישות המלאות שהוענקו לעסק זה? כל המשתמשים שקיבלו גישה יחזרו לראות רק את הגרסה האנונימית (אם קיימת). פעולה זו לא ניתנת לביטול.')) return;
+  if (!confirm('להסיר את כל ההרשאות המפורשות פר-משתמש לעסק זה? כל המשתמשים יחזרו לרמת הגישה שנקבעת ע"י מצב ההפצה הכללי בלבד. פעולה זו לא ניתנת לביטול.')) return;
   const btn = document.getElementById('revokeAllBtn');
   if (btn){ btn.disabled = true; btn.textContent = 'מבטל...'; }
   const { data: activeGrants, error: fetchErr } = await window.supabaseClient
     .from('business_access_grants').select('id').eq('business_id', bizId).eq('active', true);
-  if (fetchErr){ toast('שגיאה: ' + fetchErr.message); if (btn){ btn.disabled = false; btn.textContent = '🚫 בטל את כל הגישות המלאות לעסק'; } return; }
-  if (!activeGrants || !activeGrants.length){ toast('אין כרגע גישות פעילות לביטול'); if (btn){ btn.disabled = false; btn.textContent = '🚫 בטל את כל הגישות המלאות לעסק'; } return; }
+  if (fetchErr){ toast('שגיאה: ' + fetchErr.message); if (btn){ btn.disabled = false; btn.textContent = '🚫 בטל את כל ההרשאות המפורשות לעסק זה'; } return; }
+  if (!activeGrants || !activeGrants.length){ toast('אין כרגע הרשאות מפורשות לביטול'); if (btn){ btn.disabled = false; btn.textContent = '🚫 בטל את כל ההרשאות המפורשות לעסק זה'; } return; }
   const { error } = await window.supabaseClient.from('business_access_grants')
     .update({ revoked_at: new Date().toISOString(), revoked_by: CURRENT_PROFILE.id })
     .eq('business_id', bizId).eq('active', true);
-  if (btn){ btn.disabled = false; btn.textContent = '🚫 בטל את כל הגישות המלאות לעסק'; }
+  if (btn){ btn.disabled = false; btn.textContent = '🚫 בטל את כל ההרשאות המפורשות לעסק זה'; }
   if (error){ toast('שגיאה: ' + error.message); return; }
   bsdLogActivity('revoke_all_access', 'businesses', bizId, { count: activeGrants.length });
-  toast(`בוטלו ${activeGrants.length} גישות. כל המשתמשים חזרו לרמת הגישה הרגילה שלהם`);
+  toast(`בוטלו ${activeGrants.length} הרשאות מפורשות. כל המשתמשים חזרו לרמת הגישה שנקבעת ע"י מצב ההפצה הכללי`);
   loadBizAccessGrants(bizId);
   loadGrantCounts();
+}
+
+async function toggleBizAccessAudit(bizId){
+  const box = document.getElementById('bizAccessAuditList');
+  if (!box) return;
+  if (box.style.display === 'block'){ box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.innerHTML = 'טוען...';
+  const { data, error } = await window.supabaseClient
+    .from('business_access_audit').select('*').eq('business_id', bizId)
+    .order('changed_at', { ascending: false }).limit(50);
+  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה: ${esc(error.message)}</span>`; return; }
+  if (!data || !data.length){ box.innerHTML = '<span style="color:#999;">אין עדיין היסטוריית שינויים</span>'; return; }
+  box.innerHTML = data.map(a => {
+    const who = a.target_user ? esc(userName(a.target_user)) : '(מצב הפצה כללי)';
+    return `<div style="padding:4px 0;border-bottom:1px solid #f1efe8;">${fmtDateTime(a.changed_at)} · ${who} · ${a.level_before || '—'} ← ${a.level_after || '—'} · ע"י ${esc(userName(a.changed_by))}</div>`;
+  }).join('');
 }
 
 // ============================================================
