@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192351';
+    var PAGE_BUILD = '202608201900';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1064,47 +1064,48 @@ async function sendPopupReply(i, recipientId){
 }
 
 // ============================================================
-// NEW LEAD POPUP (19.08.2026) — כשמגיע ליד חדש מהאתר (SITE123),
-// נוצרת משימה ("צור קשר עם ליד חדש מהאתר..." / "פנייה חוזרת מ...")
-// אבל בלי due_date, ולכן checkTasksPopup (שמציג רק משימות של "היום")
-// אף פעם לא תופס אותה - זו הסיבה שההתראה לא "קפצה" כשנכנס ל-CRM,
-// גם שהפוש בטלפון כן הגיע. פותר את זה בדיוק כמו checkNewMessagesPopup:
-// נבדק בטעינה + כל דקה כל עוד הדשבורד פתוח, מסומן ב-localStorage כדי
-// שלא יופיע שוב אחרי שכבר נראה פעם אחת (גם בין רענוני דף/כניסות חדשות).
+// NEW LEAD POPUP — הליד עצמו נשלף ישירות (website_intake_stage='new'),
+// לא דרך משימה. בכוונה בלי localStorage שמדכא לצמיתות אחרי שנראה פעם
+// אחת - לפי דרישה מפורשת (20.08.2026): הפופ-אפ לא "נעלם לתמיד" רק כי
+// נסגר או נצפה; הוא ימשיך להופיע (בכל טעינת דף/בדיקה כל דקה) כל עוד
+// הליד עדיין במצב 'new' בפועל ב-DB, ויפסיק להופיע רק כשמסמנים בפועל
+// "שוחחתי עם הלקוח" (המצב אז הופך ל-'contacted' והשאילתה כאן לא תחזיר
+// אותו יותר) - windowSessionSuppressed מונע רק הכפלה של אותו overlay
+// כמה פעמים באותה טעינת עמוד ממש, לא מדכא בין רענונים/כניסות.
 // ============================================================
+let _leadPopupOpenIds = new Set();
 async function checkNewLeadPopup(profile){
   const { data, error } = await window.supabaseClient
-    .from('tasks')
-    .select('id, title, related_id, created_at')
-    .eq('assigned_to', profile.id)
-    .eq('related_type', 'lead')
-    .neq('status', 'הושלמה')
-    .or('title.ilike.צור קשר עם ליד חדש מהאתר%,title.ilike.פנייה חוזרת מ%')
+    .from('leads')
+    .select('id, full_name, phone, website_purpose_guess, created_at')
+    .eq('website_intake_stage', 'new')
     .order('created_at', { ascending: false });
   if (error || !data || data.length === 0) return;
-
-  const shownIds = JSON.parse(localStorage.getItem('bsdLeadPopupShown_' + profile.id) || '[]');
-  const toShow = data.filter(t => !shownIds.includes(t.id));
-  if (toShow.length === 0) return;
-
-  localStorage.setItem('bsdLeadPopupShown_' + profile.id, JSON.stringify(data.map(t => t.id)));
-  showNewLeadPopup(toShow);
+  // אם overlay של אותם לידים כבר פתוח על המסך עכשיו - לא פותחים שני overlay-ים זה על זה
+  const ids = data.map(l => l.id).join(',');
+  if (document.getElementById('newLeadPopupOverlay') && document.getElementById('newLeadPopupOverlay').dataset.ids === ids) return;
+  showNewLeadPopup(data);
 }
 
-function showNewLeadPopup(tasks){
+function showNewLeadPopup(leads){
+  const existing = document.getElementById('newLeadPopupOverlay');
+  if (existing) existing.remove();
   const overlay = document.createElement('div');
+  overlay.id = 'newLeadPopupOverlay';
+  overlay.dataset.ids = leads.map(l => l.id).join(',');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:center;justify-content:center;z-index:9998;padding:20px;';
-  const first = tasks[0];
-  const isRepeat = first.title.startsWith('פנייה חוזרת');
-  const extraCount = tasks.length - 1;
+  const first = leads[0];
+  const name = first.full_name || 'שם לא זוהה';
+  const extraCount = leads.length - 1;
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:14px;padding:26px 28px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;text-align:center;">
-      <div style="font-size:2.2rem;margin-bottom:4px;">${isRepeat ? '🔁' : '🆕'}</div>
-      <div style="font-weight:700;color:#0e1b34;font-size:1.15rem;margin-bottom:6px;">${isRepeat ? 'פנייה חוזרת מהאתר' : 'ליד חדש מהאתר'}</div>
-      <div style="color:#40485c;font-size:.92rem;margin-bottom:4px;">${esc(first.title.replace(/^(צור קשר עם ליד חדש מהאתר - |פנייה חוזרת מ-)/, ''))}</div>
-      ${extraCount > 0 ? `<div style="color:#8a93a8;font-size:.78rem;margin-bottom:14px;">ועוד ${extraCount} פנייה/ות ממתינות</div>` : '<div style="margin-bottom:14px;"></div>'}
+      <div style="font-size:2.2rem;margin-bottom:4px;">🆕</div>
+      <div style="font-weight:700;color:#0e1b34;font-size:1.15rem;margin-bottom:6px;">ליד חדש מהאתר</div>
+      <div style="color:#40485c;font-size:.92rem;margin-bottom:2px;">${esc(name)}${first.phone ? ' · ' + esc(first.phone) : ''}</div>
+      ${first.website_purpose_guess ? `<div style="color:#8a93a8;font-size:.78rem;margin-bottom:4px;">${esc(first.website_purpose_guess)}</div>` : ''}
+      ${extraCount > 0 ? `<div style="color:#8a93a8;font-size:.78rem;margin-bottom:14px;">ועוד ${extraCount} ליד/ים ממתינים בתיבת הקליטה</div>` : '<div style="margin-bottom:14px;"></div>'}
       <div style="display:flex;gap:10px;justify-content:center;">
-        <a href="lead-alert.html?id=${encodeURIComponent(first.related_id)}&kind=${isRepeat ? 'repeat' : 'new'}" class="btn btn-primary" style="background:#0e1b34;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;">פתח את הליד</a>
+        <a href="leads-hub.html?open=${encodeURIComponent(first.id)}" class="btn btn-primary" style="background:#0e1b34;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;">פתח את הליד</a>
         <button class="btn btn-ghost" id="newLeadPopupCloseBtn" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;border-radius:8px;padding:10px 20px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer;">סגירה</button>
       </div>
     </div>`;

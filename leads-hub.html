@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192351';
+    var PAGE_BUILD = '202608201900';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -147,7 +147,7 @@
 
   <div class="lead-tabs">
     <button type="button" class="lead-tab active" data-tab="business" onclick="switchTab('business')">עסקים <span class="count" id="countBusiness">0</span></button>
-    <button type="button" class="lead-tab" data-tab="seller" onclick="switchTab('seller')">מוכרים (טרם עסק) <span class="count" id="countSeller">0</span></button>
+    <button type="button" class="lead-tab" data-tab="seller" onclick="switchTab('seller')">לידים מהאתר <span class="count" id="countSeller">0</span></button>
     <button type="button" class="lead-tab" data-tab="buyer" onclick="switchTab('buyer')">קונים <span class="count" id="countBuyer">0</span></button>
     <button type="button" class="lead-tab" data-tab="partner" onclick="switchTab('partner')">שותפות/השקעה <span class="count" id="countPartner">0</span></button>
   </div>
@@ -290,10 +290,19 @@ async function loadAll(){
   if (leadErr){ toast('שגיאה בטעינת לידים: ' + leadErr.message); }
 
   const noAgreement = r => !r.agreement_status || r.agreement_status === 'אין הסכם';
-  ALL_BUSINESSES = (bizData || []).filter(noAgreement);
-  ALL_SELLERS = (leadData || []).filter(l => l.type === 'seller' && noAgreement(l));
-  ALL_BUYERS = (leadData || []).filter(l => l.type === 'buyer' && noAgreement(l));
-  ALL_PARTNERS = (leadData || []).filter(l => l.type === 'partner' && noAgreement(l));
+  // "לידים מהאתר" (טאב seller, ראו rename למעלה): כל ליד שהאוטומציה קלטה
+  // ועדיין לא סווג/הועבר סופית (website_intake_stage != null) - בלי קשר
+  // ל-type הזמני שלו - בתוספת מוכרים-בלי-הסכם "ישנים" (מהזנה ידנית, לפני
+  // האוטומציה), כדי לא לאבד גישה לרשומות קיימות. ליד מהאתר שעדיין לא סווג
+  // סופית לעולם לא מופיע בטאבי קונים/שותפים - זו בדיוק המטרה: הוא "יושב"
+  // כאן עד שמסמנים במפורש ששוחחו איתו ובוחרים לאן להעביר אותו.
+  const isOpenWebsiteLead = l => l.website_intake_stage === 'new' || l.website_intake_stage === 'contacted';
+  const legacySellers = (leadData || []).filter(l => l.type === 'seller' && noAgreement(l) && !l.website_intake_stage);
+  const websiteLeads = (leadData || []).filter(isOpenWebsiteLead);
+  const seenIds = new Set();
+  ALL_SELLERS = [...websiteLeads, ...legacySellers].filter(l => (seenIds.has(l.id) ? false : (seenIds.add(l.id), true)));
+  ALL_BUYERS = (leadData || []).filter(l => l.type === 'buyer' && noAgreement(l) && !isOpenWebsiteLead(l));
+  ALL_PARTNERS = (leadData || []).filter(l => l.type === 'partner' && noAgreement(l) && !isOpenWebsiteLead(l));
 
   document.getElementById('countBusiness').textContent = ALL_BUSINESSES.length;
   document.getElementById('countSeller').textContent = ALL_SELLERS.length;
@@ -321,12 +330,25 @@ function tableName(){
   return CURRENT_TAB === 'business' ? 'businesses' : 'leads';
 }
 
+function websiteStatusBadge(r){
+  const s = r.status || '';
+  const map = {
+    'חדש': ['#fdece0','#a3521a'],
+    'ממתין לשיחה': ['#fdece0','#a3521a'],
+    'שוחחתי, ממתין לסיווג': ['#eaf1fb','#2b5fa3'],
+  };
+  const [bg,fg] = map[s] || ['#eee6d4','#665'];
+  return `<span class="badge" style="background:${bg};color:${fg};">${esc(s || 'ליד מהאתר')}</span>`;
+}
 function rowNameCell(r){
   if (CURRENT_TAB === 'business'){
     const bizName = r.internal_name && r.internal_name.trim() ? r.internal_name : '(ללא שם עסק)';
     return `<div class="primary-name">${esc(bizName)}</div><div class="sub-name">${esc(r.owner_name||'—')}</div>`;
   }
   const personName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || '—';
+  if (CURRENT_TAB === 'seller' && r.website_intake_stage){
+    return `<div class="primary-name">${esc(personName)}</div><div style="margin-top:4px;">${websiteStatusBadge(r)}</div>`;
+  }
   if (CURRENT_TAB === 'seller' && r.business_name){
     return `<div class="primary-name">${esc(personName)}</div><div class="sub-name">${esc(r.business_name)}</div>`;
   }
@@ -343,6 +365,7 @@ function rowPhoneCell(r){
   return phone ? `<a href="tel:${esc(phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(phone)}</a>` : '—';
 }
 function rowNotesCell(r){
+  if (CURRENT_TAB === 'seller' && r.website_intake_stage) return esc(r.website_purpose_guess || '—');
   return esc(r.notes || '—');
 }
 
@@ -363,18 +386,20 @@ function renderTable(){
   const tn = tableName();
   body.innerHTML = rows.map(r => {
     const editable = canEditRecord(r.created_by);
+    const isWebsiteLead = CURRENT_TAB === 'seller' && !!r.website_intake_stage;
+    const rowClickAction = isWebsiteLead ? `openWebsiteLead('${r.id}')` : (editable ? `openEdit('${r.id}')` : `openReadOnly('${r.id}')`);
     return `
-    <tr style="cursor:pointer;" onclick="${editable ? `openEdit('${r.id}')` : `openReadOnly('${r.id}')`}">
+    <tr style="cursor:pointer;" onclick="${rowClickAction}">
       <td>
         <div style="display:flex;align-items:flex-start;gap:8px;">
           <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
             <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
             <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
-              ${editable
+              ${isWebsiteLead ? `<a href="javascript:void(0)" onclick="openWebsiteLead('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">💬 שוחחתי עם הלקוח</a>` : (editable
                 ? `<a href="javascript:void(0)" onclick="openEdit('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>`
-                : `<a href="javascript:void(0)" onclick="openReadOnly('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ צפייה (ליד של ${esc(userName(r.created_by))})</a>`}
+                : `<a href="javascript:void(0)" onclick="openReadOnly('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ צפייה (ליד של ${esc(userName(r.created_by))})</a>`)}
               <a href="javascript:void(0)" onclick="openNotesPanel('${tn}','${r.id}','${esc((r.internal_name||r.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(r.id))}</a>
-              ${(editable && canSendAgreement()) ? `<a href="javascript:void(0)" onclick="sendAgreement('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
+              ${(editable && canSendAgreement() && !isWebsiteLead) ? `<a href="javascript:void(0)" onclick="sendAgreement('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
               ${editable ? `<a href="javascript:void(0)" onclick="deleteRecord('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
             </div>
           </div>
@@ -591,6 +616,197 @@ async function addNote(tableName, recordId){
   renderTable();
 }
 
+// ============================================================
+// "לידים מהאתר" — קליטה, סימון "שוחחתי עם הלקוח", תיעוד שיחה וסיווג ידני
+// (20.08.2026). כל כתיבה כאן מאומתת בפועל מול ה-DB בקריאה נפרדת לפני
+// שמוצגת הודעת הצלחה — לעולם לא "✓ נשמר" רק כי הקריאה הראשונה לא החזירה
+// שגיאה.
+// ============================================================
+
+async function verifyLeadWrite(id, expectedFields){
+  // קריאה נפרדת ועצמאית לחלוטין מקריאת הכתיבה עצמה - אם השרת/הרשת שיקרו
+  // על הצלחה בקריאה הראשונה, הבדיקה החוזרת הזו תתפוס את זה.
+  const { data, error } = await window.supabaseClient.from('leads').select('*').eq('id', id).maybeSingle();
+  if (error || !data) return { ok:false, row:null, mismatches:['לא הצלחתי לשלוף את הרשומה מחדש: ' + (error ? error.message : 'לא נמצאה')] };
+  const mismatches = [];
+  for (const [key, expected] of Object.entries(expectedFields)){
+    const actual = data[key];
+    const normExpected = expected === undefined ? null : expected;
+    const normActual = actual === undefined ? null : actual;
+    if (normExpected !== normActual) mismatches.push(`${key}: ציפינו "${normExpected}" אבל בפועל "${normActual}"`);
+  }
+  return { ok: mismatches.length === 0, row: data, mismatches };
+}
+
+function openWebsiteLead(id){
+  const r = ALL_SELLERS.find(x => x.id === id);
+  if (!r){ toast('הליד לא נמצא'); return; }
+  if (r.website_intake_stage === 'new') renderWebsiteLeadIntro(r);
+  else renderWebsiteLeadConversationForm(r);
+}
+
+function renderWebsiteLeadIntro(r){
+  const personName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || 'שם לא זוהה';
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>🌐 ליד חדש מהאתר</h3>
+    <div style="background:#fff3d6;border:1px solid #e8cf8a;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a6d1f;margin-bottom:14px;">
+      ${esc(r.website_purpose_guess || 'טרם דיברו עם הלקוח.')} — הסיווג להלן הוא ניחוש בלבד, לא סופי.
+    </div>
+    <div style="margin-bottom:10px;"><div style="font-size:.75rem;color:#999;">שם</div><div style="font-size:.95rem;font-weight:700;">${esc(personName)}</div></div>
+    ${r.phone ? `<div style="margin-bottom:10px;"><div style="font-size:.75rem;color:#999;">טלפון</div><div style="font-size:.9rem;" dir="ltr">${esc(r.phone)}</div></div>` : ''}
+    ${r.email ? `<div style="margin-bottom:10px;"><div style="font-size:.75rem;color:#999;">אימייל</div><div style="font-size:.9rem;" dir="ltr">${esc(r.email)}</div></div>` : ''}
+    ${r.city ? `<div style="margin-bottom:10px;"><div style="font-size:.75rem;color:#999;">עיר</div><div style="font-size:.9rem;">${esc(r.city)}</div></div>` : ''}
+    <div style="margin-bottom:6px;"><div style="font-size:.75rem;color:#999;margin-bottom:3px;">תוכן הפנייה</div>
+      <div style="font-size:.85rem;white-space:pre-wrap;background:#f7f5ee;border-radius:8px;padding:10px 12px;max-height:180px;overflow-y:auto;">${esc(r.notes || '—')}</div>
+    </div>
+    <div id="wlIntroError" style="display:none;background:#fdeceb;border:1px solid #e4b3ac;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#a02c1d;margin-top:10px;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="rejectWebsiteLead('${r.id}')" style="color:#a02c1d;">🗑️ דחה ומחק</button>
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">סגירה</button>
+      <button type="button" class="btn btn-navy" id="wlTalkedBtn" onclick="markContactedAndContinue('${r.id}')">💬 שוחחתי עם הלקוח</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('open');
+}
+
+async function markContactedAndContinue(id){
+  const btn = document.getElementById('wlTalkedBtn');
+  if (btn){ btn.disabled = true; btn.textContent = 'שומר...'; }
+  const nowIso = new Date().toISOString();
+  const { error } = await window.supabaseClient.from('leads').update({
+    website_intake_stage: 'contacted', status: 'שוחחתי, ממתין לסיווג',
+    intake_reviewed_at: nowIso, intake_reviewed_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null
+  }).eq('id', id);
+  if (error){
+    const box = document.getElementById('wlIntroError');
+    if (box){ box.style.display = 'block'; box.textContent = 'שגיאה בשמירה: ' + error.message + ' — לא ממשיכים לפני שהשמירה תצליח.'; }
+    if (btn){ btn.disabled = false; btn.textContent = '💬 שוחחתי עם הלקוח'; }
+    return;
+  }
+  const verify = await verifyLeadWrite(id, { website_intake_stage: 'contacted', status: 'שוחחתי, ממתין לסיווג' });
+  if (!verify.ok){
+    const box = document.getElementById('wlIntroError');
+    if (box){ box.style.display = 'block'; box.textContent = 'השרת לא החזיר שגיאה, אבל בבדיקה חוזרת הנתונים לא תואמים: ' + verify.mismatches.join(' | '); }
+    if (btn){ btn.disabled = false; btn.textContent = '💬 שוחחתי עם הלקוח'; }
+    return;
+  }
+  await loadAll();
+  const fresh = ALL_SELLERS.find(x => x.id === id) || verify.row;
+  renderWebsiteLeadConversationForm(fresh);
+}
+
+function renderWebsiteLeadConversationForm(r){
+  const personName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || 'שם לא זוהה';
+  const isTraining = r.website_intake_stage === 'training';
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>📝 תיעוד שיחה — ${esc(personName)}</h3>
+    <div style="font-size:.75rem;color:#999;margin-bottom:14px;">${r.phone ? '📞 ' + esc(r.phone) + ' ' : ''}${r.email ? '· ✉️ ' + esc(r.email) : ''}</div>
+
+    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">מהות השיחה</label>
+    <textarea id="wlSummary" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_conversation_summary || '')}</textarea>
+
+    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">מה הלקוח מחפש</label>
+    <textarea id="wlWants" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_customer_wants || '')}</textarea>
+
+    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">פרטים חשובים שעלו בשיחה</label>
+    <textarea id="wlDetails" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_important_details || '')}</textarea>
+
+    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">הערות</label>
+    <textarea id="wlNotes" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:14px;resize:vertical;">${esc(r.intake_conversation_notes || '')}</textarea>
+
+    <div style="font-size:.85rem;font-weight:700;color:var(--navy);margin-bottom:8px;">לאן להעביר את הליד?</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;"><input type="radio" name="wlCat" value="seller"> 🏢 מוכר עסק</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;"><input type="radio" name="wlCat" value="buyer"> 🧍 קונה או משקיע</label>
+      <label id="wlInvestorWrap" style="display:none;align-items:center;gap:8px;font-size:.82rem;color:#665;margin-inline-start:26px;"><input type="checkbox" id="wlInvestorFlag"> מדובר במשקיע (לא רק קונה)</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;"><input type="radio" name="wlCat" value="training"> 🎓 מתעניין בהכשרה</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;"><input type="radio" name="wlCat" value="" checked> ⏳ להשאיר כליד להמשך טיפול (לא לסווג עדיין)</label>
+    </div>
+
+    <div id="wlSaveError" style="display:none;background:#fdeceb;border:1px solid #e4b3ac;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#a02c1d;margin-top:8px;"></div>
+    <div id="wlSaveOk" style="display:none;background:#e8f5ec;border:1px solid #b7ddc3;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#245c40;margin-top:8px;font-weight:700;"></div>
+
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">סגירה</button>
+      <button type="button" class="btn btn-navy" id="wlSaveBtn" onclick="saveWebsiteLeadTransfer('${r.id}')">💾 שמור והעבר</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.querySelectorAll('input[name="wlCat"]').forEach(el => el.addEventListener('change', () => {
+    const checked = document.querySelector('input[name="wlCat"]:checked');
+    document.getElementById('wlInvestorWrap').style.display = (checked && checked.value === 'buyer') ? 'flex' : 'none';
+  }));
+}
+
+async function saveWebsiteLeadTransfer(id){
+  const btn = document.getElementById('wlSaveBtn');
+  const errBox = document.getElementById('wlSaveError');
+  const okBox = document.getElementById('wlSaveOk');
+  errBox.style.display = 'none'; okBox.style.display = 'none';
+
+  const category = (document.querySelector('input[name="wlCat"]:checked') || {}).value || '';
+  const isInvestor = document.getElementById('wlInvestorFlag') && document.getElementById('wlInvestorFlag').checked;
+
+  const payload = {
+    intake_conversation_summary: document.getElementById('wlSummary').value.trim() || null,
+    intake_customer_wants: document.getElementById('wlWants').value.trim() || null,
+    intake_important_details: document.getElementById('wlDetails').value.trim() || null,
+    intake_conversation_notes: document.getElementById('wlNotes').value.trim() || null,
+    intake_reviewed_at: new Date().toISOString(),
+    intake_reviewed_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null
+  };
+
+  if (category === 'seller'){
+    payload.type = 'seller'; payload.status = 'הועבר למוכר'; payload.website_intake_stage = null;
+  } else if (category === 'buyer'){
+    payload.type = isInvestor ? 'partner' : 'buyer'; payload.status = 'הועבר לקונה או משקיע'; payload.website_intake_stage = null;
+  } else if (category === 'training'){
+    payload.status = 'הועבר להכשרה'; payload.website_intake_stage = 'training';
+  } else {
+    payload.status = 'שוחחתי, ממתין לסיווג'; payload.website_intake_stage = 'contacted';
+  }
+
+  btn.disabled = true; btn.textContent = 'שומר...';
+  const { error } = await window.supabaseClient.from('leads').update(payload).eq('id', id);
+  if (error){
+    errBox.style.display = 'block'; errBox.textContent = 'שגיאה בשמירה: ' + error.message + ' — הליד לא הועבר.';
+    btn.disabled = false; btn.textContent = '💾 שמור והעבר';
+    return;
+  }
+
+  // אימות אמיתי, בקריאה נפרדת, לפני כל הודעת הצלחה
+  const expected = {
+    status: payload.status, website_intake_stage: payload.website_intake_stage,
+    intake_conversation_summary: payload.intake_conversation_summary
+  };
+  if (payload.type) expected.type = payload.type;
+  const verify = await verifyLeadWrite(id, expected);
+  if (!verify.ok){
+    errBox.style.display = 'block';
+    errBox.textContent = 'השמירה לא אושרה בבדיקה חוזרת מול השרת — לא סומן כהצלחה: ' + verify.mismatches.join(' | ');
+    btn.disabled = false; btn.textContent = '💾 שמור והעבר';
+    return;
+  }
+
+  okBox.style.display = 'block';
+  okBox.textContent = '✅ הליד נשמר בפועל במסד הנתונים ואומת בקריאה חוזרת.' + (payload.website_intake_stage ? '' : ' עבר לרשימה המתאימה.');
+  btn.textContent = '✅ נשמר';
+  await loadAll();
+  setTimeout(() => { closeModal(); }, 900);
+}
+
+async function rejectWebsiteLead(id){
+  if (!confirm('למחוק את הליד הזה לגמרי? הפעולה אינה הפיכה.')) return;
+  await window.supabaseClient.from('tasks').delete().eq('related_type', 'lead').eq('related_id', id);
+  const { error } = await window.supabaseClient.from('leads').delete().eq('id', id);
+  if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
+  toast('הליד נמחק');
+  closeModal();
+  await loadAll();
+}
+
 (async function init(){
   CURRENT_PROFILE = await requireAuth();
   if (!CURRENT_PROFILE) return;
@@ -599,6 +815,19 @@ async function addNote(tableName, recordId){
   await loadUsers();
   await loadRatingLevels();
   await loadAll();
+
+  // קישור עמוק מ-popup הליד החדש / lead-alert.html: ?open=<id>&tab=seller
+  // פותח ישירות את מסך הליד מהאתר. ה-param מוסר מיד אחרי השימוש (כמו
+  // התיקון שכבר בוצע פעם ב-leads.html) כדי שרענון דף לא יפתח את זה שוב.
+  const params = new URLSearchParams(location.search);
+  const openId = params.get('open');
+  if (openId){
+    switchTab('seller');
+    const row = ALL_SELLERS.find(x => x.id === openId);
+    history.replaceState(null, '', location.pathname);
+    if (row) openWebsiteLead(openId);
+    else toast('הליד לא נמצא (ייתכן שכבר טופל)');
+  }
 })();
 </script>
 </body>

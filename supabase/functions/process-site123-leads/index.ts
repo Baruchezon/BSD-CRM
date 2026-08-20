@@ -101,7 +101,7 @@ async function processOneEmail(row: {
     if (emailNorm) orParts.push(`email.ilike.${emailNorm}`);
     const { data: candidates } = await supabase
       .from('leads')
-      .select('id, phone, phone2, email, notes, full_name, type, updated_at')
+      .select('id, phone, phone2, email, notes, full_name, type, updated_at, website_intake_stage')
       .or(orParts.join(','));
     // סינון סופי בקוד (לא רק ב-DB): ה-ilike גס בכוונה כדי לתפוס פורמטים שונים
     // של אותו מספר (05x מול 9725x מול +9725x), findDuplicate מוודא התאמה אמיתית
@@ -121,9 +121,14 @@ async function processOneEmail(row: {
     const addNote = `\n\n[קליטה אוטומטית מהאתר ${nowStr}] התקבלה פנייה נוספת בטלפון/מייל התואמים לרשומה זו.\n`
       + `שם הפונה בטופס הנוכחי: ${displayName}${sameName ? '' : ` (שונה משם הרשומה הקיימת: ${existing.full_name || 'שם לא זוהה'})`}\n`
       + `מטרה: ${parsed.purpose || '—'} | הודעה: ${parsed.message || '—'} | תאריך בטופס: ${parsed.dateField || '—'}`;
-    const { error: updErr } = await supabase.from('leads').update({
-      notes: (existing.notes || '') + addNote
-    }).eq('id', existing.id);
+    // אם הרשומה הקיימת היא עדיין ליד-אתר פתוח (עוד לא סווג/הועבר) - מחזירים
+    // אותה ל-'new' כדי שהפנייה הנוספת תקפוץ שוב בתיבת הקליטה ולא תיבלע
+    // בתוך הערה על ליד שממתין ממילא. לידים שכבר הועברו סופית (stage=null)
+    // לא נפתחים מחדש אוטומטית - רק מקבלים הערה + משימה, כמו קודם.
+    const stillOpenIntake = existing.website_intake_stage === 'new' || existing.website_intake_stage === 'contacted';
+    const updatePayload: Record<string, any> = { notes: (existing.notes || '') + addNote };
+    if (stillOpenIntake) { updatePayload.website_intake_stage = 'new'; updatePayload.status = 'חדש'; }
+    const { error: updErr } = await supabase.from('leads').update(updatePayload).eq('id', existing.id);
     if (updErr) throw new Error('update existing lead failed: ' + updErr.message);
 
     await supabase.from('audit_log').insert({
@@ -154,13 +159,23 @@ async function processOneEmail(row: {
   }
 
   // ---- ליד חדש ----
+  // כל ליד חדש מהאתר נכנס ל"תיבת קליטה" (website_intake_stage='new') ולא
+  // מסווג סופית לקונה/מוכר/שותף כאן, גם כשההודעה ברורה - הסיווג הסופי
+  // וההעברה לרשימה המתאימה נעשים אך ורק ידנית, אחרי שדיברו עם הלקוח
+  // (ראה לידים-hub.html / דרישה מפורשת: "אל תסווג את הליד סופית לבד").
+  // ה-type/needsReview כאן הם ניחוש בלבד לתצוגה במסך הקליטה - לא קובעים
+  // לאן הליד "שייך" במערכת.
   const nameParts = displayName === 'שם לא זוהה' ? [] : displayName.split(/\s+/).filter(Boolean);
   const firstName = nameParts[0] || null;
   const lastName = nameParts.slice(1).join(' ') || null;
 
-  const reviewPrefix = (needsReview || !parsed.recognizedTemplate)
-    ? '⚠️ לא ניתן היה לסווג את הפנייה בוודאות - נדרשת בדיקה ידנית.\n' : '';
-  const notes = `${reviewPrefix}[נוצר אוטומטית ע"י המערכת - קליטה אוטומטית מהאתר, ${nowStr}]\n`
+  const guessLabel = classification === 'seller' ? 'מעוניין למכור עסק (ניחוש)'
+    : classification === 'buyer' ? 'מחפש לקנות עסק (ניחוש)'
+    : classification === 'partner' ? 'מעוניין בשותפות/השקעה (ניחוש)'
+    : 'לא ניתן היה לנחש בוודאות - נדרשת בדיקה ידנית';
+
+  const notes = `[נוצר אוטומטית ע"י המערכת - ליד מהאתר, טרם סווג, ${nowStr}]\n`
+    + `ניחוש ראשוני (לא סופי): ${guessLabel}\n`
     + `מטרת הפנייה כפי שמולאה בטופס: ${parsed.purpose || '(לא צוין)'}\n`
     + `הודעה חופשית מהפונה: ${parsed.message || '(לא צוין)'}\n`
     + `תאריך שדה בטופס: ${parsed.dateField || '(לא צוין)'}\n`
@@ -170,7 +185,8 @@ async function processOneEmail(row: {
   const payload: Record<string, any> = {
     type, first_name: firstName, last_name: lastName, full_name: displayName,
     phone: parsed.phone || null, email: parsed.email || null, city: parsed.city || null,
-    source: 'SITE123 / אתר BSD', status: 'חדש מהאתר', notes,
+    source: 'SITE123 / אתר BSD', status: 'חדש', notes,
+    website_intake_stage: 'new', website_purpose_guess: guessLabel,
     created_by: adminId, handled_by: adminId, agreement_status: 'אין הסכם'
   };
   if (type === 'buyer' || type === 'partner') {
@@ -181,6 +197,15 @@ async function processOneEmail(row: {
 
   const { data: newLead, error: insErr } = await supabase.from('leads').insert(payload).select('id').single();
   if (insErr) throw new Error('insert lead failed: ' + insErr.message);
+
+  // אימות אמיתי (לא רק "לא החזיר שגיאה"): שליפה חוזרת בקריאה נפרדת ובדיקה
+  // שהשורה אכן קיימת עם הערכים שביקשנו - כדי שלעולם לא נדווח "נוצר" בלי
+  // שזה באמת נשמר במסד הנתונים.
+  const { data: verifyRow, error: verifyErr } = await supabase
+    .from('leads').select('id, website_intake_stage, status').eq('id', newLead.id).maybeSingle();
+  if (verifyErr || !verifyRow || verifyRow.website_intake_stage !== 'new') {
+    throw new Error('lead insert could not be verified after write: ' + (verifyErr?.message || 'row not found or mismatched after insert'));
+  }
 
   await supabase.from('audit_log').insert({
     table_name: 'leads', record_id: newLead.id, action: 'create',
@@ -194,10 +219,9 @@ async function processOneEmail(row: {
     related_type: 'lead', related_id: newLead.id
   }).select('id').single();
 
-  const typeLabel = type === 'seller' ? 'מוכר עסק' : type === 'partner' ? 'משקיע' : 'מחפש לרכוש עסק';
   await sendPushToAdmins({
     title: '🆕 ליד חדש התקבל מהאתר',
-    body: `${displayName} | ${typeLabel}${parsed.phone ? ' | ' + parsed.phone : ''}${needsReview ? ' | ⚠️ נדרש סיווג' : ''}`,
+    body: `${displayName}${parsed.phone ? ' | ' + parsed.phone : ''} - ${guessLabel}`,
     kind: 'morning',
     url: `lead-alert.html?id=${newLead.id}&kind=new`,
     tag: `bsd-site123-${row.id}`
