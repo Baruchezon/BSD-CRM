@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608202235';
+    var PAGE_BUILD = '202608211600';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -713,6 +713,7 @@ function toggleListingFields(){
 
 function openBizForm(id){
   const biz = id ? ALL_BIZ.find(b=>b.id===id) : null;
+  AI_TEXT_ORIGINAL = {}; // איפוס בין פתיחות טופס שונות - כל עסק מתחיל "נקי" מבחינת שחזור AI
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>${biz ? 'עריכת עסק' : 'עסק חדש'}</h3>
@@ -744,9 +745,17 @@ function openBizForm(id){
         <div class="section-h">תיאור</div>
         <div class="field full">
           <label>תיאור קצר של העסק</label>
-          <div style="display:flex;gap:6px;align-items:flex-start;">
-            <textarea id="short_description" style="flex:1;">${esc(biz?.short_description)}</textarea>
-            <button type="button" class="btn btn-ghost" style="white-space:nowrap;padding:0 12px;height:38px;" onclick="suggestShortDescription()">💡 הצע</button>
+          <div style="display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;">
+            <textarea id="short_description" style="flex:1;min-width:220px;">${esc(biz?.short_description)}</textarea>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <button type="button" class="btn btn-ghost" style="white-space:nowrap;padding:0 12px;height:38px;" onclick="suggestShortDescription()">💡 הצע</button>
+              <button type="button" class="btn btn-ghost" id="aiImprove_short_description" style="white-space:nowrap;padding:0 12px;height:38px;" onclick="improveFieldWithAI('short_description')">🤖 שיפור ניסוח באמצעות AI</button>
+            </div>
+          </div>
+          <div id="aiStatus_short_description" style="font-size:.75rem;color:#999;margin-top:4px;min-height:1.1em;"></div>
+          <div id="aiRevertBox_short_description" style="display:none;font-size:.75rem;margin-top:2px;">
+            <span style="color:#999;">הניסוח הוחלף על ידי AI.</span>
+            <a href="#" onclick="revertAiText('short_description');return false;" style="color:var(--navy,#0e1b34);text-decoration:underline;">↩ שחזר לנוסח המקורי</a>
           </div>
         </div>
 
@@ -797,11 +806,19 @@ function openBizForm(id){
           <input type="text" id="sold_to" value="${esc(biz?.sold_to)}">
         </div>
 
-        <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
           <span>הערות</span>
-          <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="openNotesRecording({recordId:'${biz ? biz.id : 'new-' + Date.now()}', label:'${esc((biz?.internal_name || 'עסק חדש').replace(/'/g,''))}', textareaId:'notes', currentProfile:CURRENT_PROFILE})">🎙️ הקלט הערות</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="openNotesRecording({recordId:'${biz ? biz.id : 'new-' + Date.now()}', label:'${esc((biz?.internal_name || 'עסק חדש').replace(/'/g,''))}', textareaId:'notes', currentProfile:CURRENT_PROFILE})">🎙️ הקלט הערות</button>
+            <button type="button" class="btn btn-ghost" id="aiImprove_notes" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="improveFieldWithAI('notes')">🤖 סידור וניסוח מקצועי באמצעות AI</button>
+          </div>
         </div>
         <div class="field full">${textareaRow('notes','הערות חופשיות', biz?.notes, 180)}</div>
+        <div id="aiStatus_notes" style="font-size:.75rem;color:#999;margin-top:-8px;margin-bottom:10px;min-height:1.1em;"></div>
+        <div id="aiRevertBox_notes" style="display:none;font-size:.75rem;margin-top:-8px;margin-bottom:10px;">
+          <span style="color:#999;">הניסוח הוחלף על ידי AI.</span>
+          <a href="#" onclick="revertAiText('notes');return false;" style="color:var(--navy,#0e1b34);text-decoration:underline;">↩ שחזר לנוסח המקורי</a>
+        </div>
       </div>
 
       ${biz ? `
@@ -2555,6 +2572,164 @@ function suggestShortDescription(){
   const suggestion = parts.join(', ') + '.';
   document.getElementById('short_description').value = suggestion;
   toast('הוצע תיאור על בסיס הנתונים בטופס - ניתן לערוך לפני השמירה');
+}
+
+// ============================================================================
+// שיפור ניסוח באמצעות AI - "תיאור קצר של העסק" ו"הערות"
+//
+// עקרונות (לפי דרישה מפורשת):
+//   - שום שמירה אוטומטית: הטקסט המשופר מוצג רק בתצוגה מקדימה; הוא נכנס
+//     לשדה בטופס רק אחרי "אישור והחלפה", והשמירה בפועל למסד הנתונים
+//     עדיין קורית רק דרך כפתור "שמירה" הרגיל של הטופס - בדיוק כאילו
+//     המשתמש הקליד את הטקסט בעצמו.
+//   - עובד גם על עסק חדש שטרם נשמר: הטקסט נשלח כפי שהוא בטופס, לא נקרא
+//     מה-DB, אז אין תלות ב-business_id.
+//   - לפני כל שינוי בפועל בשדה, שומרים את הערך המקורי (AI_TEXT_ORIGINAL)
+//     כדי לאפשר "שחזר לנוסח המקורי" גם אחרי אישור ההחלפה, כל עוד הטופס
+//     עדיין פתוח ולא נשמר.
+// ============================================================================
+let AI_TEXT_ORIGINAL = {};
+
+function aiFieldLabel(fieldId){
+  return fieldId === 'short_description' ? 'תיאור קצר של העסק' : 'הערות';
+}
+function aiButtonLabel(fieldId){
+  return fieldId === 'short_description' ? '🤖 שיפור ניסוח באמצעות AI' : '🤖 סידור וניסוח מקצועי באמצעות AI';
+}
+
+async function invokeImproveTextFn(fieldType, sourceText, isAnonymous){
+  const { data, error } = await window.supabaseClient.functions.invoke('improve-business-text', {
+    body: { field_type: fieldType, source_text: sourceText, is_anonymous: isAnonymous }
+  });
+  if (error){
+    let ctx = null;
+    try { ctx = await error.context?.json?.(); } catch(_e){}
+    throw new Error((ctx && ctx.error) || error.message || 'שגיאה לא ידועה בשיפור הניסוח');
+  }
+  return data;
+}
+
+// כפתור "שיפור ניסוח" / "סידור וניסוח מקצועי" ליד השדה - שלב 1: קריאה ל-AI
+// ותצוגה מקדימה בלבד, שום שמירה. מציג מצב טעינה ברור על הכפתור עצמו.
+async function improveFieldWithAI(fieldId){
+  const textarea = document.getElementById(fieldId);
+  if (!textarea) return;
+  const sourceText = (textarea.value || '').trim();
+  const statusEl = document.getElementById('aiStatus_' + fieldId);
+  if (!sourceText){
+    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ יש להזין טקסט בשדה לפני השיפור.'; }
+    return;
+  }
+  const btn = document.getElementById('aiImprove_' + fieldId);
+  const isAnonymous = !!(document.getElementById('anon_card_active') && document.getElementById('anon_card_active').checked);
+  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = '🤖 מנסח מחדש... (עשוי לקחת כמה שניות)'; }
+  bsdSetButtonLoading(btn, true, 'מעבד...');
+  try {
+    const data = await invokeImproveTextFn(fieldId === 'short_description' ? 'short_description' : 'notes', sourceText, isAnonymous);
+    bsdSetButtonLoading(btn, false);
+    if (!data || !data.improved_text || data.insufficient_info){
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ ' + (data && data.notes_to_user ? data.notes_to_user : 'אין מספיק תוכן בשדה כדי לשפר את הניסוח באופן משמעותי - הוסף פרטים ונסה שוב.'); }
+      return;
+    }
+    if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = ''; }
+    openAiTextPreview(fieldId, sourceText, data.improved_text, isAnonymous, data.notes_to_user || null);
+  } catch (e){
+    bsdSetButtonLoading(btn, false);
+    const msg = e && e.message ? e.message : String(e);
+    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
+    toast('❌ ' + msg);
+  }
+}
+
+function closeAiTextPreview(){
+  const el = document.getElementById('aiTextOverlay');
+  if (el) el.remove();
+}
+
+// שלב 2: תצוגה מקדימה - טקסט מקורי + נוסח מוצע (ניתן לעריכה ידנית) + 3
+// כפתורים: אישור והחלפה / נסה ניסוח נוסף / ביטול. שום דבר לא נשמר כאן.
+function openAiTextPreview(fieldId, originalText, proposedText, isAnonymous, noteToUser){
+  closeAiTextPreview();
+  const overlay = document.createElement('div');
+  overlay.id = 'aiTextOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:99;padding:40px 20px;';
+  const noteHtml = noteToUser
+    ? `<div style="background:#fff8e6;border:1px solid #e0c880;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.8rem;color:#7a5a10;">ℹ️ ${esc(noteToUser)}</div>`
+    : '';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:680px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 4px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">תצוגה מקדימה - ${esc(aiFieldLabel(fieldId))} (AI)</h3>
+      <div style="font-size:.78rem;color:#999;margin-bottom:12px;">זו טיוטה בלבד - שום דבר לא נשמר עדיין. ניתן לערוך את הנוסח המוצע למטה לפני האישור.${isAnonymous ? ' (העסק מסומן כאנונימי - הנוסח המוצע נמנע מפרטים מזהים.)' : ''}</div>
+      ${noteHtml}
+      <label style="display:block;font-size:.78rem;color:#665;">הטקסט המקורי</label>
+      <textarea readonly style="width:100%;padding:8px 10px;border:1px solid #e3e0d5;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;background:#f7f5ef;color:#665;min-height:80px;margin-bottom:12px;">${esc(originalText)}</textarea>
+      <label style="display:block;font-size:.78rem;color:#665;">הנוסח המוצע (ניתן לעריכה)</label>
+      <textarea id="aiProposedText" style="width:100%;padding:8px 10px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;min-height:120px;">${esc(proposedText)}</textarea>
+      <div id="aiPreviewStatus" style="font-size:.78rem;color:#999;margin-top:8px;min-height:1.2em;"></div>
+      <div style="display:flex;justify-content:space-between;gap:10px;margin-top:16px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-ghost" id="aiTryAgainBtn" onclick="tryAnotherAiPhrasing('${fieldId}', ${JSON.stringify(isAnonymous)})">🔄 נסה ניסוח נוסף</button>
+        <div style="display:flex;gap:10px;">
+          <button type="button" class="btn btn-ghost" onclick="closeAiTextPreview()">ביטול</button>
+          <button type="button" class="btn btn-primary" onclick="confirmAiTextReplace('${fieldId}')">✅ אישור והחלפה</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  // שומרים את הטקסט המקורי (של הפתיחה הראשונה בסשן העריכה הזה בלבד) כדי
+  // לאפשר "שחזר לנוסח המקורי" גם אחרי אישור - לא דורסים אם כבר נשמר קודם.
+  if (AI_TEXT_ORIGINAL[fieldId] === undefined) AI_TEXT_ORIGINAL[fieldId] = originalText;
+}
+
+// כפתור "נסה ניסוח נוסף" בתוך התצוגה המקדימה - קורא שוב ל-AI על אותו
+// טקסט מקורי (לא על הנוסח המוצע, כדי לא "לסחוף" ניסוחים קודמים) ומרענן
+// את התצוגה המקדימה עם ניסוח חלופי.
+async function tryAnotherAiPhrasing(fieldId, isAnonymous){
+  const statusEl = document.getElementById('aiPreviewStatus');
+  const btn = document.getElementById('aiTryAgainBtn');
+  const originalText = AI_TEXT_ORIGINAL[fieldId];
+  if (!originalText) return;
+  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = '🤖 מנסח ניסוח נוסף...'; }
+  bsdSetButtonLoading(btn, true, 'מנסח...');
+  try {
+    const data = await invokeImproveTextFn(fieldId === 'short_description' ? 'short_description' : 'notes', originalText, isAnonymous);
+    bsdSetButtonLoading(btn, false);
+    if (!data || !data.improved_text || data.insufficient_info){
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ ' + (data && data.notes_to_user ? data.notes_to_user : 'לא הצלחנו לייצר ניסוח חלופי - נסה שוב.'); }
+      return;
+    }
+    openAiTextPreview(fieldId, originalText, data.improved_text, isAnonymous, data.notes_to_user || null);
+  } catch (e){
+    bsdSetButtonLoading(btn, false);
+    const msg = e && e.message ? e.message : String(e);
+    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
+  }
+}
+
+// שלב 3: אישור מפורש - כאן ורק כאן הטקסט (אולי נערך ידנית בתצוגה
+// המקדימה) נכנס בפועל לשדה בטופס. עדיין לא נשמר במסד הנתונים - זה
+// יקרה רק כשהמשתמש ילחץ על כפתור "שמירה" הרגיל בתחתית הטופס.
+function confirmAiTextReplace(fieldId){
+  const proposedEl = document.getElementById('aiProposedText');
+  const finalText = proposedEl ? proposedEl.value : '';
+  const textarea = document.getElementById(fieldId);
+  if (textarea) textarea.value = finalText;
+  const revertBox = document.getElementById('aiRevertBox_' + fieldId);
+  if (revertBox) revertBox.style.display = 'block';
+  closeAiTextPreview();
+  toast('הנוסח הוחלף - ניתן לערוך ידנית, לשחזר לנוסח המקורי, או לשמור עם כפתור "שמירה" הרגיל.');
+}
+
+// "↩ שחזר לנוסח המקורי" - מחזיר את השדה לערך שהיה בו לפני השיפור הראשון
+// בסשן העריכה הנוכחי (עדיין לפני שמירה בפועל).
+function revertAiText(fieldId){
+  const original = AI_TEXT_ORIGINAL[fieldId];
+  if (original === undefined) return;
+  const textarea = document.getElementById(fieldId);
+  if (textarea) textarea.value = original;
+  const revertBox = document.getElementById('aiRevertBox_' + fieldId);
+  if (revertBox) revertBox.style.display = 'none';
+  delete AI_TEXT_ORIGINAL[fieldId];
+  toast('הנוסח המקורי שוחזר.');
 }
 
 async function saveBiz(e){
