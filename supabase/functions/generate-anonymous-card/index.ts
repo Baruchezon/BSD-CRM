@@ -78,6 +78,28 @@ function formatKeyFacts(facts: string[]): string {
   return facts.filter(Boolean).map(f => `• ${f}`).join('\n');
 }
 
+// ---------- טביעת אצבע (hash) של התוכן שבאמת משפיע על התקציר האנונימי ----------
+// שימוש: לזהות "האם התקציר עדיין תואם את נתוני העסק" בלי לנחש לפי updated_at
+// (שמתעדכן על כל שינוי טכני, גם כזה שלא נוגע לתקציר בכלל - למשל סטטוס מכירה
+// או מטפל בעסק). כולל רק את השדות שבאמת מוזנים ל-AI ב-generateSummary()
+// למעלה: תחום/קטגוריה/עיר, תיאור/הערות, נתונים כמותיים, וסיבת מכירה רק אם
+// היא בפועל מוצגת (anon_card_show_reason). internal_name הוסר בכוונה -
+// שינוי שם העסק הפנימי לא משפיע על תוכן התקציר האנונימי בכלל.
+// חייב להישאר זהה בדיוק (סדר שדות, טיפול ב-null/undefined) לפונקציית
+// ה-JS המקבילה ב-businesses.html (computeAnonSourceFingerprint) - שתיהן
+// חייבות לחשב את אותו hash על אותו קלט כדי שבדיקת ה"יש עדכון" תהיה אמינה.
+async function computeAnonSourceHash(biz: Record<string, unknown>): Promise<string> {
+  const parts = [
+    biz.field, biz.category, biz.city,
+    biz.short_description, biz.notes,
+    biz.years_active, biz.annual_revenue, biz.operating_profit, biz.net_profit, biz.employees_count,
+    biz.anon_card_show_reason ? biz.sale_reason : null,
+  ];
+  const raw = parts.filter(v => v !== null && v !== undefined && v !== '').map(String).join('|');
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // ---------- שלב 1: יצירת התקציר (Claude כותב מחדש, לא מעתיק) ----------
 async function generateSummary(biz: Record<string, unknown>): Promise<{ anon_display_name: string | null; anon_summary: string | null; ai_flagged_concerns: string[] }> {
   const sourceText = [biz.short_description, biz.notes, biz.anon_card_show_reason ? biz.sale_reason : null]
@@ -226,9 +248,15 @@ Deno.serve(async (req: Request) => {
       if (concerns.length) {
         return jsonResponse({ error: 'הטקסט מכיל מידע שעלול לזהות את העסק - לא נשמר', concerns }, 422);
       }
-      const sourceHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(
-        [biz.internal_name, biz.short_description, biz.notes, biz.sale_reason].filter(Boolean).join('|')
-      )).then(buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join(''));
+      // תיקון 21.08.2026: ה-hash היה בנוי על internal_name (לא באמת משפיע
+      // על התקציר) ולא כלל תחום/קטגוריה/עיר/נתונים כמותיים/סיבת מכירה
+      // (כן משפיעים) - זו הייתה הסיבה שהמלצת "צור תקציר חדש" הופיעה על כל
+      // שינוי טכני ולא נעלמה גם אחרי תקציר עדכני. עכשיו על אותו נוסחה
+      // המשותפת (ראו computeAnonSourceHash למעלה), מחושב על הביזנס העדכני
+      // ביותר שבאמת נשמר - biz שנטען למעלה עשוי להיות "ישן" אם ה-draft
+      // נוצר לפני שינוי אחר בטופס; שולפים שוב טרי כדי לא לשמור hash שגוי.
+      const { data: freshBizForHash } = await supabase.from('businesses').select('*').eq('id', business_id).maybeSingle();
+      const sourceHash = await computeAnonSourceHash(freshBizForHash || biz);
       const { error: updateErr } = await supabase.from('businesses').update({
         anon_display_name: finalDisplayName,
         anon_summary: finalSummary,
