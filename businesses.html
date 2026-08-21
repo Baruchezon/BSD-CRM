@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608211600';
+    var PAGE_BUILD = '202608211900';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -714,6 +714,8 @@ function toggleListingFields(){
 function openBizForm(id){
   const biz = id ? ALL_BIZ.find(b=>b.id===id) : null;
   AI_TEXT_ORIGINAL = {}; // איפוס בין פתיחות טופס שונות - כל עסק מתחיל "נקי" מבחינת שחזור AI
+  AI_EDIT_PENDING = {};
+  AI_EDIT_REVERTED = {};
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>${biz ? 'עריכת עסק' : 'עסק חדש'}</h3>
@@ -731,8 +733,9 @@ function openBizForm(id){
           <label>שם אנונימי להצגה</label>
           <div style="display:flex;gap:6px;">
             <input type="text" id="anonymous_name" value="${esc(biz?.anonymous_name)}" style="flex:1;">
-            <button type="button" class="btn btn-ghost" style="white-space:nowrap;padding:0 12px;" onclick="suggestAnonymousName()">💡 הצע</button>
+            <button type="button" class="btn btn-ghost" id="suggestAnonNameBtn" style="white-space:nowrap;padding:0 12px;" onclick="suggestAnonymousName()">💡 הצע</button>
           </div>
+          <div id="suggestAnonNameStatus" style="font-size:.72rem;color:#999;margin-top:3px;min-height:1.1em;"></div>
         </div>
         ${fieldRow('website','אתר אינטרנט', biz?.website, 'text')}
 
@@ -753,9 +756,10 @@ function openBizForm(id){
             </div>
           </div>
           <div id="aiStatus_short_description" style="font-size:.75rem;color:#999;margin-top:4px;min-height:1.1em;"></div>
+          <div id="aiEditedInfo_short_description" style="display:none;font-size:.72rem;color:#8a5a00;margin-top:2px;"></div>
           <div id="aiRevertBox_short_description" style="display:none;font-size:.75rem;margin-top:2px;">
             <span style="color:#999;">הניסוח הוחלף על ידי AI.</span>
-            <a href="#" onclick="revertAiText('short_description');return false;" style="color:var(--navy,#0e1b34);text-decoration:underline;">↩ שחזר לנוסח המקורי</a>
+            <a href="#" onclick="revertAiText('short_description');return false;" style="color:var(--navy,#0e1b34);text-decoration:underline;">↩ שחזר לנוסח שלפני עריכת ה-AI</a>
           </div>
         </div>
 
@@ -814,10 +818,11 @@ function openBizForm(id){
           </div>
         </div>
         <div class="field full">${textareaRow('notes','הערות חופשיות', biz?.notes, 180)}</div>
-        <div id="aiStatus_notes" style="font-size:.75rem;color:#999;margin-top:-8px;margin-bottom:10px;min-height:1.1em;"></div>
-        <div id="aiRevertBox_notes" style="display:none;font-size:.75rem;margin-top:-8px;margin-bottom:10px;">
+        <div id="aiStatus_notes" style="font-size:.75rem;color:#999;margin-top:-8px;margin-bottom:4px;min-height:1.1em;"></div>
+        <div id="aiEditedInfo_notes" style="display:none;font-size:.72rem;color:#8a5a00;margin-top:-2px;margin-bottom:4px;"></div>
+        <div id="aiRevertBox_notes" style="display:none;font-size:.75rem;margin-top:-2px;margin-bottom:10px;">
           <span style="color:#999;">הניסוח הוחלף על ידי AI.</span>
-          <a href="#" onclick="revertAiText('notes');return false;" style="color:var(--navy,#0e1b34);text-decoration:underline;">↩ שחזר לנוסח המקורי</a>
+          <a href="#" onclick="revertAiText('notes');return false;" style="color:var(--navy,#0e1b34);text-decoration:underline;">↩ שחזר לנוסח שלפני עריכת ה-AI</a>
         </div>
       </div>
 
@@ -863,7 +868,7 @@ function openBizForm(id){
           <label style="display:block;font-size:.78rem;color:#665;margin-top:8px;">תקציר אנונימי (ניתן לעריכה ידנית)</label>
           <textarea id="anon_summary" rows="8" placeholder="נוצר אוטומטית או הוזן ידנית - בלי פרטים מזהים" style="width:100%;padding:8px 10px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;">${esc(biz.anon_summary)}</textarea>
           <div style="font-size:.72rem;color:#999;margin-top:4px;">${biz.anon_summary_generated_at ? 'נוצר לאחרונה ע"י AI: ' + fmtDateTime(biz.anon_summary_generated_at) : 'טרם נוצר ע"י AI'} - עריכה ידנית כאן נשמרת עם כפתור "שמירה" הרגיל בתחתית הטופס, ותמיד עוברת בדיקת אנונימיות בזמן השמירה.</div>
-          <div id="anonStaleWarning" style="display:none;font-size:.78rem;color:#b3402c;margin-top:6px;">⚠️ התיאור/ההערות עודכנו מאז יצירת התקציר - מומלץ ליצור תקציר חדש.</div>
+          <div id="anonStaleWarning" style="display:none;font-size:.78rem;color:#b3402c;margin-top:6px;">⚠️ פרטים מהותיים בעסק (תיאור/הערות/נתונים כספיים/תחום) השתנו מאז יצירת התקציר האחרון - מומלץ ליצור תקציר מעודכן.</div>
           <button type="button" class="btn btn-ghost" style="margin-top:8px;" onclick="generateAnonSummary('${biz.id}')" id="genAnonSummaryBtn">🔄 צור תקציר אנונימי (AI) - לתצוגה מקדימה</button>
           <div id="genAnonSummaryStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
         </div>
@@ -955,9 +960,43 @@ function openBizForm(id){
   if (biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz)) loadBizAccessGrants(biz.id);
   if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadAnonDistSummary(biz.id);
   if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadSaleFileModule(biz.id);
-  if (biz && biz.anon_summary && biz.anon_summary_generated_at && biz.updated_at > biz.anon_summary_generated_at){
-    const warnEl = document.getElementById('anonStaleWarning');
-    if (warnEl) warnEl.style.display = 'block';
+  if (biz && biz.anon_summary && biz.anon_summary_generated_at) refreshAnonStaleWarning(biz);
+  if (biz) initAiEditIndicators(biz);
+}
+
+// ============================================================================
+// זיהוי אמין של "האם התקציר האנונימי עדיין תואם את נתוני העסק" - תיקון
+// 21.08.2026 (סעיף 2 באפיון). לפני התיקון ההשוואה הייתה updated_at (מתעדכן
+// בכל שמירה, כולל שינוי טכני שלא קשור בכלל לתקציר) מול anon_summary_
+// generated_at - ולכן ההמלצה "צור תקציר חדש" הייתה מופיעה גם כשלא היה שום
+// שינוי מהותי, ולא נעלמת גם אחרי תקציר עדכני שנוצר בפועל.
+// עכשיו: hash אמיתי של אך ורק השדות שבאמת מוזנים ל-AI ביצירת התקציר (ראו
+// computeAnonSourceHash המקבילה ב-supabase/functions/generate-anonymous-
+// card/index.ts - שתי הפונקציות חייבות להישאר זהות בדיוק), מושווה מול
+// ה-hash שנשמר בזמן היצירה/עדכון האחרון של התקציר (anon_summary_source_hash).
+async function computeAnonSourceFingerprint(biz){
+  const parts = [
+    biz.field, biz.category, biz.city,
+    biz.short_description, biz.notes,
+    biz.years_active, biz.annual_revenue, biz.operating_profit, biz.net_profit, biz.employees_count,
+    biz.anon_card_show_reason ? biz.sale_reason : null,
+  ];
+  const raw = parts.filter(v => v !== null && v !== undefined && v !== '').map(String).join('|');
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function refreshAnonStaleWarning(biz){
+  const warnEl = document.getElementById('anonStaleWarning');
+  if (!warnEl) return;
+  if (!biz || !biz.anon_summary_source_hash){ warnEl.style.display = 'none'; return; }
+  try {
+    const currentHash = await computeAnonSourceFingerprint(biz);
+    warnEl.style.display = (currentHash !== biz.anon_summary_source_hash) ? 'block' : 'none';
+  } catch (e){
+    // אם החישוב נכשל מסיבה טכנית (לא אמור לקרות ב-HTTPS) - עדיף להסתיר
+    // מאשר להציג קביעה לא מבוססת.
+    warnEl.style.display = 'none';
   }
 }
 
@@ -1597,6 +1636,67 @@ async function invokeAnonCardFn(body){
     throw new Error(anonFunctionErrorMessage(error, ctx));
   }
   return data;
+}
+
+// ============================================================================
+// עדכון אוטומטי של תקציר אנונימי מופץ (21.08.2026, סעיף 1+2 באפיון) - בלי
+// לגעת בהפצה/הרשאות/משתמשים בכלל. רק השדות שבאמת מוזנים ל-AI ביצירת
+// התקציר (ראו computeAnonSourceHash המקבילה ב-generate-anonymous-card)
+// נחשבים "מהותיים"; שינוי בכל שדה אחר (סטטוס, מטפל, כתובת, טלפון וכו')
+// לעולם לא מפעיל רענון.
+// ============================================================================
+const ANON_SIGNIFICANT_FIELDS = ['short_description','notes','field','category','city','annual_revenue','operating_profit','net_profit','employees_count','years_active'];
+
+function anonSignificantFieldsChanged(existingBiz, payload){
+  const changed = [];
+  ANON_SIGNIFICANT_FIELDS.forEach(f => {
+    const oldV = existingBiz ? (existingBiz[f] ?? null) : null;
+    const newV = payload[f] !== undefined ? (payload[f] ?? null) : oldV;
+    if (String(oldV ?? '') !== String(newV ?? '')) changed.push(f);
+  });
+  const showReason = payload.anon_card_show_reason !== undefined ? payload.anon_card_show_reason : (existingBiz ? existingBiz.anon_card_show_reason : false);
+  if (showReason){
+    const oldReason = existingBiz ? (existingBiz.sale_reason ?? null) : null;
+    const newReason = payload.sale_reason !== undefined ? (payload.sale_reason ?? null) : oldReason;
+    if (String(oldReason ?? '') !== String(newReason ?? '')) changed.push('sale_reason');
+  }
+  return changed;
+}
+
+// נקרא מ-saveBiz אחרי שהשמירה הראשית כבר הצליחה. אם אין שינוי מהותי - לא
+// עושה כלום (שקט לגמרי). אם יש שינוי מהותי - קורא לאותה פונקציית AI
+// שמשמשת ליצירה ידנית (draft), ורק אם התוצאה עברה את הבדיקה הבטיחותית
+// בלי חששות - מאשר אותה אוטומטית (confirm) ומעדכן את המטמון המקומי כדי
+// שהתצוגה תשקף מיד את התוכן החדש. אם יש חשש כלשהו - לא נכתב כלום, וההמלצה
+// "תקציר מעודכן" (מבוססת hash אמיתי) תישאר גלויה כדי שיטופל ידנית.
+async function maybeAutoRefreshAnonSummary(bizId, existingBiz, payload){
+  const isDistributed = existingBiz && existingBiz.distribution_status && existingBiz.distribution_status !== 'not_distributed';
+  if (!isDistributed) return;
+  const changedFields = anonSignificantFieldsChanged(existingBiz, payload);
+  if (!changedFields.length) return;
+  try {
+    const draft = await invokeAnonCardFn({ business_id: bizId });
+    if (!draft || (!draft.anon_summary && !draft.anon_display_name) || (draft.concerns && draft.concerns.length)){
+      bsdLogActivity('anon_summary_auto_refresh_skipped', 'businesses', bizId, {
+        changed_fields: changedFields,
+        reason: (draft && draft.concerns && draft.concerns.length) ? 'safety_concerns' : 'insufficient_info'
+      });
+      return;
+    }
+    const confirmed = await invokeAnonCardFn({
+      business_id: bizId, action: 'confirm',
+      anon_display_name: draft.anon_display_name, anon_summary: draft.anon_summary
+    });
+    const bizCache = ALL_BIZ.find(b => b.id === bizId);
+    if (bizCache){
+      bizCache.anon_display_name = confirmed.anon_display_name;
+      bizCache.anon_summary = confirmed.anon_summary;
+    }
+    bsdLogActivity('anon_summary_auto_refreshed', 'businesses', bizId, { changed_fields: changedFields });
+    toast('🔄 התקציר האנונימי המופץ עודכן אוטומטית בעקבות השינוי (ההפצה וההרשאות לא השתנו)');
+  } catch (e){
+    bsdLogActivity('anon_summary_auto_refresh_failed', 'businesses', bizId, { changed_fields: changedFields, error: (e && e.message) || String(e) });
+  }
 }
 
 // שלב 1: יצירת טיוטה בלבד - לעולם לא שומרת, לעולם לא משנה את הטופס האמיתי.
@@ -2536,21 +2636,45 @@ function normalizeWebsite(url){
   return url;
 }
 
-function suggestAnonymousName(){
+// שיפור 21.08.2026 (סעיף 6 באפיון): במקום משפט שיווקי ארוך שנבנה מתבנית
+// קבועה, מציע שם אנונימי קצר (2-3 מילים בלבד) שמתאר את תחום העיסוק המרכזי,
+// דרך AI - עובד ישירות על שדות הטופס (לא קורא מה-DB, אז זהה לעסק חדש
+// ולעסק קיים). שם העסק האמיתי, עיר, כתובת וכו' לעולם לא נשלחים ל-AI בכלל.
+// אין שמירה אוטומטית - רק ממלא את השדה, המשתמש יכול לערוך או לבקש הצעה
+// נוספת לפני השמירה בפועל.
+async function suggestAnonymousName(){
+  const btn = document.getElementById('suggestAnonNameBtn');
+  const statusEl = document.getElementById('suggestAnonNameStatus');
   const field = document.getElementById('field').value.trim();
-  const region = document.getElementById('region').value.trim();
-  const city = document.getElementById('city').value.trim();
-  const years = parseInt(document.getElementById('years_active').value) || 0;
-  const revenue = parseFloat(document.getElementById('annual_revenue').value) || 0;
+  const category = document.getElementById('category').value.trim();
+  const subcategory = document.getElementById('subcategory').value.trim();
+  const shortDescription = document.getElementById('short_description').value.trim();
 
-  const area = region || city || 'מרכז הארץ';
-  const ageDesc = years >= 15 ? 'ותיק' : (years >= 5 ? 'יציב' : 'צעיר וצומח');
-  const sizeDesc = revenue >= 3000000 ? 'רווחי בהיקף משמעותי' : (revenue >= 800000 ? 'רווחי' : 'בעל פוטנציאל צמיחה');
-  const fieldDesc = field || 'עסק';
-
-  const suggestion = `${fieldDesc} ${ageDesc}, ${sizeDesc}, באזור ${area}`;
-  document.getElementById('anonymous_name').value = suggestion;
-  toast('הוצע כינוי - ניתן לערוך לפני השמירה');
+  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = '🤖 מנתח את תחום הפעילות...'; }
+  bsdSetButtonLoading(btn, true, 'מנתח...');
+  try {
+    const { data, error } = await window.supabaseClient.functions.invoke('suggest-anonymous-name', {
+      body: { field, category, subcategory, short_description: shortDescription }
+    });
+    bsdSetButtonLoading(btn, false);
+    if (error){
+      let ctx = null;
+      try { ctx = await error.context?.json?.(); } catch(_e){}
+      throw new Error((ctx && ctx.error) || error.message || 'שגיאה לא ידועה בהצעת השם');
+    }
+    if (!data || data.insufficient_info || !data.anon_name){
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ ' + (data && data.message ? data.message : 'אין מספיק מידע להצעת שם אנונימי. יש להשלים את תיאור העסק או את תחום הפעילות.'); }
+      return;
+    }
+    if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = ''; }
+    document.getElementById('anonymous_name').value = data.anon_name;
+    toast('הוצע כינוי - ניתן לערוך או ללחוץ שוב לקבלת הצעה חלופית, לפני השמירה');
+  } catch (e){
+    bsdSetButtonLoading(btn, false);
+    const msg = e && e.message ? e.message : String(e);
+    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
+    toast('❌ ' + msg);
+  }
 }
 
 function suggestShortDescription(){
@@ -2589,6 +2713,38 @@ function suggestShortDescription(){
 //     עדיין פתוח ולא נשמר.
 // ============================================================================
 let AI_TEXT_ORIGINAL = {};
+// סימונים שנרשמו בפועל בסשן הנוכחי (בין קריאת AI מוצלחת לבין השמירה עצמה)
+// - לא נוצר עדיין ב-DB, רק ממתין להיכלל בפעולת saveBiz הבאה. מפתח: fieldId.
+let AI_EDIT_PENDING = {};
+// שדות שבהם המשתמש שחזר במפורש לנוסח שלפני ה-AI בסשן הנוכחי - מנקה גם את
+// הסימון השמור ב-DB בשמירה הבאה (סעיף 3: אם חזרו לגמרי למקור, השדה כבר לא
+// "נערך ע"י AI" בפועל).
+let AI_EDIT_REVERTED = {};
+
+// טוען אינדיקציה אמינה של "שדה זה כבר נערך ע"י AI בעבר" מנתוני ה-DB בפועל
+// (short_description_ai_edited_at / notes_ai_edited_at) - לעולם לא מזהים
+// לפי סגנון כתיבה או ניחוש. מאפשר גם שחזור לגרסה שלפני העריכה גם בפתיחה
+// חדשה של הטופס (לא רק באותו סשן דפדפן), כי הטקסט המקורי שמור בפועל ב-DB.
+function initAiEditIndicators(biz){
+  ['short_description','notes'].forEach(fieldId => {
+    const editedAt = biz[fieldId + '_ai_edited_at'];
+    const preText = biz[fieldId + '_pre_ai_text'];
+    const infoEl = document.getElementById('aiEditedInfo_' + fieldId);
+    const revertBox = document.getElementById('aiRevertBox_' + fieldId);
+    if (editedAt){
+      if (preText !== null && preText !== undefined) AI_TEXT_ORIGINAL[fieldId] = preText;
+      if (revertBox) revertBox.style.display = (preText !== null && preText !== undefined) ? 'block' : 'none';
+      if (infoEl){
+        const editorName = userName(biz[fieldId + '_ai_edited_by']);
+        infoEl.style.display = 'block';
+        infoEl.textContent = '🤖 שדה זה כבר נערך באמצעות AI בתאריך ' + fmtDateTime(editedAt) + (editorName && editorName !== '—' ? (' על ידי ' + editorName) : '');
+      }
+    } else if (infoEl){
+      infoEl.style.display = 'none';
+      infoEl.textContent = '';
+    }
+  });
+}
 
 function aiFieldLabel(fieldId){
   return fieldId === 'short_description' ? 'תיאור קצר של העסק' : 'הערות';
@@ -2611,7 +2767,46 @@ async function invokeImproveTextFn(fieldType, sourceText, isAnonymous){
 
 // כפתור "שיפור ניסוח" / "סידור וניסוח מקצועי" ליד השדה - שלב 1: קריאה ל-AI
 // ותצוגה מקדימה בלבד, שום שמירה. מציג מצב טעינה ברור על הכפתור עצמו.
+// שער כניסה לכפתור "שיפור ניסוח" / "סידור וניסוח מקצועי": בודק תחילה, לפי
+// נתוני מערכת אמיתיים בלבד (לא ניחוש סגנון כתיבה!), אם השדה כבר נערך
+// בעבר ע"י AI - בדיקה כפולה: (א) הסימון השמור בפועל ב-DB על העסק הזה
+// (short_description_ai_edited_at / notes_ai_edited_at, ולא סומן כמבוטל
+// ע"י שחזור בסשן הנוכחי), או (ב) שכבר בוצעה עריכת AI על השדה הזה באותו
+// סשן עריכה נוכחי שעדיין לא נשמרה (AI_EDIT_PENDING). אם כן - מציג שאלת
+// אישור ולא מפעיל את ה-AI כלל עד שהמשתמש בוחר "המשך".
 async function improveFieldWithAI(fieldId){
+  const bizId = document.getElementById('bizForm') ? document.getElementById('bizForm').dataset.bizId : '';
+  const biz = bizId ? ALL_BIZ.find(b => b.id === bizId) : null;
+  const alreadyAiEdited = !!AI_EDIT_PENDING[fieldId] || !!(biz && biz[fieldId + '_ai_edited_at'] && !AI_EDIT_REVERTED[fieldId]);
+  if (alreadyAiEdited){
+    openAiReuseConfirm(fieldId);
+    return;
+  }
+  await runAiImprove(fieldId);
+}
+
+function closeAiReuseConfirm(){
+  const el = document.getElementById('aiReuseOverlay');
+  if (el) el.remove();
+}
+
+function openAiReuseConfirm(fieldId){
+  closeAiReuseConfirm();
+  const overlay = document.createElement('div');
+  overlay.id = 'aiReuseOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:440px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4);text-align:center;">
+      <div style="font-size:.95rem;margin-bottom:18px;line-height:1.5;">הטקסט הזה כבר נוצר או נערך באמצעות AI. האם ברצונך לבצע עריכה נוספת?</div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+        <button type="button" class="btn btn-ghost" onclick="closeAiReuseConfirm()">ביטול</button>
+        <button type="button" class="btn btn-primary" onclick="closeAiReuseConfirm();runAiImprove('${fieldId}')">המשך לעריכת AI נוספת</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function runAiImprove(fieldId){
   const textarea = document.getElementById(fieldId);
   if (!textarea) return;
   const sourceText = (textarea.value || '').trim();
@@ -2715,12 +2910,20 @@ function confirmAiTextReplace(fieldId){
   if (textarea) textarea.value = finalText;
   const revertBox = document.getElementById('aiRevertBox_' + fieldId);
   if (revertBox) revertBox.style.display = 'block';
+  // מסמן שימוש AI על השדה הזה בסשן הנוכחי - נשמר בפועל ל-DB (סעיף 3: תאריך,
+  // משתמש, גרסה לפני/אחרי) רק כשהטופס יישמר, יחד עם כל שאר הטופס.
+  // aiText נשמר כאן ולא נקרא מהשדה בזמן השמירה, כדי לשקף בדיוק את מה ש-AI
+  // הפיק - גם אם המשתמש ילטש ידנית את השדה עצמו אחרי האישור.
+  AI_EDIT_PENDING[fieldId] = { aiText: finalText };
+  delete AI_EDIT_REVERTED[fieldId];
   closeAiTextPreview();
-  toast('הנוסח הוחלף - ניתן לערוך ידנית, לשחזר לנוסח המקורי, או לשמור עם כפתור "שמירה" הרגיל.');
+  toast('הנוסח הוחלף - ניתן לערוך ידנית, לשחזר לנוסח שלפני העריכה, או לשמור עם כפתור "שמירה" הרגיל.');
 }
 
-// "↩ שחזר לנוסח המקורי" - מחזיר את השדה לערך שהיה בו לפני השיפור הראשון
-// בסשן העריכה הנוכחי (עדיין לפני שמירה בפועל).
+// "↩ שחזר לנוסח שלפני עריכת ה-AI" - מחזיר את השדה לערך שהיה בו לפני
+// העריכה (בין אם היא נטענה מה-DB מסשן קודם ובין אם בוצעה כרגע בסשן הזה).
+// מסמן גם שבשמירה הבאה יש לנקות את הסימון השמור ב-DB, כי בפועל השדה חזר
+// להיות "לא ערוך ע"י AI".
 function revertAiText(fieldId){
   const original = AI_TEXT_ORIGINAL[fieldId];
   if (original === undefined) return;
@@ -2728,8 +2931,12 @@ function revertAiText(fieldId){
   if (textarea) textarea.value = original;
   const revertBox = document.getElementById('aiRevertBox_' + fieldId);
   if (revertBox) revertBox.style.display = 'none';
+  const infoEl = document.getElementById('aiEditedInfo_' + fieldId);
+  if (infoEl){ infoEl.style.display = 'none'; infoEl.textContent = ''; }
   delete AI_TEXT_ORIGINAL[fieldId];
-  toast('הנוסח המקורי שוחזר.');
+  delete AI_EDIT_PENDING[fieldId];
+  AI_EDIT_REVERTED[fieldId] = true;
+  toast('הנוסח שלפני עריכת ה-AI שוחזר.');
 }
 
 async function saveBiz(e){
@@ -2762,6 +2969,25 @@ async function saveBiz(e){
     removal_reason: g('listing_status') === 'removed' ? g('removal_reason') : null,
     sold_to: g('listing_status') === 'sold' ? g('sold_to') : null
   };
+
+  // סימון אמין של שימוש AI על תיאור/הערות (סעיף 3) - נכתב ל-DB רק כאן,
+  // בשמירה עצמה, בדיוק כמו כל שדה אחר בטופס. AI_EDIT_PENDING מוזן ב-
+  // confirmAiTextReplace ברגע אישור ההחלפה; AI_EDIT_REVERTED מוזן ב-
+  // revertAiText כשהמשתמש חוזר במפורש לנוסח הקודם - במקרה כזה מנקים את
+  // הסימון השמור, כי בפועל השדה כבר לא "ערוך ע"י AI".
+  ['short_description','notes'].forEach(fieldId => {
+    if (AI_EDIT_PENDING[fieldId] && AI_EDIT_PENDING[fieldId].aiText !== undefined){
+      payload[fieldId + '_ai_edited_at'] = new Date().toISOString();
+      payload[fieldId + '_ai_edited_by'] = CURRENT_PROFILE ? CURRENT_PROFILE.id : null;
+      payload[fieldId + '_pre_ai_text'] = AI_TEXT_ORIGINAL[fieldId] !== undefined ? AI_TEXT_ORIGINAL[fieldId] : null;
+      payload[fieldId + '_ai_text'] = AI_EDIT_PENDING[fieldId].aiText;
+    } else if (AI_EDIT_REVERTED[fieldId]){
+      payload[fieldId + '_ai_edited_at'] = null;
+      payload[fieldId + '_ai_edited_by'] = null;
+      payload[fieldId + '_pre_ai_text'] = null;
+      payload[fieldId + '_ai_text'] = null;
+    }
+  });
 
   const cb = id => document.getElementById(id) ? document.getElementById(id).checked : undefined;
   const showFormError = msg => {
@@ -2844,6 +3070,7 @@ async function saveBiz(e){
   if (!payload.internal_name){ showFormError('שם העסק הוא שדה חובה - השמירה לא בוצעה'); return; }
 
   let error;
+  let savedBizId = bizId || null;
   if (bizId){
     ({ error } = await window.supabaseClient.from('businesses').update(payload).eq('id', bizId));
     if (!error) bsdLogActivity('update', 'businesses', bizId);
@@ -2851,10 +3078,19 @@ async function saveBiz(e){
     payload.created_by = CURRENT_PROFILE ? CURRENT_PROFILE.id : null;
     const insertResult = await window.supabaseClient.from('businesses').insert(payload).select('id').single();
     error = insertResult.error;
-    if (!error && insertResult.data) bsdLogActivity('create', 'businesses', insertResult.data.id);
+    if (!error && insertResult.data){ savedBizId = insertResult.data.id; bsdLogActivity('create', 'businesses', insertResult.data.id); }
   }
   if (error){ showFormError('❌ שגיאה בשמירה: ' + error.message); return; }
+  AI_EDIT_PENDING = {}; AI_EDIT_REVERTED = {}; // נשמרו בהצלחה - לא צריך לשלוח שוב
   const nowAnonActive = (document.getElementById('anon_card_active') && !anonBlocked) ? cb('anon_card_active') : wasAnonActive;
+  // סעיף 1 באפיון: עסק שכבר היה מופץ (wasAnonActive=true, כלומר התוכן
+  // האנונימי כבר היה פעיל לפני השמירה הזו - לא רק הופעל עכשיו) ופרט מהותי
+  // שמשפיע על התקציר האנונימי השתנה - מרעננים את התקציר אוטומטית, בלי
+  // לגעת בהפצה/הרשאות/משתמשים בכלל. רק אם ה-DB אכן קיבל את השדות
+  // האנונימיים בהצלחה (לא anonBlocked).
+  if (wasAnonActive && nowAnonActive && !anonBlocked && savedBizId){
+    await maybeAutoRefreshAnonSummary(savedBizId, existingBiz, payload);
+  }
   if (!wasAnonActive && nowAnonActive){
     toast('🪪 העסק הופץ אנונימית בהצלחה');
   } else if (wasAnonActive && !nowAnonActive){
