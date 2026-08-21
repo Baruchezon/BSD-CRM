@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192351';
+    var PAGE_BUILD = '202608211659';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -640,6 +640,23 @@ async function saveMatch(e){
   } else {
     const buyerId = g('buyer_id'), bizId = g('business_id');
     if (!buyerId || !bizId){ toast('יש לבחור קונה ועסק'); return; }
+    // מניעת כפילות: כמו ב-recordAnonDistribution (businesses.html) - לפני
+    // יצירת התאמה חדשה בודקים אם כבר קיימת התאמה לאותו זוג עסק+קונה. אם כן,
+    // לא יוצרים רשומה כפולה; נותנים לבחור בין פתיחת ההתאמה הקיימת לבין
+    // יצירה בכל זאת (למשל מחזור שני מול אותו קונה).
+    const { data: existingMatch } = await window.supabaseClient
+      .from('matches').select('id, status').eq('business_id', bizId).eq('buyer_id', buyerId).maybeSingle();
+    if (existingMatch){
+      const proceedAnyway = confirm(
+        `כבר קיימת התאמה בין העסק לקונה הזה (סטטוס: "${existingMatch.status || ''}"). \n\n` +
+        `אישור (OK) = פתח את ההתאמה הקיימת\nביטול (Cancel) = צור בכל זאת התאמה חדשה נפרדת`
+      );
+      if (!proceedAnyway){
+        closeModal();
+        openMatchForm(existingMatch.id);
+        return;
+      }
+    }
     const basePayload = {
       buyer_id: buyerId, business_id: bizId,
       match_percent: num(g('match_percent')),
