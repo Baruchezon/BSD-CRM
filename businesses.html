@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608211900';
+    var PAGE_BUILD = '202608212000';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -2776,8 +2776,29 @@ async function invokeImproveTextFn(fieldType, sourceText, isAnonymous){
 // אישור ולא מפעיל את ה-AI כלל עד שהמשתמש בוחר "המשך".
 async function improveFieldWithAI(fieldId){
   const bizId = document.getElementById('bizForm') ? document.getElementById('bizForm').dataset.bizId : '';
-  const biz = bizId ? ALL_BIZ.find(b => b.id === bizId) : null;
-  const alreadyAiEdited = !!AI_EDIT_PENDING[fieldId] || !!(biz && biz[fieldId + '_ai_edited_at'] && !AI_EDIT_REVERTED[fieldId]);
+  const btn = document.getElementById('aiImprove_' + fieldId);
+  let alreadyAiEdited = !!AI_EDIT_PENDING[fieldId];
+  // תיקון 21.08.2026: הבדיקה הייתה תלויה במטמון המקומי (ALL_BIZ), שיכול
+  // היה להיות לא מעודכן (למשל דף שנשאר פתוח מסשן קודם) ולכן "לפספס" עריכת
+  // AI שכבר בוצעה ונשמרה. עכשיו נבדק ישירות מול ה-DB בפועל בכל לחיצה על
+  // הכפתור (רק כשיש כבר עסק קיים ולא בוטל בסשן הנוכחי) - זו הבדיקה
+  // ה"אמינה" שסעיף 3 דורש, לא הנחה על סמך מה שנטען קודם.
+  if (!alreadyAiEdited && bizId && !AI_EDIT_REVERTED[fieldId]){
+    bsdSetButtonLoading(btn, true, 'בודק...');
+    try {
+      const { data: freshBiz, error: freshErr } = await window.supabaseClient
+        .from('businesses').select(fieldId + '_ai_edited_at').eq('id', bizId).maybeSingle();
+      if (freshErr) throw freshErr;
+      alreadyAiEdited = !!(freshBiz && freshBiz[fieldId + '_ai_edited_at']);
+    } catch (e){
+      // אם הבדיקה החיה נכשלה טכנית - נופלים בחזרה על מה שכבר יש במטמון
+      // המקומי, כדי לא לחסום את המשתמש לגמרי; לעולם לא "מניחים שלא נערך".
+      const biz = ALL_BIZ.find(b => b.id === bizId);
+      alreadyAiEdited = !!(biz && biz[fieldId + '_ai_edited_at']);
+    } finally {
+      bsdSetButtonLoading(btn, false);
+    }
+  }
   if (alreadyAiEdited){
     openAiReuseConfirm(fieldId);
     return;
