@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608211719';
+    var PAGE_BUILD = '202608221200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1229,7 +1229,7 @@ async function decideAccessRequest(reqId, bizId, requestedBy, approve){
   if (approve){
     const { error: grantErr } = await window.supabaseClient.from('business_access_grants').insert({
       business_id: bizId, granted_to: requestedBy, granted_by: CURRENT_PROFILE.id,
-      access_level: 'full_view', source_request_id: reqId
+      access_level: 'full', source_request_id: reqId
     });
     if (grantErr && grantErr.code !== '23505'){ toast('הבקשה אושרה אך שחרור הגישה נכשל: ' + grantErr.message); }
     bsdLogActivity('approve_access_request', 'businesses', bizId, { requested_by: requestedBy, request_id: reqId });
