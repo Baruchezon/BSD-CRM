@@ -100,14 +100,27 @@ async function computeAnonSourceHash(biz: Record<string, unknown>): Promise<stri
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// שם תצוגה אנונימי גנרי לפי תחום/קטגוריה בלבד - לא תלוי ב-AI ולא תלוי בטקסט
+// חופשי, כך שהוא תמיד זמין (גם כשאין short_description/notes/sale_reason
+// בכלל) וגם תמיד בטוח (field/category הם כבר שדות מובנים שהוגדרו כלליים,
+// לא טקסט חופשי שעלול לזהות את העסק). זו רשת הביטחון שמבטיחה ששם תצוגה
+// אנונימי תמיד ילווה תקציר אנונימי - לא רק ניסיון בלבד מה-AI.
+function buildFallbackDisplayName(biz: Record<string, unknown>): string | null {
+  const field = typeof biz.field === 'string' ? biz.field.trim() : '';
+  const category = typeof biz.category === 'string' ? biz.category.trim() : '';
+  const label = field || category;
+  return label ? `עסק בתחום ${label}` : null;
+}
+
 // ---------- שלב 1: יצירת התקציר (Claude כותב מחדש, לא מעתיק) ----------
 async function generateSummary(biz: Record<string, unknown>): Promise<{ anon_display_name: string | null; anon_summary: string | null; ai_flagged_concerns: string[] }> {
   const sourceText = [biz.short_description, biz.notes, biz.anon_card_show_reason ? biz.sale_reason : null]
     .filter(Boolean).join('\n---\n');
 
   if (!sourceText.trim()) {
-    // אין בכלל טקסט חופשי - אין מה לתמצת, ואין טעם לקרוא ל-AI על ריק (סעיף 4)
-    return { anon_display_name: null, anon_summary: null, ai_flagged_concerns: [] };
+    // אין בכלל טקסט חופשי לתמצת (ואין טעם לקרוא ל-AI על ריק, סעיף 4) - אבל
+    // עדיין אפשר וצריך לתת שם תצוגה גנרי לפי תחום/קטגוריה אם הם קיימים.
+    return { anon_display_name: buildFallbackDisplayName(biz), anon_summary: null, ai_flagged_concerns: [] };
   }
 
   const systemPrompt = `אתה עוזר למשרד תיווך עסקים (BSD Business Brokers Israel) ליצור כרטיס עסק אנונימי מקצועי ושיווקי, שיוצג למשתמשים שאינם רשאים לראות את פרטי העסק המלאים. המטרה: לאפשר לסוכן או לקונה להבין את ההזדמנות העסקית בלי לחשוף מידע שמאפשר לזהות את העסק.
@@ -178,7 +191,10 @@ ${sourceText}
   if (Array.isArray(input.key_facts) && input.key_facts.length) sections.push(`נתונים מרכזיים:\n${formatKeyFacts(input.key_facts)}`);
 
   return {
-    anon_display_name: input.anon_display_name || null,
+    // אם Claude עצמו החזיר null (למשל שיקל דעת שאין מספיק מידע ייחודי) -
+    // עדיין נופלים חזרה לשם גנרי לפי תחום/קטגוריה, כדי שתקציר אנונימי לעולם
+    // לא ייווצר בלי שם תצוגה שמגדיר את תחום הפעילות.
+    anon_display_name: input.anon_display_name || buildFallbackDisplayName(biz),
     anon_summary: sections.length ? sections.join('\n\n') : null,
     ai_flagged_concerns: Array.isArray(input.ai_flagged_concerns) ? input.ai_flagged_concerns : [],
   };
