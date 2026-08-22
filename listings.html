@@ -174,13 +174,13 @@ function card(b){
   <div class="card">
     <div class="card-top">
       <span class="field-tag">${esc(b.field || b.category || 'עסק')}</span>
-      <h3>${esc(b.anonymous_name || 'עסק למכירה')}</h3>
+      <h3>${esc(b.anon_display_name || 'עסק למכירה')}</h3>
       <div class="region">${esc(b.region || b.city || '')}</div>
     </div>
     <div class="card-body">
       <div class="desc">${esc(b.short_description || 'פרטים נוספים ייחשפו לאחר יצירת קשר.')}</div>
       ${stats.length ? `<div class="stats-row">${stats.map(s=>`<div class="stat"><div class="v">${s.v}</div><div class="l">${s.l}</div></div>`).join('')}</div>` : ''}
-      <button class="card-cta" onclick="openInquiry('${b.id}', '${esc(b.anonymous_name || '')}')">מעוניין? השאר פרטים</button>
+      <button class="card-cta" onclick="openInquiry('${b.id}', '${esc(b.anon_display_name || '')}')">מעוניין? השאר פרטים</button>
     </div>
   </div>`;
 }
