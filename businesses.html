@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608212000';
+    var PAGE_BUILD = '202608211719';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -855,6 +855,13 @@ function openBizForm(id){
         <label style="display:flex;align-items:center;gap:8px;margin-top:4px;cursor:pointer;">
           <input type="checkbox" id="anon_card_show_reason" style="width:auto;" ${biz.anon_card_show_reason?'checked':''}> שלב את סיבת המכירה בתקציר (גם היא תעבור תמצות, לא תוצג כטקסט גולמי)
         </label>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;background:#eef6f0;border-radius:6px;padding:8px 10px;">
+          <input type="checkbox" id="public_listing_active" style="width:auto;" ${biz.public_listing_active?'checked':''}>
+          פרסם גם בעמוד הרשימה הציבורי באתר (listings.html)
+        </label>
+        <div style="font-size:.72rem;color:#665;margin-top:4px;">
+          זמין רק אם "הכן תוכן אנונימי" מסומן למעלה - אם תבטל את זה, העסק יורד אוטומטית גם מהרשימה הציבורית. הרשימה הציבורית מציגה בדיוק את אותם שדות אנונימיים בלבד.
+        </div>
 
         <div style="margin-top:12px;padding-top:10px;border-top:1px dashed #d8d3c4;">
           <div style="display:flex;align-items:center;gap:8px;">
@@ -3030,6 +3037,11 @@ async function saveBiz(e){
     payload.anon_card_active = cb('anon_card_active');
     payload.anon_card_show_price = cb('anon_card_show_price');
     payload.anon_card_show_reason = cb('anon_card_show_reason');
+    // public_listing_active דורש anon_card_active=true גם ב-DB (ה-VIEW
+    // public_business_listings בודק את שניהם), אבל אוכפים גם כאן כדי
+    // שהתצוגה בטופס לא תבלבל - אם ביטלו את התוכן האנונימי, מבטלים גם
+    // את הפרסום הציבורי, לא משאירים אותו "דלוק" בלי תוכן מאחוריו.
+    payload.public_listing_active = cb('anon_card_active') ? cb('public_listing_active') : false;
 
     if (document.getElementById('anon_summary')){
       const manualDisplayName = g('anon_display_name');
