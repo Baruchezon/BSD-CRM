@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608221530';
+    var PAGE_BUILD = '202608222100';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -333,31 +333,40 @@ async function loadBusinesses(){
 // ============================================================
 let GRANT_COUNTS = {};
 // ============================================================================
-// 22.08.2026 — פישוט: שני חיוויים בלבד לגבי תקצירים ברשימת העסקים.
-// "תקציר ראשוני" = טקסט שנוצר במערכת (b.anon_summary/anon_display_name) —
-// אין צורך בטעינה נפרדת, זה כבר חלק מ-ALL_BIZ.
-// "תקציר מורחב" = קובץ. הזיהוי הוא אך ורק לפי קטגוריה מסווגת (אמינה),
-// לעולם לא לפי ניחוש שם קובץ:
-//   - business_file_meta.category = 'מצגת אנונימית' (סיווג ידני בזמן העלאה
-//     לאזור "קבצים מצורפים" הכללי - הקטגוריה הזו כבר קיימת מזמן ברשימת
-//     BIZ_FILE_CATEGORIES, רק לא שימשה עד היום לחיווי עצמו)
-//   - business_sale_files.category = 'anon_presentation' (הסלוט הישן בתיק
-//     המכירה, גם הוא כבר מסווג ולא מבוסס-שם) - לשם המשכיות היסטורית
-// קובץ ששמו "במקרה" מכיל את המילה אנונימי, בלי סיווג מפורש כזה, אינו נספר.
+// 22.08.2026 (תיקון אחה"צ) — לפי הבהרה מפורשת: "תקציר מורחב" מזוהה אך ורק
+// לפי קובץ PDF ששמו מכיל את המילה "אנונימי" או "אנונימית" - לא לפי קטגוריה
+// שנבחרה ידנית (הגרסה הקודמת התבססה על category='מצגת אנונימית', אבל בפועל
+// קבצים שכבר הועלו לא סווגו כך, וגם ניחוש-הקטגוריה האוטומטי בהעלאה בודק קודם
+// את המילה "תקציר" ותופס קבצים כמו "תקציר אנונימי.pdf" כ-'תקציר' רגיל -
+// זו הסיבה שהחיווי לא הופיע בפועל אצל אף עסק). "תקציר ראשוני" (b.anon_summary/
+// anon_display_name) לא השתנה - הבדיקה הזו כבר הייתה ועודנה מסונכרנת למקור
+// האמיתי היחיד, גם ברשימה וגם בכרטיס העסק (ראו הבדג' "✓ תקציר אנונימי מוכן"
+// הקיים בכרטיס עצמו).
 // ============================================================================
-let EXTENDED_SUMMARY_FILEMETA_BY_BIZ = {}; // business_id -> true (מ-business_file_meta.category)
-let EXTENDED_SUMMARY_SALEFILE_BY_BIZ = {}; // business_id -> true (מ-business_sale_files.category, הסלוט הישן)
+function isAnonExtendedPdfName(name){
+  return /אנונימי/.test(name || '');
+}
+// storagePath משמר תמיד את הסיומת האמיתית של הקובץ שהועלה (גם אם שם התצוגה
+// נערך אחר כך ואיבד את הסיומת) - כך שבדיקת "האם זה PDF" לא תלויה בשינוי שם.
+function isAnonExtendedPdfRow(storagePath, displayName, originalFilename){
+  return /\.pdf($|\?)/i.test(storagePath || '') && isAnonExtendedPdfName(displayName || originalFilename);
+}
+let EXTENDED_SUMMARY_FILEMETA_BY_BIZ = {}; // business_id -> true (PDF ששמו מכיל אנונימי/אנונימית, מ-business_file_meta)
+let EXTENDED_SUMMARY_SALEFILE_BY_BIZ = {}; // business_id -> true (business_sale_files.category='anon_presentation', הסלוט הישן - נשאר כמקור נוסף, לא נגעתי בו)
 async function loadExtendedSummaryIndicator(){
   EXTENDED_SUMMARY_FILEMETA_BY_BIZ = {};
   EXTENDED_SUMMARY_SALEFILE_BY_BIZ = {};
   const ids = ALL_BIZ.map(b => b.id);
   if (!ids.length) return;
   const [metaRes, saleRes] = await Promise.all([
-    window.supabaseClient.from('business_file_meta').select('business_id').eq('category', 'מצגת אנונימית').in('business_id', ids),
+    window.supabaseClient.from('business_file_meta').select('business_id, storage_path, display_name, original_filename').in('business_id', ids),
     window.supabaseClient.from('business_sale_files').select('business_id').eq('category', 'anon_presentation').eq('status', 'active').in('business_id', ids),
   ]);
   if (metaRes.error) console.warn('טעינת תקציר מורחב (קבצים מצורפים) נכשלה:', metaRes.error.message);
-  (metaRes.data || []).forEach(f => { EXTENDED_SUMMARY_FILEMETA_BY_BIZ[f.business_id] = true; });
+  (metaRes.data || []).forEach(f => {
+    if (!isAnonExtendedPdfRow(f.storage_path, f.display_name, f.original_filename)) return;
+    EXTENDED_SUMMARY_FILEMETA_BY_BIZ[f.business_id] = true;
+  });
   if (saleRes.error) console.warn('טעינת תקציר מורחב (תיק מכירה) נכשלה:', saleRes.error.message);
   (saleRes.data || []).forEach(f => { EXTENDED_SUMMARY_SALEFILE_BY_BIZ[f.business_id] = true; });
 }
@@ -367,12 +376,12 @@ function hasExtendedSummary(bizId){
 function primarySummaryBadge(b){
   const ready = !!(b.anon_summary || b.anon_display_name);
   return ready
-    ? `<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="קיים תקציר אנונימי ראשוני (טקסט) - לחץ לצפייה/עריכה" style="cursor:pointer;background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">✓ קיים תקציר ראשוני</span>`
+    ? `<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="קיים תקציר אנונימי ראשוני (טקסט) - לחץ לצפייה/עריכה" style="cursor:pointer;background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">✓ יש תקציר אנונימי ראשוני</span>`
     : `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">○ אין תקציר ראשוני</span>`;
 }
 function extendedSummaryBadge(bizId){
   return hasExtendedSummary(bizId)
-    ? `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="קיים קובץ המסווג כתקציר אנונימי מורחב - לחץ לצפייה/הורדה/הפצה" style="cursor:pointer;background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">✓ קיים תקציר מורחב</span>`
+    ? `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="נמצא קובץ PDF ששמו מכיל 'אנונימי'/'אנונימית' - לחץ לצפייה/הורדה/הפצה" style="cursor:pointer;background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">✓ יש תקציר אנונימי מורחב</span>`
     : `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">○ אין תקציר מורחב</span>`;
 }
 // מספר קבצים בפועל לכל עסק - מבוסס אך ורק על אזור "קבצים מצורפים" המאוחד
@@ -397,14 +406,14 @@ function filesIndicatorBadge(bizId){
   if (!count) return '';
   return `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="לעסק זה יש ${count} קבצים מצורפים" style="cursor:pointer;font-size:.78rem;color:#3a5cad;font-weight:700;white-space:nowrap;">📎 קבצים: ${count}</span>`;
 }
-// כל עדכון לכרטיס עסק (העלאת קובץ חדש, שינוי קטגוריה, מחיקת קובץ) חייב
-// לעדכן מייד את חיווי "תקציר מורחב" ברשימה - לא לחכות לרענון דף מלא.
-// נקרא מתוך loadBizFiles() בכל שלושת המקרים (processBizFiles/saveBizFileMeta/
-// deleteBizFile כולם מסתיימים בקריאה ל-loadBizFiles), כך שמקום אחד מכסה הכול.
-// מבוסס על category בלבד (לא ניחוש שם קובץ) - לא שאילתה נוספת ל-DB, נעשה
-// שימוש ברשימת הקבצים שכבר נטענה הרגע (merged, כוללת category).
+// כל עדכון לכרטיס עסק (העלאת קובץ חדש, שינוי שם, מחיקת קובץ) חייב לעדכן
+// מייד את חיווי "תקציר מורחב" ברשימה - לא לחכות לרענון דף מלא. נקרא מתוך
+// loadBizFiles() בכל שלושת המקרים (processBizFiles/saveBizFileMeta/
+// deleteBizFile כולם מסתיימים בקריאה ל-loadBizFiles), כך שמקום אחד מכסה
+// הכול. מבוסס על שם הקובץ (PDF + "אנונימי"/"אנונימית") - לא שאילתה נוספת
+// ל-DB, נעשה שימוש ברשימת הקבצים שכבר נטענה הרגע (merged).
 function refreshAnonFileIndicatorForBiz(bizId, files){
-  const has = (files || []).some(f => f.category === 'מצגת אנונימית');
+  const has = (files || []).some(f => isAnonExtendedPdfRow(f.storagePath, f.displayName, null));
   if (has) EXTENDED_SUMMARY_FILEMETA_BY_BIZ[bizId] = true;
   else delete EXTENDED_SUMMARY_FILEMETA_BY_BIZ[bizId];
   // הרשימה עצמה יכולה להיות מוסתרת מאחורי המודאל של הטופס כרגע - זה בסדר,
@@ -1238,18 +1247,13 @@ async function loadAnonymousBusinesses(){
 }
 
 // 22.08.2026 — זיהוי "תקציר מורחב" לפי קטגוריה מסווגת בלבד (לא ניחוש שם
-// קובץ). is_anon_filename נשמרת ב-DB כנתיב תאימות היסטורי בלבד (ראו ה-RLS
-// המתאימה, שעכשיו בודקת category בנוסף לשם) - כאן בצד הלקוח משתמשים רק
-// בקטגוריה, כי היא המקור האמין היחיד לפי המפרט.
-function isAnonFileName(name){ return /אנונימי/.test(name || ''); } // נשאר לתאימות RLS/היסטוריה בלבד, לא לשימוש לסיווג חדש
+// קובץ). "תקציר מורחב" מזוהה לפי isAnonExtendedPdfRow (PDF + המילה
+// "אנונימי"/"אנונימית" בשם) - ראו ההגדרה למעלה.
 
 // קבצי "תקציר מורחב" לכל העסקים המוצגים במסך האנונימי - נטענים כאן בבת אחת
-// (לא per-card) כדי לא ליצור עשרות שאילתות. שני מקורות אפשריים, שניהם
-// מסווגים במפורש (לא ניחוש שם), ה-RLS בכל אחד דואג בעצמו שרק קבצים תקינים
-// מוחזרים:
-//  1. business_sale_files עם category='anon_presentation' (הסלוט הישן בתיק המכירה)
-//  2. business_file_meta עם category='מצגת אנונימית' (סיווג ידני בהעלאה לאזור
-//     "קבצים מצורפים" הכללי - זו הדרך התקנית היחידה לסמן תקציר מורחב שם)
+// (לא per-card) כדי לא ליצור עשרות שאילתות. שני מקורות אפשריים:
+//  1. business_sale_files עם category='anon_presentation' (הסלוט הישן בתיק המכירה - קטגוריה מפורשת, לא נגעתי בו)
+//  2. business_file_meta - קובץ PDF ששמו מכיל "אנונימי"/"אנונימית" (isAnonExtendedPdfRow)
 let ANON_BIZ_FILES = {}; // business_id -> [files]
 async function loadAnonBizFiles(){
   ANON_BIZ_FILES = {};
@@ -1265,9 +1269,8 @@ async function loadAnonBizFiles(){
       .eq('status', 'active'),
     window.supabaseClient
       .from('business_file_meta')
-      .select('id, business_id, display_name, original_filename, storage_path, file_type, file_size, category, created_at')
-      .in('business_id', ids)
-      .eq('category', 'מצגת אנונימית'),
+      .select('id, business_id, display_name, original_filename, storage_path, file_type, file_size, created_at')
+      .in('business_id', ids),
   ]);
 
   if (saleFilesRes.error) console.warn('טעינת קבצי תיק מכירה אנונימיים נכשלה:', saleFilesRes.error.message);
@@ -1280,14 +1283,17 @@ async function loadAnonBizFiles(){
   });
 
   if (metaFilesRes.error) console.warn('טעינת קבצי תקציר מורחב נכשלה:', metaFilesRes.error.message);
-  (metaFilesRes.data || []).forEach(f => {
-    const name = f.display_name || f.original_filename;
-    (ANON_BIZ_FILES[f.business_id] = ANON_BIZ_FILES[f.business_id] || []).push({
-      id: f.id, business_id: f.business_id, file_name: name, storage_path: f.storage_path,
-      file_type: f.file_type, file_size: f.file_size, created_at: f.created_at,
-      source: 'file_meta', label: 'תקציר מורחב',
+  // סינון בצד הלקוח כהגנת עומק בלבד - ה-RLS כבר לא מחזיר שורות שלא תואמות.
+  (metaFilesRes.data || [])
+    .filter(f => isAnonExtendedPdfRow(f.storage_path, f.display_name, f.original_filename))
+    .forEach(f => {
+      const name = f.display_name || f.original_filename;
+      (ANON_BIZ_FILES[f.business_id] = ANON_BIZ_FILES[f.business_id] || []).push({
+        id: f.id, business_id: f.business_id, file_name: name, storage_path: f.storage_path,
+        file_type: f.file_type, file_size: f.file_size, created_at: f.created_at,
+        source: 'file_meta', label: 'תקציר מורחב',
+      });
     });
-  });
 
   Object.keys(ANON_BIZ_FILES).forEach(bizId => {
     ANON_BIZ_FILES[bizId].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
@@ -1387,7 +1393,7 @@ async function openSendAnonSummaryModal(bizId){
 }
 
 async function openSendAnonModal(bizId, file){
-  const biz = ALL_ANON_BIZ.find(b => b.id === bizId);
+  const biz = ALL_ANON_BIZ.find(b => b.id === bizId) || ALL_BIZ.find(b => b.id === bizId);
   if (!biz){ toast('שגיאה: העסק לא נמצא'); return; }
   SEND_ANON_BIZ_ID = bizId; SEND_ANON_FILE = file; SEND_ANON_BUYER = null;
   const isPrimary = !file;
@@ -1543,7 +1549,7 @@ async function confirmSendAnonFile(){
   if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
   const bizId = SEND_ANON_BIZ_ID, file = SEND_ANON_FILE, buyer = SEND_ANON_BUYER;
   const isPrimary = !file;
-  const biz = ALL_ANON_BIZ.find(b => b.id === bizId);
+  const biz = ALL_ANON_BIZ.find(b => b.id === bizId) || ALL_BIZ.find(b => b.id === bizId);
   const channel = getSelectedSendAnonChannel();
   sendAnonStatus('מתחיל...', false);
   if (!buyer){ const m='יש לבחור קונה מהרשימה'; toast(m); sendAnonStatus(m, true); return; }
@@ -2173,6 +2179,7 @@ async function loadBizFiles(bizId){
     const fullPath = `${bizId}/${f.name}`;
     const meta = metaByPath[fullPath];
     return {
+      metaId: meta ? meta.id : null,
       storagePath: fullPath, rawName: f.name,
       displayName: (meta && meta.display_name) || displayFileName(f.name),
       category: (meta && meta.category) || null,
@@ -2185,16 +2192,20 @@ async function loadBizFiles(bizId){
   refreshAnonFileIndicatorForBiz(bizId, merged);
 
   if (!merged.length){ box.innerHTML = '<span style="color:#999;">אין קבצים מצורפים עדיין</span>'; return; }
-  box.innerHTML = merged.map((f, idx) => `
+  box.innerHTML = merged.map((f, idx) => {
+    const isAnonPdf = isAnonExtendedPdfRow(f.storagePath, f.displayName, null);
+    return `
     <div id="bizfrow_${idx}" style="padding:8px 0;border-bottom:1px solid #f0ede4;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:180px;display:flex;align-items:center;gap:6px;">
+        <div style="flex:1;min-width:180px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
           <input type="checkbox" class="bizfSendCheck" data-idx="${idx}" onchange="updateBizSendBtn('${bizId}')" style="cursor:pointer;">
           <span id="bizfname_${idx}">📄 ${esc(f.displayName)}</span>
           ${f.category ? `<span style="background:#eef2fb;color:#3a5cad;font-size:.68rem;font-weight:700;padding:1px 8px;border-radius:10px;margin-inline-start:6px;">${esc(f.category)}</span>` : ''}
+          ${isAnonPdf ? `<span title="קובץ PDF ששמו מכיל 'אנונימי'/'אנונימית' - מזוהה אוטומטית כתקציר אנונימי מורחב" style="background:#e6f4ea;color:#1e7b34;font-size:.68rem;font-weight:700;padding:1px 8px;border-radius:10px;">🔒 תקציר אנונימי מורחב</span>` : ''}
         </div>
         <span>
           <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="downloadBizFile('${bizId}',${idx})">📂 פתח / הורד</button>
+          ${isAnonPdf && f.metaId ? `<button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="openSendAnonExtendedFromCard('${bizId}',${idx})">📧 הפץ כתקציר אנונימי</button>` : ''}
           ${canManage ? `<button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="editBizFileMeta('${bizId}',${idx})">✏️ ערוך</button>` : ''}
           ${canManage ? `<button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="deleteBizFile('${bizId}',${idx})">מחק</button>` : ''}
         </span>
@@ -2202,10 +2213,23 @@ async function loadBizFiles(bizId){
       <div style="font-size:.7rem;color:#999;margin-top:2px;">
         ${f.createdAt ? fmtDateTime(f.createdAt) : ''}${f.uploadedBy ? ' · הועלה ע"י ' + esc(userName(f.uploadedBy)) : ''}${f.sizeBytes ? ' · ' + Math.round(f.sizeBytes/1024) + 'KB' : ''}
       </div>
-    </div>`).join('')
+    </div>`;
+  }).join('')
     + `<div style="margin-top:10px;">
          <button type="button" class="btn btn-ghost" id="bizSendEmailBtn" disabled title="סמן קובץ אחד לפחות למעלה כדי להפעיל" onclick="openSendFilesToBuyer('${bizId}')">📧 שלח לקונה במייל</button>
        </div>`;
+}
+
+// שליחת תקציר אנונימי מורחב ישירות מכרטיס העסק (לא מטאב "עסקים אנונימיים") -
+// עובר דרך אותו מודאל/מנגנון anon_distributions בדיוק (openSendAnonModal),
+// כדי שאותן הגנות הרשאה בדיוק יחולו בין אם השליחה נפתחה כאן או שם.
+function openSendAnonExtendedFromCard(bizId, idx){
+  const f = (BIZ_FILES_CACHE[bizId] || [])[idx];
+  if (!f || !f.metaId){ toast('שגיאה: לא נמצא רישום קובץ מתאים - רענן ונסה שוב'); return; }
+  openSendAnonModal(bizId, {
+    id: f.metaId, business_id: bizId, file_name: f.displayName,
+    storage_path: f.storagePath, file_size: f.sizeBytes, source: 'file_meta',
+  });
 }
 
 // עריכה מוטבעת (שינוי שם תצוגה + קטגוריה) - שורה הופכת לטופס קטן במקום.
