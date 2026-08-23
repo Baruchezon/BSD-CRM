@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608231400';
+    var PAGE_BUILD = '202608231830';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -152,6 +152,9 @@
     <button type="button" class="lead-tab" data-tab="partner" onclick="switchTab('partner')">שותפות/השקעה <span class="count" id="countPartner">0</span></button>
     <button type="button" class="lead-tab" data-tab="y2026" onclick="switchTab('y2026')">לידים 2026 <span class="count" id="countY2026">0</span></button>
   </div>
+  <div id="y2026HiddenLinkWrap" style="display:none;margin:-6px 0 10px;">
+    <a href="javascript:void(0)" onclick="openHiddenY2026Panel()" style="font-size:.78rem;color:#8a8578;">📁 רשומות שהוסרו מרשימת 2026 (<span id="countY2026Hidden">0</span>) — צפייה ושחזור</a>
+  </div>
 
   <div class="filters">
     <input type="text" id="fSearch" oninput="renderTable()" placeholder="חיפוש לפי שם, טלפון, עיר, תחום, הערות...">
@@ -187,6 +190,8 @@ let ALL_SELLERS = [];
 let ALL_BUYERS = [];
 let ALL_PARTNERS = [];
 let ALL_LEADS_2026 = [];
+let HIDDEN_Y2026_IDS = new Set();
+let HIDDEN_Y2026_DETAILS = [];
 let ALL_USERS = [];
 let CURRENT_PROFILE = null;
 let RATING_LEVELS = [];
@@ -306,20 +311,31 @@ async function loadAll(){
   ALL_BUYERS = (leadData || []).filter(l => l.type === 'buyer' && noAgreement(l) && !isOpenWebsiteLead(l));
   ALL_PARTNERS = (leadData || []).filter(l => l.type === 'partner' && noAgreement(l) && !isOpenWebsiteLead(l));
 
-  // טאב "לידים 2026" - רישום מסודר בלבד (לתצוגה/עיון), לא תור עבודה: כל
-  // הרשומות בטבלת leads (כל type, כל סטטוס, כולל כאלה שכבר טופלו/הועברו/
-  // יש להן הסכם) שנוצרו מ-1.1.2026 ואילך, בלי לגעת בסינון הקיים של שאר
-  // הטאבים למעלה. ממוין מהחדש לישן לפי תאריך קליטה בפועל.
   const Y2026_START = new Date('2026-01-01T00:00:00');
-  ALL_LEADS_2026 = (leadData || [])
+  const leads2026Raw = (leadData || [])
     .filter(l => l.created_at && new Date(l.created_at) >= Y2026_START)
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  // "הסתרה" מרשימת 2026 - טבלה נפרדת לגמרי (leads_2026_hidden), RLS אדמין
+  // בלבד. מי שאינו אדמין יקבל שגיאת RLS/רשימה ריקה על השאילתה הזו - זה תקין
+  // ומצופה (ראה migrations/2026-08-23c) - לא נחשוף שגיאה למשתמש על כך, פשוט
+  // לא תהיה לו יכולת הסתרה/שחזור והרשימה תוצג במלואה כאילו כלום לא הוסתר.
+  let hiddenRows = [];
+  try {
+    const { data } = await window.supabaseClient.from('leads_2026_hidden').select('*');
+    hiddenRows = data || [];
+  } catch (e) { hiddenRows = []; }
+  HIDDEN_Y2026_IDS = new Set(hiddenRows.map(h => h.lead_id));
+  HIDDEN_Y2026_DETAILS = hiddenRows;
+
+  ALL_LEADS_2026 = leads2026Raw.filter(l => !HIDDEN_Y2026_IDS.has(l.id));
 
   document.getElementById('countBusiness').textContent = ALL_BUSINESSES.length;
   document.getElementById('countSeller').textContent = ALL_SELLERS.length;
   document.getElementById('countBuyer').textContent = ALL_BUYERS.length;
   document.getElementById('countPartner').textContent = ALL_PARTNERS.length;
   document.getElementById('countY2026').textContent = ALL_LEADS_2026.length;
+  renderHiddenY2026Link();
 
   await loadNotesSummary();
   renderTable();
@@ -328,6 +344,7 @@ async function loadAll(){
 function switchTab(tab){
   CURRENT_TAB = tab;
   document.querySelectorAll('.lead-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  renderHiddenY2026Link();
   renderTable();
 }
 
@@ -409,7 +426,24 @@ function renderTable(){
   body.innerHTML = rows.map(r => {
     const editable = canEditRecord(r.created_by);
     const isWebsiteLead = CURRENT_TAB === 'seller' && !!r.website_intake_stage;
-    const rowClickAction = isWebsiteLead ? `openWebsiteLead('${r.id}')` : (editable ? `openEdit('${r.id}')` : `openReadOnly('${r.id}')`);
+    const isY2026 = CURRENT_TAB === 'y2026';
+    const isAdmin = !!(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin');
+    const rowClickAction = isY2026 ? `openReadOnly('${r.id}')` : (isWebsiteLead ? `openWebsiteLead('${r.id}')` : (editable ? `openEdit('${r.id}')` : `openReadOnly('${r.id}')`));
+    // טאב "לידים 2026" הוא רישום/לוג בלבד - לא תור עבודה: אין כאן עריכה/שליחת
+    // הסכם/מחיקה רגילה. הפעולה היחידה מלבד צפייה והערות היא "הסרה מהרשימה
+    // הזו בלבד" (admin בלבד, ראה hideFromY2026Confirm) - לעולם לא deleteRecord.
+    const menuHtml = isY2026 ? `
+              <a href="javascript:void(0)" onclick="openReadOnly('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ צפייה</a>
+              <a href="javascript:void(0)" onclick="openNotesPanel('${tn}','${r.id}','${esc((r.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(r.id))}</a>
+              ${isAdmin ? `<a href="javascript:void(0)" onclick="hideFromY2026Confirm('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ הסר מרשימת 2026 בלבד</a>` : ''}
+    ` : `
+              ${isWebsiteLead ? `<a href="javascript:void(0)" onclick="openWebsiteLead('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">💬 שוחחתי עם הלקוח</a>` : (editable
+                ? `<a href="javascript:void(0)" onclick="openEdit('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>`
+                : `<a href="javascript:void(0)" onclick="openReadOnly('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ צפייה (ליד של ${esc(userName(r.created_by))})</a>`)}
+              <a href="javascript:void(0)" onclick="openNotesPanel('${tn}','${r.id}','${esc((r.internal_name||r.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(r.id))}</a>
+              ${(editable && canSendAgreement() && !isWebsiteLead) ? `<a href="javascript:void(0)" onclick="sendAgreement('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
+              ${editable ? `<a href="javascript:void(0)" onclick="deleteRecord('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
+    `;
     return `
     <tr style="cursor:pointer;" onclick="${rowClickAction}">
       <td>
@@ -417,12 +451,7 @@ function renderTable(){
           <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
             <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
             <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
-              ${isWebsiteLead ? `<a href="javascript:void(0)" onclick="openWebsiteLead('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">💬 שוחחתי עם הלקוח</a>` : (editable
-                ? `<a href="javascript:void(0)" onclick="openEdit('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>`
-                : `<a href="javascript:void(0)" onclick="openReadOnly('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ צפייה (ליד של ${esc(userName(r.created_by))})</a>`)}
-              <a href="javascript:void(0)" onclick="openNotesPanel('${tn}','${r.id}','${esc((r.internal_name||r.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(r.id))}</a>
-              ${(editable && canSendAgreement() && !isWebsiteLead) ? `<a href="javascript:void(0)" onclick="sendAgreement('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
-              ${editable ? `<a href="javascript:void(0)" onclick="deleteRecord('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
+              ${menuHtml}
             </div>
           </div>
           <div>${rowNameCell(r)}</div>
@@ -641,6 +670,86 @@ async function addNote(tableName, recordId){
   await loadNotesSummary();
   await loadNotes(tableName, recordId);
   renderTable();
+}
+
+// ============================================================
+// "לידים 2026" — הסרה/שחזור מהרשימה בלבד (leads_2026_hidden). לעולם לא
+// DELETE/UPDATE על leads עצמו - ראה migrations/2026-08-23c_leads_2026_hidden.sql.
+// זמין לאדמין בלבד, גם ב-UI (כאן) וגם ב-RLS (מקור האמת האמיתי - זה כאן
+// רק כדי לא להציג כפתור שממילא ייכשל).
+// ============================================================
+function renderHiddenY2026Link(){
+  const wrap = document.getElementById('y2026HiddenLinkWrap');
+  if (!wrap) return;
+  const isAdmin = !!(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin');
+  wrap.style.display = (isAdmin && CURRENT_TAB === 'y2026') ? 'block' : 'none';
+  const cnt = document.getElementById('countY2026Hidden');
+  if (cnt) cnt.textContent = HIDDEN_Y2026_DETAILS.length;
+}
+function hideFromY2026Confirm(id){
+  const r = ALL_LEADS_2026.find(x => x.id === id) || (leadRowByIdAnyTab(id));
+  const name = r ? (r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || 'הליד') : 'הליד';
+  const overlay = document.createElement('div');
+  overlay.id = 'hideY2026Overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:99;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:460px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 12px;color:var(--navy);">הסרת ${esc(name)} מרשימת לידים 2026</h3>
+      <p style="font-size:.88rem;color:#444;line-height:1.6;margin-bottom:14px;">הפעולה תסיר את הליד מרשימת לידי 2026 בלבד. מידע קיים בעסקים, בקונים, בשותפים או במקומות אחרים במערכת לא יימחק.</p>
+      <textarea id="hideY2026Reason" placeholder="סיבת ההסרה (לא חובה)..." style="width:100%;min-height:60px;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;margin-bottom:14px;"></textarea>
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button onclick="document.getElementById('hideY2026Overlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
+        <button onclick="hideFromY2026Do('${id}')" style="background:#b00020;color:#fff;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">הסר מרשימת 2026 בלבד</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function leadRowByIdAnyTab(id){
+  return [...ALL_LEADS_2026, ...ALL_SELLERS, ...ALL_BUYERS, ...ALL_PARTNERS].find(x => x.id === id);
+}
+async function hideFromY2026Do(id){
+  const reason = (document.getElementById('hideY2026Reason') || {}).value || null;
+  const { error } = await window.supabaseClient.from('leads_2026_hidden').insert({
+    lead_id: id, hidden_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null, hidden_reason: reason
+  });
+  const ov = document.getElementById('hideY2026Overlay'); if (ov) ov.remove();
+  if (error){ toast('שגיאה בהסרה: ' + error.message); return; }
+  toast('הליד הוסר מרשימת 2026 בלבד. שום רשומה אחרת במערכת לא נגעה.');
+  await loadAll();
+}
+async function openHiddenY2026Panel(){
+  const overlay = document.createElement('div');
+  overlay.id = 'hiddenY2026PanelOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:99;padding:40px 20px;';
+  const rowsHtml = HIDDEN_Y2026_DETAILS.length === 0
+    ? '<div style="color:#999;text-align:center;padding:14px;">אין רשומות מוסתרות</div>'
+    : HIDDEN_Y2026_DETAILS.map(h => {
+        const lead = leadRowByIdAnyTab(h.lead_id);
+        const name = lead ? (lead.full_name || [lead.first_name,lead.last_name].filter(Boolean).join(' ')) : '(ליד לא נמצא ברשימה הנוכחית)';
+        return `<div style="border-bottom:1px solid #f0ede4;padding:10px 0;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+          <div>
+            <div style="font-weight:700;">${esc(name || '—')}</div>
+            <div style="font-size:.75rem;color:#999;">הוסר ע"י ${esc(userName(h.hidden_by))} · ${fmtDateTime(h.hidden_at)}${h.hidden_reason ? ' · ' + esc(h.hidden_reason) : ''}</div>
+          </div>
+          <button onclick="restoreY2026('${h.lead_id}')" style="background:var(--gold);color:#1c2333;border:none;padding:7px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;white-space:nowrap;">שחזר</button>
+        </div>`;
+      }).join('');
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:560px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">רשומות שהוסרו מרשימת לידים 2026</h3>
+      <div style="max-height:400px;overflow-y:auto;">${rowsHtml}</div>
+      <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+        <button onclick="document.getElementById('hiddenY2026PanelOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+async function restoreY2026(leadId){
+  const { error } = await window.supabaseClient.from('leads_2026_hidden').delete().eq('lead_id', leadId);
+  if (error){ toast('שגיאה בשחזור: ' + error.message); return; }
+  toast('הרשומה שוחזרה לרשימת 2026');
+  const ov = document.getElementById('hiddenY2026PanelOverlay'); if (ov) ov.remove();
+  await loadAll();
 }
 
 // ============================================================
