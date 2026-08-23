@@ -88,6 +88,10 @@
   .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
   .toast{position:fixed;bottom:24px;left:24px;background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.3);}  .src-filter-btn{border:none;background:transparent;color:#6b6558;font-size:.82rem;padding:6px 12px;border-radius:6px;cursor:pointer;font-family:inherit;}
   .src-filter-btn.active{background:#fff;color:#0e1b34;font-weight:700;box-shadow:0 1px 3px rgba(14,27,52,.15);}
+  .task-tab-btn{border:1.5px solid #d8d3c4;background:#fff;color:#40485c;font-family:inherit;font-size:.9rem;font-weight:700;padding:10px 18px;border-radius:10px;cursor:pointer;}
+  .task-tab-btn.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .task-tab-count{display:inline-block;background:rgba(0,0,0,.08);border-radius:10px;padding:1px 8px;font-size:.78rem;margin-inline-start:4px;}
+  .task-tab-btn.active .task-tab-count{background:rgba(255,255,255,.2);}
   /* מסך מובייל: אותה בעיה שכבר תוקנה פעם ב-match-detail.html (מודאל "מרחף"
      עם ריפוד גדול מכל כיוון, כפתורי שמירה/ביטול צפים באמצע) - כאן מיושם
      אותו פתרון: מסך מלא במובייל, כפתורים מוצמדים לתחתית. */
@@ -175,7 +179,13 @@
     <input type="hidden" id="fSource" value="all">
   </div>
 
-  <h3 style="margin:18px 0 8px;">📋 משימות לביצוע</h3>
+  <div id="taskTabBar" style="display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 10px;">
+    <button type="button" class="task-tab-btn active" data-tab="today" onclick="setTaskTab('today')">📅 היום <span id="tabCountToday" class="task-tab-count"></span></button>
+    <button type="button" class="task-tab-btn" data-tab="overdue" onclick="setTaskTab('overdue')">⚠️ באיחור <span id="tabCountOverdue" class="task-tab-count"></span></button>
+    <button type="button" class="task-tab-btn" data-tab="upcoming" onclick="setTaskTab('upcoming')">🗓️ הקרובות <span id="tabCountUpcoming" class="task-tab-count"></span></button>
+    <button type="button" class="task-tab-btn" data-tab="done" onclick="setTaskTab('done')">✅ בוצעו</button>
+  </div>
+  <div id="openTasksSection">
   <div class="table-scroll-wrap" style="position:relative;">
   <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
   <table>
@@ -188,8 +198,10 @@
     <button type="button" class="btn btn-ghost" onclick="scrollTableBy(this,260)">➡ גלול חזרה</button>
   </div>
   </div>
+  </div>
 
-  <h3 style="margin:32px 0 8px;color:#666;">🗄️ היסטוריה — משימות שבוצעו</h3>
+  <div id="doneTasksSection" style="display:none;">
+  <h3 style="margin:18px 0 8px;color:#666;">✅ משימות שבוצעו</h3>
   <div class="filters">
     <input type="text" id="fHistSearch" placeholder="חיפוש לפי שם משימה..." style="min-width:220px;">
     <select id="fHistPeriod">
@@ -212,6 +224,7 @@
     <button type="button" class="btn btn-ghost" onclick="scrollTableBy(this,260)">➡ גלול חזרה</button>
   </div>
   </div>
+  </div>
 </div>
 
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
@@ -222,8 +235,10 @@
 <script src="js/auth.js?v=202608170630"></script>
 <script src="js/permissions.js?v=202608181530"></script>
 <script src="js/push.js?v=202608122320"></script>
+<script src="js/taskActions.js?v=202608230500"></script>
 <script>
 let ALL_TASKS = [], ALL_USERS = [], CURRENT_PROFILE = null;
+let CURRENT_TASK_TAB = 'today'; // default landing tab, per spec
 let ALL_LEADS = [], ALL_BIZ = [], ALL_MATCHES = [];
 const relatedLabels = {lead:'ליד', business:'עסק', match:'התאמה'};
 const MATCH_STATUSES = ['התאמה חדשה','נשלח לקונה - ממתין לתגובה (אנונימי)','נשלחו מסמכים לאחר חתימת הסכם',
@@ -363,6 +378,34 @@ async function checkSchemaBanner(){
   }
 }
 
+// Categorizes an OPEN task into one of the three active tabs. A task with no
+// due_date at all (rare - possible via the AI voice/meeting pipelines) is
+// treated as "upcoming" so it's still visible somewhere, never hidden.
+function taskCategory(t){
+  if (!t.due_date) return 'upcoming';
+  const today = todayISO();
+  if (t.due_date < today) return 'overdue';
+  if (t.due_date === today) return 'today';
+  return 'upcoming';
+}
+
+function setTaskTab(tab){
+  CURRENT_TASK_TAB = tab;
+  document.querySelectorAll('.task-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('openTasksSection').style.display = tab === 'done' ? 'none' : 'block';
+  document.getElementById('doneTasksSection').style.display = tab === 'done' ? 'block' : 'none';
+  renderTable();
+}
+
+function updateTaskTabCounts(){
+  const open = ALL_TASKS.filter(t => t.status === 'פתוחה');
+  const counts = { today:0, overdue:0, upcoming:0 };
+  open.forEach(t => counts[taskCategory(t)]++);
+  document.getElementById('tabCountToday').textContent = counts.today || '';
+  document.getElementById('tabCountOverdue').textContent = counts.overdue || '';
+  document.getElementById('tabCountUpcoming').textContent = counts.upcoming || '';
+}
+
 function renderTable(){
   const fSearch = document.getElementById('fSearch').value.trim().toLowerCase();
   const fAssigned = document.getElementById('fAssigned').value;
@@ -370,8 +413,11 @@ function renderTable(){
   const fDateTo = document.getElementById('fDateTo').value;
   const fSource = document.getElementById('fSource').value;
 
+  updateTaskTabCounts();
+
   let rows = ALL_TASKS.filter(t=>{
     if (t.status !== 'פתוחה') return false;
+    if (taskCategory(t) !== CURRENT_TASK_TAB) return false;
     if (fSearch && !(t.title||'').toLowerCase().includes(fSearch)) return false;
     if (fAssigned !== 'all' && t.assigned_to !== fAssigned) return false;
     if (fDateFrom && (!t.due_date || t.due_date < fDateFrom)) return false;
@@ -395,6 +441,7 @@ function renderTable(){
             <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
             <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
               <a href="javascript:void(0)" onclick="openTaskForm('${t.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>
+              <a href="javascript:void(0)" onclick="event.stopPropagation();postponeTask('${t.id}')" style="display:block;color:#ffdd88;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📅 דחה למחר</a>
               ${isUnread
                 ? `<a href="javascript:void(0)" onclick="toggleTaskRead('${t.id}', true)" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👁️ סמן כנקרא</a>`
                 : `<a href="javascript:void(0)" onclick="toggleTaskRead('${t.id}', false)" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">↺ סמן כלא נקרא</a>`}
@@ -576,6 +623,13 @@ async function saveTask(e){
   }
 }
 
+async function postponeTask(id){
+  const { error, newDueDate } = await postponeTaskToTomorrow(window.supabaseClient, id);
+  if (error){ toast('שגיאה בדחיית המשימה: ' + error.message); return; }
+  toast('המשימה נדחתה למחר (' + fmtDate(newDueDate) + ')');
+  await loadTasks(); // re-fetches + re-renders -> task now lands in the correct tab automatically
+}
+
 async function completeTask(id){
   let { error } = await window.supabaseClient.from('tasks').update({ status: 'הושלמה', completed_at: new Date().toISOString() }).eq('id', id);
 
@@ -622,6 +676,13 @@ async function deleteTask(id){
 (async function init(){
   CURRENT_PROFILE = await requireAuth();
   if (!CURRENT_PROFILE) return;
+  const tabParam = new URLSearchParams(location.search).get('tab');
+  if (tabParam && ['today','overdue','upcoming','done'].includes(tabParam)){
+    CURRENT_TASK_TAB = tabParam;
+    document.querySelectorAll('.task-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabParam));
+    document.getElementById('openTasksSection').style.display = tabParam === 'done' ? 'none' : 'block';
+    document.getElementById('doneTasksSection').style.display = tabParam === 'done' ? 'block' : 'none';
+  }
   await loadUsers();
   await loadRelatedLookups();
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
