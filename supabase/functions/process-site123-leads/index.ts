@@ -81,7 +81,7 @@ async function processOneEmail(row: {
   received_at: string | null;
 }) {
   const parsed = parseSite123Body(row.raw_body);
-  const { type, classification, needsReview } = classifyPurpose(parsed.purpose);
+  const { type, classification, needsReview } = classifyPurpose(parsed.checkboxes, parsed.message);
 
   await supabase.from('site123_lead_emails').update({
     parsed: parsed as any,
@@ -120,7 +120,7 @@ async function processOneEmail(row: {
     const sameName = (existing.full_name || '').trim() === displayName.trim();
     const addNote = `\n\n[קליטה אוטומטית מהאתר ${nowStr}] התקבלה פנייה נוספת בטלפון/מייל התואמים לרשומה זו.\n`
       + `שם הפונה בטופס הנוכחי: ${displayName}${sameName ? '' : ` (שונה משם הרשומה הקיימת: ${existing.full_name || 'שם לא זוהה'})`}\n`
-      + `מטרה: ${parsed.purpose || '—'} | הודעה: ${parsed.message || '—'} | תאריך בטופס: ${parsed.dateField || '—'}`;
+      + `תיבות סימון שנבחרו (כל הבחירות): ${parsed.checkboxes.length ? parsed.checkboxes.join(', ') : '(לא סומן)'} | הודעה: ${parsed.message || '—'}`;
     // אם הרשומה הקיימת היא עדיין ליד-אתר פתוח (עוד לא סווג/הועבר) - מחזירים
     // אותה ל-'new' כדי שהפנייה הנוספת תקפוץ שוב בתיבת הקליטה ולא תיבלע
     // בתוך הערה על ליד שממתין ממילא. לידים שכבר הועברו סופית (stage=null)
@@ -138,7 +138,7 @@ async function processOneEmail(row: {
 
     const { data: task } = await supabase.from('tasks').insert({
       title: `פנייה חוזרת מ-${displayName} - בדוק ליד קיים (${existing.full_name || 'שם לא זוהה'})`,
-      description: `התקבלה פנייה נוספת מהאתר בשם "${displayName}", בטלפון/מייל שכבר שייכים לרשומה קיימת בשם "${existing.full_name || 'שם לא זוהה'}". מטרה: ${parsed.purpose || '—'}. הודעה: ${parsed.message || '—'}`,
+      description: `התקבלה פנייה נוספת מהאתר בשם "${displayName}", בטלפון/מייל שכבר שייכים לרשומה קיימת בשם "${existing.full_name || 'שם לא זוהה'}". תיבות שסומנו: ${parsed.checkboxes.join(', ') || '—'}. הודעה: ${parsed.message || '—'}`,
       priority: 'גבוהה', assigned_to: adminId, status: 'פתוחה',
       related_type: 'lead', related_id: existing.id
     }).select('id').single();
@@ -172,15 +172,15 @@ async function processOneEmail(row: {
   const guessLabel = classification === 'seller' ? 'מעוניין למכור עסק (ניחוש)'
     : classification === 'buyer' ? 'מחפש לקנות עסק (ניחוש)'
     : classification === 'partner' ? 'מעוניין בשותפות/השקעה (ניחוש)'
-    : 'לא ניתן היה לנחש בוודאות - נדרשת בדיקה ידנית';
+    : classification === 'training' ? 'מתעניין בהכשרת מתווכי עסקים (ניחוש)'
+    : 'דורש בדיקה - לא ניתן היה לזהות תחום התעניינות בוודאות';
 
   const notes = `[נוצר אוטומטית ע"י המערכת - ליד מהאתר, טרם סווג, ${nowStr}]\n`
     + `ניחוש ראשוני (לא סופי): ${guessLabel}\n`
-    + `מטרת הפנייה כפי שמולאה בטופס: ${parsed.purpose || '(לא צוין)'}\n`
+    + `תיבות סימון שנבחרו בטופס (כל הבחירות שסומנו, לא רק אחת): ${parsed.checkboxes.length ? parsed.checkboxes.join(', ') : '(לא סומנה אף תיבה)'}\n`
     + `הודעה חופשית מהפונה: ${parsed.message || '(לא צוין)'}\n`
-    + `תאריך שדה בטופס: ${parsed.dateField || '(לא צוין)'}\n`
     + (parsed.city ? `עיר/מיקום כפי שנרשם: ${parsed.city}\n` : '')
-    + (!parsed.recognizedTemplate ? `\nהמייל לא תאם את מבנה הטופס המוכר - טקסט מקורי מלא:\n${stripPipes(row.raw_body).slice(0, 2000)}` : '');
+    + (!parsed.recognizedTemplate ? `\nהמייל לא תאם אף אחת משתי תבניות הטופס המוכרות - טקסט מקורי מלא:\n${stripPipes(row.raw_body).slice(0, 2000)}` : '');
 
   const payload: Record<string, any> = {
     type, first_name: firstName, last_name: lastName, full_name: displayName,
@@ -214,7 +214,7 @@ async function processOneEmail(row: {
 
   const { data: task } = await supabase.from('tasks').insert({
     title: `צור קשר עם ליד חדש מהאתר - ${displayName}`,
-    description: `מטרה: ${parsed.purpose || '—'}\nהודעה: ${parsed.message || '—'}\nטלפון: ${parsed.phone || '—'} | מייל: ${parsed.email || '—'}`,
+    description: `תיבות שסומנו: ${parsed.checkboxes.join(', ') || '—'}\nהודעה: ${parsed.message || '—'}\nטלפון: ${parsed.phone || '—'} | מייל: ${parsed.email || '—'}`,
     priority: 'רגילה', assigned_to: adminId, status: 'פתוחה',
     related_type: 'lead', related_id: newLead.id
   }).select('id').single();
@@ -236,7 +236,7 @@ async function processOneEmail(row: {
 
 // ---------- כניסה ל-Gmail ושליפת מיילים ----------
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
   const summary = { fetched: 0, newRows: 0, created: 0, merged: 0, skipped: 0, errors: [] as string[] };
 
   const gmailUser = Deno.env.get('GMAIL_EMAIL_ADDRESS');
