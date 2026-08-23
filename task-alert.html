@@ -88,6 +88,7 @@ const params = new URLSearchParams(location.search);
 const taskId = params.get('id');
 const kind = params.get('kind') || 'nudnik';
 const root = document.getElementById('root');
+let CURRENT_TASK = null; // set by loadTask(), read by postponeToTomorrow() for its due_time
 
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -130,6 +131,8 @@ async function loadTask(){
     return;
   }
 
+  CURRENT_TASK = task;
+
   if (task.status === 'הושלמה'){
     renderAlreadyDone(task);
     return;
@@ -156,9 +159,9 @@ function renderTask(task){
       ${task.description ? `<div class="task-desc">${esc(task.description)}</div>` : ''}
     </div>
     <div class="actions">
-      <button class="action btn-done" onclick="markDone()">✅ סיימתי - סמן כהושלם</button>
-      <button class="action btn-snooze" onclick="snooze()">⏰ תזכיר לי שוב בעוד 10 דקות</button>
-      <button class="action btn-open" onclick="openFull()">📂 פתח את כל פרטי המשימה</button>
+      <button class="action btn-done" onclick="markDone()">✅ בוצע</button>
+      <button class="action btn-snooze" onclick="postponeToTomorrow()">📅 דחה למחר</button>
+      <button class="action btn-open" onclick="openFull()">📂 פתח ב-BSD CRM</button>
     </div>
   `;
 }
@@ -189,15 +192,38 @@ async function markDone(){
   `;
 }
 
-async function snooze(){
-  root.innerHTML = `<div class="loading" style="color:var(--navy);"><div class="spinner" style="border-color:rgba(14,27,52,.2);border-top-color:var(--navy);"></div>מעדכן תזכורת...</div>`;
-  // Setting last_notified_at to "now" makes the reminder engine wait its normal interval
-  // before nudging again, which naturally delays the next push by ~10 minutes.
-  await window.supabaseClient.from('tasks').update({ last_notified_at: new Date().toISOString() }).eq('id', taskId);
+function tomorrowISO(){
+  // "tomorrow" is always relative to today's real date - even for a task that
+  // was already overdue from several days ago, postponing means "push to
+  // tomorrow from now", not "add one day to its old due date".
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+async function postponeToTomorrow(){
+  root.innerHTML = `<div class="loading" style="color:var(--navy);"><div class="spinner" style="border-color:rgba(14,27,52,.2);border-top-color:var(--navy);"></div>דוחה למחר...</div>`;
+  // Updates the SAME task row - never creates a new task and never leaves a
+  // copy on the original day. due_time carries over unchanged if the task had
+  // one; a date-only task stays date-only (still shows in the 08:00 list).
+  // notify_count/last_notified_at reset so tomorrow's reminder fires fresh
+  // instead of the engine thinking "already notified" from before the postpone.
+  const { error } = await window.supabaseClient.from('tasks').update({
+    due_date: tomorrowISO(),
+    last_notified_at: null,
+    notify_count: 0
+  }).eq('id', taskId);
+
+  if (error){
+    root.innerHTML = `<div class="error-state"><div style="font-size:2.5rem;">⚠️</div><p style="color:#40485c;margin-top:10px;">שגיאה בדחיית המשימה: ${esc(error.message)}</p><button class="action btn-open" style="margin-top:16px;" onclick="location.href='tasks.html'">לרשימת המשימות</button></div>`;
+    return;
+  }
+
   root.innerHTML = `
     <div class="done-state">
-      <div class="icon">⏰</div>
-      <p>בסדר, נזכיר לך שוב בעוד כ-10 דקות.</p>
+      <div class="icon">📅</div>
+      <p>המשימה "${esc(CURRENT_TASK ? CURRENT_TASK.title : '')}" נדחתה למחר${CURRENT_TASK && CURRENT_TASK.due_time ? ' בשעה ' + esc(CURRENT_TASK.due_time.slice(0,5)) : ''}.</p>
       <button class="action btn-open" style="margin-top:16px;" onclick="location.href='tasks.html'">לרשימת המשימות</button>
     </div>
   `;
