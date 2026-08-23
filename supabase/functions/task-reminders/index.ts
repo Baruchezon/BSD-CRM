@@ -79,12 +79,12 @@ Deno.serve(async () => {
 
   let sentMorning = 0, sentNudnik = 0;
 
-  // ---- 1) Date-only tasks due today, morning window, not yet notified today ----
+  // ---- 1) Date-only tasks due today OR still open from a past date (never disappear), morning window, not yet notified today ----
   if (now.getHours() === MORNING_HOUR && now.getMinutes() < 5) {
     const { data: morningTasks } = await supabase
       .from('tasks')
       .select('id, title, assigned_to, due_date, due_time, status, last_notified_at')
-      .eq('due_date', today)
+      .lte('due_date', today)
       .is('due_time', null)
       .eq('status', 'פתוחה');
 
@@ -105,11 +105,11 @@ Deno.serve(async () => {
     }
   }
 
-  // ---- 2) Date+time tasks: due_time has passed today, still open, repeat until max ----
+  // ---- 2) Date+time tasks: due today or overdue from a past date, due_time has passed, still open, repeat until max ----
   const { data: nudnikTasks } = await supabase
     .from('tasks')
     .select('id, title, assigned_to, due_date, due_time, status, last_notified_at, notify_count')
-    .eq('due_date', today)
+    .lte('due_date', today)
     .not('due_time', 'is', null)
     .eq('status', 'פתוחה')
     .lte('due_time', nowTime)
