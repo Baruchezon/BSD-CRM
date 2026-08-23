@@ -201,8 +201,8 @@ function renderConfirm(){
         ${allMatches.map((m,i) => `<span class="match-chip" data-idx="${i}" onclick="selectMatch(${i})">${esc(m.name)}</span>`).join('')}
       </div>` : ''}
       <div class="row-actions" style="margin-top:16px;">
-        <button class="btn btn-ghost" onclick="renderHome()">ביטול</button>
-        <button class="btn btn-primary" id="saveBtn" onclick="saveTask()">שמירה</button>
+        <button type="button" class="btn btn-ghost" onclick="renderHome()">ביטול</button>
+        <button type="button" class="btn btn-primary" id="saveBtn" onclick="saveTask()">שמירה</button>
       </div>
     </div>
   `;
@@ -220,13 +220,27 @@ function selectMatch(idx){
   }
 }
 
+let SAVE_IN_PROGRESS = false; // JS-level lock, checked BEFORE the DOM disabled state is even set - closes the fast-double-tap race the DOM-only guard alone doesn't fully cover
+
 async function saveTask(){
+  if (SAVE_IN_PROGRESS) return; // already saving - ignore any extra click entirely, no second insert
+  SAVE_IN_PROGRESS = true;
+
   const saveBtn = document.getElementById('saveBtn');
   saveBtn.disabled = true;
   saveBtn.textContent = 'שומר...';
 
-  const { data: { session } } = await window.supabaseClient.auth.getSession();
-  if (!session){ renderNoAuth(); return; }
+  // getSession() can very briefly report "no session" right after a cold
+  // launch even though the user IS logged in (documented in js/auth.js) -
+  // retry with a short grace period instead of bailing to a false
+  // "not logged in" screen on a transient blip.
+  let session = null;
+  for (const delay of [0, 300, 600]) {
+    if (delay) await new Promise(r => setTimeout(r, delay));
+    ({ data: { session } } = await window.supabaseClient.auth.getSession());
+    if (session) break;
+  }
+  if (!session){ renderNoAuth(); SAVE_IN_PROGRESS = false; return; }
 
   const payload = {
     title: document.getElementById('cTitle').value.trim() || 'משימה חדשה',
@@ -245,24 +259,49 @@ async function saveTask(){
     payload.related_id = m.id;
   }
 
-  const { data, error } = await window.supabaseClient.from('tasks').insert(payload).select().single();
+  const { error } = await window.supabaseClient.from('tasks').insert(payload);
+  SAVE_IN_PROGRESS = false;
+
   if (error){
+    // שגיאה אמיתית בלבד - אף פעם לא מציגים הצלחה כאן, ואף פעם לא לופ: המסך
+    // נשאר על האישור עם הכפתור פעיל שוב, כדי שאפשר לנסות שוב פעם אחת בלבד.
     toast('שגיאה בשמירה: ' + error.message);
     saveBtn.disabled = false;
     saveBtn.textContent = 'שמירה';
     return;
   }
 
+  renderSavedPrompt();
+}
+
+// אחרי שמירה מוצלחת: הודעה ברורה + שאלה אחת. לא עוברים ל-BSD CRM, לא למסך
+// המשימות, ולא למסך שמירה נוסף - בדיוק לפי הדרישה.
+function renderSavedPrompt(){
   root.innerHTML = `
     <div class="done-state">
       <div class="icon">✅</div>
-      <p style="color:var(--navy);font-weight:700;font-size:1.05rem;margin-top:10px;">המשימה נשמרה!</p>
+      <p style="color:var(--navy);font-weight:700;font-size:1.05rem;margin-top:10px;">המשימה נשמרה בהצלחה. האם תרצה ליצור משימה נוספת?</p>
       <div class="row-actions" style="margin-top:16px;">
-        <button class="btn btn-ghost" onclick="location.href='tasks.html?open=${data.id}'">פתח את המשימה</button>
-        <button class="btn btn-primary" onclick="renderHome()">משימה נוספת</button>
+        <button type="button" class="btn btn-ghost" onclick="finishSession()">לא</button>
+        <button type="button" class="btn btn-primary" onclick="renderHome()">כן</button>
       </div>
     </div>
   `;
+}
+
+// "לא": ניסיון סגירת החלון; אם הדפדפן לא מאפשר (למשל הדף לא נפתח בסקריפט,
+// וזה המצב הרגיל כשפותחים מהאייקון או מקישור ישיר - כרום/ספארי לרוב חוסמים
+// window.close() במקרה כזה) - מוצג מסך סיום נקי במקום, בלי מעבר ל-BSD CRM.
+function finishSession(){
+  window.close();
+  setTimeout(() => {
+    root.innerHTML = `
+      <div class="done-state">
+        <div class="icon">✅</div>
+        <p style="color:var(--navy);font-weight:700;font-size:1.05rem;margin-top:10px;">המשימה נשמרה. ניתן לסגור את החלון.</p>
+      </div>
+    `;
+  }, 150);
 }
 
 (async function init(){
