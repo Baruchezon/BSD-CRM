@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608201900';
+    var PAGE_BUILD = '202608231400';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -150,6 +150,7 @@
     <button type="button" class="lead-tab" data-tab="seller" onclick="switchTab('seller')">לידים מהאתר <span class="count" id="countSeller">0</span></button>
     <button type="button" class="lead-tab" data-tab="buyer" onclick="switchTab('buyer')">קונים <span class="count" id="countBuyer">0</span></button>
     <button type="button" class="lead-tab" data-tab="partner" onclick="switchTab('partner')">שותפות/השקעה <span class="count" id="countPartner">0</span></button>
+    <button type="button" class="lead-tab" data-tab="y2026" onclick="switchTab('y2026')">לידים 2026 <span class="count" id="countY2026">0</span></button>
   </div>
 
   <div class="filters">
@@ -185,6 +186,7 @@ let ALL_BUSINESSES = [];
 let ALL_SELLERS = [];
 let ALL_BUYERS = [];
 let ALL_PARTNERS = [];
+let ALL_LEADS_2026 = [];
 let ALL_USERS = [];
 let CURRENT_PROFILE = null;
 let RATING_LEVELS = [];
@@ -304,10 +306,20 @@ async function loadAll(){
   ALL_BUYERS = (leadData || []).filter(l => l.type === 'buyer' && noAgreement(l) && !isOpenWebsiteLead(l));
   ALL_PARTNERS = (leadData || []).filter(l => l.type === 'partner' && noAgreement(l) && !isOpenWebsiteLead(l));
 
+  // טאב "לידים 2026" - רישום מסודר בלבד (לתצוגה/עיון), לא תור עבודה: כל
+  // הרשומות בטבלת leads (כל type, כל סטטוס, כולל כאלה שכבר טופלו/הועברו/
+  // יש להן הסכם) שנוצרו מ-1.1.2026 ואילך, בלי לגעת בסינון הקיים של שאר
+  // הטאבים למעלה. ממוין מהחדש לישן לפי תאריך קליטה בפועל.
+  const Y2026_START = new Date('2026-01-01T00:00:00');
+  ALL_LEADS_2026 = (leadData || [])
+    .filter(l => l.created_at && new Date(l.created_at) >= Y2026_START)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
   document.getElementById('countBusiness').textContent = ALL_BUSINESSES.length;
   document.getElementById('countSeller').textContent = ALL_SELLERS.length;
   document.getElementById('countBuyer').textContent = ALL_BUYERS.length;
   document.getElementById('countPartner').textContent = ALL_PARTNERS.length;
+  document.getElementById('countY2026').textContent = ALL_LEADS_2026.length;
 
   await loadNotesSummary();
   renderTable();
@@ -323,7 +335,11 @@ function currentRows(){
   if (CURRENT_TAB === 'business') return ALL_BUSINESSES;
   if (CURRENT_TAB === 'seller') return ALL_SELLERS;
   if (CURRENT_TAB === 'buyer') return ALL_BUYERS;
+  if (CURRENT_TAB === 'y2026') return ALL_LEADS_2026;
   return ALL_PARTNERS;
+}
+function leadTypeLabel(t){
+  return { seller: 'מוכר', buyer: 'קונה', partner: 'שותפות/השקעה' }[t] || (t || '—');
 }
 
 function tableName(){
@@ -346,6 +362,11 @@ function rowNameCell(r){
     return `<div class="primary-name">${esc(bizName)}</div><div class="sub-name">${esc(r.owner_name||'—')}</div>`;
   }
   const personName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || '—';
+  if (CURRENT_TAB === 'y2026'){
+    const badges = [`<span class="badge" style="background:#eee6d4;color:#665;">${esc(leadTypeLabel(r.type))}</span>`];
+    if (r.status) badges.push(`<span class="badge" style="background:#eaf1fb;color:#2b5fa3;">${esc(r.status)}</span>`);
+    return `<div class="primary-name">${esc(personName)}</div><div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">${badges.join('')}</div>`;
+  }
   if (CURRENT_TAB === 'seller' && r.website_intake_stage){
     return `<div class="primary-name">${esc(personName)}</div><div style="margin-top:4px;">${websiteStatusBadge(r)}</div>`;
   }
@@ -358,6 +379,7 @@ function rowNameCell(r){
 function rowCityCell(r){
   if (CURRENT_TAB === 'business') return esc(r.city || '—');
   if (CURRENT_TAB === 'seller') return esc(r.business_city || r.city || '—');
+  if (CURRENT_TAB === 'y2026') return esc(r.business_city || r.requested_area || r.city || '—');
   return esc(r.requested_area || r.city || '—');
 }
 function rowPhoneCell(r){
@@ -449,6 +471,11 @@ function openReadOnly(id){
     const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
     rows.push(['שם', personName], ['טלפון', r.phone], ['שם העסק', r.business_name],
       ['תחום העסק', r.business_field], ['עיר העסק', r.business_city || r.city], ['הערות', r.notes]);
+  } else if (CURRENT_TAB === 'y2026'){
+    const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
+    rows.push(['שם', personName], ['סוג ליד', leadTypeLabel(r.type)], ['סטטוס', r.status || '—'],
+      ['טלפון', r.phone], ['עיר / אזור', r.business_city || r.requested_area || r.city],
+      ['תאריך קליטה', fmtDateTime(r.created_at)], ['הערות', r.notes]);
   } else {
     const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
     rows.push(['שם', personName], ['טלפון', r.phone], ['אזור מבוקש', r.requested_area || r.city],
