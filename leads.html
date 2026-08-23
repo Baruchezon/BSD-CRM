@@ -418,9 +418,17 @@ async function maybeHandleUrlParams(){
     params.delete('open');
     history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params.toString() : ''));
   } else if (params.get('new') === '1'){
-    const t = params.get('type') === 'partner' ? 'partner' : 'buyer';
-    openLeadForm(null, t);
+    const t = params.get('type') === 'partner' ? 'partner' : params.get('type') === 'seller' ? 'seller' : 'buyer';
+    const pf = {
+      first_name: params.get('pf_first_name') || null,
+      last_name: params.get('pf_last_name') || null,
+      phone: params.get('pf_phone') || null,
+      email: params.get('pf_email') || null,
+      notes: params.get('pf_notes') || null
+    };
+    openLeadForm(null, t, pf);
     params.delete('new'); params.delete('type');
+    params.delete('pf_first_name'); params.delete('pf_last_name'); params.delete('pf_phone'); params.delete('pf_email'); params.delete('pf_notes');
     history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params.toString() : ''));
   }
 }
@@ -695,9 +703,10 @@ function textareaRow(id,label,value,minHeight){
   return `<div class="field full"><label>${label}</label><textarea id="${id}" style="min-height:${minHeight||60}px;">${esc(value||'')}</textarea></div>`;
 }
 
-function openLeadForm(id, forcedType){
+function openLeadForm(id, forcedType, prefillData){
   const lead = id ? ALL_LEADS.find(l=>l.id===id) : null;
   const type = forcedType || (lead ? lead.type : 'buyer');
+  const pf = prefillData || {};
 
   const modal = document.getElementById('modalBox');
   const typeLabel = type==='buyer' ? 'קונה' : type==='partner' ? 'שותפות/השקעה' : 'מוכר';
@@ -717,11 +726,11 @@ function openLeadForm(id, forcedType){
         </div>` : ''}
         <div class="field"><label>מטפל כרגע</label><select id="handled_by">${userOptions(lead?.handled_by)}</select></div>
         <div class="section-h">פרטים כלליים</div>
-        ${fieldRow('first_name','שם פרטי', lead?.first_name)}
-        ${fieldRow('last_name','שם משפחה', lead?.last_name)}
-        ${fieldRowPhone('phone','טלפון', lead?.phone)}
+        ${fieldRow('first_name','שם פרטי', lead?.first_name || pf.first_name)}
+        ${fieldRow('last_name','שם משפחה', lead?.last_name || pf.last_name)}
+        ${fieldRowPhone('phone','טלפון', lead?.phone || pf.phone)}
         ${fieldRowPhone('phone2','טלפון נוסף', lead?.phone2)}
-        ${fieldRow('email','דוא"ל', lead?.email, 'email')}
+        ${fieldRow('email','דוא"ל', lead?.email || pf.email, 'email')}
         ${fieldRow('city','עיר', lead?.city)}
         ${fieldRow('address','כתובת', lead?.address)}
         ${fieldRow('id_number','ת.ז / ח.פ / עוסק מורשה', lead?.id_number)}
@@ -772,7 +781,7 @@ function openLeadForm(id, forcedType){
           <span>הערות</span>
           <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="openNotesRecording({recordId:'${lead ? lead.id : 'new-' + Date.now()}', label:'${esc((lead?.full_name || 'רשומה חדשה').replace(/'/g,''))}', textareaId:'notes', currentProfile:CURRENT_PROFILE})">🎙️ הקלט הערות</button>
         </div>
-        ${textareaRow('notes','הערות', lead?.notes, 180)}
+        ${textareaRow('notes','הערות', lead?.notes || pf.notes, 180)}
         ${lead ? `
         <div class="section-h">🎙️ הקלטות ותמלולים</div>
         <div class="field full">
