@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608231900';
+    var PAGE_BUILD = '202608232030';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -155,7 +155,60 @@
   <div id="y2026HiddenLinkWrap" style="display:none;margin:-6px 0 10px;">
     <a href="javascript:void(0)" onclick="openHiddenY2026Panel()" style="font-size:.78rem;color:#8a8578;">📁 רשומות שהוסרו מרשימת 2026 (<span id="countY2026Hidden">0</span>) — צפייה ושחזור</a>
   </div>
+  <div id="y2026ViewToggleWrap" style="display:none;margin:-4px 0 10px;font-size:.78rem;color:#8a8578;">
+    תצוגה:
+    <a href="javascript:void(0)" onclick="setY2026ViewMode('new')" id="y2026ModeNewLink" style="font-weight:700;">🆕 חדשה (leads_2026_review)</a>
+    ·
+    <a href="javascript:void(0)" onclick="setY2026ViewMode('legacy')" id="y2026ModeLegacyLink">🔙 ישנה (זמנית, עד לאישור המעבר)</a>
+    ·
+    <a href="javascript:void(0)" onclick="openHiddenY2026ReviewPanel()">📁 רשומות שהוסרו מהרשימה החדשה (<span id="countY2026ReviewHidden">0</span>)</a>
+  </div>
 
+  <div id="y2026ReviewSection" style="display:none;">
+    <div class="filters" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+      <input type="text" id="y2026ReviewSearch" oninput="renderY2026ReviewTable()" placeholder="חיפוש לפי שם, טלפון, מייל, תוכן..." style="flex:1;min-width:200px;">
+      <select id="y2026FilterClassification" onchange="renderY2026ReviewTable()">
+        <option value="">כל הסיווגים</option>
+        <option value="מוכר עסק">מוכר עסק</option>
+        <option value="קונה עסק">קונה עסק</option>
+        <option value="מתעניין בקורס">מתעניין בקורס</option>
+        <option value="unclassified">דורש בדיקה</option>
+      </select>
+      <select id="y2026FilterExists" onchange="renderY2026ReviewTable()">
+        <option value="">קיים/לא קיים - הכל</option>
+        <option value="exists">קיים במערכת</option>
+        <option value="not_exists">לא קיים במערכת</option>
+      </select>
+      <select id="y2026FilterAgreement" onchange="renderY2026ReviewTable()">
+        <option value="">הסכם - הכל</option>
+        <option value="has">יש הסכם</option>
+        <option value="none">אין הסכם</option>
+      </select>
+      <select id="y2026FilterStatus" onchange="renderY2026ReviewTable()">
+        <option value="">סטטוס בדיקה - הכל</option>
+        <option value="ממתין לבדיקה">חדש</option>
+        <option value="נבדק">נבדק</option>
+        <option value="הועבר">הועבר</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:4px;font-size:.8rem;white-space:nowrap;">
+        <input type="checkbox" id="y2026FilterNeedsReview" onchange="renderY2026ReviewTable()"> רק דורש בדיקה
+      </label>
+    </div>
+    <div class="table-scroll-wrap" style="position:relative;">
+      <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+        <table>
+          <thead>
+            <tr>
+              <th>שם / פרטים</th><th>סיווג</th><th>קיים במערכת</th><th>תאריך פנייה</th><th>סטטוס בדיקה</th>
+            </tr>
+          </thead>
+          <tbody id="y2026ReviewBody"><tr class="empty-row"><td colspan="5">טוען...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="legacyY2026AndOtherTabsSection">
   <div class="filters">
     <input type="text" id="fSearch" oninput="renderTable()" placeholder="חיפוש לפי שם, טלפון, עיר, תחום, הערות...">
   </div>
@@ -172,6 +225,7 @@
       <tr class="empty-row"><td colspan="6">טוען...</td></tr>
     </tbody>
   </table>
+  </div>
   </div>
   </div>
 </div>
@@ -192,6 +246,10 @@ let ALL_PARTNERS = [];
 let ALL_LEADS_2026 = [];
 let HIDDEN_Y2026_IDS = new Set();
 let HIDDEN_Y2026_DETAILS = [];
+let Y2026_VIEW_MODE = 'new'; // 'new' = leads_2026_review (default) | 'legacy' = old leads_2026_hidden view
+let Y2026_REVIEW_ROWS = [];       // לא מוסתרות
+let Y2026_REVIEW_HIDDEN_ROWS = []; // מוסתרות (is_hidden=true)
+let Y2026_REVIEW_MATCHES_CACHE = {}; // review_row_id -> matches array (מהשרת, לפי טלפון/מייל)
 let ALL_USERS = [];
 let CURRENT_PROFILE = null;
 let RATING_LEVELS = [];
@@ -330,22 +388,335 @@ async function loadAll(){
 
   ALL_LEADS_2026 = leads2026Raw.filter(l => !HIDDEN_Y2026_IDS.has(l.id));
 
+  // רשימת 2026 החדשה (leads_2026_review) - עצמאית לגמרי מ-leads, ראה
+  // migrations/2026-08-23d. RLS אדמין בלבד - למי שאינו אדמין תיכשל בשקט
+  // (התנהגות זהה לתבנית ההסתרה הקיימת למעלה).
+  let reviewRows = [];
+  try {
+    const { data } = await window.supabaseClient.from('leads_2026_review').select('*').order('received_at', { ascending: false, nullsFirst: false });
+    reviewRows = data || [];
+  } catch (e) { reviewRows = []; }
+  Y2026_REVIEW_ROWS = reviewRows.filter(r => !r.is_hidden);
+  Y2026_REVIEW_HIDDEN_ROWS = reviewRows.filter(r => r.is_hidden);
+
   document.getElementById('countBusiness').textContent = ALL_BUSINESSES.length;
   document.getElementById('countSeller').textContent = ALL_SELLERS.length;
   document.getElementById('countBuyer').textContent = ALL_BUYERS.length;
   document.getElementById('countPartner').textContent = ALL_PARTNERS.length;
-  document.getElementById('countY2026').textContent = ALL_LEADS_2026.length;
+  document.getElementById('countY2026').textContent = Y2026_REVIEW_ROWS.length;
+  const cntReviewHidden = document.getElementById('countY2026ReviewHidden');
+  if (cntReviewHidden) cntReviewHidden.textContent = Y2026_REVIEW_HIDDEN_ROWS.length;
   renderHiddenY2026Link();
 
   await loadNotesSummary();
-  renderTable();
+  applyY2026ViewVisibility();
+  if (CURRENT_TAB === 'y2026' && Y2026_VIEW_MODE === 'new') renderY2026ReviewTable();
+  else renderTable();
 }
 
 function switchTab(tab){
   CURRENT_TAB = tab;
   document.querySelectorAll('.lead-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   renderHiddenY2026Link();
+  applyY2026ViewVisibility();
+  if (tab === 'y2026' && Y2026_VIEW_MODE === 'new') { renderY2026ReviewTable(); return; }
   renderTable();
+}
+function applyY2026ViewVisibility(){
+  const isY2026 = CURRENT_TAB === 'y2026';
+  const isAdmin = !!(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin');
+  const toggleWrap = document.getElementById('y2026ViewToggleWrap');
+  if (toggleWrap) toggleWrap.style.display = (isY2026 && isAdmin) ? 'block' : 'none';
+  const reviewSection = document.getElementById('y2026ReviewSection');
+  const legacySection = document.getElementById('legacyY2026AndOtherTabsSection');
+  if (isY2026 && isAdmin && Y2026_VIEW_MODE === 'new'){
+    if (reviewSection) reviewSection.style.display = 'block';
+    if (legacySection) legacySection.style.display = 'none';
+  } else {
+    if (reviewSection) reviewSection.style.display = 'none';
+    if (legacySection) legacySection.style.display = 'block';
+  }
+  const newLink = document.getElementById('y2026ModeNewLink');
+  const legacyLink = document.getElementById('y2026ModeLegacyLink');
+  if (newLink) newLink.style.fontWeight = Y2026_VIEW_MODE === 'new' ? '700' : '400';
+  if (legacyLink) legacyLink.style.fontWeight = Y2026_VIEW_MODE === 'legacy' ? '700' : '400';
+}
+function setY2026ViewMode(mode){
+  Y2026_VIEW_MODE = mode;
+  applyY2026ViewVisibility();
+  if (mode === 'new') renderY2026ReviewTable(); else renderTable();
+}
+
+// ============================================================
+// "לידים 2026" - תצוגה חדשה (leads_2026_review), עצמאית לגמרי מ-leads.
+// ראה migrations/2026-08-23d_leads_2026_review.sql.
+// ============================================================
+function classificationBadge(c){
+  const map = {
+    'מוכר עסק': ['#fdece0','#a3521a'], 'קונה עסק': ['#eaf1fb','#2b5fa3'],
+    'מתעניין בקורס': ['#eaf7ec','#2f8f4e'], 'unclassified': ['#f3e6e6','#a33a3a']
+  };
+  const label = c === 'unclassified' ? 'דורש בדיקה' : (c || '—');
+  const [bg,fg] = map[c] || ['#eee6d4','#665'];
+  return `<span class="badge" style="background:${bg};color:${fg};">${esc(label)}</span>`;
+}
+function reviewStatusLabel(row){
+  if (row.is_hidden) return 'הוסר';
+  if (row.review_status === 'ממתין לבדיקה' || !row.review_status) return 'חדש';
+  return row.review_status;
+}
+async function loadY2026ReviewMatches(rows){
+  const toFetch = rows.filter(r => !(r.id in Y2026_REVIEW_MATCHES_CACHE));
+  if (toFetch.length === 0) return;
+  await Promise.all(toFetch.map(async r => {
+    try {
+      const { data, error } = await window.supabaseClient.rpc('find_2026_review_matches', { p_phone: r.phone || null, p_email: r.email || null });
+      Y2026_REVIEW_MATCHES_CACHE[r.id] = error ? [] : (data || []);
+    } catch (e) { Y2026_REVIEW_MATCHES_CACHE[r.id] = []; }
+  }));
+}
+function existsBadges(matches){
+  if (!matches || matches.length === 0) return '<span class="badge" style="background:#eee6d4;color:#665;">לא נמצא במערכת</span>';
+  const locLabel = { leads: 'לידים', businesses: 'עסקים', training_leads: 'מתעניני קורס' };
+  const subtypeLabel = { buyer: 'קונים', seller: 'מוכרים', partner: 'שותפים' };
+  return matches.map(m => {
+    const label = m.table === 'leads' ? (subtypeLabel[m.subtype] || 'לידים') : (locLabel[m.table] || m.table);
+    return `<span class="badge" style="background:#eaf1fb;color:#2b5fa3;margin-inline-end:4px;">${esc(label)}</span>`;
+  }).join('');
+}
+async function renderY2026ReviewTable(){
+  const body = document.getElementById('y2026ReviewBody');
+  if (!body) return;
+  await loadY2026ReviewMatches(Y2026_REVIEW_ROWS);
+
+  const search = (document.getElementById('y2026ReviewSearch')?.value || '').trim().toLowerCase();
+  const fClass = document.getElementById('y2026FilterClassification')?.value || '';
+  const fExists = document.getElementById('y2026FilterExists')?.value || '';
+  const fAgreement = document.getElementById('y2026FilterAgreement')?.value || '';
+  const fStatus = document.getElementById('y2026FilterStatus')?.value || '';
+  const fNeedsReview = !!document.getElementById('y2026FilterNeedsReview')?.checked;
+
+  let rows = Y2026_REVIEW_ROWS.filter(r => {
+    if (search){
+      const hay = [r.full_name, r.phone, r.email, r.message_content, r.raw_purpose].join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    if (fClass && r.classification !== fClass) return false;
+    if (fNeedsReview && r.classification !== 'unclassified') return false;
+    if (fStatus && (r.review_status || 'ממתין לבדיקה') !== fStatus) return false;
+    const matches = Y2026_REVIEW_MATCHES_CACHE[r.id] || [];
+    if (fExists === 'exists' && matches.length === 0) return false;
+    if (fExists === 'not_exists' && matches.length > 0) return false;
+    if (fAgreement){
+      const hasAgreement = matches.some(m => m.agreement_status === 'יש הסכם חתום');
+      if (fAgreement === 'has' && !hasAgreement) return false;
+      if (fAgreement === 'none' && hasAgreement) return false;
+    }
+    return true;
+  });
+
+  if (rows.length === 0){
+    body.innerHTML = '<tr class="empty-row"><td colspan="5">אין רשומות תואמות</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(r => {
+    const matches = Y2026_REVIEW_MATCHES_CACHE[r.id] || [];
+    return `
+    <tr style="cursor:pointer;" onclick="openY2026ReviewDetail('${r.id}')">
+      <td>
+        <div class="primary-name">${esc(r.full_name || 'שם לא זוהה')}</div>
+        <div class="sub-name">${esc(r.phone || '—')}${r.email ? ' · ' + esc(r.email) : ''}</div>
+      </td>
+      <td>${classificationBadge(r.classification)}</td>
+      <td>${existsBadges(matches)}</td>
+      <td>${fmtDate(r.received_at)}</td>
+      <td>${esc(reviewStatusLabel(r))}</td>
+    </tr>`;
+  }).join('');
+}
+
+function y2026AgreementSummary(matches){
+  if (!matches || matches.length === 0) return '—';
+  return matches.map(m => {
+    const status = m.agreement_status || 'אין מידע על הסכם';
+    return `${esc(m.label || '—')}: ${esc(status)}`;
+  }).join('<br>');
+}
+function y2026OpenLink(m){
+  if (m.table === 'leads') return `leads.html?open=${encodeURIComponent(m.id)}`;
+  if (m.table === 'businesses') return `businesses.html?open=${encodeURIComponent(m.id)}`;
+  if (m.table === 'training_leads') return `training-admin.html`;
+  return null;
+}
+async function openY2026ReviewDetail(id){
+  const r = Y2026_REVIEW_ROWS.find(x => x.id === id) || Y2026_REVIEW_HIDDEN_ROWS.find(x => x.id === id);
+  if (!r){ toast('רשומה לא נמצאה'); return; }
+  await loadY2026ReviewMatches([r]);
+  const matches = Y2026_REVIEW_MATCHES_CACHE[r.id] || [];
+  const isAdmin = !!(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin');
+
+  const matchesHtml = matches.length === 0 ? '<div style="color:#999;">לא נמצאה התאמה קיימת במערכת</div>' : matches.map(m => {
+    const link = y2026OpenLink(m);
+    const locLabel = { leads: 'ליד', businesses: 'עסק', training_leads: 'מתעניין בקורס' }[m.table] || m.table;
+    return `<div style="border-bottom:1px solid #f0ede4;padding:8px 0;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <div><b>${esc(m.label || '—')}</b> <span style="color:#999;font-size:.78rem;">(${esc(locLabel)})</span><br>
+      <span style="font-size:.78rem;color:#665;">${esc(m.agreement_status || 'אין מידע על הסכם')}</span></div>
+      ${link ? `<a href="${link}" target="_blank" style="white-space:nowrap;font-size:.8rem;">פתח ↗</a>` : ''}
+    </div>`;
+  }).join('');
+
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">${esc(r.full_name || 'שם לא זוהה')}</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;font-size:.85rem;">
+      <div><label style="display:block;font-size:.72rem;color:#999;">שם מלא</label><input id="y2rName" value="${esc(r.full_name||'')}" style="width:100%;padding:6px 8px;border:1px solid #d8d3c4;border-radius:6px;"></div>
+      <div><label style="display:block;font-size:.72rem;color:#999;">טלפון</label><input id="y2rPhone" value="${esc(r.phone||'')}" dir="ltr" style="width:100%;padding:6px 8px;border:1px solid #d8d3c4;border-radius:6px;"></div>
+      <div><label style="display:block;font-size:.72rem;color:#999;">מייל</label><input id="y2rEmail" value="${esc(r.email||'')}" dir="ltr" style="width:100%;padding:6px 8px;border:1px solid #d8d3c4;border-radius:6px;"></div>
+      <div><label style="display:block;font-size:.72rem;color:#999;">תאריך פנייה</label><div style="padding:6px 0;">${fmtDateTime(r.received_at)}</div></div>
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="display:block;font-size:.72rem;color:#999;">תחומי התעניינות שסומנו (מקורי)</label>
+      <div style="background:#f7f5ee;border-radius:8px;padding:8px 10px;font-size:.85rem;">${esc(r.raw_purpose || '(לא סומן)')}</div>
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="display:block;font-size:.72rem;color:#999;">תוכן הפנייה</label>
+      <div style="background:#f7f5ee;border-radius:8px;padding:8px 10px;font-size:.85rem;white-space:pre-wrap;">${esc(r.message_content || '—')}</div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="display:block;font-size:.72rem;color:#999;">סיווג</label>
+      <select id="y2rClass" style="width:100%;padding:6px 8px;border:1px solid #d8d3c4;border-radius:6px;">
+        ${['מוכר עסק','קונה עסק','מתעניין בקורס','unclassified'].map(c => `<option value="${c}" ${r.classification===c?'selected':''}>${c==='unclassified'?'דורש בדיקה':c}</option>`).join('')}
+      </select>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="display:block;font-size:.72rem;color:#999;margin-bottom:6px;">התאמות קיימות במערכת</label>
+      ${matchesHtml}
+    </div>
+    <div style="font-size:.78rem;color:#999;margin-bottom:14px;">סטטוס בדיקה: <b>${esc(reviewStatusLabel(r))}</b></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;">
+      <button onclick="closeModal()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:8px 14px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
+      ${r.is_hidden ? `<button onclick="restoreY2026Review('${r.id}')" style="background:var(--gold);color:#1c2333;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שחזר לרשימה</button>`
+        : `<button onclick="saveY2026ReviewEdit('${r.id}')" style="background:#fff;border:1px solid #2b5fa3;color:#2b5fa3;padding:8px 14px;border-radius:8px;font-family:inherit;cursor:pointer;">שמור שינויים</button>
+        <button onclick="markY2026ReviewChecked('${r.id}')" style="background:#fff;border:1px solid #2f8f4e;color:#2f8f4e;padding:8px 14px;border-radius:8px;font-family:inherit;cursor:pointer;">✓ סמן כנבדק</button>
+        ${matches.length === 0 ? `<button onclick="transferY2026Review('${r.id}')" style="background:#2b5fa3;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">➡️ העבר לרשומה פעילה</button>` : ''}
+        ${isAdmin ? `<button onclick="closeModal();hideFromY2026ReviewConfirm('${r.id}')" style="background:#b00020;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">🗑️ הסר מרשימת 2026 בלבד</button>` : ''}`}
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('open');
+}
+async function saveY2026ReviewEdit(id){
+  const full_name = document.getElementById('y2rName').value.trim() || null;
+  const phone = document.getElementById('y2rPhone').value.trim() || null;
+  const email = document.getElementById('y2rEmail').value.trim() || null;
+  const classification = document.getElementById('y2rClass').value;
+  const r = Y2026_REVIEW_ROWS.find(x => x.id === id);
+  const classificationChanged = r && r.classification !== classification;
+  const payload = { full_name, phone, email, classification };
+  if (classificationChanged){
+    payload.classification_overridden_by = CURRENT_PROFILE ? CURRENT_PROFILE.id : null;
+    payload.classification_overridden_at = new Date().toISOString();
+  }
+  const { error } = await window.supabaseClient.from('leads_2026_review').update(payload).eq('id', id);
+  if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+  delete Y2026_REVIEW_MATCHES_CACHE[id]; // טלפון/מייל אולי השתנו - נחשב מחדש
+  closeModal();
+  toast('נשמר. הליד הפעיל (אם יש) לא נגע ולא השתנה.');
+  await loadAll();
+}
+async function markY2026ReviewChecked(id){
+  const { error } = await window.supabaseClient.from('leads_2026_review').update({ review_status: 'נבדק' }).eq('id', id);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  closeModal();
+  toast('סומן כנבדק');
+  await loadAll();
+}
+function transferY2026Review(id){
+  const r = Y2026_REVIEW_ROWS.find(x => x.id === id);
+  if (!r){ toast('רשומה לא נמצאה'); return; }
+  const nameParts = (r.full_name || '').split(/\s+/).filter(Boolean);
+  const first = nameParts[0] || '';
+  const last = nameParts.slice(1).join(' ') || '';
+  const notes = `[הועבר מרשימת בדיקה "לידים 2026" - סיווג מקורי: ${r.classification === 'unclassified' ? 'דורש בדיקה' : r.classification}]\nתחומי התעניינות שסומנו: ${r.raw_purpose || '(לא סומן)'}\nתוכן הפנייה: ${r.message_content || '—'}`;
+  let type = 'buyer';
+  if (r.classification === 'מוכר עסק') type = 'seller';
+  else if (r.classification === 'קונה עסק') type = 'buyer';
+  if (r.classification === 'מתעניין בקורס'){
+    window.open('training-admin.html', '_blank');
+    toast('נפתח מסך ההכשרות - יש להזין את הפרטים ידנית (אין עדיין קליטה אוטומטית ממסך זה).');
+  } else {
+    const params = new URLSearchParams({
+      new: '1', type,
+      pf_first_name: first, pf_last_name: last, pf_phone: r.phone || '', pf_email: r.email || '', pf_notes: notes
+    });
+    window.open('leads.html?' + params.toString(), '_blank');
+  }
+  markY2026ReviewTransferred(id, type);
+}
+async function markY2026ReviewTransferred(id, toTable){
+  const { error } = await window.supabaseClient.from('leads_2026_review').update({
+    review_status: 'הועבר', transferred_to_table: toTable, transferred_at: new Date().toISOString(),
+    transferred_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null
+  }).eq('id', id);
+  if (error){ toast('הועבר, אך עדכון סטטוס נכשל: ' + error.message); return; }
+  closeModal();
+  await loadAll();
+}
+function hideFromY2026ReviewConfirm(id){
+  const r = Y2026_REVIEW_ROWS.find(x => x.id === id);
+  const name = r ? (r.full_name || 'הרשומה') : 'הרשומה';
+  const overlay = document.createElement('div');
+  overlay.id = 'hideY2026ReviewOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:99;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:460px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 12px;color:var(--navy);">הסרת ${esc(name)} מרשימת לידים 2026</h3>
+      <p style="font-size:.88rem;color:#444;line-height:1.6;margin-bottom:14px;">הפעולה תסיר את הרשומה מרשימת הבדיקה בלבד. שום ליד, קונה, מוכר, עסק, שותף או מתעניין בקורס במערכת הפעילה לא יימחק ולא ישתנה.</p>
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button onclick="document.getElementById('hideY2026ReviewOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
+        <button onclick="hideY2026ReviewDo('${id}')" style="background:#b00020;color:#fff;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">הסר מרשימת 2026 בלבד</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+async function hideY2026ReviewDo(id){
+  const { error } = await window.supabaseClient.from('leads_2026_review').update({
+    is_hidden: true, hidden_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null, hidden_at: new Date().toISOString()
+  }).eq('id', id);
+  const ov = document.getElementById('hideY2026ReviewOverlay'); if (ov) ov.remove();
+  if (error){ toast('שגיאה בהסרה: ' + error.message); return; }
+  toast('הרשומה הוסרה מרשימת 2026 בלבד. שום רשומה אחרת במערכת לא נגעה.');
+  await loadAll();
+}
+async function restoreY2026Review(id){
+  const { error } = await window.supabaseClient.from('leads_2026_review').update({ is_hidden: false }).eq('id', id);
+  if (error){ toast('שגיאה בשחזור: ' + error.message); return; }
+  closeModal();
+  toast('הרשומה שוחזרה לרשימת 2026');
+  await loadAll();
+}
+async function openHiddenY2026ReviewPanel(){
+  const overlay = document.createElement('div');
+  overlay.id = 'hiddenY2026ReviewPanelOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:99;padding:40px 20px;';
+  const rowsHtml = Y2026_REVIEW_HIDDEN_ROWS.length === 0
+    ? '<div style="color:#999;text-align:center;padding:14px;">אין רשומות מוסתרות</div>'
+    : Y2026_REVIEW_HIDDEN_ROWS.map(r => `
+      <div style="border-bottom:1px solid #f0ede4;padding:10px 0;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div>
+          <div style="font-weight:700;">${esc(r.full_name || 'שם לא זוהה')}</div>
+          <div style="font-size:.75rem;color:#999;">הוסר ע"י ${esc(userName(r.hidden_by))} · ${fmtDateTime(r.hidden_at)}</div>
+        </div>
+        <button onclick="restoreY2026Review('${r.id}')" style="background:var(--gold);color:#1c2333;border:none;padding:7px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;white-space:nowrap;">שחזר</button>
+      </div>`).join('');
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:560px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">רשומות שהוסרו מרשימת לידים 2026 (החדשה)</h3>
+      <div style="max-height:400px;overflow-y:auto;">${rowsHtml}</div>
+      <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+        <button onclick="document.getElementById('hiddenY2026ReviewPanelOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
 }
 
 function currentRows(){
@@ -682,7 +1053,7 @@ function renderHiddenY2026Link(){
   const wrap = document.getElementById('y2026HiddenLinkWrap');
   if (!wrap) return;
   const isAdmin = !!(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin');
-  wrap.style.display = (isAdmin && CURRENT_TAB === 'y2026') ? 'block' : 'none';
+  wrap.style.display = (isAdmin && CURRENT_TAB === 'y2026' && Y2026_VIEW_MODE === 'legacy') ? 'block' : 'none';
   const cnt = document.getElementById('countY2026Hidden');
   if (cnt) cnt.textContent = HIDDEN_Y2026_DETAILS.length;
 }
