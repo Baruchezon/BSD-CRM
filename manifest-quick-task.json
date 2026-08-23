@@ -1,0 +1,19 @@
+{
+  "id": "/BSD-CRM/task-quick.html",
+  "name": "משימה ל-BSD",
+  "short_name": "משימה ל-BSD",
+  "start_url": "./task-quick.html",
+  "scope": "./task-quick.html",
+  "display": "standalone",
+  "background_color": "#0e1b34",
+  "theme_color": "#0e1b34",
+  "orientation": "portrait",
+  "dir": "rtl",
+  "lang": "he",
+  "icons": [
+    { "src": "icon-quick-task-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-quick-task-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-quick-task-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-quick-task-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
