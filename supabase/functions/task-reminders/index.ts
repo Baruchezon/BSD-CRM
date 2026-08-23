@@ -3,11 +3,15 @@
 // Runs on a schedule (every minute, via pg_cron + pg_net — see the SQL migration
 // file next to this one) and checks the `tasks` table for anything due.
 //
-// - Task has due_date only (no due_time)  -> sends ONE push in the morning
-//   (between MORNING_HOUR:00 and MORNING_HOUR:05 local time), sound "morning".
+// - Task has due_date only (no due_time)  -> included in ONE consolidated
+//   digest push per user in the morning (between MORNING_HOUR:00 and
+//   MORNING_HOUR:05 local time), sound "morning", showing today/overdue
+//   counts and linking straight to tasks.html's "today" tab - never one push
+//   per task.
 // - Task has due_date AND due_time        -> sends a push at due_time, then
 //   keeps repeating every NUDNIK_INTERVAL_MIN minutes ("nudnik" sound) until
 //   the task is marked completed/read, up to NUDNIK_MAX_REPEATS times.
+//   (unchanged from before - only the date-only morning path was consolidated)
 //
 // Requires these Edge Function secrets (set via `supabase secrets set`):
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  (auto-available in Supabase)
@@ -77,9 +81,14 @@ Deno.serve(async () => {
   const mm = String(now.getMinutes()).padStart(2, '0');
   const nowTime = `${hh}:${mm}:00`;
 
-  let sentMorning = 0, sentNudnik = 0;
+  let sentMorning = 0, sentNudnik = 0, morningTasksIncluded = 0;
 
-  // ---- 1) Date-only tasks due today OR still open from a past date (never disappear), morning window, not yet notified today ----
+  // ---- 1) Date-only tasks due today OR still open from a past date (never disappear) ----
+  // ONE consolidated digest push per user (not one push per task) showing how
+  // many are due today vs. overdue, clicking opens tasks.html straight on the
+  // "today" tab. Per-task last_notified_at is still the dedupe key (a task
+  // already included in today's digest is skipped), so re-running this
+  // function within the same morning window never double-notifies.
   if (now.getHours() === MORNING_HOUR && now.getMinutes() < 5) {
     const { data: morningTasks } = await supabase
       .from('tasks')
@@ -88,20 +97,32 @@ Deno.serve(async () => {
       .is('due_time', null)
       .eq('status', 'פתוחה');
 
+    const byUser: Record<string, { todayCount: number; overdueCount: number; taskIds: string[] }> = {};
     for (const t of morningTasks ?? []) {
       const lastNotified = t.last_notified_at ? todayISO(new Date(t.last_notified_at)) : null;
-      if (lastNotified === today) continue; // already sent today
+      if (lastNotified === today) continue; // already included in today's digest - never re-notify same task same day
       if (!t.assigned_to) continue;
+      const bucket = byUser[t.assigned_to] ?? (byUser[t.assigned_to] = { todayCount: 0, overdueCount: 0, taskIds: [] });
+      if (t.due_date === today) bucket.todayCount++; else bucket.overdueCount++;
+      bucket.taskIds.push(t.id);
+    }
 
-      await sendToUser(t.assigned_to, {
-        title: '📋 משימה להיום',
-        body: t.title,
+    for (const [userId, info] of Object.entries(byUser)) {
+      const total = info.todayCount + info.overdueCount;
+      const parts: string[] = [];
+      if (info.todayCount) parts.push(`היום: ${info.todayCount}`);
+      if (info.overdueCount) parts.push(`באיחור: ${info.overdueCount}`);
+
+      await sendToUser(userId, {
+        title: `📋 ${total} משימות ממתינות`,
+        body: parts.join(' · '),
         kind: 'morning',
-        url: `task-alert.html?id=${t.id}&kind=morning`,
-        tag: `bsd-task-${t.id}`
+        url: `tasks.html?tab=today`,
+        tag: `bsd-morning-digest-${userId}` // one tag per user -> a second run in the same window replaces rather than stacks
       });
-      await supabase.from('tasks').update({ last_notified_at: new Date().toISOString() }).eq('id', t.id);
+      await supabase.from('tasks').update({ last_notified_at: new Date().toISOString() }).in('id', info.taskIds);
       sentMorning++;
+      morningTasksIncluded += total;
     }
   }
 
@@ -135,7 +156,7 @@ Deno.serve(async () => {
     sentNudnik++;
   }
 
-  return new Response(JSON.stringify({ ok: true, sentMorning, sentNudnik }), {
+  return new Response(JSON.stringify({ ok: true, sentMorning, sentNudnik, morningTasksIncluded }), {
     headers: { 'Content-Type': 'application/json' }
   });
 });

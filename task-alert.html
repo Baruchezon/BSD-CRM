@@ -83,6 +83,7 @@
 
 <script src="js/config.js"></script>
 <script src="js/supabaseClient.js"></script>
+<script src="js/taskActions.js"></script>
 <script>
 const params = new URLSearchParams(location.search);
 const taskId = params.get('id');
@@ -192,28 +193,9 @@ async function markDone(){
   `;
 }
 
-function tomorrowISO(){
-  // "tomorrow" is always relative to today's real date - even for a task that
-  // was already overdue from several days ago, postponing means "push to
-  // tomorrow from now", not "add one day to its old due date".
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
-}
-
 async function postponeToTomorrow(){
   root.innerHTML = `<div class="loading" style="color:var(--navy);"><div class="spinner" style="border-color:rgba(14,27,52,.2);border-top-color:var(--navy);"></div>דוחה למחר...</div>`;
-  // Updates the SAME task row - never creates a new task and never leaves a
-  // copy on the original day. due_time carries over unchanged if the task had
-  // one; a date-only task stays date-only (still shows in the 08:00 list).
-  // notify_count/last_notified_at reset so tomorrow's reminder fires fresh
-  // instead of the engine thinking "already notified" from before the postpone.
-  const { error } = await window.supabaseClient.from('tasks').update({
-    due_date: tomorrowISO(),
-    last_notified_at: null,
-    notify_count: 0
-  }).eq('id', taskId);
+  const { error } = await postponeTaskToTomorrow(window.supabaseClient, taskId);
 
   if (error){
     root.innerHTML = `<div class="error-state"><div style="font-size:2.5rem;">⚠️</div><p style="color:#40485c;margin-top:10px;">שגיאה בדחיית המשימה: ${esc(error.message)}</p><button class="action btn-open" style="margin-top:16px;" onclick="location.href='tasks.html'">לרשימת המשימות</button></div>`;
