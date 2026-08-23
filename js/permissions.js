@@ -125,6 +125,16 @@ function bsdApplyRoleDefaults(role) {
   return Object.assign({}, BSD_ROLE_DEFAULT_PERMISSIONS[role] || BSD_ROLE_DEFAULT_PERMISSIONS.agent);
 }
 
+// ---- הוספת משימה מהירה (מסך הקלטה/כתיבה) ----
+// ברירת מחדל: רק admin. manager אינו מקבל עקיפה אוטומטית - בדיוק כמו משתמש
+// רגיל, צריך את הדגל can_quick_add_task במפורש. זהו קו ההגנה הראשון (UI)
+// בלבד - האכיפה האמיתית היא ב-Edge Function מול הפרופיל האמיתי בכל קריאה.
+function canQuickAddTask(profile) {
+  if (!profile) return false;
+  if (profile.role === 'admin') return true;
+  return !!profile.can_quick_add_task;
+}
+
 function bsdLogActivity(actionType, entityType, entityId, details){
   if (!window.supabaseClient || !CURRENT_PROFILE) return;
   window.supabaseClient.from('audit_log').insert({

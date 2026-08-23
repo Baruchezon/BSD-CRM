@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608202235';
+    var PAGE_BUILD = '202608230700';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -415,6 +415,7 @@ function openEditForm(id){
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_upload_sale_files" style="width:auto;" ${u.can_upload_sale_files?'checked':''}> אפשר העלאת קבצים לתיק מכירה (ללא סימון - admin/manager תמיד מורשים)</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_view_buyer_rating" style="width:auto;" ${u.can_view_buyer_rating?'checked':''}> אפשר צפייה בדירוג רצינות קונים (ללא סימון - admin/manager תמיד מורשים)</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_edit_buyer_rating" style="width:auto;" ${u.can_edit_buyer_rating?'checked':''}> אפשר שינוי דירוג רצינות קונים (ללא סימון - admin/manager תמיד מורשים)</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_quick_add_task" style="width:auto;" ${u.can_quick_add_task?'checked':''}> הוספת משימה מהירה (מסך הקלטה/כתיבה מהאייקון בטלפון - ללא סימון, admin תמיד מורשה)</label>
         </div>
         <div class="field full"><label>הערות</label><textarea id="notes">${esc(u.notes)}</textarea></div>
         <div class="field full" style="background:#fff8e6;border:1px solid #e8d18a;border-radius:8px;padding:10px 12px;">
@@ -498,7 +499,8 @@ async function saveEdit(e){
     can_record: document.getElementById('can_record').checked,
     can_upload_sale_files: document.getElementById('can_upload_sale_files').checked,
     can_view_buyer_rating: document.getElementById('can_view_buyer_rating').checked,
-    can_edit_buyer_rating: document.getElementById('can_edit_buyer_rating').checked
+    can_edit_buyer_rating: document.getElementById('can_edit_buyer_rating').checked,
+    can_quick_add_task: document.getElementById('can_quick_add_task').checked
   };
   const { error } = await window.supabaseClient.from('profiles').update(payload).eq('id', id);
   if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
@@ -626,6 +628,7 @@ function openCreateForm(){
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_upload_sale_files" style="width:auto;"> אפשר העלאת קבצים לתיק מכירה (ללא סימון - admin/manager תמיד מורשים)</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_view_buyer_rating" style="width:auto;"> אפשר צפייה בדירוג רצינות קונים (ללא סימון - admin/manager תמיד מורשים)</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_edit_buyer_rating" style="width:auto;"> אפשר שינוי דירוג רצינות קונים (ללא סימון - admin/manager תמיד מורשים)</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_quick_add_task" style="width:auto;"> הוספת משימה מהירה (מסך הקלטה/כתיבה מהאייקון בטלפון - ללא סימון, admin תמיד מורשה)</label>
         </div>
       </div>
       <div class="modal-actions">
@@ -700,7 +703,8 @@ async function createUser(e){
         can_record: document.getElementById('new_can_record').checked,
         can_upload_sale_files: document.getElementById('new_can_upload_sale_files').checked,
         can_view_buyer_rating: document.getElementById('new_can_view_buyer_rating').checked,
-        can_edit_buyer_rating: document.getElementById('new_can_edit_buyer_rating').checked
+        can_edit_buyer_rating: document.getElementById('new_can_edit_buyer_rating').checked,
+        can_quick_add_task: document.getElementById('new_can_quick_add_task').checked
       })
     });
     const result = await resp.json();

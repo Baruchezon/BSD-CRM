@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>משימה ל-BSD</title>
+<link rel="manifest" href="manifest-quick-task.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-quick-task-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon-quick-task.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="משימה ל-BSD">
+<meta name="theme-color" content="#0e1b34">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{ --navy:#0e1b34; --navy2:#1c2f4d; --gold:#d4af6a; }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; font-family:'Segoe UI',Arial,sans-serif;
+    background:linear-gradient(160deg,var(--navy) 0%,var(--navy2) 100%);
+    display:flex; flex-direction:column; align-items:center;
+    padding:24px 16px calc(24px + env(safe-area-inset-bottom));
+  }
+  .card{ width:100%; max-width:460px; background:#fff; border-radius:20px; box-shadow:0 20px 60px rgba(0,0,0,.4); overflow:hidden; }
+  .card-top{ background:var(--navy); color:#fff; padding:20px 22px 16px; text-align:center; }
+  .card-top .title{ font-weight:800; font-size:1.2rem; }
+  .card-body{ padding:24px 22px 28px; }
+  .big-btn{
+    width:100%; border:none; border-radius:14px; padding:22px 16px; margin-bottom:14px;
+    font-family:inherit; font-size:1.05rem; font-weight:700; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+  }
+  .big-btn .ic{ font-size:1.6rem; }
+  .btn-write{ background:#eef1f6; color:var(--navy); }
+  .btn-record{ background:var(--navy); color:#fff; }
+  .btn-record.recording{ background:#b3402c; animation:pulse 1.2s infinite; }
+  @keyframes pulse{ 0%{box-shadow:0 0 0 0 rgba(179,64,44,.5);} 70%{box-shadow:0 0 0 14px rgba(179,64,44,0);} 100%{box-shadow:0 0 0 0 rgba(179,64,44,0);} }
+  textarea#writeText{
+    width:100%; min-height:120px; border:1px solid #d8d3c4; border-radius:10px; padding:12px;
+    font-family:inherit; font-size:1rem; resize:vertical; margin-bottom:14px;
+  }
+  .row-actions{ display:flex; gap:10px; }
+  .btn{ border:none; border-radius:10px; padding:13px 16px; font-family:inherit; font-size:.95rem; font-weight:700; cursor:pointer; flex:1; }
+  .btn-primary{ background:var(--navy); color:#fff; }
+  .btn-ghost{ background:#eef1f6; color:var(--navy); }
+  .field{ margin-bottom:12px; }
+  .field label{ display:block; font-size:.78rem; color:#666; margin-bottom:4px; }
+  .field input, .field select, .field textarea{ width:100%; padding:10px 12px; border:1px solid #d8d3c4; border-radius:8px; font-family:inherit; font-size:.92rem; }
+  .match-chip{ display:inline-block; background:#eef1f6; color:var(--navy); border:1px solid #d8d3c4; border-radius:16px; padding:6px 12px; margin:3px; font-size:.82rem; cursor:pointer; }
+  .match-chip.selected{ background:var(--navy); color:#fff; border-color:var(--navy); }
+  .loading, .error-state, .noauth-state{ padding:50px 24px; text-align:center; color:#fff; }
+  .spinner{ width:34px;height:34px;border:3px solid rgba(255,255,255,.25); border-top-color:#fff; border-radius:50%; margin:0 auto 14px; animation:spin .8s linear infinite; }
+  @keyframes spin{ to{transform:rotate(360deg);} }
+  .done-state{ padding:44px 24px; text-align:center; }
+  .done-state .icon{ font-size:3rem; }
+  .toast{ position:fixed; bottom:20px; right:20px; left:20px; max-width:420px; margin:0 auto; background:var(--navy); color:#fff; padding:12px 18px; border-radius:10px; font-size:.88rem; z-index:80; box-shadow:0 6px 20px rgba(0,0,0,.3); }
+</style>
+</head>
+<body>
+
+<div id="root" class="card">
+  <div class="loading"><div class="spinner"></div>טוען...</div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/permissions.js"></script>
+<script>
+const root = document.getElementById('root');
+let CURRENT_PROFILE = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let EXTRACTED = null; // last extraction result, edited in the confirm screen
+
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function toast(msg){
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+function renderNoAuth(){
+  root.innerHTML = `<div class="noauth-state">
+    <div style="font-size:2.5rem;">🔒</div>
+    <p style="margin-top:10px;">אין לך הרשאה להשתמש בהוספת משימה מהירה.</p>
+    <button class="btn btn-ghost" style="margin-top:12px;width:auto;" onclick="location.href='tasks.html'">למסך המשימות הרגיל</button>
+  </div>`;
+}
+
+function renderHome(){
+  root.innerHTML = `
+    <div class="card-top"><div class="title">משימה ל-BSD</div></div>
+    <div class="card-body">
+      <button class="big-btn btn-record" id="recordBtn" onclick="toggleRecording()"><span class="ic">🎙️</span> הקלטת משימה</button>
+      <button class="big-btn btn-write" onclick="showWriteMode()"><span class="ic">✍️</span> כתיבת משימה</button>
+      <div id="writeArea" style="display:none;">
+        <textarea id="writeText" placeholder="לדוגמה: להתקשר מחר בשעה 10 ליוסי לגבי עסק המסעדה" autofocus></textarea>
+        <div class="row-actions">
+          <button class="btn btn-ghost" onclick="showHomeButtons()">ביטול</button>
+          <button class="btn btn-primary" onclick="submitWrittenText()">המשך</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function showWriteMode(){
+  document.querySelectorAll('.big-btn').forEach(b => b.style.display = 'none');
+  document.getElementById('writeArea').style.display = 'block';
+  document.getElementById('writeText').focus();
+}
+function showHomeButtons(){
+  renderHome();
+}
+
+async function submitWrittenText(){
+  const text = document.getElementById('writeText').value.trim();
+  if (!text){ toast('נא להקליד תוכן משימה'); return; }
+  await processAndShowConfirm({ mode: 'text', text });
+}
+
+async function toggleRecording(){
+  const btn = document.getElementById('recordBtn');
+  if (mediaRecorder && mediaRecorder.state === 'recording'){
+    mediaRecorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordedChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+      await processAndShowConfirm({ mode: 'audio', blob });
+    };
+    mediaRecorder.start();
+    btn.classList.add('recording');
+    btn.innerHTML = '<span class="ic">⏹️</span> לחץ לעצירה';
+  } catch (err) {
+    toast('לא ניתן לגשת למיקרופון: ' + (err.message || err));
+  }
+}
+
+async function processAndShowConfirm(input){
+  root.innerHTML = `<div class="loading"><div class="spinner"></div>${input.mode === 'audio' ? 'מתמלל ומחלץ פרטים...' : 'מחלץ פרטים...'}</div>`;
+
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (!session){ renderNoAuth(); return; }
+
+  try {
+    let resp;
+    if (input.mode === 'audio'){
+      const form = new FormData();
+      form.append('audio', input.blob, 'recording.webm');
+      resp = await fetch(`${window.BSD_CONFIG.SUPABASE_URL}/functions/v1/transcribe-and-extract-task`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: form
+      });
+    } else {
+      resp = await fetch(`${window.BSD_CONFIG.SUPABASE_URL}/functions/v1/transcribe-and-extract-task`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: input.text })
+      });
+    }
+    const result = await resp.json();
+    if (!resp.ok){ toast('שגיאה: ' + (result.error || 'לא ידועה')); renderHome(); return; }
+    EXTRACTED = result;
+    EXTRACTED._selectedMatch = null;
+    renderConfirm();
+  } catch (err) {
+    toast('שגיאת רשת: ' + (err.message || err));
+    renderHome();
+  }
+}
+
+function renderConfirm(){
+  const e = EXTRACTED;
+  const allMatches = [
+    ...(e.possible_matches?.businesses || []).map(m => ({...m, type:'business'})),
+    ...(e.possible_matches?.leads || []).map(m => ({...m, type:'lead'}))
+  ];
+  root.innerHTML = `
+    <div class="card-top"><div class="title">אישור לפני שמירה</div></div>
+    <div class="card-body">
+      <div class="field"><label>כותרת</label><input type="text" id="cTitle" value="${esc(e.title)}"></div>
+      <div class="field"><label>תיאור</label><textarea id="cDesc" rows="2">${esc(e.description)}</textarea></div>
+      <div class="field"><label>תאריך יעד</label><input type="date" id="cDate" value="${esc(e.due_date||'')}"></div>
+      <div class="field"><label>שעת יעד (לא חובה)</label><input type="time" id="cTime" value="${esc(e.due_time||'')}"></div>
+      ${allMatches.length ? `<div class="field"><label>שיוך אפשרי - לחץ לבחירה, או השאר ללא שיוך</label>
+        ${allMatches.map((m,i) => `<span class="match-chip" data-idx="${i}" onclick="selectMatch(${i})">${esc(m.name)}</span>`).join('')}
+      </div>` : ''}
+      <div class="row-actions" style="margin-top:16px;">
+        <button class="btn btn-ghost" onclick="renderHome()">ביטול</button>
+        <button class="btn btn-primary" id="saveBtn" onclick="saveTask()">שמירה</button>
+      </div>
+    </div>
+  `;
+  window._allMatches = allMatches;
+}
+
+function selectMatch(idx){
+  document.querySelectorAll('.match-chip').forEach(c => c.classList.remove('selected'));
+  const chip = document.querySelector(`.match-chip[data-idx="${idx}"]`);
+  if (EXTRACTED._selectedMatch === idx){
+    EXTRACTED._selectedMatch = null;
+  } else {
+    EXTRACTED._selectedMatch = idx;
+    chip.classList.add('selected');
+  }
+}
+
+async function saveTask(){
+  const saveBtn = document.getElementById('saveBtn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'שומר...';
+
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (!session){ renderNoAuth(); return; }
+
+  const payload = {
+    title: document.getElementById('cTitle').value.trim() || 'משימה חדשה',
+    description: document.getElementById('cDesc').value.trim() || null,
+    due_date: document.getElementById('cDate').value || null,
+    due_time: document.getElementById('cTime').value || null,
+    status: 'פתוחה',
+    assigned_to: session.user.id, // המשתמש המחובר עצמו - RLS אוכף את זה גם אם זה היה שגוי
+    source: 'voice'
+  };
+
+  const sel = EXTRACTED._selectedMatch;
+  if (sel !== null && window._allMatches && window._allMatches[sel]){
+    const m = window._allMatches[sel];
+    payload.related_type = m.type === 'business' ? 'business' : 'lead';
+    payload.related_id = m.id;
+  }
+
+  const { data, error } = await window.supabaseClient.from('tasks').insert(payload).select().single();
+  if (error){
+    toast('שגיאה בשמירה: ' + error.message);
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'שמירה';
+    return;
+  }
+
+  root.innerHTML = `
+    <div class="done-state">
+      <div class="icon">✅</div>
+      <p style="color:var(--navy);font-weight:700;font-size:1.05rem;margin-top:10px;">המשימה נשמרה!</p>
+      <div class="row-actions" style="margin-top:16px;">
+        <button class="btn btn-ghost" onclick="location.href='tasks.html?open=${data.id}'">פתח את המשימה</button>
+        <button class="btn btn-primary" onclick="renderHome()">משימה נוספת</button>
+      </div>
+    </div>
+  `;
+}
+
+(async function init(){
+  CURRENT_PROFILE = await requireAuth();
+  if (!CURRENT_PROFILE) return;
+  if (!canQuickAddTask(CURRENT_PROFILE)){ renderNoAuth(); return; }
+  renderHome();
+})();
+</script>
+</body>
+</html>
