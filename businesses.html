@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608242350';
+    var PAGE_BUILD = '202608242357';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -701,6 +701,20 @@ function toggleListingFields(){
   const v = document.getElementById('listing_status').value;
   document.getElementById('removalReasonField').style.display = v === 'removed' ? 'block' : 'none';
   document.getElementById('soldToField').style.display = v === 'sold' ? 'block' : 'none';
+  // 24.08.2026: כשעסק לא פעיל למכירה (נמכר/הוסר), פרסום ציבורי מנותק
+  // אוטומטית - ה-VIEW הציבורי כבר חוסם listing_status שאינו 'active' כך
+  // שאין כאן חשיפה בפועל, אבל בלי זה הדגל בטופס נשאר "דלוק" ומטעה גם אחרי
+  // שהעסק כבר לא פעיל. מבוטל ומנוטרל (לא רק מוסתר) כדי שלא יתאפשר לסמן
+  // מחדש בלי לחזור קודם לסטטוס פעיל.
+  const pubCb = document.getElementById('public_listing_active');
+  if (pubCb){
+    if (v !== 'active'){
+      pubCb.checked = false;
+      pubCb.disabled = true;
+    } else {
+      pubCb.disabled = false;
+    }
+  }
 }
 
 function openBizForm(id){
@@ -848,11 +862,11 @@ function openBizForm(id){
           <input type="checkbox" id="anon_card_show_reason" style="width:auto;" ${biz.anon_card_show_reason?'checked':''}> שלב את סיבת המכירה בתקציר (גם היא תעבור תמצות, לא תוצג כטקסט גולמי)
         </label>
         <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;background:#eef6f0;border-radius:6px;padding:8px 10px;">
-          <input type="checkbox" id="public_listing_active" style="width:auto;" ${biz.public_listing_active?'checked':''}>
+          <input type="checkbox" id="public_listing_active" style="width:auto;" ${biz.public_listing_active?'checked':''} ${biz.listing_status && biz.listing_status !== 'active' ? 'disabled' : ''}>
           פרסם גם בעמוד הרשימה הציבורי באתר (listings.html)
         </label>
         <div style="font-size:.72rem;color:#665;margin-top:4px;">
-          זמין רק אם "הכן תוכן אנונימי" מסומן למעלה - אם תבטל את זה, העסק יורד אוטומטית גם מהרשימה הציבורית. הרשימה הציבורית מציגה בדיוק את אותם שדות אנונימיים בלבד.
+          זמין רק אם "הכן תוכן אנונימי" מסומן למעלה - אם תבטל את זה, העסק יורד אוטומטית גם מהרשימה הציבורית. הרשימה הציבורית מציגה בדיוק את אותם שדות אנונימיים בלבד. גם עסק שסטטוס המכירה שלו הוא "נמכר" או "עסקה לא פעילה" יורד אוטומטית מהפרסום הציבורי.
         </div>
 
         <div style="margin-top:12px;padding-top:10px;border-top:1px dashed #d8d3c4;">
@@ -3097,7 +3111,12 @@ async function saveBiz(e){
     // public_business_listings בודק את שניהם), אבל אוכפים גם כאן כדי
     // שהתצוגה בטופס לא תבלבל - אם ביטלו את התוכן האנונימי, מבטלים גם
     // את הפרסום הציבורי, לא משאירים אותו "דלוק" בלי תוכן מאחוריו.
-    payload.public_listing_active = cb('anon_card_active') ? cb('public_listing_active') : false;
+    // 24.08.2026: אותו עיקרון גם כשסטטוס המכירה עצמו אינו 'active' -
+    // עסק שנמכר/הוסר לא יכול להישאר מסומן כמפורסם ציבורית (גם אם ה-DB
+    // VIEW כבר חוסם את זה דרך listing_status='active', כדי שהדגל בטופס
+    // ישקף את המצב האמיתי ולא יטעה).
+    const listingStatusVal = g('listing_status');
+    payload.public_listing_active = (cb('anon_card_active') && (listingStatusVal === 'active' || !listingStatusVal)) ? cb('public_listing_active') : false;
 
     if (document.getElementById('anon_summary')){
       const manualDisplayName = g('anon_display_name');
