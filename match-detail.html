@@ -11,7 +11,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608181530';
+    var PAGE_BUILD = '202608240635';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -246,7 +246,7 @@ async function loadEverything(){
   const [{data:biz}, {data:buyer}, {data:users}] = await Promise.all([
     window.supabaseClient.from('businesses').select('*').eq('id', match.business_id).single(),
     window.supabaseClient.from('leads').select('*').eq('id', match.buyer_id).single(),
-    window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active')
+    window.supabaseClient.rpc('get_active_users_basic')
   ]);
   BIZ = biz; BUYER = buyer; ALL_USERS = users || [];
 

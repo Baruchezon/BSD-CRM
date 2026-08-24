@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608211659';
+    var PAGE_BUILD = '202608240635';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -194,7 +194,7 @@ async function loadAttention(){
 
   const [{data:matches, error:mErr}, {data:tasks, error:tErr}, {data:users}] = await Promise.all([
     matchQuery, taskQuery,
-    window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active')
+    window.supabaseClient.rpc('get_active_users_basic')
   ]);
   ALL_USERS = users || [];
 

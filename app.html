@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608201900';
+    var PAGE_BUILD = '202608240635';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -453,7 +453,7 @@ async function populateActivityUserFilter(profile){
   const sel = document.getElementById('activityUserFilter');
   if (!isAdmin){ sel.style.display = 'none'; return; }
   sel.style.display = '';
-  const { data } = await window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active');
+  const { data } = await window.supabaseClient.rpc('get_active_users_basic');
   (data||[]).forEach(u=>{
     const o = document.createElement('option');
     o.value = u.id;
@@ -1002,7 +1002,7 @@ async function checkNewMessagesPopup(profile){
   if (toShow.length === 0) return;
 
   const senderIds = [...new Set(toShow.map(m => m.sender_id))];
-  const { data: senders } = await window.supabaseClient.from('profiles').select('id, full_name, email').in('id', senderIds);
+  const { data: senders } = await window.supabaseClient.rpc('get_active_users_basic');
   const nameMap = {};
   (senders || []).forEach(s => { nameMap[s.id] = (s.full_name && s.full_name.trim()) ? s.full_name : s.email; });
   toShow.forEach(m => { m.senderName = nameMap[m.sender_id] || 'משתמש'; });

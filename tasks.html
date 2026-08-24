@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608230530';
+    var PAGE_BUILD = '202608240635';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -323,7 +323,7 @@ function closeModal(){ document.getElementById('overlay').classList.remove('open
 function userName(id){ const u = ALL_USERS.find(x=>x.id===id); return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—'; }
 
 async function loadUsers(){
-  const { data } = await window.supabaseClient.from('profiles').select('id, full_name, email').eq('status','active');
+  const { data } = await window.supabaseClient.rpc('get_active_users_basic');
   ALL_USERS = data || [];
   const sel = document.getElementById('fAssigned');
   const isAdmin = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager');
