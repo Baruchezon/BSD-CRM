@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202608192010';
+    var PAGE_BUILD = '202608240635';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -164,7 +164,7 @@ async function loadReport(){
     bizIds.length ? window.supabaseClient.from('businesses').select('id, internal_name, anon_display_name').in('id', bizIds) : { data: [] },
     buyerIds.length ? window.supabaseClient.from('leads').select('id, full_name, first_name, last_name').in('id', buyerIds) : { data: [] },
     fileIds.length ? window.supabaseClient.from('business_sale_files').select('id, file_name').in('id', fileIds) : { data: [] },
-    userIds.length ? window.supabaseClient.from('profiles').select('id, full_name, email').in('id', userIds) : { data: [] },
+    userIds.length ? window.supabaseClient.rpc('get_active_users_basic') : { data: [] },
   ]);
   BIZ_MAP = {}; (bizData||[]).forEach(b => BIZ_MAP[b.id] = b);
   BUYER_MAP = {}; (buyerData||[]).forEach(b => BUYER_MAP[b.id] = b);
