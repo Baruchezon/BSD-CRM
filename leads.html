@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608192351';
+    var PAGE_BUILD = '202608240522';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -558,6 +558,9 @@ function renderTable(){
     const rowCls = agrStatus === 'יש הסכם חתום' ? 'row-signed' : (agrStatus === 'נשלח הסכם לחתימה' ? 'row-sent' : 'row-none');
     const statusEmoji = rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
     nameCell = statusEmoji + nameCell;
+    if (isGrantOnlyViewer(l)){
+      nameCell = nameCell.replace('</div>', ' <span style="font-size:.68rem;background:#eef4fb;color:#1a3d8f;border-radius:8px;padding:1px 7px;font-weight:700;white-space:nowrap;">🔓 שוחרר אליי</span></div>');
+    }
     if (notesIconStyle(l.id)){
       const noteDot = `<span onclick="event.stopPropagation();openNotesPanel('leads','${l.id}','${esc((personName||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(l.id))}" style="cursor:pointer;font-size:.72rem;color:#1a3d8f !important;font-weight:700;white-space:nowrap;margin-inline-start:6px;background:#fff !important;border-radius:8px;padding:1px 6px;">🔵 קיימת הערה</span>`;
       nameCell = nameCell.replace('</div>', noteDot + '</div>');
@@ -569,11 +572,11 @@ function renderTable(){
           <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
             <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
             <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
-              <a href="javascript:void(0)" onclick="openLeadForm('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>
-              <a href="javascript:void(0)" onclick="openNotesPanel('leads','${l.id}','${esc((l.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(l.id))}${notesIconStyle(l.id) ? ' 🔵' : ''}</a>
+              <a href="javascript:void(0)" onclick="openLeadForm('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">${isGrantOnlyViewer(l) ? '👁️ צפייה' : '✏️ ערוך'}</a>
+              ${isGrantOnlyViewer(l) ? '' : `<a href="javascript:void(0)" onclick="openNotesPanel('leads','${l.id}','${esc((l.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(l.id))}${notesIconStyle(l.id) ? ' 🔵' : ''}</a>`}
               <a href="matches.html?view=by_buyer&buyer_id=${l.id}" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔗 עסקים שהוצגו (התאמות)</a>
-              ${(canSendAgreement() && l.agreement_status !== 'יש הסכם חתום') ? `<a href="javascript:void(0)" onclick="sendAgreementForLead('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
-              ${canEditRecord(l.created_by) ? `<a href="javascript:void(0)" onclick="deleteLead('${l.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
+              ${(canSendAgreement() && l.agreement_status !== 'יש הסכם חתום' && !isGrantOnlyViewer(l)) ? `<a href="javascript:void(0)" onclick="sendAgreementForLead('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
+              ${canDeleteLead(l) ? `<a href="javascript:void(0)" onclick="deleteLead('${l.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
             </div>
           </div>
           <div>${nameCell}</div>
@@ -597,6 +600,28 @@ function canEditRecord(createdBy){
   if (!CURRENT_PROFILE) return false;
   if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
   return createdBy === CURRENT_PROFILE.id;
+}
+
+// שחרור קונים/משקיעים לצפייה (24.08.2026) - תואם ל-RLS: leads_delete מאפשרת
+// מחיקת buyer/partner רק לאדמין (לא manager), seller ללא שינוי.
+function canDeleteLead(l){
+  if (!CURRENT_PROFILE || !l) return false;
+  if (CURRENT_PROFILE.role === 'admin') return true;
+  if (l.type === 'seller') return CURRENT_PROFILE.role === 'manager';
+  return false;
+}
+// תואם ל-leads_update/lag_insert/lag_update: רק יוצר הכרטיס (created_by) או
+// אדמין יכולים לנהל שחרור/ביטול צפייה על buyer/partner (לא manager).
+function canManageLeadAccess(l){
+  if (!CURRENT_PROFILE || !l) return false;
+  return CURRENT_PROFILE.role === 'admin' || l.created_by === CURRENT_PROFILE.id;
+}
+// אם זה buyer/partner, המשתמש הנוכחי אינו אדמין ואינו היוצר - הדרך היחידה
+// ש-RLS (leads_select) בכלל מאפשרת לו לראות את השורה היא grant פעיל.
+function isGrantOnlyViewer(l){
+  if (!l || !CURRENT_PROFILE) return false;
+  if (l.type !== 'buyer' && l.type !== 'partner') return false;
+  return CURRENT_PROFILE.role !== 'admin' && l.created_by !== CURRENT_PROFILE.id;
 }
 
 function canSendAgreement(){
@@ -712,6 +737,7 @@ function openLeadForm(id, forcedType, prefillData){
   const typeLabel = type==='buyer' ? 'קונה' : type==='partner' ? 'שותפות/השקעה' : 'מוכר';
   modal.innerHTML = `
     <h3>${lead ? 'עריכת' : 'הוספת'} ${typeLabel}</h3>
+    ${(lead && isGrantOnlyViewer(lead)) ? `<div style="background:#eef4fb;border:1px solid #cddcef;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#1a3d8f;margin-bottom:10px;">🔓 <b>שוחרר אליי</b> — צפייה בלבד, ללא אפשרות עריכה, מחיקה או שחרור לאחרים.</div>` : ''}
     ${lead ? agreementBanner(lead.agreement_status, lead.agreement_number, 'leads', lead.id, lead.agreement_pdf_path, lead.agreement_pdf_uploaded_at) : ''}
     ${lead && type === 'buyer' ? '<div id="anonReceivedBox" style="margin-bottom:10px;"></div>' : ''}
     ${lead ? '' : `<div class="type-toggle">
@@ -782,17 +808,26 @@ function openLeadForm(id, forcedType, prefillData){
           <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="openNotesRecording({recordId:'${lead ? lead.id : 'new-' + Date.now()}', label:'${esc((lead?.full_name || 'רשומה חדשה').replace(/'/g,''))}', textareaId:'notes', currentProfile:CURRENT_PROFILE})">🎙️ הקלט הערות</button>
         </div>
         ${textareaRow('notes','הערות', lead?.notes || pf.notes, 180)}
-        ${lead ? `
+        ${(lead && !isGrantOnlyViewer(lead)) ? `
         <div class="section-h">🎙️ הקלטות ותמלולים</div>
         <div class="field full">
           ${CURRENT_PROFILE.can_record!==false ? `<button type="button" class="btn btn-ghost" onclick="window.openStandaloneRecording({type:'buyer', id:'${lead.id}', label:'${esc((lead.full_name||'קונה').replace(/'/g,''))}', currentProfile:CURRENT_PROFILE, onSaved: () => loadLeadMeetings('${lead.id}')})">🔴 הקלט שיחה/פגישה</button>` : ''}
           <div id="leadMeetingsList" style="margin-top:10px;font-size:.82rem;">טוען...</div>
         </div>
         ` : ''}
+        ${(lead && (type === 'buyer' || type === 'partner') && canManageLeadAccess(lead)) ? `
+        <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>🔓 שחרור לצפייה</span>
+          <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="openReleaseLeadAccessModal('${lead.id}')">+ שחרר לצפייה</button>
+        </div>
+        <div class="field full">
+          <div id="leadAccessGrantsList" style="font-size:.82rem;">טוען...</div>
+        </div>
+        ` : ''}
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="cancelLeadForm()">ביטול</button>
-        <button type="submit" class="btn btn-primary">שמירה</button>
+        ${(lead && isGrantOnlyViewer(lead)) ? '' : '<button type="submit" class="btn btn-primary">שמירה</button>'}
       </div>
     </form>
   `;
@@ -806,8 +841,100 @@ function openLeadForm(id, forcedType, prefillData){
   document.getElementById('leadForm').dataset.leadId = lead ? lead.id : '';
   document.getElementById('leadForm').dataset.leadType = type;
   document.getElementById('leadForm').addEventListener('submit', saveLead);
-  if (lead) loadLeadMeetings(lead.id);
+  if (lead && !isGrantOnlyViewer(lead)) loadLeadMeetings(lead.id);
   if (lead && type === 'buyer') loadAnonReceived(lead.id);
+  if (lead && (type === 'buyer' || type === 'partner') && canManageLeadAccess(lead)) loadLeadAccessGrants(lead.id);
+  if (lead && isGrantOnlyViewer(lead)) applyReadOnlyLeadForm();
+}
+
+function applyReadOnlyLeadForm(){
+  const form = document.getElementById('leadForm');
+  if (!form) return;
+  form.querySelectorAll('input, select, textarea').forEach(el => { el.disabled = true; });
+}
+
+// שחרור קונים/משקיעים לצפייה (24.08.2026) - RLS (lag_select/insert/update)
+// כבר אוכפת שרק היוצר או אדמין יכולים לנהל את זה; הממשק רק חושף פעולה
+// שממילא חסומה בשרת למי שאין לו הרשאה - לא מסתמך על הסתרת הכפתור בלבד.
+async function loadLeadAccessGrants(leadId){
+  const box = document.getElementById('leadAccessGrantsList');
+  if (!box) return;
+  const { data, error } = await window.supabaseClient
+    .from('lead_access_grants')
+    .select('*')
+    .eq('lead_id', leadId)
+    .eq('active', true)
+    .order('granted_at', { ascending: false });
+  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה: ${esc(error.message)}</span>`; return; }
+  window.CURRENT_LEAD_GRANTS = data || [];
+  if (!data || !data.length){ box.innerHTML = '<span style="color:#999;">עדיין לא שוחרר לאף משתמש</span>'; return; }
+  box.innerHTML = data.map(g => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eee;flex-wrap:wrap;gap:6px;">
+      <span><b>${esc(userName(g.granted_to))}</b> · שוחרר ב-${fmtDate(g.granted_at)} ע"י ${esc(userName(g.granted_by))}</span>
+      <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="revokeLeadAccessGrant('${g.id}','${leadId}')">בטל צפייה</button>
+    </div>
+  `).join('');
+}
+
+function openReleaseLeadAccessModal(leadId){
+  const alreadyGranted = (window.CURRENT_LEAD_GRANTS || []).map(g => g.granted_to);
+  const candidateUsers = ALL_USERS.filter(u => u.id !== CURRENT_PROFILE.id && !alreadyGranted.includes(u.id));
+  const overlay = document.createElement('div');
+  overlay.id = 'releaseLeadAccessOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:400;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;max-height:80vh;overflow:auto;">
+      <h3 style="margin:0 0 16px;color:#0e1b34;border-right:4px solid #c9a24b;padding-right:10px;">שחרור לצפייה</h3>
+      <label style="display:block;font-size:.8rem;color:#666;margin-bottom:8px;">בחר משתמש אחד או יותר לשחרור צפייה בכרטיס:</label>
+      <div id="releaseLeadUserList" style="max-height:260px;overflow:auto;border:1px solid #d8d3c4;border-radius:8px;padding:8px;margin-bottom:10px;">
+        ${candidateUsers.length ? candidateUsers.map(u => `
+          <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;cursor:pointer;">
+            <input type="checkbox" value="${u.id}" class="release-lead-user-cb">
+            <span>${esc(u.full_name && u.full_name.trim() ? u.full_name : u.email)}</span>
+          </label>
+        `).join('') : '<span style="color:#999;font-size:.85rem;">כל המשתמשים הפעילים כבר משוחררים</span>'}
+      </div>
+      <div id="releaseLeadAccessError" style="display:none;color:#b00020;font-size:.82rem;margin-bottom:8px;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button onclick="document.getElementById('releaseLeadAccessOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
+        <button id="releaseLeadAccessSubmitBtn" onclick="submitReleaseLeadAccess('${leadId}')" style="background:#c9a24b;color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שחרר לנבחרים</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function submitReleaseLeadAccess(leadId){
+  const checked = Array.from(document.querySelectorAll('.release-lead-user-cb:checked')).map(cb => cb.value);
+  const errEl = document.getElementById('releaseLeadAccessError');
+  if (errEl) errEl.style.display = 'none';
+  if (!checked.length){
+    if (errEl){ errEl.textContent = '⚠️ יש לבחור לפחות משתמש אחד'; errEl.style.display = 'block'; }
+    return;
+  }
+  const btn = document.getElementById('releaseLeadAccessSubmitBtn');
+  if (btn){ btn.disabled = true; btn.textContent = 'משחרר...'; }
+  const rows = checked.map(uid => ({ lead_id: leadId, granted_to: uid, granted_by: CURRENT_PROFILE.id }));
+  const { error } = await window.supabaseClient.from('lead_access_grants').insert(rows);
+  if (btn){ btn.disabled = false; btn.textContent = 'שחרר לנבחרים'; }
+  if (error){
+    if (errEl){ errEl.textContent = 'שגיאה: ' + error.message; errEl.style.display = 'block'; }
+    return;
+  }
+  if (typeof bsdLogActivity === 'function') bsdLogActivity('release_lead_access', 'leads', leadId, { users: checked });
+  document.getElementById('releaseLeadAccessOverlay').remove();
+  toast('שוחרר בהצלחה');
+  await loadLeadAccessGrants(leadId);
+}
+
+async function revokeLeadAccessGrant(grantId, leadId){
+  if (!confirm('לבטל את הצפייה של המשתמש הזה בכרטיס? הוא לא יראה אותו יותר ברשימה שלו.')) return;
+  const { error } = await window.supabaseClient.from('lead_access_grants')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('id', grantId);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  if (typeof bsdLogActivity === 'function') bsdLogActivity('revoke_lead_access', 'leads', leadId, { grant_id: grantId });
+  toast('הצפייה בוטלה');
+  await loadLeadAccessGrants(leadId);
 }
 
 // סעיף 6 באפיון: מה קיבל הקונה - אילו עסקים אנונימיים, מתי, ממי, ובאיזה סטטוס
