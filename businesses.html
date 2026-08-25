@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608251709';
+    var PAGE_BUILD = '202608251810';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608251709">
+<link rel="stylesheet" href="css/style.css?v=202608251810">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -236,7 +236,7 @@
 
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202608251709"></script>
+<script src="js/auth.js?v=202608251810"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
@@ -3487,9 +3487,19 @@ function openArchiveView(){
 }
 async function deleteBiz(id){
   if (!confirm('למחוק עסק זה? הפעולה בלתי הפיכה.')) return;
+  // תיקון 25.08.2026: התפריט (⋮) נשאר פתוח/תקוע על המסך בזמן שהמחיקה
+  // מתבצעת ברשת, ובמיוחד אם המחיקה נכשלת (הקוד היה עושה return מוקדם
+  // בלי לסגור כלום ובלי לרענן את הטבלה). סוגרים את כל התפריטים הפתוחים
+  // מיד, לפני שמתחילים את הפעולה בכלל - לא רק אחרי הצלחה.
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
   const { error } = await window.supabaseClient.from('businesses').delete().eq('id', id);
-  if (error){ toast('אין הרשאה למחוק, או שגיאה: ' + error.message); return; }
-  toast('נמחק בהצלחה');
+  if (error){
+    // שגיאה אמיתית מוצגת כמו שהיא - לעולם לא הודעת הצלחה מזויפת. התפריט
+    // כבר נסגר למעלה, והעסק עדיין ברשימה כרגיל (לא הוסר, כי לא נמחק בפועל).
+    toast('❌ שגיאה במחיקה: ' + error.message);
+    return;
+  }
+  toast('✅ נמחק בהצלחה');
   await loadBusinesses();
 }
 
