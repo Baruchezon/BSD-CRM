@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608251215';
+    var PAGE_BUILD = '202608251530';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608251215">
+<link rel="stylesheet" href="css/style.css?v=202608251530">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -236,7 +236,7 @@
 
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202608251215"></script>
+<script src="js/auth.js?v=202608251530"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
@@ -1438,16 +1438,16 @@ async function openSendAnonModal(bizId, file){
     <h3>${isPrimary ? 'שליחת תקציר ראשוני לקונה' : 'שליחת תקציר מורחב לקונה'}</h3>
     <div class="field full" style="margin-bottom:14px;">
       <label>עסק</label>
-      <div style="background:#f7f5ef;border-radius:8px;padding:8px 12px;font-size:.85rem;">${esc(bizLabel)}</div>
+      <input type="text" readonly value="${esc(bizLabel)}" style="background:#f7f5ef;">
     </div>
     ${isPrimary ? `
     <div class="field full" style="margin-bottom:14px;">
       <label>תקציר ראשוני שיישלח</label>
-      <div style="background:#f7f5ef;border-radius:8px;padding:8px 12px;font-size:.85rem;white-space:pre-wrap;">${esc(biz.anon_summary)}</div>
+      <textarea readonly rows="4" style="background:#f7f5ef;">${esc(biz.anon_summary)}</textarea>
     </div>` : `
     <div class="field full" style="margin-bottom:14px;">
       <label>קובץ</label>
-      <div style="background:#f7f5ef;border-radius:8px;padding:8px 12px;font-size:.85rem;">📄 ${esc(file.file_name)}</div>
+      <input type="text" readonly value="📄 ${esc(file.file_name)}" style="background:#f7f5ef;">
     </div>`}
     <div class="field full" style="margin-bottom:10px;overflow:visible;">
       <label>בחר קונה (מתוך הקונים שלך בלבד)</label>
@@ -2392,7 +2392,7 @@ async function openSendFilesToBuyer(bizId){
 
     <div class="field full" style="margin-bottom:14px;">
       <label>קבצים לשליחה</label>
-      <div style="background:#f7f5ef;border-radius:8px;padding:8px 12px;font-size:.85rem;">
+      <div style="background:#f7f5ef;border-radius:8px;padding:8px 12px;font-size:.85rem;display:block;min-height:38px;line-height:1.6;box-sizing:border-box;">
         ${filesInfo.map(f => `<div>📄 ${esc(f.displayName)}</div>`).join('') || '<span style="color:#999;">לא נבחרו קבצים</span>'}
       </div>
     </div>
