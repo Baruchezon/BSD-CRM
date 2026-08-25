@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608251620';
+    var PAGE_BUILD = '202608251709';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608251620">
+<link rel="stylesheet" href="css/style.css?v=202608251709">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -251,10 +251,10 @@
 
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202608251620"></script>
-<script src="js/permissions.js?v=202608251620"></script>
+<script src="js/auth.js?v=202608251709"></script>
+<script src="js/permissions.js?v=202608251709"></script>
 <script src="js/push.js?v=202608122320"></script>
-<script src="js/standaloneRecording.js?v=202608251620"></script>
+<script src="js/standaloneRecording.js?v=202608251709"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script>
 let ALL_LEADS = [];
@@ -396,8 +396,13 @@ async function loadLeads(){
   // הסינון לפי created_by הוסר - RLS (leads_select) כבר מחזיר בשרת רק את מה שמותר.
   const { data, error } = await q;
   if (error){ toast('שגיאה בטעינת נתונים: ' + error.message); return; }
-  // לידים ללא הסכם כלל מנוהלים כעת ב"לידים" — כאן מוצגים רק מי שנשלח אליו הסכם או שחתם
-  ALL_LEADS = (data || []).filter(l => (l.agreement_status === 'נשלח הסכם לחתימה' || l.agreement_status === 'יש הסכם חתום') && !l.is_archived);
+  // תיקון 25.08.2026 (כלל עסקי מחייב): קיום/הצגה של ליד (קונה, שותף או
+  // מוכר ישן) לעולם לא מותנים בסטטוס הסכם. ליד חדש חייב להישאר ולהופיע
+  // כאן מהרגע שנשמר, גם בלי הסכם, גם לפני שנשלח הסכם. הסינון הקודם (רק
+  // "נשלח הסכם"/"יש הסכם חתום") היה הגורם לכך שליד חדש נשמר בהצלחה
+  // במסד הנתונים אך נעלם בשקט מהמסך הזה. הסינון היחיד שנשאר הוא ארכיון
+  // (is_archived) - ליד בארכיון מוצג בטאב הארכיון הנפרד, לא כאן.
+  ALL_LEADS = (data || []).filter(l => !l.is_archived);
   ARCHIVED_LEADS = (data || []).filter(l => l.is_archived);
   populateStatusFilter();
   populateCreatedByFilter();
@@ -1080,18 +1085,12 @@ async function saveLead(e){
   }
 
   if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
-  // תיקון 25.08.2026: מסך "קונים ומשקיעים" מציג רק לידים עם הסכם שנשלח/נחתם
-  // (ראו הסינון ב-loadLeads) - ליד בלי הסכם פשוט לא מופיע כאן, גם אם הוא
-  // ה-"ליד חדש" שממש נוצר הרגע דרך "+ קונה חדש"/"+ שותפות/השקעה" באותו
-  // מסך. לפני התיקון, ההפניה חזרה ל"לידים" קרתה רק אם המשתמש הגיע לכאן
-  // מ-leads-hub (from=leads-hub) - אז ליד חדש שנוצר ישירות כאן נשמר
-  // בהצלחה, אבל נעלם בשקט מהמסך בלי שום הודעה, בדיוק כמו שברוך דיווח.
-  // עכשיו ההפניה קורית תמיד כשאין הסכם, בלי תלות בדרך ההגעה למסך.
-  if (payload.agreement_status !== 'יש הסכם חתום' && payload.agreement_status !== 'נשלח הסכם לחתימה'){
-    toast('✅ נשמר בהצלחה - מוצג כעת ב"לידים" עד שישלח הסכם');
-    setTimeout(() => { location.href = 'leads-hub.html'; }, 900);
-    return;
-  }
+  // תיקון 25.08.2026 (כלל עסקי מחייב): הצגת ליד במסך הזה לעולם לא מותנית
+  // בהסכם (ראו loadLeads) - לכן אין יותר צורך להעביר החוצה ל"לידים" כשאין
+  // הסכם. ליד חדש נשאר ומופיע כאן מיד אחרי השמירה, בדיוק כמו כל ליד אחר.
+  // ה"תיקון" הקודם (הפניה ל-leads-hub עם הודעה) הוסר - הוא היה מבוסס על
+  // הנחה שגויה שהסינון-לפי-הסכם הוא עיצוב תקין; זו בדיוק ההנחה שהתבררה
+  // כשגויה ותוקנה בשורש.
   toast('נשמר בהצלחה');
   closeModal();
   await loadLeads();
