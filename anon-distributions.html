@@ -161,7 +161,7 @@ async function loadReport(){
   const userIds = [...new Set(ALL_ROWS.map(r => r.sender_user_id))];
 
   const [{ data: bizData }, { data: buyerData }, { data: fileData }, { data: userData }] = await Promise.all([
-    bizIds.length ? window.supabaseClient.from('businesses').select('id, internal_name, anon_display_name').in('id', bizIds) : { data: [] },
+    bizIds.length ? window.supabaseClient.from('businesses').select('id, internal_name, anon_display_name, business_number').in('id', bizIds) : { data: [] },
     buyerIds.length ? window.supabaseClient.from('leads').select('id, full_name, first_name, last_name').in('id', buyerIds) : { data: [] },
     fileIds.length ? window.supabaseClient.from('business_sale_files').select('id, file_name').in('id', fileIds) : { data: [] },
     userIds.length ? window.supabaseClient.rpc('get_active_users_basic') : { data: [] },
@@ -187,7 +187,7 @@ function populateFilterOptions(){
     userSel.appendChild(o);
   });
   Object.values(BIZ_MAP).forEach(b => {
-    const o = document.createElement('option'); o.value = b.id; o.textContent = b.internal_name || b.anon_display_name || 'עסק';
+    const o = document.createElement('option'); o.value = b.id; o.textContent = (b.internal_name || b.anon_display_name || 'עסק') + (b.business_number ? ' (' + b.business_number + ')' : '');
     bizSel.appendChild(o);
   });
   Object.values(BUYER_MAP).forEach(b => {
@@ -231,7 +231,7 @@ function renderTable(rows){
     const file = window.FILE_MAP[r.anon_file_id];
     return `<tr>
       <td>${fmtDateTime(r.sent_at)}</td>
-      <td>${esc(biz ? (biz.internal_name || biz.anon_display_name) : '—')}</td>
+      <td>${esc(biz ? ((biz.internal_name || biz.anon_display_name) + (biz.business_number ? ' (' + biz.business_number + ')' : '')) : '—')}</td>
       <td>${esc(file ? file.file_name : '—')}</td>
       <td>${esc(buyer ? (buyer.full_name || [buyer.first_name,buyer.last_name].filter(Boolean).join(' ')) : '—')}</td>
       <td>${esc(sender ? (sender.full_name || sender.email) : '—')}</td>

@@ -199,11 +199,11 @@ async function loadForms(){
   const [{ data: bizData, error: bizErr }, { data: buyerData, error: buyerErr }] = await Promise.all([
     window.supabaseClient
       .from('businesses')
-      .select('id, internal_name, city, owner_phone, intake_form_path, intake_form_filled_by, intake_form_filled_at')
+      .select('id, internal_name, business_number, city, owner_phone, intake_form_path, intake_form_filled_by, intake_form_filled_at')
       .not('intake_form_path', 'is', null),
     window.supabaseClient
       .from('leads')
-      .select('id, full_name, city, phone, buyer_form_path, buyer_form_filled_by, buyer_form_filled_at')
+      .select('id, full_name, client_number, city, phone, buyer_form_path, buyer_form_filled_by, buyer_form_filled_at')
       .eq('type', 'buyer')
       .not('buyer_form_path', 'is', null)
   ]);
@@ -212,11 +212,11 @@ async function loadForms(){
   if (buyerErr){ toast('שגיאה בטעינת טפסי קונים: ' + buyerErr.message); }
 
   const bizRows = (bizData || []).map(f => ({
-    kind: 'business', id: f.id, name: f.internal_name, city: f.city, phone: f.owner_phone,
+    kind: 'business', id: f.id, name: f.internal_name + (f.business_number ? ' (' + f.business_number + ')' : ''), city: f.city, phone: f.owner_phone,
     filled_by: f.intake_form_filled_by, filled_at: f.intake_form_filled_at
   }));
   const buyerRows = (buyerData || []).map(f => ({
-    kind: 'buyer', id: f.id, name: f.full_name, city: f.city, phone: f.phone,
+    kind: 'buyer', id: f.id, name: f.full_name + (f.client_number ? ' (' + f.client_number + ')' : ''), city: f.city, phone: f.phone,
     filled_by: f.buyer_form_filled_by, filled_at: f.buyer_form_filled_at
   }));
   ALL_FORMS = [...bizRows, ...buyerRows];

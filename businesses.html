@@ -1467,7 +1467,7 @@ async function openSendAnonModal(bizId, file){
     </div>
     <div class="field full" style="margin-bottom:10px;">
       <label>תוכן ההודעה</label>
-      <textarea id="sendAnonBody" rows="4" style="width:100%;">שלום,\n\n${isPrimary ? 'מצורף תקציר ראשוני אנונימי בנוגע לעסק המדובר.' : 'מצורף חומר אנונימי בנוגע לעסק המדובר.'}\n\nבברכה,\n${(CURRENT_PROFILE && CURRENT_PROFILE.full_name) || 'BSD Business Brokers Israel'}</textarea>
+      <textarea id="sendAnonBody" rows="4" style="width:100%;">שלום,\n\n${isPrimary ? 'מצורף תקציר ראשוני אנונימי בנוגע לעסק המדובר.' : 'מצורף חומר אנונימי בנוגע לעסק המדובר.'}\n\nמספר עסק\n${biz && biz.business_number ? esc(biz.business_number) : ''}\n\nבברכה,\n${(CURRENT_PROFILE && CURRENT_PROFILE.full_name) || 'BSD Business Brokers Israel'}</textarea>
     </div>
     <div id="sendAnonStatus" style="min-height:20px;margin-bottom:8px;font-size:.85rem;font-weight:600;"></div>
     <div class="modal-actions">
