@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608251827';
+    var PAGE_BUILD = '202608251938';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -3485,21 +3485,72 @@ function openArchiveView(){
   toast(`${ARCHIVED_BIZ.length} עסקים בארכיון`);
   alert('עסקים בארכיון:\n' + ARCHIVED_BIZ.map(b=>`- ${b.internal_name} (${b.archive_reason||'ללא סיבה'})`).join('\n') || 'אין עסקים בארכיון');
 }
+// תיקון 25.08.2026: הבדיקה חייבת לעבור דרך RPC ולא ספירה ישירה מהלקוח.
+// נבדק בפועל: tasks_select חושף שורות רק ל-admin ולמשתמש שהמשימה שויכה
+// אליו (לא ל-manager!), ול-business_number_correction_log אין אפילו
+// הרשאת SELECT ללקוח בכלל (לא רק RLS - permission denied ברמת הטבלה).
+// ספירה ישירה מהדפדפן הייתה מחזירה בטעות "0 היסטוריה" במקרים כאלה,
+// ועלולה הייתה לגרום למחיקה פיזית של עסק עם היסטוריה אמיתית - בניגוד
+// למדיניות. get_business_history_summary() היא SECURITY DEFINER ורואה
+// את המצב האמיתי במסד, ללא תלות בהרשאות ה-RLS של המשתמש המחובר.
+async function bizHasAnyHistory(id){
+  const { data, error } = await window.supabaseClient.rpc('get_business_history_summary', { biz_id: id });
+  if (error){
+    // אם בדיקת ההיסטוריה עצמה נכשלת, אסור בשום אופן להניח "אין היסטוריה"
+    // ולהמשיך למחיקה פיזית - עדיף לעצור ולהציג שגיאה אמיתית.
+    throw new Error('בדיקת היסטוריה נכשלה: ' + error.message);
+  }
+  const rows = (data || []).filter(r => r.row_count > 0);
+  return { hasHistory: rows.length > 0, details: rows.map(r => `${r.table_name}: ${r.row_count}`) };
+}
 async function deleteBiz(id){
-  if (!confirm('למחוק עסק זה? הפעולה בלתי הפיכה.')) return;
-  // תיקון 25.08.2026: התפריט (⋮) נשאר פתוח/תקוע על המסך בזמן שהמחיקה
-  // מתבצעת ברשת, ובמיוחד אם המחיקה נכשלת (הקוד היה עושה return מוקדם
+  if (!confirm('להסיר עסק זה מהמערכת? אם אין לו היסטוריה קשורה הוא יימחק לצמיתות. אם יש לו היסטוריה (התאמות, משימות, הפצות וכו׳) הוא יועבר אוטומטית לארכיון כדי לשמר אותה.')) return;
+  // תיקון 25.08.2026: התפריט (⋮) נשאר פתוח/תקוע על המסך בזמן שהפעולה
+  // מתבצעת ברשת, ובמיוחד אם היא נכשלת (הקוד היה עושה return מוקדם
   // בלי לסגור כלום ובלי לרענן את הטבלה). סוגרים את כל התפריטים הפתוחים
   // מיד, לפני שמתחילים את הפעולה בכלל - לא רק אחרי הצלחה.
   document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
-  const { error } = await window.supabaseClient.from('businesses').delete().eq('id', id);
-  if (error){
-    // שגיאה אמיתית מוצגת כמו שהיא - לעולם לא הודעת הצלחה מזויפת. התפריט
-    // כבר נסגר למעלה, והעסק עדיין ברשימה כרגיל (לא הוסר, כי לא נמחק בפועל).
-    toast('❌ שגיאה במחיקה: ' + error.message);
+
+  let hasHistory, details;
+  try {
+    ({ hasHistory, details } = await bizHasAnyHistory(id));
+  } catch (e){
+    // לא הצלחנו לבדוק היסטוריה בביטחון - עוצרים כאן ולא ממשיכים למחיקה,
+    // כדי לא לסכן מחיקה פיזית של עסק שיש לו בפועל היסטוריה.
+    toast('❌ ' + e.message + ' - הפעולה בוטלה לביטחון');
     return;
   }
-  toast('✅ נמחק בהצלחה');
+
+  if (!hasHistory){
+    // אין שום תלות/היסטוריה בשום טבלה קשורה - מותר למחוק פיזית.
+    const { error } = await window.supabaseClient.from('businesses').delete().eq('id', id);
+    if (error){
+      // שגיאה אמיתית מוצגת כמו שהיא - לעולם לא הודעת הצלחה מזויפת. התפריט
+      // כבר נסגר למעלה, והעסק עדיין ברשימה כרגיל (לא הוסר, כי לא נמחק בפועל).
+      toast('❌ שגיאה במחיקה: ' + error.message);
+      return;
+    }
+    toast('✅ נמחק בהצלחה');
+    await loadBusinesses();
+    return;
+  }
+
+  // קיימת היסטוריה קשורה (25.08.2026: מדיניות - לעולם לא למחוק פיזית במקרה כזה,
+  // כדי לא לאבד anon_distributions/משימות/פגישות/התאמות וכו׳). משתמשים במנגנון
+  // הארכיון הקיים כבר במערכת (is_archived/archived_at/archived_by/archive_reason)
+  // במקום ליצור מנגנון נפרד - העסק יוסתר מכל הרשימות הפעילות (loadBusinesses כבר
+  // מסנן !is_archived) אך יישאר במלואו, כולל כל הקשרים ההיסטוריים.
+  const { error } = await window.supabaseClient.from('businesses').update({
+    is_archived: true,
+    archived_at: new Date().toISOString(),
+    archived_by: CURRENT_PROFILE.id,
+    archive_reason: 'הועבר אוטומטית לארכיון בעת ניסיון מחיקה - קיימת היסטוריה קשורה (' + details.join(', ') + ')'
+  }).eq('id', id);
+  if (error){
+    toast('❌ שגיאה בהעברה לארכיון: ' + error.message);
+    return;
+  }
+  toast('📁 לעסק זה יש היסטוריה קשורה - הועבר לארכיון (לא נמחק) כדי לשמר אותה. ניתן לשחזר מהארכיון בכל עת.');
   await loadBusinesses();
 }
 
