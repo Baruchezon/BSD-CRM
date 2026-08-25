@@ -381,7 +381,8 @@ async function refreshNavMsgBadge(){
 // we force one hard reload. The sessionStorage guard makes it
 // impossible to get stuck in a reload loop if something is off.
 // ============================================================
-(async function checkStalePage(){
+async function checkStalePage(opts){
+  opts = opts || {};
   try {
     // window.PAGE_BUILD is the single source of truth (set inline near the
     // top of every page that has real state worth protecting - this used to
@@ -401,10 +402,30 @@ async function refreshNavMsgBadge(){
       return;
     }
     if (sessionStorage.getItem('bsdReloadedFor') === version) return; // already tried
+    // 25.08.2026: this function now also runs periodically (see setInterval
+    // below) for tabs left open a long time, not just once on load. A forced
+    // reload mid-work would abort whatever the user is doing (an open modal,
+    // an in-progress recording, unsaved text in a field) - so a periodic
+    // call is allowed to detect staleness but must NOT reload while an
+    // .overlay is open; it just defers and tries again on the next interval
+    // instead. The original one-time call on page load is unaffected
+    // (nothing is open yet at that point) and keeps its exact old behavior.
+    if (opts.periodic){
+      const overlay = document.getElementById('overlay');
+      if (overlay && overlay.classList.contains('open')) return; // try again next interval
+    }
     sessionStorage.setItem('bsdReloadedFor', version);
     location.reload(true);
   } catch(e) { /* offline or blocked - carry on with what we have */ }
-})();
+}
+checkStalePage();
+// 25.08.2026: re-check every 5 minutes so a tab left open for a long work
+// session still picks up a deployed fix on its own, instead of only ever
+// checking once at load. Safe by construction: same version.json compare,
+// same one-shot-per-version guard, and skipped entirely (not just delayed)
+// whenever a modal is open - so it can never interrupt an open form, never
+// loops, and never fires more than once per new version.
+setInterval(() => checkStalePage({ periodic: true }), 5 * 60 * 1000);
 
 // ============================================================
 // רשת ביטחון גלובלית נגד כשלים שקטים (17.08.2026)
