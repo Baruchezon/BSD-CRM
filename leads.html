@@ -258,6 +258,11 @@
 <script src="js/notesRecording.js?v=2"></script>
 <script>
 let ALL_LEADS = [];
+let ARCHIVED_LEADS = [];
+function clientNumberBadge(l){
+  if (!l || !l.client_number) return '';
+  return `<span style="display:inline-block;background:#0e1b34;color:#e8cf8a;font-weight:700;font-size:.72rem;padding:2px 9px;border-radius:12px;letter-spacing:.3px;white-space:nowrap;">${esc(l.client_number)}</span>`;
+}
 let ALL_USERS = [];
 let CURRENT_PROFILE = null;
 let RATING_LEVELS = [];           // רשימת הרמות הפעילות, ממוינות לפי sort_order
@@ -392,7 +397,8 @@ async function loadLeads(){
   const { data, error } = await q;
   if (error){ toast('שגיאה בטעינת נתונים: ' + error.message); return; }
   // לידים ללא הסכם כלל מנוהלים כעת ב"לידים" — כאן מוצגים רק מי שנשלח אליו הסכם או שחתם
-  ALL_LEADS = (data || []).filter(l => l.agreement_status === 'נשלח הסכם לחתימה' || l.agreement_status === 'יש הסכם חתום');
+  ALL_LEADS = (data || []).filter(l => (l.agreement_status === 'נשלח הסכם לחתימה' || l.agreement_status === 'יש הסכם חתום') && !l.is_archived);
+  ARCHIVED_LEADS = (data || []).filter(l => l.is_archived);
   populateStatusFilter();
   populateCreatedByFilter();
   populateRatingFilter();
@@ -504,9 +510,11 @@ function renderTable(){
       }
     }
     if (search){
+      const clientNumDigits = (l.client_number||'').match(/(\d{3,4})$/)?.[1] || '';
       const hay = [l.full_name, l.first_name, l.last_name, l.phone, l.phone2, l.city, l.source, l.status, l.email,
         l.business_name, l.business_field, l.business_city, l.requested_field, l.requested_area,
-        l.requested_categories, l.company, l.address, l.id_number, l.notes].join(' ').toLowerCase();
+        l.requested_categories, l.company, l.address, l.id_number, l.notes,
+        l.client_number, l.client_number ? l.client_number.replace(/^BSD-C-/,'') : '', clientNumDigits].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -545,7 +553,7 @@ function renderTable(){
       nameCell = `<div class="primary-name">${esc(bizName)}</div><div class="sub-name">${esc(personName)}</div>`;
       cityCell = esc(l.business_city || l.city || '—');
     } else {
-      nameCell = `<div class="primary-name">${esc(personName)}</div>`;
+      nameCell = `<div class="primary-name">${esc(personName)} ${clientNumberBadge(l)}</div>`;
       cityCell = esc(l.requested_area || l.city || '—');
     }
 
@@ -748,8 +756,10 @@ function openLeadForm(id, forcedType, prefillData){
     <form id="leadForm">
       <div class="form-grid">
         ${lead ? `<div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;">
-          מספר מזהה: <b>${esc(lead.internal_code||'—')}</b> · הוזן ע"י: <b>${esc(userName(lead.created_by))}</b> בתאריך ${fmtDate(lead.created_at)}
-        </div>` : ''}
+          ${lead.client_number ? `מספר קונה/משקיע: <b style="font-size:.95rem;">${esc(lead.client_number)}</b> · ` : ''}הוזן ע"י: <b>${esc(userName(lead.created_by))}</b> בתאריך ${fmtDate(lead.created_at)}
+          ${(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin' && lead.internal_code) ? `<div style="margin-top:4px;font-size:.68rem;color:#aaa;">מזהה טכני (מנהל בלבד): ${esc(lead.internal_code)}</div>` : ''}
+        </div>
+        ${lead.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 רשומה זו נמצאת בארכיון${lead.archive_reason ? ' — סיבה: '+esc(lead.archive_reason) : ''}${CURRENT_PROFILE && CURRENT_PROFILE.role==='admin' ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreLeadFromArchive('${lead.id}')">↩️ שחזר מהארכיון</button>` : ''}</div>` : (CURRENT_PROFILE && CURRENT_PROFILE.role==='admin' ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveLead('${lead.id}')">📁 העבר לארכיון</button></div>` : '')}` : ''}
         <div class="field"><label>מטפל כרגע</label><select id="handled_by">${userOptions(lead?.handled_by)}</select></div>
         <div class="section-h">פרטים כלליים</div>
         ${fieldRow('first_name','שם פרטי', lead?.first_name || pf.first_name)}
@@ -1222,6 +1232,30 @@ async function addNote(tableName, recordId){
   await markNotesRead(tableName, recordId);
 }
 
+async function archiveLead(id){
+  if (CURRENT_PROFILE.role !== 'admin'){ toast('רק מנהל יכול להעביר לארכיון'); return; }
+  const { count: matchCount } = await window.supabaseClient.from('matches').select('id', {count:'exact', head:true}).eq('buyer_id', id);
+  const { count: taskCount } = await window.supabaseClient.from('tasks').select('id', {count:'exact', head:true}).eq('buyer_id', id);
+  if ((matchCount||0) > 0 || (taskCount||0) > 0){
+    toast(`לא ניתן להעביר לארכיון: קיימות ${matchCount||0} התאמות ו-${taskCount||0} משימות מקושרות. יש לטפל בהן תחילה.`);
+    return;
+  }
+  const reason = prompt('יש לציין סיבה להעברה לארכיון:');
+  if (!reason || !reason.trim()){ toast('העברה לארכיון בוטלה - נדרשת סיבה'); return; }
+  if (!confirm('להעביר רשומה זו לארכיון? היא לא תופיע ברשימות/חיפוש/התאמות, אך תישמר במלואה ואפשר לשחזר בכל עת.')) return;
+  const { error } = await window.supabaseClient.from('leads').update({ is_archived: true, archived_at: new Date().toISOString(), archived_by: CURRENT_PROFILE.id, archive_reason: reason.trim() }).eq('id', id);
+  if (error){ toast('שגיאה בהעברה לארכיון: ' + error.message); return; }
+  toast('הועבר לארכיון');
+  await loadLeads();
+}
+async function restoreLeadFromArchive(id){
+  if (CURRENT_PROFILE.role !== 'admin'){ toast('רק מנהל יכול לשחזר מארכיון'); return; }
+  if (!confirm('לשחזר רשומה זו מהארכיון?')) return;
+  const { error } = await window.supabaseClient.from('leads').update({ is_archived: false, archived_at: null, archived_by: null, archive_reason: null }).eq('id', id);
+  if (error){ toast('שגיאה בשחזור: ' + error.message); return; }
+  toast('שוחזר מהארכיון');
+  await loadLeads();
+}
 async function deleteLead(id){
   if (!confirm('למחוק רשומה זו? הפעולה בלתי הפיכה.')) return;
   const { error } = await window.supabaseClient.from('leads').delete().eq('id', id);

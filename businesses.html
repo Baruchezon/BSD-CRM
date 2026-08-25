@@ -245,6 +245,11 @@
 <script src="js/notesRecording.js?v=2"></script>
 <script>
 let ALL_BIZ = [];
+let ARCHIVED_BIZ = [];
+function bizNumberBadge(b){
+  if (!b || !b.business_number) return '';
+  return `<span style="display:inline-block;background:#0e1b34;color:#e8cf8a;font-weight:700;font-size:.72rem;padding:2px 9px;border-radius:12px;letter-spacing:.3px;white-space:nowrap;">${esc(b.business_number)}</span>`;
+}
 let ALL_SELLERS = [];
 let ALL_USERS = [];
 
@@ -315,7 +320,8 @@ async function loadBusinesses(){
   const { data, error } = await q;
   if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
   // עסקים ללא הסכם כלל מנוהלים כעת ב"לידים" — כאן מוצגים רק מי שנשלח אליו הסכם או שחתם
-  ALL_BIZ = (data || []).filter(b => b.agreement_status === 'נשלח הסכם לחתימה' || b.agreement_status === 'יש הסכם חתום');
+  ALL_BIZ = (data || []).filter(b => (b.agreement_status === 'נשלח הסכם לחתימה' || b.agreement_status === 'יש הסכם חתום') && !b.is_archived);
+  ARCHIVED_BIZ = (data || []).filter(b => b.is_archived);
   await loadGrantCounts();
   await loadFilesIndicator();
   await loadExtendedSummaryIndicator();
@@ -580,8 +586,10 @@ function renderTable(){
     if (agreement !== 'all' && (b.agreement_status || 'אין הסכם') !== agreement) return false;
     if (createdBy !== 'all' && b.created_by !== createdBy) return false;
     if (search){
+      const bizNumDigits = (b.business_number||'').match(/(\d{3,4})$/)?.[1] || '';
       const hay = [b.internal_name, b.owner_name, b.owner_phone, b.city, b.field, b.category, b.subcategory, b.status, String(b.asking_price||''),
-        b.short_description, b.sale_reason, b.region, b.address, b.source, b.notes, b.id_number, b.entity_type, b.removal_reason, b.sold_to].join(' ').toLowerCase();
+        b.short_description, b.sale_reason, b.region, b.address, b.source, b.notes, b.id_number, b.entity_type, b.removal_reason, b.sold_to,
+        b.business_number, b.business_number ? b.business_number.replace(/^BSD-B-/,'') : '', bizNumDigits].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -623,11 +631,12 @@ function renderTable(){
           <div>
             <div class="primary-name" style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
               <span>${statusEmoji}${esc(b.internal_name)}</span>
+              ${bizNumberBadge(b)}
               ${filesIndicatorBadge(b.id)}
               ${notesIconStyle(b.id) ? `<span onclick="event.stopPropagation();openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(b.id))}" style="cursor:pointer;font-size:.72rem;color:#1a3d8f;font-weight:700;white-space:nowrap;">🔵 קיימת הערה</span>` : ''}
             </div>
             ${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}
-            ${b.internal_code?`<div class="sub-name" style="font-size:.72rem;color:#999;">${esc(b.internal_code)}</div>`:''}
+            ${(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin' && b.internal_code)?`<div class="sub-name" style="font-size:.68rem;color:#bbb;" title="מזהה טכני (מנהל בלבד)">${esc(b.internal_code)}</div>`:''}
             <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${distributionBadge(b)}${publicListingBadge(b)}</div>
           </div>
         </div>
@@ -731,9 +740,11 @@ function openBizForm(id){
       <div class="form-grid">
         <div class="section-h">זיהוי</div>
         <div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;">
-          מספר מזהה פנימי: <b>${biz?.internal_code ? esc(biz.internal_code) : 'ייווצר אוטומטית עם השמירה'}</b>
+          מספר עסק: <b style="font-size:.95rem;">${biz?.business_number ? esc(biz.business_number) : 'ייווצר אוטומטית עם השמירה'}</b>
           ${biz ? ` · הוזן ע"י: <b>${esc(userName(biz.created_by))}</b> בתאריך ${fmtDate(biz.created_at)}` : ''}
+          ${(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin' && biz?.internal_code) ? `<div style="margin-top:4px;font-size:.68rem;color:#aaa;">מזהה טכני (מנהל בלבד): ${esc(biz.internal_code)}</div>` : ''}
         </div>
+        ${biz?.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 עסק זה נמצא בארכיון${biz.archive_reason ? ' — סיבה: '+esc(biz.archive_reason) : ''}${CURRENT_PROFILE && CURRENT_PROFILE.role==='admin' ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${biz.id}')">↩️ שחזר מהארכיון</button>` : ''}</div>` : (biz && CURRENT_PROFILE && CURRENT_PROFILE.role==='admin' ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveBiz('${biz.id}')">📁 העבר לארכיון</button></div>` : '')}
         ${fieldRow('internal_name','שם העסק (פנימי)', biz?.internal_name)}
         <div class="field">
           <label>שם אנונימי להצגה</label>
@@ -1353,6 +1364,7 @@ function renderAnonBizGrid(){
         <div style="font-weight:700;color:#0e1b34;">${esc(b.anon_display_name || b.field || 'עסק')} ${b.category ? '· ' + esc(b.category) : ''}</div>
         ${agreementBadge}
       </div>
+      <div style="margin-top:6px;font-size:.72rem;color:#8a6a2a;background:#fbf3de;display:inline-block;padding:2px 10px;border-radius:10px;font-weight:700;">מספר עסק ${b.business_number ? esc(b.business_number) : '⚠️ חסר - יש להשלים לפני שליחה'}</div>
       <div style="font-size:.82rem;color:#665;margin-top:4px;">
         ${b.city ? '📍 ' + esc(b.city) + ' &nbsp; ' : ''}
         ${b.years_active ? '🕐 ' + esc(b.years_active) + ' שנות פעילות &nbsp;' : ''}
@@ -1403,11 +1415,14 @@ let SEND_ANON_BIZ_ID = null, SEND_ANON_FILE = null, SEND_ANON_BUYER = null;
 async function openSendAnonFileModal(bizId, fileId){
   const file = (ANON_BIZ_FILES[bizId] || []).find(f => f.id === fileId);
   if (!file){ toast('שגיאה: הקובץ לא נמצא'); return; }
+  const bizForNumCheck = ALL_ANON_BIZ.find(b => b.id === bizId) || ALL_BIZ.find(b => b.id === bizId);
+  if (!bizForNumCheck || !bizForNumCheck.business_number){ toast('לא ניתן לשלוח אנונימי: לעסק אין מספר עסק. יש להשלים לפני שליחה.'); return; }
   await openSendAnonModal(bizId, file);
 }
 async function openSendAnonSummaryModal(bizId){
   const biz = ALL_ANON_BIZ.find(b => b.id === bizId);
   if (!biz || !biz.anon_summary){ toast('שגיאה: אין תקציר ראשוני מוכן לעסק זה'); return; }
+  if (!biz.business_number){ toast('לא ניתן לשלוח אנונימי: לעסק אין מספר עסק. יש להשלים לפני שליחה.'); return; }
   await openSendAnonModal(bizId, null);
 }
 
@@ -3431,6 +3446,39 @@ async function loadAnonDistSummary(bizId){
   `;
 }
 
+async function archiveBiz(id){
+  if (CURRENT_PROFILE.role !== 'admin'){ toast('רק מנהל יכול להעביר לארכיון'); return; }
+  const { count: matchCount } = await window.supabaseClient.from('matches').select('id', {count:'exact', head:true}).eq('business_id', id);
+  const { count: taskCount } = await window.supabaseClient.from('tasks').select('id', {count:'exact', head:true}).eq('business_id', id);
+  if ((matchCount||0) > 0 || (taskCount||0) > 0){
+    toast(`לא ניתן להעביר לארכיון: קיימות ${matchCount||0} התאמות ו-${taskCount||0} משימות מקושרות. יש לטפל בהן תחילה.`);
+    return;
+  }
+  const reason = prompt('יש לציין סיבה להעברה לארכיון:');
+  if (!reason || !reason.trim()){ toast('העברה לארכיון בוטלה - נדרשת סיבה'); return; }
+  if (!confirm('להעביר עסק זה לארכיון? הוא לא יופיע ברשימות/חיפוש/התאמות/אתר, אך יישמר במלואו ואפשר לשחזר בכל עת.')) return;
+  const { error } = await window.supabaseClient.from('businesses').update({ is_archived: true, archived_at: new Date().toISOString(), archived_by: CURRENT_PROFILE.id, archive_reason: reason.trim() }).eq('id', id);
+  if (error){ toast('שגיאה בהעברה לארכיון: ' + error.message); return; }
+  toast('הועבר לארכיון');
+  closeBizForm();
+  await loadBusinesses();
+}
+async function restoreBizFromArchive(id){
+  if (CURRENT_PROFILE.role !== 'admin'){ toast('רק מנהל יכול לשחזר מארכיון'); return; }
+  if (!confirm('לשחזר עסק זה מהארכיון לרשימה הרגילה?')) return;
+  const { error } = await window.supabaseClient.from('businesses').update({ is_archived: false, archived_at: null, archived_by: null, archive_reason: null }).eq('id', id);
+  if (error){ toast('שגיאה בשחזור: ' + error.message); return; }
+  toast('שוחזר מהארכיון');
+  closeBizForm();
+  await loadBusinesses();
+}
+function openArchiveView(){
+  if (CURRENT_PROFILE.role !== 'admin'){ toast('רק מנהל יכול לצפות בארכיון'); return; }
+  const rows = ARCHIVED_BIZ.map(b => `<tr><td>${esc(b.internal_name)}</td><td>${esc(b.archive_reason||'—')}</td><td>${fmtDate(b.archived_at)}</td><td><button type="button" class="btn btn-ghost" onclick="restoreBizFromArchive('${b.id}')">↩️ שחזר</button></td></tr>`).join('') || '<tr><td colspan="4">אין עסקים בארכיון</td></tr>';
+  const modal = document.getElementById('bizFormModal') || document.getElementById('modalRoot');
+  toast(`${ARCHIVED_BIZ.length} עסקים בארכיון`);
+  alert('עסקים בארכיון:\n' + ARCHIVED_BIZ.map(b=>`- ${b.internal_name} (${b.archive_reason||'ללא סיבה'})`).join('\n') || 'אין עסקים בארכיון');
+}
 async function deleteBiz(id){
   if (!confirm('למחוק עסק זה? הפעולה בלתי הפיכה.')) return;
   const { error } = await window.supabaseClient.from('businesses').delete().eq('id', id);

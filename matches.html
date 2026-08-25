@@ -300,6 +300,8 @@ function closeModal(){
 }
 function buyerName(id){ const b = ALL_BUYERS.find(x=>x.id===id); return b ? b.full_name : '—'; }
 function bizName(id){ const b = ALL_BIZ.find(x=>x.id===id); return b ? b.internal_name : '—'; }
+function buyerNumTag(id){ const b = ALL_BUYERS.find(x=>x.id===id); return b && b.client_number ? `<span style="display:inline-block;background:#0e1b34;color:#e8cf8a;font-weight:700;font-size:.68rem;padding:1px 7px;border-radius:10px;margin-inline-start:5px;">${esc(b.client_number)}</span>` : ''; }
+function bizNumTag(id){ const b = ALL_BIZ.find(x=>x.id===id); return b && b.business_number ? `<span style="display:inline-block;background:#0e1b34;color:#e8cf8a;font-weight:700;font-size:.68rem;padding:1px 7px;border-radius:10px;margin-inline-start:5px;">${esc(b.business_number)}</span>` : ''; }
 function buyerLabel(id){ const b = ALL_BUYERS.find(x=>x.id===id); return b ? b.full_name : ''; }
 function bizLabel(id){ const b = ALL_BIZ.find(x=>x.id===id); return b ? b.internal_name : ''; }
 function userName(id){
@@ -310,8 +312,8 @@ function userName(id){
 
 async function loadLookups(){
   const [{data:buyers}, {data:biz}, {data:users}] = await Promise.all([
-    window.supabaseClient.from('leads').select('id, full_name').eq('type','buyer'),
-    window.supabaseClient.from('businesses').select('id, internal_name'),
+    window.supabaseClient.from('leads').select('id, full_name, client_number').eq('type','buyer'),
+    window.supabaseClient.from('businesses').select('id, internal_name, business_number'),
     window.supabaseClient.rpc('get_active_users_basic')
   ]);
   ALL_BUYERS = buyers || []; ALL_BIZ = biz || []; ALL_USERS = users || [];
@@ -368,8 +370,8 @@ function daysSince(iso){
 function matchRowHTML(m, opts){
   opts = opts || {};
   const cells = [];
-  if (!opts.hideBuyer) cells.push(`<td data-label="קונה">${esc(buyerName(m.buyer_id))}</td>`);
-  if (!opts.hideBiz) cells.push(`<td data-label="עסק">${esc(bizName(m.business_id))}</td>`);
+  if (!opts.hideBuyer) cells.push(`<td data-label="קונה">${esc(buyerName(m.buyer_id))}${buyerNumTag(m.buyer_id)}</td>`);
+  if (!opts.hideBiz) cells.push(`<td data-label="עסק">${esc(bizName(m.business_id))}${bizNumTag(m.business_id)}</td>`);
   cells.push(`<td data-label="סטטוס"><span class="status-pill" style="${statusStyle(m.status)}">${esc(m.status)}</span></td>`);
   cells.push(`<td data-label="רמת חשיפה">${esc(DISCLOSURE_LABELS[m.disclosure_level||1]||'—')}</td>`);
   cells.push(`<td data-label="פעולה הבאה">${esc(m.next_action)||'<span style="color:#c0392b;font-weight:700;">— אין —</span>'}</td>`);
@@ -417,7 +419,7 @@ function renderTable(){
     rows.forEach(m=>{ (groups[m.business_id] = groups[m.business_id] || []).push(m); });
     const bizIds = Object.keys(groups).sort((a,b)=>bizName(a).localeCompare(bizName(b),'he'));
     body.innerHTML = bizIds.map(bizId=>`
-      <tr><td colspan="7" style="background:var(--navy);color:#fff;font-weight:700;padding:9px 14px;">🏢 ${esc(bizName(bizId))} <span style="font-weight:400;opacity:.75;">(${groups[bizId].length} קונים)</span></td></tr>
+      <tr><td colspan="7" style="background:var(--navy);color:#fff;font-weight:700;padding:9px 14px;">🏢 ${esc(bizName(bizId))}${bizNumTag(bizId)} <span style="font-weight:400;opacity:.75;">(${groups[bizId].length} קונים)</span></td></tr>
       ${groups[bizId].map(m=>matchRowHTML(m,{hideBiz:true, showDaysIdle:true})).join('')}
     `).join('');
     return;
@@ -429,7 +431,7 @@ function renderTable(){
     rows.forEach(m=>{ (groups[m.buyer_id] = groups[m.buyer_id] || []).push(m); });
     const buyerIds = Object.keys(groups).sort((a,b)=>buyerName(a).localeCompare(buyerName(b),'he'));
     body.innerHTML = buyerIds.map(buyerId=>`
-      <tr><td colspan="7" style="background:var(--navy);color:#fff;font-weight:700;padding:9px 14px;">🧍 ${esc(buyerName(buyerId))} <span style="font-weight:400;opacity:.75;">(${groups[buyerId].length} עסקים)</span></td></tr>
+      <tr><td colspan="7" style="background:var(--navy);color:#fff;font-weight:700;padding:9px 14px;">🧍 ${esc(buyerName(buyerId))}${buyerNumTag(buyerId)} <span style="font-weight:400;opacity:.75;">(${groups[buyerId].length} עסקים)</span></td></tr>
       ${groups[buyerId].map(m=>matchRowHTML(m,{hideBuyer:true, showDaysIdle:true})).join('')}
     `).join('');
     return;
