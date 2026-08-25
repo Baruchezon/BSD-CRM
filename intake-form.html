@@ -562,7 +562,7 @@ function setVal(id, v){ const el = document.getElementById(id); if (el && (v !==
       setVal('sale_reason', biz.sale_reason);
       setVal('notes', biz.notes);
 
-      document.querySelector('.filler-banner > div:first-child').innerHTML = '📋 <b>מילוי טופס פגישה לעסק קיים: ' + esc(biz.internal_name || '') + '</b> - הפרטים הוזנו מראש מכרטיס העסק, ניתן לערוך ולהשלים';
+      document.querySelector('.filler-banner > div:first-child').innerHTML = '📋 <b>מילוי טופס פגישה לעסק קיים: ' + esc(biz.internal_name || '') + (biz.business_number ? ' (' + esc(biz.business_number) + ')' : '') + '</b> - הפרטים הוזנו מראש מכרטיס העסק, ניתן לערוך ולהשלים';
       const submitBtn = document.getElementById('submitBtn');
       submitBtn.textContent = '✅ שמור טופס לעסק הקיים';
     }

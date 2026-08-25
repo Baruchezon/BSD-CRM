@@ -246,18 +246,20 @@ const MATCH_STATUSES = ['התאמה חדשה','נשלח לקונה - ממתין 
 
 async function loadRelatedLookups(){
   const [{data: leads}, {data: biz}, {data: matches}] = await Promise.all([
-    window.supabaseClient.from('leads').select('id, full_name, first_name, last_name, type'),
-    window.supabaseClient.from('businesses').select('id, internal_name'),
+    window.supabaseClient.from('leads').select('id, full_name, first_name, last_name, type, client_number'),
+    window.supabaseClient.from('businesses').select('id, internal_name, business_number'),
     window.supabaseClient.from('matches').select('id, buyer_id, business_id, status')
   ]);
   ALL_LEADS = leads || []; ALL_BIZ = biz || []; ALL_MATCHES = matches || [];
 }
 function leadName(id){ const l = ALL_LEADS.find(x=>x.id===id); return l ? (l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || '—') : '—'; }
 function bizName(id){ const b = ALL_BIZ.find(x=>x.id===id); return b ? b.internal_name : '—'; }
-function matchLabel(id){ const m = ALL_MATCHES.find(x=>x.id===id); return m ? `${leadName(m.buyer_id)} × ${bizName(m.business_id)}` : '—'; }
+function leadNameWithNum(id){ const l = ALL_LEADS.find(x=>x.id===id); if(!l) return '—'; const n = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || '—'; return l.client_number ? `${n} (${l.client_number})` : n; }
+function bizNameWithNum(id){ const b = ALL_BIZ.find(x=>x.id===id); if(!b) return '—'; return b.business_number ? `${b.internal_name} (${b.business_number})` : b.internal_name; }
+function matchLabel(id){ const m = ALL_MATCHES.find(x=>x.id===id); return m ? `${leadNameWithNum(m.buyer_id)} × ${bizNameWithNum(m.business_id)}` : '—'; }
 function relatedRecordOptions(type, selected){
-  if (type === 'lead') return ALL_LEADS.map(l=>`<option value="${l.id}" ${l.id===selected?'selected':''}>${esc(l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || '—')}</option>`).join('');
-  if (type === 'business') return ALL_BIZ.map(b=>`<option value="${b.id}" ${b.id===selected?'selected':''}>${esc(b.internal_name||'—')}</option>`).join('');
+  if (type === 'lead') return ALL_LEADS.map(l=>`<option value="${l.id}" ${l.id===selected?'selected':''}>${esc(leadNameWithNum(l.id))}</option>`).join('');
+  if (type === 'business') return ALL_BIZ.map(b=>`<option value="${b.id}" ${b.id===selected?'selected':''}>${esc(bizNameWithNum(b.id))}</option>`).join('');
   if (type === 'match') return ALL_MATCHES.map(m=>`<option value="${m.id}" ${m.id===selected?'selected':''}>${esc(matchLabel(m.id))}</option>`).join('');
   return '';
 }
