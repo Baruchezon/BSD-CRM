@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608251530';
+    var PAGE_BUILD = '202608251620';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608251530">
+<link rel="stylesheet" href="css/style.css?v=202608251620">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -236,7 +236,7 @@
 
 <script src="js/config.js?v=202608111530"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202608251530"></script>
+<script src="js/auth.js?v=202608251620"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
@@ -3214,6 +3214,19 @@ async function saveBiz(e){
   if (wasAnonActive && nowAnonActive && !anonBlocked && savedBizId){
     await maybeAutoRefreshAnonSummary(savedBizId, existingBiz, payload);
   }
+  // תיקון 25.08.2026: מסך "עסקים למכירה" מציג רק עסקים עם הסכם שנשלח/נחתם
+  // (ראו הסינון ב-loadBusinesses) - עסק בלי הסכם פשוט לא מופיע כאן, גם אם
+  // הוא ה-"עסק חדש" שממש נוצר הרגע דרך כפתור "+ עסק חדש" באותו מסך. לפני
+  // התיקון, ההפניה חזרה ל"לידים" קרתה רק אם המשתמש הגיע לכאן מ-leads-hub
+  // (from=leads-hub) - אז עסק/עריכה חדשים שנוצרו ישירות כאן נשמרו בהצלחה,
+  // אבל נעלמו בשקט מהמסך בלי שום הודעה, בדיוק כמו שברוך דיווח. עכשיו
+  // ההפניה קורית תמיד כשאין הסכם, בלי תלות בדרך ההגעה למסך, ועם הודעה
+  // אחת ברורה בלבד (לא כפולה עם הודעת "נשמר בהצלחה" הרגילה).
+  if (payload.agreement_status !== 'יש הסכם חתום' && payload.agreement_status !== 'נשלח הסכם לחתימה'){
+    toast('✅ העסק נשמר בהצלחה - מוצג כעת ב"לידים" עד שישלח הסכם');
+    setTimeout(() => { location.href = 'leads-hub.html'; }, 900);
+    return;
+  }
   if (!wasAnonActive && nowAnonActive){
     toast('🪪 העסק הופץ אנונימית בהצלחה');
   } else if (wasAnonActive && !nowAnonActive){
@@ -3222,11 +3235,6 @@ async function saveBiz(e){
     toast('✅ שאר הטופס נשמר בהצלחה (השדות האנונימיים לא עודכנו - ראה הודעה למעלה)');
   } else {
     toast('✅ נשמר בהצלחה');
-  }
-  if (payload.agreement_status !== 'יש הסכם חתום' && payload.agreement_status !== 'נשלח הסכם לחתימה'
-      && new URLSearchParams(location.search).get('from') === 'leads-hub'){
-    location.href = 'leads-hub.html';
-    return;
   }
   closeModal();
   await loadBusinesses();
