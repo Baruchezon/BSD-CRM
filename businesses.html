@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608260912';
+    var PAGE_BUILD = '202608260940';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -925,11 +925,6 @@ function openBizForm(id){
         <div style="font-size:.72rem;color:#999;margin-top:4px;">${biz.internal_business_summary_generated_at ? 'נוצר לאחרונה ע"י AI: ' + fmtDateTime(biz.internal_business_summary_generated_at) : 'טרם נוצר ע"י AI'} - עריכה ידנית כאן נשמרת עם כפתור "שמירה" הרגיל בתחתית הטופס.</div>
         <button type="button" class="btn btn-ghost" style="margin-top:8px;" onclick="generateInternalSummary('${biz.id}')" id="genInternalSummaryBtn">🔄 צור תקציר עסקי מלא (AI) - לתצוגה מקדימה</button>
         <div id="genInternalSummaryStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
-        ${typeof sfCanUpload === 'function' && sfCanUpload() ? `
-        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #d8d3c4;">
-          <button type="button" class="btn btn-ghost" onclick="generateAndSaveSummaryPdf('${biz.id}','internal_full_summary','inlineFullPdfStatus')">📄 הפק PDF מהתקציר הזה (נשמר אוטומטית בתיק מכירה ← תקציר מנהלים)</button>
-          <div id="inlineFullPdfStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
-        </div>` : ''}
       </div>
 
       <div class="section-h" style="margin-top:14px;">📁 תיק מכירה (כולל מצגת אנונימית להעלאה)</div>
