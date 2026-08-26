@@ -159,7 +159,9 @@ function sfGroupForDisplay(files){
 function sfSourceBadge(f){
   if (f.source !== 'auto_generated') return '';
   const typeLabel = f.document_type === 'short_summary' ? 'תקציר קצר'
-    : f.document_type === 'internal_full_summary' ? 'תקציר עסקי מלא' : 'נוצר אוטומטית';
+    : f.document_type === 'internal_full_summary' ? 'תקציר עסקי מלא'
+    : f.document_type === 'anonymous_summary' ? 'תקציר אנונימי'
+    : 'נוצר אוטומטית';
   return `<span style="background:#eaf1fb;color:#1a4d8f;border-radius:6px;padding:1px 7px;font-size:.68rem;font-weight:700;white-space:nowrap;">🤖 ${esc(typeLabel)} · גרסה ${f.version_number||1}</span>`;
 }
 
@@ -183,6 +185,7 @@ function openSaleFileCategory(bizId, categoryKey){
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button type="button" class="btn btn-ghost" onclick="generateAndSaveSummaryPdf('${bizId}','short_summary')">📄 תקציר קצר</button>
         <button type="button" class="btn btn-ghost" onclick="generateAndSaveSummaryPdf('${bizId}','internal_full_summary')">📄 תקציר עסקי מלא</button>
+        <button type="button" class="btn btn-ghost" onclick="generateAndSaveSummaryPdf('${bizId}','anonymous_summary')">📄 תקציר אנונימי</button>
         <button type="button" class="btn btn-ghost" disabled title="בקרוב" style="opacity:.55;cursor:not-allowed;">☁️ שמירה ב-Google Drive (בקרוב)</button>
       </div>
       <div id="sfPdfGenStatus" style="font-size:.78rem;color:#999;margin-top:6px;min-height:1.1em;"></div>
