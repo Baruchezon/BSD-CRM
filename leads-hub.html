@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608260615';
+    var PAGE_BUILD = '202608260700';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -649,7 +649,8 @@ async function openY2026ReviewDetail(id){
         : `<button onclick="saveY2026ReviewEdit('${r.id}')" style="background:#fff;border:1px solid #2b5fa3;color:#2b5fa3;padding:8px 14px;border-radius:8px;font-family:inherit;cursor:pointer;">שמור שינויים</button>
         <button onclick="markY2026ReviewChecked('${r.id}')" style="background:#fff;border:1px solid #2f8f4e;color:#2f8f4e;padding:8px 14px;border-radius:8px;font-family:inherit;cursor:pointer;">✓ סמן כנבדק</button>
         ${matches.length === 0 ? `<button onclick="transferY2026Review('${r.id}')" style="background:#2b5fa3;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">${normalizeClassification(r.classification) === 'מתעניין בקורס' ? '➡️ העבר למתעניינים בקורס' : '➡️ העבר לרשומה פעילה'}</button>` : ''}
-        ${isAdmin ? `<button onclick="closeModal();hideFromY2026ReviewConfirm('${r.id}')" style="background:#b00020;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">🗑️ הסר מרשימת 2026 בלבד</button>` : ''}`}
+        ${isAdmin ? `<button onclick="closeModal();hideFromY2026ReviewConfirm('${r.id}')" style="background:#b00020;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">🗑️ הסר מרשימת 2026 בלבד</button>` : ''}
+        ${isAdmin && !isExistingBuyerOrBusiness(matches) ? `<button onclick="closeModal();hardDeleteY2026ReviewConfirm('${r.id}')" style="background:#fff;border:1px solid #7a0016;color:#7a0016;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">🗑️ מחק לצמיתות מ"לידים 2026"</button>` : ''}`}
     </div>
   `;
   document.getElementById('overlay').classList.add('open');
@@ -772,6 +773,53 @@ async function restoreY2026Review(id){
   if (error){ toast('שגיאה בשחזור: ' + error.message); return; }
   closeModal();
   toast('הרשומה שוחזרה לרשימת 2026');
+  await loadAll();
+}
+// מחיקה לצמיתות (DELETE אמיתי, לא soft-hide) - שונה מ"הסרה" למעלה. leads_2026_review
+// היא טבלה עצמאית לחלוטין ללא שום FK אליה משום טבלה אחרת (נבדק ואומת) - כך שמחיקה
+// כאן פיזית ובלתי הפיכה, אבל מבנית לא יכולה לגלוש/להשפיע על leads/businesses/
+// training_leads בשום צורה. בכל זאת, כהגנה כפולה, מותרת רק על רשומה שאין לה שום
+// התאמה קיימת כקונה (leads) או כעסק למכירה (businesses) - נבדק גם בכפתור (לא
+// מוצג כשיש התאמה) וגם כאן בפועל ממש לפני המחיקה, כדי שלא ניתן יהיה לעקוף.
+function hardDeleteY2026ReviewConfirm(id){
+  const r = Y2026_REVIEW_ROWS.find(x => x.id === id) || Y2026_REVIEW_HIDDEN_ROWS.find(x => x.id === id);
+  const name = r ? (r.full_name || 'הרשומה') : 'הרשומה';
+  const overlay = document.createElement('div');
+  overlay.id = 'hardDeleteY2026ReviewOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:99;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:460px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 12px;color:#7a0016;">מחיקה לצמיתות של ${esc(name)}</h3>
+      <p style="font-size:.88rem;color:#444;line-height:1.6;margin-bottom:14px;">הפעולה תמחק לצמיתות ובאופן בלתי הפיך את הרשומה הזו מרשימת "לידים 2026" בלבד. הרשומה אינה קיימת כקונה או כעסק במערכת - כך שלא קיימת כאן שום רשומה קונה/עסק/מוכר/שותף/מתעניין בקורס שתושפע. פעולה זו שונה מ"הסרה" הרגילה - כאן הרשומה תימחק לגמרי ולא ניתן יהיה לשחזר אותה.</p>
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button onclick="document.getElementById('hardDeleteY2026ReviewOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
+        <button onclick="hardDeleteY2026ReviewDo('${id}')" style="background:#7a0016;color:#fff;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">מחק לצמיתות</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+async function hardDeleteY2026ReviewDo(id){
+  // בדיקה חיה ממש לפני המחיקה (לא מהמטמון) - הגנה כפולה מעבר להסתרת הכפתור
+  const r = Y2026_REVIEW_ROWS.find(x => x.id === id) || Y2026_REVIEW_HIDDEN_ROWS.find(x => x.id === id);
+  if (r){
+    try {
+      const { data, error } = await window.supabaseClient.rpc('find_2026_review_matches', { p_phone: r.phone || null, p_email: r.email || null });
+      const liveMatches = error ? [] : (data || []);
+      if (isExistingBuyerOrBusiness(liveMatches)){
+        const ov = document.getElementById('hardDeleteY2026ReviewOverlay'); if (ov) ov.remove();
+        toast('לא ניתן למחוק לצמיתות - נמצאה התאמה קיימת כקונה או כעסק במערכת. ניתן להשתמש ב"הסר מרשימת 2026 בלבד" במקום.');
+        return;
+      }
+    } catch (e) { /* אם הבדיקה נכשלה, לא ממשיכים למחיקה - עדיף להיזהר */
+      const ov = document.getElementById('hardDeleteY2026ReviewOverlay'); if (ov) ov.remove();
+      toast('שגיאה בבדיקת התאמה לפני המחיקה - המחיקה בוטלה למען הזהירות.');
+      return;
+    }
+  }
+  const { error } = await window.supabaseClient.from('leads_2026_review').delete().eq('id', id);
+  const ov = document.getElementById('hardDeleteY2026ReviewOverlay'); if (ov) ov.remove();
+  if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
+  toast('הרשומה נמחקה לצמיתות מ"לידים 2026" בלבד. שום רשומה אחרת במערכת לא נגעה.');
   await loadAll();
 }
 async function openHiddenY2026ReviewPanel(){
