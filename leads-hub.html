@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608260430';
+    var PAGE_BUILD = '202608260615';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -465,7 +465,11 @@ function toggleY2026ShowExistsElsewhere(){
 // באנגלית (seller/buyer/training) במקום הסיווג העברי הרגיל. הפונקציה הזו רק
 // מפרשת אותם לצורך תצוגה/לוגיקה - היא לעולם לא כותבת/משנה את הערך המאוחסן.
 function normalizeClassification(c){
-  const legacyMap = { seller: 'מוכר עסק', buyer: 'קונה עסק', training: 'מתעניין בקורס' };
+  // seller/buyer/training הם ערכי ייבוא ישנים עם אותה משמעות ודאית כמו הסיווג
+  // העברי. partner הוא ערך ייבוא ישן ללא מיפוי ודאי לאחת משלוש הקטגוריות
+  // (מוכר/קונה/קורס) - לפי כלל "אם הסיווג אינו ודאי, אין לנחש", הוא מטופל
+  // כ-unclassified ("דורש בדיקה") לצורך תצוגה/סינון, עם אפשרות עריכה ידנית.
+  const legacyMap = { seller: 'מוכר עסק', buyer: 'קונה עסק', training: 'מתעניין בקורס', partner: 'unclassified' };
   return legacyMap[c] || c;
 }
 function classificationBadge(c){
