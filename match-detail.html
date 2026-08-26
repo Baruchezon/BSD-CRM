@@ -11,7 +11,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608251215';
+    var PAGE_BUILD = '202608260746';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -38,7 +38,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="js/pdfPipeline.js?v=202608261"></script>
 <link rel="stylesheet" href="css/style.css?v=202608251215">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -663,18 +663,13 @@ async function generateMeetingPdfBlob(meetingId, forceLevel){
   window.scrollTo(0,0);
   await nextPaint();
   try{
-    if (typeof window.html2pdf !== 'function') throw new Error('html2pdf לא נטען - בדוק חסימת רשת ל-CDN');
-    let worker, canvas, attempt = 1;
-    while (true){
-      worker = window.html2pdf().set({ margin:10, filename, html2canvas:{scale:2,useCORS:true}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} }).from(el);
-      await worker.toCanvas();
-      canvas = worker.prop.canvas;
-      if ((isCanvasBlank(canvas) || canvas.width<10 || canvas.height<10) && attempt<4){ attempt++; await new Promise(r=>setTimeout(r,400*attempt)); continue; }
-      break;
-    }
-    if (isCanvasBlank(canvas) || canvas.width<10 || canvas.height<10) throw new Error('הצילום יצא ריק לאחר ' + attempt + ' ניסיונות');
-    const blob = await worker.outputPdf('blob');
-    if (!blob || blob.size < 1000) throw new Error('קובץ PDF פגום/קטן מדי');
+    // תוקן 26.08.2026 - שורש הבעיה: html2pdf.js (html2canvas הישן) שובר
+    // עברית מעורבת עם מספרים/אנגלית/מרכאות (למשל שם עסק עם בע"מ, מספרי
+    // טלפון) - נבדק בפועל על קובץ שהורד למחשב, לא רק בדפדפן. הוחלף
+    // ב-bsdRenderElementToPdf (js/pdfPipeline.js) שמבוסס על html2canvas-pro
+    // ותוקן ואומת על אותה בעיה בדיוק. שאר הארכיטקטורה (jsPDF, אותו
+    // printTemplate) זהה - זו החלפת שכבת הצילום בלבד, לא מנגנון מקביל.
+    const { blob } = await bsdRenderElementToPdf(el);
     return { blob, filename };
   } finally { overlay.style.display = 'none'; }
 }

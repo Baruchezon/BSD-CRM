@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608251938';
+    var PAGE_BUILD = '202608260746';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -241,7 +241,8 @@
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608251215"></script>
-<script src="js/saleFileModule2.js?v=202608192145"></script>
+<script src="js/pdfPipeline.js?v=202608261"></script>
+<script src="js/saleFileModule2.js?v=202608261"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script>
 let ALL_BIZ = [];
@@ -904,6 +905,18 @@ function openBizForm(id){
 
         <button type="button" class="btn btn-ghost" style="margin-top:10px;" onclick="previewAnonCard('${biz.id}')">👁️ תצוגה מקדימה - איך זה נראה אנונימי</button>
       </div>
+
+      <div class="section-h" style="margin-top:14px;">📝 תקציר עסקי פנימי מלא</div>
+      <div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;">
+        <div style="font-size:.78rem;color:#665;margin-bottom:8px;">
+          מסמך פנימי בלבד - בניגוד לתקציר האנונימי, מותר ורצוי שיכלול פרטים מזהים (שם העסק, בעלים, טלפון, כתובת) כאשר הם קיימים. נפרד לחלוטין מהתקציר האנונימי, לעולם לא מוצג לגורם שאין לו הרשאת צפייה מלאה בעסק.
+        </div>
+        <textarea id="internal_business_summary" rows="10" placeholder="נוצר אוטומטית מנתוני העסק, או הוזן/נערך ידנית" style="width:100%;padding:8px 10px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;">${esc(biz.internal_business_summary)}</textarea>
+        <div style="font-size:.72rem;color:#999;margin-top:4px;">${biz.internal_business_summary_generated_at ? 'נוצר לאחרונה ע"י AI: ' + fmtDateTime(biz.internal_business_summary_generated_at) : 'טרם נוצר ע"י AI'} - עריכה ידנית כאן נשמרת עם כפתור "שמירה" הרגיל בתחתית הטופס.</div>
+        <button type="button" class="btn btn-ghost" style="margin-top:8px;" onclick="generateInternalSummary('${biz.id}')" id="genInternalSummaryBtn">🔄 צור תקציר עסקי מלא (AI) - לתצוגה מקדימה</button>
+        <div id="genInternalSummaryStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
+      </div>
+
       <div class="section-h" style="margin-top:14px;">📁 תיק מכירה (כולל מצגת אנונימית להעלאה)</div>
       <div id="saleFileModuleBox" style="margin-bottom:6px;"></div>
       <div id="anonDistSummaryBox" style="margin-top:10px;"></div>
@@ -1715,6 +1728,139 @@ async function invokeAnonCardFn(body){
     throw new Error(anonFunctionErrorMessage(error, ctx));
   }
   return data;
+}
+
+// ============================================================================
+// תקציר עסקי פנימי מלא (26.08.2026) - פונקציה נפרדת לגמרי מ-generate-anonymous-card
+// (invokeAnonCardFn למעלה); קוראת ל-generate-business-summary עם mode:'internal_full'.
+// אין כאן שום כלל אנונימיזציה - מותר להשתמש בכל נתוני העסק כולל מזהים.
+// ============================================================================
+async function invokeBusinessSummaryFn(body){
+  const { data, error } = await window.supabaseClient.functions.invoke('generate-business-summary', { body });
+  if (error){
+    let ctx = null;
+    try { ctx = await error.context?.json?.(); } catch(_e){}
+    throw new Error(anonFunctionErrorMessage(error, ctx));
+  }
+  return data;
+}
+
+async function generateInternalSummary(bizId){
+  const btn = document.getElementById('genInternalSummaryBtn');
+  const statusEl = document.getElementById('genInternalSummaryStatus');
+  if (btn) btn.disabled = true;
+  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = '🤖 כותב טיוטת תקציר עסקי מלא... (עשוי לקחת כמה שניות)'; }
+  try {
+    const data = await invokeBusinessSummaryFn({ business_id: bizId, mode: 'internal_full' });
+    if (!data?.text){
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ ' + (data?.warnings?.[0] || 'אין מספיק מידע ליצירת תקציר אמין - הוסף פרטים לעסק ונסה שוב'); }
+      return;
+    }
+    if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = ''; }
+    openInternalSummaryDraftPreview(bizId, data.text);
+  } catch (e){
+    const msg = e && e.message ? e.message : String(e);
+    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
+    toast('⚠️ ' + msg);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function closeInternalSummaryDraftPreview(){
+  const el = document.getElementById('internalSummaryDraftOverlay');
+  if (el) el.remove();
+}
+
+// תצוגה מקדימה + עריכה + אישור מפורש לפני שמירה - בדיוק כמו openAnonDraftPreview,
+// כדי שלעולם לא נדרוס טקסט קיים (ידני או AI קודם) בלי אישור מפורש של המשתמש.
+function openInternalSummaryDraftPreview(bizId, draftText){
+  closeInternalSummaryDraftPreview();
+  const overlay = document.createElement('div');
+  overlay.id = 'internalSummaryDraftOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:98;padding:40px 20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:640px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">תצוגה מקדימה - תקציר עסקי מלא (AI)</h3>
+      <div style="font-size:.78rem;color:#999;margin-bottom:12px;">זו טיוטה בלבד - שום דבר לא נשמר עדיין. ניתן לערוך לפני האישור.</div>
+      <textarea id="internalSummaryDraftText" rows="14" style="width:100%;padding:8px 10px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;">${esc(draftText || '')}</textarea>
+      <div id="internalSummaryDraftStatus" style="font-size:.78rem;color:#999;margin-top:8px;min-height:1.2em;"></div>
+      <div style="display:flex;justify-content:space-between;gap:10px;margin-top:16px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-ghost" onclick="generateInternalSummary('${bizId}')">🔄 יצירה מחדש (AI)</button>
+        <div style="display:flex;gap:10px;">
+          <button type="button" class="btn btn-ghost" onclick="closeInternalSummaryDraftPreview()">ביטול</button>
+          <button type="button" class="btn btn-primary" onclick="confirmInternalSummaryDraft('${bizId}')">✅ אישור ושמירה</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+// ============================================================================
+// הפקת PDF ממודול התקצירים - נקרא מהכפתורים שנבנים ב-js/saleFileModule2.js
+// בתוך קטגוריית "תקציר מנהלים". משתמש בטקסט הקיים בפועל בטופס (short_description
+// / internal_business_summary) - לא יוצר טקסט חדש כאן, ולא שומר PDF אם עדיין
+// אין טקסט. כל הפקה = גרסה חדשה (saveAutoGeneratedSummaryPdf), לעולם לא דריסה.
+// ============================================================================
+async function generateAndSaveSummaryPdf(bizId, documentType){
+  const biz = ALL_BIZ.find(b => b.id === bizId) || {};
+  const statusEl = document.getElementById('sfPdfGenStatus');
+  let text, label;
+  if (documentType === 'short_summary'){
+    const el = document.getElementById('short_description');
+    text = (el ? el.value : biz.short_description) || '';
+    label = 'תקציר קצר';
+    if (!text.trim()){
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ אין עדיין תקציר קצר - מלא/הצע אותו בשדה "תיאור קצר של העסק" למעלה ושמור, ואז הפק PDF.'; }
+      return;
+    }
+  } else {
+    const el = document.getElementById('internal_business_summary');
+    text = (el ? el.value : biz.internal_business_summary) || '';
+    label = 'תקציר עסקי מלא';
+    if (!text.trim()){
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ אין עדיין תקציר עסקי מלא - צור אותו למעלה תחילה ("🔄 צור תקציר עסקי מלא").'; }
+      return;
+    }
+  }
+  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = '📄 מפיק PDF... (עשוי לקחת כמה שניות)'; }
+  try {
+    const bodyEl = document.createElement('div');
+    bodyEl.style.cssText = 'font-size:13px;line-height:1.9;white-space:pre-wrap;';
+    bodyEl.textContent = text;
+    const producerName = (CURRENT_PROFILE && (CURRENT_PROFILE.full_name || CURRENT_PROFILE.email)) || '';
+    const { blob } = await bsdRenderBrandedPdf({
+      titleText: `${label} — ${biz.internal_name || 'עסק'}`,
+      subtitleText: `הופק ${new Date().toLocaleDateString('he-IL')} ע"י ${producerName}`,
+      bodyEl,
+    });
+    const { versionNum } = await saveAutoGeneratedSummaryPdf(bizId, documentType, blob, label);
+    if (statusEl){ statusEl.style.color = '#1e7b34'; statusEl.textContent = `✓ הופק ונשמר - ${label}, גרסה ${versionNum}`; }
+    toast(`הופק ונשמר PDF - ${label} (גרסה ${versionNum})`);
+    await loadSaleFileModule(bizId);
+    openSaleFileCategory(bizId, 'exec_summary');
+  } catch (e){
+    const msg = e && e.message ? e.message : String(e);
+    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
+    toast('❌ שגיאה בהפקת PDF: ' + msg);
+  }
+}
+
+async function confirmInternalSummaryDraft(bizId){
+  const statusEl = document.getElementById('internalSummaryDraftStatus');
+  const text = document.getElementById('internalSummaryDraftText').value.trim() || null;
+  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = 'שומר...'; }
+  try {
+    await invokeBusinessSummaryFn({ business_id: bizId, mode: 'internal_full', action: 'confirm', text });
+    toast('התקציר העסקי המלא נשמר בהצלחה');
+    bsdLogActivity('generate_internal_summary', 'businesses', bizId);
+    closeInternalSummaryDraftPreview();
+    await loadBusinesses();
+    openBizForm(bizId);
+  } catch (e){
+    const msg = e && e.message ? e.message : String(e);
+    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
+  }
 }
 
 // ============================================================================
@@ -3085,7 +3231,13 @@ async function saveBiz(e){
     agreement_status: g('agreement_status'), handled_by: g('handled_by') || null,
     listing_status: g('listing_status'),
     removal_reason: g('listing_status') === 'removed' ? g('removal_reason') : null,
-    sold_to: g('listing_status') === 'sold' ? g('sold_to') : null
+    sold_to: g('listing_status') === 'sold' ? g('sold_to') : null,
+    // תקציר עסקי פנימי מלא - שדה חדש (26.08.2026), נשמר גם דרך כפתור
+    // "שמירה" הרגיל (כמו short_description/notes) וגם דרך זרימת ה-AI
+    // הייעודית (confirmInternalSummaryDraft) - כדי שעריכה ידנית ישירה
+    // בטקסטאריה לעולם לא תלך לאיבוד. בכוונה לא נוגעים כאן ב-*_generated_at/
+    // *_generated_by - אלה מתעדכנים רק כשה-AI בפועל יצר/אישר טקסט חדש.
+    internal_business_summary: g('internal_business_summary'),
   };
 
   // סימון אמין של שימוש AI על תיאור/הערות (סעיף 3) - נכתב ל-DB רק כאן,

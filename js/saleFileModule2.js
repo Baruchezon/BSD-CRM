@@ -129,6 +129,45 @@ function renderSaleFileCards(bizId){
   }
 }
 
+// ---------------------------------------------------------------
+// תיעוד מקור/גרסה (26.08.2026) - קבצים שנוצרו אוטומטית ע"י מודול
+// התקצירים משתייכים ל-version_group_id משותף; מציגים רק את הגרסה
+// האחרונה כשורה ראשית, עם קישור להרחבת היסטוריית הגרסאות הקודמות.
+// קבצים שהועלו ידנית (source='manual_upload' או ריק, קבצים ישנים
+// מלפני המיגרציה) ממשיכים להתנהג בדיוק כמו קודם - שום שינוי התנהגות.
+// ---------------------------------------------------------------
+function sfGroupForDisplay(files){
+  const grouped = {}; // version_group_id -> [files]
+  const standalone = [];
+  files.forEach(f => {
+    if (f.version_group_id){
+      (grouped[f.version_group_id] = grouped[f.version_group_id] || []).push(f);
+    } else {
+      standalone.push(f);
+    }
+  });
+  const primaryRows = [];
+  Object.values(grouped).forEach(group => {
+    group.sort((a,b) => (b.version_number||1) - (a.version_number||1));
+    primaryRows.push({ latest: group[0], history: group.slice(1) });
+  });
+  standalone.forEach(f => primaryRows.push({ latest: f, history: [] }));
+  primaryRows.sort((a,b) => new Date(b.latest.created_at) - new Date(a.latest.created_at));
+  return primaryRows;
+}
+
+function sfSourceBadge(f){
+  if (f.source !== 'auto_generated') return '';
+  const typeLabel = f.document_type === 'short_summary' ? 'תקציר קצר'
+    : f.document_type === 'internal_full_summary' ? 'תקציר עסקי מלא' : 'נוצר אוטומטית';
+  return `<span style="background:#eaf1fb;color:#1a4d8f;border-radius:6px;padding:1px 7px;font-size:.68rem;font-weight:700;white-space:nowrap;">🤖 ${esc(typeLabel)} · גרסה ${f.version_number||1}</span>`;
+}
+
+function toggleSfVersionHistory(groupId){
+  const el = document.getElementById('sfHistory_' + groupId);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
 function openSaleFileCategory(bizId, categoryKey){
   const cat = sfCategoryMeta(categoryKey);
   const files = SF_FILES_BY_CATEGORY[categoryKey] || [];
@@ -137,16 +176,39 @@ function openSaleFileCategory(bizId, categoryKey){
   const hasUploadPermission = sfCanUpload();
   const canUpload = hasUploadPermission && !isAndroidMobile();
   const isPhotoCat = categoryKey === 'business_photo';
+  const rows = sfGroupForDisplay(files);
+  const summaryPdfBar = categoryKey === 'exec_summary' ? `
+    <div style="background:#eef3fb;border:1px solid #cfe0f5;border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+      <div style="font-size:.78rem;color:#1a4d8f;font-weight:700;margin-bottom:6px;">✨ הפקת תקציר PDF חדש (גרסה חדשה, לא דורס קובץ קודם)</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-ghost" onclick="generateAndSaveSummaryPdf('${bizId}','short_summary')">📄 תקציר קצר</button>
+        <button type="button" class="btn btn-ghost" onclick="generateAndSaveSummaryPdf('${bizId}','internal_full_summary')">📄 תקציר עסקי מלא</button>
+        <button type="button" class="btn btn-ghost" disabled title="בקרוב" style="opacity:.55;cursor:not-allowed;">☁️ שמירה ב-Google Drive (בקרוב)</button>
+      </div>
+      <div id="sfPdfGenStatus" style="font-size:.78rem;color:#999;margin-top:6px;min-height:1.1em;"></div>
+    </div>` : '';
   panel.innerHTML = `
     <div style="background:#f7f5ef;border-radius:12px;padding:14px 16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
         <div style="font-weight:700;color:#0e1b34;">${cat.icon} ${esc(cat.label)}</div>
         <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="document.getElementById('saleFileCategoryPanel').innerHTML=''">סגור</button>
       </div>
+      ${summaryPdfBar}
       <div id="sfFilesList">
-        ${files.length === 0
+        ${rows.length === 0
           ? '<div style="color:#999;font-size:.82rem;">אין עדיין קבצים בקטגוריה זו</div>'
-          : files.map(f => sfFileRow(f, sfCanManageFile(f))).join('')}
+          : rows.map(r => {
+              const row = sfFileRow(r.latest, sfCanManageFile(r.latest));
+              if (!r.history.length) return row;
+              const gid = r.latest.version_group_id;
+              return row + `
+                <div style="padding:2px 0 8px;">
+                  <a href="#" onclick="toggleSfVersionHistory('${gid}');return false;" style="font-size:.72rem;color:#8a93ab;text-decoration:underline;">🕘 היסטוריית גרסאות קודמות (${r.history.length})</a>
+                  <div id="sfHistory_${gid}" style="display:none;margin-inline-start:12px;">
+                    ${r.history.map(h => sfFileRow(h, false)).join('')}
+                  </div>
+                </div>`;
+            }).join('')}
       </div>
       ${canUpload ? `
       <div style="margin-top:12px;border-top:1px solid #e5e1d5;padding-top:10px;">
@@ -163,16 +225,19 @@ function openSaleFileCategory(bizId, categoryKey){
 }
 
 function sfFileRow(f, canManage){
+  const isAuto = f.source === 'auto_generated';
   return `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e5e1d5;font-size:.83rem;">
-      <span>📄 ${esc(f.file_name)} <span style="color:#8a93ab;font-size:.75rem;">${f.confidentiality_level === 1 ? '· אנונימי' : '· חסוי'}</span></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e5e1d5;font-size:.83rem;flex-wrap:wrap;gap:4px;">
+      <span>📄 ${esc(f.file_name)} <span style="color:#8a93ab;font-size:.75rem;">${f.confidentiality_level === 1 ? '· אנונימי' : '· חסוי'}</span> ${sfSourceBadge(f)}
+        <span style="color:#b3a98a;font-size:.7rem;">${fmtDateTime ? fmtDateTime(f.created_at) : ''}${f.uploaded_by ? (' · ' + (typeof userName === 'function' ? userName(f.uploaded_by) : '')) : ''}</span>
+      </span>
       <span style="display:flex;gap:4px;flex-wrap:wrap;">
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="viewSaleFile('${f.id}','${esc(f.storage_path)}')">👁️ צפייה</button>
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="downloadSaleFile('${esc(f.storage_path)}','${esc(f.file_name.replace(/'/g,''))}')">📂 הורדה</button>
-        ${canManage ? `
+        ${canManage && !isAuto ? `
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="renameSaleFile('${f.id}','${esc(f.file_name.replace(/'/g,''))}')">✏️ שינוי שם</button>
-        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="changeSaleFileCategory('${f.id}','${f.category}')">🔀 שינוי קטגוריה</button>
-        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;color:#b3402c;" onclick="deleteSaleFile('${f.id}')">מחק</button>` : ''}
+        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="changeSaleFileCategory('${f.id}','${f.category}')">🔀 שינוי קטגוריה</button>` : ''}
+        ${canManage ? `<button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;color:#b3402c;" onclick="deleteSaleFile('${f.id}')">מחק</button>` : ''}
       </span>
     </div>`;
 }
@@ -553,4 +618,54 @@ async function sfConfirmSend(bizId, bizName){
     else toast('שגיאה: ' + msg);
     if (btn) bsdSetButtonLoading(btn, false);
   }
+}
+
+// ---------------------------------------------------------------
+// שמירת PDF שנוצר אוטומטית ע"י מודול התקצירים (26.08.2026) - קטגוריה
+// קיימת (exec_summary/"תקציר מנהלים"), בלי קטגוריה חדשה. גרסה חדשה בכל
+// הפקה, אף פעם לא דורס קובץ קודם. מספר הגרסה מוקצה אטומית דרך
+// allocate_sale_file_version() כדי שלא ייווצר מרוץ בין שתי הפקות
+// מקבילות לאותו סוג מסמך.
+// documentType: 'short_summary' | 'internal_full_summary'
+// ---------------------------------------------------------------
+async function saveAutoGeneratedSummaryPdf(bizId, documentType, blob, humanLabel){
+  const { data: existing, error: findErr } = await window.supabaseClient
+    .from('business_sale_files')
+    .select('version_group_id')
+    .eq('business_id', bizId)
+    .eq('document_type', documentType)
+    .eq('status', 'active')
+    .order('version_number', { ascending: false })
+    .limit(1);
+  if (findErr) throw new Error('שגיאה באיתור גרסה קודמת: ' + findErr.message);
+
+  const groupId = (existing && existing[0] && existing[0].version_group_id) || crypto.randomUUID();
+
+  const { data: versionNum, error: verErr } = await window.supabaseClient.rpc('allocate_sale_file_version', { p_group_id: groupId });
+  if (verErr) throw new Error('שגיאה בהקצאת מספר גרסה: ' + verErr.message);
+
+  const fileName = `${humanLabel} - גרסה ${versionNum}.pdf`;
+  const path = `${bizId}/sale-file/exec_summary/${Date.now()}_v${versionNum}.pdf`;
+
+  const { error: upErr } = await window.supabaseClient.storage.from(SALE_FILE_BUCKET).upload(path, blob, { contentType: 'application/pdf', upsert: false });
+  if (upErr) throw new Error('שגיאה בהעלאת הקובץ: ' + upErr.message);
+
+  const { error: dbErr } = await window.supabaseClient.from('business_sale_files').insert({
+    business_id: bizId,
+    category: 'exec_summary',
+    file_name: fileName,
+    storage_path: path,
+    file_type: 'application/pdf',
+    file_size: blob.size,
+    confidentiality_level: 2,
+    uploaded_by: (window.CURRENT_PROFILE ? window.CURRENT_PROFILE.id : null),
+    source: 'auto_generated',
+    document_type: documentType,
+    version_number: versionNum,
+    version_group_id: groupId,
+  });
+  if (dbErr) throw new Error('שגיאה בשמירת רשומת הקובץ: ' + dbErr.message);
+
+  await sfLogAudit(bizId, 'generate_summary_pdf', { document_type: documentType, version_number: versionNum });
+  return { versionNum, path, fileName };
 }
