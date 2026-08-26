@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608260900';
+    var PAGE_BUILD = '202608260912';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -906,6 +906,11 @@ function openBizForm(id){
           <div id="anonStaleWarning" style="display:none;font-size:.78rem;color:#b3402c;margin-top:6px;">⚠️ פרטים מהותיים בעסק (תיאור/הערות/נתונים כספיים/תחום) השתנו מאז יצירת התקציר האחרון - מומלץ ליצור תקציר מעודכן.</div>
           <button type="button" class="btn btn-ghost" style="margin-top:8px;" onclick="generateAnonSummary('${biz.id}')" id="genAnonSummaryBtn">🔄 צור תקציר אנונימי (AI) - לתצוגה מקדימה</button>
           <div id="genAnonSummaryStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
+          ${typeof sfCanUpload === 'function' && sfCanUpload() ? `
+          <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #d8d3c4;">
+            <button type="button" class="btn btn-ghost" onclick="generateAndSaveSummaryPdf('${biz.id}','anonymous_summary','inlineAnonPdfStatus')">📄 הפק PDF אנונימי</button>
+            <div id="inlineAnonPdfStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
+          </div>` : ''}
         </div>
 
         <button type="button" class="btn btn-ghost" style="margin-top:10px;" onclick="previewAnonCard('${biz.id}')">👁️ תצוגה מקדימה - איך זה נראה אנונימי</button>
@@ -1815,19 +1820,47 @@ function openInternalSummaryDraftPreview(bizId, draftText){
 async function generateAndSaveSummaryPdf(bizId, documentType, statusElId){
   const biz = ALL_BIZ.find(b => b.id === bizId) || {};
   const statusEl = document.getElementById(statusElId || 'sfPdfGenStatus');
-  let text, label;
+  let text, label, titleBusinessLabel;
   if (documentType === 'short_summary'){
     const el = document.getElementById('short_description');
     text = (el ? el.value : biz.short_description) || '';
     label = 'תקציר קצר';
+    titleBusinessLabel = biz.internal_name || 'עסק';
     if (!text.trim()){
       if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ אין עדיין תקציר קצר - מלא/הצע אותו בשדה "תיאור קצר של העסק" למעלה ושמור, ואז הפק PDF.'; }
+      return;
+    }
+  } else if (documentType === 'anonymous_summary'){
+    // קריטי: לעולם לא להשתמש כאן ב-internal_name/owner_name/כתובת/טלפון -
+    // ולעולם לא לקרוא מהטקסטאריה החיה (ייתכן שנערכה ידנית ולא נשמרה/
+    // אושרה עדיין דרך confirmAnonDraft, ולכן לא עברה את בדיקת האנונימיות
+    // האמיתית). קוראים רק מהערך השמור בפועל ב-DB (biz.anon_summary),
+    // שכבר עבר בהכרח את הסריקה בזמן האישור. לא נוגעים כאן כלל בלוגיקה
+    // של anon_summary עצמו - קריאה בלבד.
+    text = biz.anon_summary || '';
+    label = 'תקציר אנונימי';
+    titleBusinessLabel = biz.anon_display_name || 'עסק';
+    if (!text.trim()){
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ אין עדיין תקציר אנונימי שמור ומאושר - צור ואשר אותו למעלה תחילה ("🔄 צור תקציר אנונימי").'; }
+      return;
+    }
+    // רשת ביטחון נוספת (לא מחליפה את הבדיקה השרתית האמיתית ב-confirm):
+    // בדיקה מקומית שאף אחד מהמזהים האמיתיים של העסק לא מופיע בטקסט,
+    // ליתר ביטחון לפני שממירים אותו ל-PDF.
+    const identifiers = [biz.internal_name, biz.anonymous_name, biz.owner_name, biz.address, biz.website, biz.owner_phone, biz.owner_email]
+      .filter(v => typeof v === 'string' && v.trim().length >= 3);
+    const lowerText = text.toLowerCase();
+    const leaked = identifiers.find(v => lowerText.includes(v.trim().toLowerCase()));
+    if (leaked){
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ נמצא חשד למידע מזהה בתוך התקציר האנונימי - לא הופק PDF. בדוק/תקן את התקציר ואשר מחדש.'; }
+      toast('⚠️ עצירת בטיחות: נמצא חשד למידע מזהה בתקציר האנונימי');
       return;
     }
   } else {
     const el = document.getElementById('internal_business_summary');
     text = (el ? el.value : biz.internal_business_summary) || '';
     label = 'תקציר עסקי מלא';
+    titleBusinessLabel = biz.internal_name || 'עסק';
     if (!text.trim()){
       if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ אין עדיין תקציר עסקי מלא - צור אותו למעלה תחילה ("🔄 צור תקציר עסקי מלא").'; }
       return;
@@ -1840,7 +1873,7 @@ async function generateAndSaveSummaryPdf(bizId, documentType, statusElId){
     bodyEl.textContent = text;
     const producerName = (CURRENT_PROFILE && (CURRENT_PROFILE.full_name || CURRENT_PROFILE.email)) || '';
     const { blob } = await bsdRenderBrandedPdf({
-      titleText: `${label} — ${biz.internal_name || 'עסק'}`,
+      titleText: `${label} — ${titleBusinessLabel}`,
       subtitleText: `הופק ${new Date().toLocaleDateString('he-IL')} ע"י ${producerName}`,
       bodyEl,
     });
