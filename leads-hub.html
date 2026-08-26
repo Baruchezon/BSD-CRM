@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608251215';
+    var PAGE_BUILD = '202608260430';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -163,6 +163,9 @@
     ·
     <a href="javascript:void(0)" onclick="openHiddenY2026ReviewPanel()">📁 רשומות שהוסרו מהרשימה החדשה (<span id="countY2026ReviewHidden">0</span>)</a>
   </div>
+  <div id="y2026ExistsElsewhereWrap" style="display:none;margin:-6px 0 10px;font-size:.78rem;color:#8a8578;">
+    <a href="javascript:void(0)" onclick="toggleY2026ShowExistsElsewhere()" id="y2026ExistsElsewhereLink">🔎 הצג לידים שכבר קיימים כקונה/עסק (<span id="countY2026ExistsElsewhere">0</span>) — מוסתרים כברירת מחדל, לא נמחקים</a>
+  </div>
 
   <div id="y2026ReviewSection" style="display:none;">
     <div class="filters" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
@@ -250,6 +253,7 @@ let Y2026_VIEW_MODE = 'new'; // 'new' = leads_2026_review (default) | 'legacy' =
 let Y2026_REVIEW_ROWS = [];       // לא מוסתרות
 let Y2026_REVIEW_HIDDEN_ROWS = []; // מוסתרות (is_hidden=true)
 let Y2026_REVIEW_MATCHES_CACHE = {}; // review_row_id -> matches array (מהשרת, לפי טלפון/מייל)
+let Y2026_SHOW_EXISTS_ELSEWHERE = false; // כברירת מחדל: לידים שכבר קיימים כקונה/עסק מוסתרים מהרשימה הראשית
 let ALL_USERS = [];
 let CURRENT_PROFILE = null;
 let RATING_LEVELS = [];
@@ -429,12 +433,14 @@ function applyY2026ViewVisibility(){
   if (toggleWrap) toggleWrap.style.display = (isY2026 && isAdmin) ? 'block' : 'none';
   const reviewSection = document.getElementById('y2026ReviewSection');
   const legacySection = document.getElementById('legacyY2026AndOtherTabsSection');
+  const eeWrapV = document.getElementById('y2026ExistsElsewhereWrap');
   if (isY2026 && isAdmin && Y2026_VIEW_MODE === 'new'){
     if (reviewSection) reviewSection.style.display = 'block';
     if (legacySection) legacySection.style.display = 'none';
   } else {
     if (reviewSection) reviewSection.style.display = 'none';
     if (legacySection) legacySection.style.display = 'block';
+    if (eeWrapV) eeWrapV.style.display = 'none'; // רלוונטי רק לתצוגת "לידים 2026" החדשה
   }
   const newLink = document.getElementById('y2026ModeNewLink');
   const legacyLink = document.getElementById('y2026ModeLegacyLink');
@@ -446,19 +452,42 @@ function setY2026ViewMode(mode){
   applyY2026ViewVisibility();
   if (mode === 'new') renderY2026ReviewTable(); else renderTable();
 }
+function toggleY2026ShowExistsElsewhere(){
+  Y2026_SHOW_EXISTS_ELSEWHERE = !Y2026_SHOW_EXISTS_ELSEWHERE;
+  renderY2026ReviewTable();
+}
 
 // ============================================================
 // "לידים 2026" - תצוגה חדשה (leads_2026_review), עצמאית לגמרי מ-leads.
 // ראה migrations/2026-08-23d_leads_2026_review.sql.
 // ============================================================
+// כמה רשומות ישנות ב-leads_2026_review נכתבו ע"י ייבוא קודם עם ערכי סיווג
+// באנגלית (seller/buyer/training) במקום הסיווג העברי הרגיל. הפונקציה הזו רק
+// מפרשת אותם לצורך תצוגה/לוגיקה - היא לעולם לא כותבת/משנה את הערך המאוחסן.
+function normalizeClassification(c){
+  const legacyMap = { seller: 'מוכר עסק', buyer: 'קונה עסק', training: 'מתעניין בקורס' };
+  return legacyMap[c] || c;
+}
 function classificationBadge(c){
+  const norm = normalizeClassification(c);
   const map = {
     'מוכר עסק': ['#fdece0','#a3521a'], 'קונה עסק': ['#eaf1fb','#2b5fa3'],
-    'מתעניין בקורס': ['#eaf7ec','#2f8f4e'], 'unclassified': ['#f3e6e6','#a33a3a']
+    'מתעניין בקורס': ['#dbeafe','#1d4ed8'], // כחול ברור ועקבי - לפי דרישה
+    'unclassified': ['#f3e6e6','#a33a3a']
   };
-  const label = c === 'unclassified' ? 'דורש בדיקה' : (c || '—');
-  const [bg,fg] = map[c] || ['#eee6d4','#665'];
+  const label = norm === 'unclassified' ? 'דורש בדיקה' : (norm || '—');
+  const [bg,fg] = map[norm] || ['#eee6d4','#665'];
   return `<span class="badge" style="background:${bg};color:${fg};">${esc(label)}</span>`;
+}
+function isExistingBuyerOrBusiness(matches){
+  // "קיים במערכת כקונה או כעסק למכירה" - התאמה לטבלת businesses, או להתאמה
+  // בטבלת leads מסוג buyer. לא כולל התאמה ל-training_leads (זה לא "כבר קיים
+  // כקונה/עסק", זה יעד ההעברה עצמו).
+  return (matches || []).some(m => m.table === 'businesses' || (m.table === 'leads' && m.subtype === 'buyer'));
+}
+function last9Digits(s){
+  const d = (s || '').replace(/\D/g, '');
+  return d.slice(-9) || null;
 }
 function reviewStatusLabel(row){
   if (row.is_hidden) return 'הוסר';
@@ -501,8 +530,8 @@ async function renderY2026ReviewTable(){
       const hay = [r.full_name, r.phone, r.email, r.message_content, r.raw_purpose].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
     }
-    if (fClass && r.classification !== fClass) return false;
-    if (fNeedsReview && r.classification !== 'unclassified') return false;
+    if (fClass && normalizeClassification(r.classification) !== fClass) return false;
+    if (fNeedsReview && normalizeClassification(r.classification) !== 'unclassified') return false;
     if (fStatus && (r.review_status || 'ממתין לבדיקה') !== fStatus) return false;
     const matches = Y2026_REVIEW_MATCHES_CACHE[r.id] || [];
     if (fExists === 'exists' && matches.length === 0) return false;
@@ -514,6 +543,23 @@ async function renderY2026ReviewTable(){
     }
     return true;
   });
+
+  // ליד שכבר קיים במערכת כקונה או כעסק למכירה לא צריך להופיע יותר ב"לידים
+  // 2026" (דרישה מפורשת) - הרשומה עצמה לעולם לא נמחקת ולא משתנה, רק מוסתרת
+  // מהתצוגה הראשית. ניתן לצפות בהן דרך הקישור הייעודי מעל הטבלה.
+  let existsElsewhereCount = 0;
+  rows = rows.filter(r => {
+    const matches = Y2026_REVIEW_MATCHES_CACHE[r.id] || [];
+    if (isExistingBuyerOrBusiness(matches)){
+      existsElsewhereCount++;
+      return Y2026_SHOW_EXISTS_ELSEWHERE;
+    }
+    return true;
+  });
+  const eeWrap = document.getElementById('y2026ExistsElsewhereWrap');
+  const eeLink = document.getElementById('y2026ExistsElsewhereLink');
+  if (eeWrap) eeWrap.style.display = existsElsewhereCount > 0 ? 'block' : 'none';
+  if (eeLink) eeLink.innerHTML = (Y2026_SHOW_EXISTS_ELSEWHERE ? '🔎 הסתר' : '🔎 הצג') + ` לידים שכבר קיימים כקונה/עסק (<span id="countY2026ExistsElsewhere">${existsElsewhereCount}</span>) — מוסתרים כברירת מחדל, לא נמחקים`;
 
   if (rows.length === 0){
     body.innerHTML = '<tr class="empty-row"><td colspan="5">אין רשומות תואמות</td></tr>';
@@ -585,7 +631,7 @@ async function openY2026ReviewDetail(id){
     <div style="margin-bottom:14px;">
       <label style="display:block;font-size:.72rem;color:#999;">סיווג</label>
       <select id="y2rClass" style="width:100%;padding:6px 8px;border:1px solid #d8d3c4;border-radius:6px;">
-        ${['מוכר עסק','קונה עסק','מתעניין בקורס','unclassified'].map(c => `<option value="${c}" ${r.classification===c?'selected':''}>${c==='unclassified'?'דורש בדיקה':c}</option>`).join('')}
+        ${['מוכר עסק','קונה עסק','מתעניין בקורס','unclassified'].map(c => `<option value="${c}" ${normalizeClassification(r.classification)===c?'selected':''}>${c==='unclassified'?'דורש בדיקה':c}</option>`).join('')}
       </select>
     </div>
     <div style="margin-bottom:14px;">
@@ -598,7 +644,7 @@ async function openY2026ReviewDetail(id){
       ${r.is_hidden ? `<button onclick="restoreY2026Review('${r.id}')" style="background:var(--gold);color:#1c2333;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שחזר לרשימה</button>`
         : `<button onclick="saveY2026ReviewEdit('${r.id}')" style="background:#fff;border:1px solid #2b5fa3;color:#2b5fa3;padding:8px 14px;border-radius:8px;font-family:inherit;cursor:pointer;">שמור שינויים</button>
         <button onclick="markY2026ReviewChecked('${r.id}')" style="background:#fff;border:1px solid #2f8f4e;color:#2f8f4e;padding:8px 14px;border-radius:8px;font-family:inherit;cursor:pointer;">✓ סמן כנבדק</button>
-        ${matches.length === 0 ? `<button onclick="transferY2026Review('${r.id}')" style="background:#2b5fa3;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">➡️ העבר לרשומה פעילה</button>` : ''}
+        ${matches.length === 0 ? `<button onclick="transferY2026Review('${r.id}')" style="background:#2b5fa3;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">${normalizeClassification(r.classification) === 'מתעניין בקורס' ? '➡️ העבר למתעניינים בקורס' : '➡️ העבר לרשומה פעילה'}</button>` : ''}
         ${isAdmin ? `<button onclick="closeModal();hideFromY2026ReviewConfirm('${r.id}')" style="background:#b00020;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">🗑️ הסר מרשימת 2026 בלבד</button>` : ''}`}
     </div>
   `;
@@ -630,31 +676,61 @@ async function markY2026ReviewChecked(id){
   toast('סומן כנבדק');
   await loadAll();
 }
-function transferY2026Review(id){
+// בדיקת כפילות "חיה" (לא מהמטמון) מול training_leads ממש לפני ההעברה -
+// לפי טלפון מנורמל (9 ספרות אחרונות) או מייל. טבלה קטנה (מודול הכשרות) -
+// select מלא וסינון בצד הלקוח, ללא כתיבה. לעולם לא כותב/משנה training_leads
+// חוץ מהוספת רשומה חדשה כשאין כפילות (transferY2026Review).
+async function checkExistingTrainingLead(phone, email){
+  const last9 = last9Digits(phone);
+  const emailNorm = (email || '').trim().toLowerCase() || null;
+  if (!last9 && !emailNorm) return null;
+  const { data, error } = await window.supabaseClient.from('training_leads').select('id, first_name, last_name, phone, email');
+  if (error || !data) return null;
+  return data.find(t => (last9 && last9Digits(t.phone) === last9) || (emailNorm && (t.email || '').trim().toLowerCase() === emailNorm)) || null;
+}
+async function transferY2026Review(id){
   const r = Y2026_REVIEW_ROWS.find(x => x.id === id);
   if (!r){ toast('רשומה לא נמצאה'); return; }
+  const cls = normalizeClassification(r.classification);
   const nameParts = (r.full_name || '').split(/\s+/).filter(Boolean);
   const first = nameParts[0] || '';
   const last = nameParts.slice(1).join(' ') || '';
-  const notes = `[הועבר מרשימת בדיקה "לידים 2026" - סיווג מקורי: ${r.classification === 'unclassified' ? 'דורש בדיקה' : r.classification}]\nתחומי התעניינות שסומנו: ${r.raw_purpose || '(לא סומן)'}\nתוכן הפנייה: ${r.message_content || '—'}`;
-  let type = 'buyer';
-  if (r.classification === 'מוכר עסק') type = 'seller';
-  else if (r.classification === 'קונה עסק') type = 'buyer';
-  if (r.classification === 'מתעניין בקורס'){
-    window.open('training-admin.html', '_blank');
-    toast('נפתח מסך ההכשרות - יש להזין את הפרטים ידנית (אין עדיין קליטה אוטומטית ממסך זה).');
-  } else {
-    const params = new URLSearchParams({
-      new: '1', type,
-      pf_first_name: first, pf_last_name: last, pf_phone: r.phone || '', pf_email: r.email || '', pf_notes: notes
-    });
-    window.open('leads.html?' + params.toString(), '_blank');
+  const notes = `[הועבר מרשימת בדיקה "לידים 2026" - סיווג מקורי: ${cls === 'unclassified' ? 'דורש בדיקה' : cls}]\nתחומי התעניינות שסומנו: ${r.raw_purpose || '(לא סומן)'}\nתוכן הפנייה: ${r.message_content || '—'}`;
+
+  if (cls === 'מתעניין בקורס'){
+    // בדיקת כפילות חיה ממש לפני ההעברה (לא רק מהמטמון של find_2026_review_matches)
+    const dup = await checkExistingTrainingLead(r.phone, r.email);
+    if (dup){
+      toast(`המתעניין כבר קיים במודול ההכשרות (${(dup.first_name || '') + ' ' + (dup.last_name || '')}) - לא נוצרה כפילות.`);
+      return;
+    }
+    const { data, error } = await window.supabaseClient.from('training_leads').insert({
+      first_name: first || (r.full_name || 'ליד ללא שם'),
+      last_name: last,
+      phone: r.phone || '',
+      email: r.email || '',
+      admin_notes: notes,
+      created_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null
+    }).select().single();
+    if (error){ toast('שגיאה בהעברה למודול ההכשרות: ' + error.message); return; }
+    toast('הליד הועתק בהצלחה למודול ההכשרות (מתעניינים בקורס).');
+    await markY2026ReviewTransferred(id, 'training_leads', data.id);
+    return;
   }
-  markY2026ReviewTransferred(id, type);
+
+  let type = 'buyer';
+  if (cls === 'מוכר עסק') type = 'seller';
+  else if (cls === 'קונה עסק') type = 'buyer';
+  const params = new URLSearchParams({
+    new: '1', type,
+    pf_first_name: first, pf_last_name: last, pf_phone: r.phone || '', pf_email: r.email || '', pf_notes: notes
+  });
+  window.open('leads.html?' + params.toString(), '_blank');
+  await markY2026ReviewTransferred(id, type, null);
 }
-async function markY2026ReviewTransferred(id, toTable){
+async function markY2026ReviewTransferred(id, toTable, toId){
   const { error } = await window.supabaseClient.from('leads_2026_review').update({
-    review_status: 'הועבר', transferred_to_table: toTable, transferred_at: new Date().toISOString(),
+    review_status: 'הועבר', transferred_to_table: toTable, transferred_to_id: toId || null, transferred_at: new Date().toISOString(),
     transferred_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null
   }).eq('id', id);
   if (error){ toast('הועבר, אך עדכון סטטוס נכשל: ' + error.message); return; }
