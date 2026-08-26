@@ -105,6 +105,7 @@ async function generateSummary(biz: Record<string, unknown>, mode: Mode): Promis
 2. ${modeInstructions}
 3. מותר להעתיק/לנסח מחדש בחופשיות מתוך התיאור/ההערות הקיימים - זה לא מסמך אנונימי ואין כאן שום מגבלת חשיפת פרטים מזהים.
 4. אם אין כלל מספיק מידע לכתוב תקציר משמעותי - סמן insufficient_info=true והשאר summary_text ריק.
+5. כתוב טקסט רגיל בלבד - בלי סימוני Markdown (בלי **, בלי #, בלי כוכביות כלשהן). הטקסט הזה מוצג כמו שהוא בשדה טקסט רגיל ומודפס כפי שהוא ל-PDF, לא עובר רינדור של Markdown. כותרות סעיפים - פשוט שורה נפרדת עם רווח לפניה ואחריה, בלי כוכביות.
 
 חובה להשתמש בכלי submit_business_summary כדי להחזיר את התשובה.`;
 
@@ -132,8 +133,12 @@ async function generateSummary(biz: Record<string, unknown>, mode: Mode): Promis
     throw new Error('התשובה מ-Claude לא הגיעה במבנה הצפוי (tool_use חסר) - נסה שוב');
   }
   const input = toolBlock.input as { summary_text?: string; insufficient_info?: boolean };
+  // רשת ביטחון: גם עם ההנחיה המפורשת לא להשתמש ב-Markdown, לפעמים המודל
+  // עדיין מכניס כוכביות - מנקים אותן כאן כדי שלעולם לא יופיעו כטקסט גולמי
+  // בשדה/ב-PDF (שאינם מרנדרים Markdown).
+  const cleanText = (t: string | null | undefined) => t ? t.replace(/\*\*/g, '').replace(/^#+\s*/gm, '') : t;
   return {
-    summary_text: input.insufficient_info ? null : (input.summary_text || null),
+    summary_text: input.insufficient_info ? null : cleanText(input.summary_text) || null,
     insufficient_info: !!input.insufficient_info,
   };
 }
