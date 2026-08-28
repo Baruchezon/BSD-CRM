@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202608282230';
+    var PAGE_BUILD = '202608282315';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -76,6 +76,14 @@
   .preview-box h3{color:var(--navy);border-bottom:2px solid var(--gold);padding-bottom:4px;}
   .move-btns{display:flex;flex-direction:column;gap:2px;}
   .move-btns button{background:#f1eee2;border:none;border-radius:5px;width:22px;height:20px;cursor:pointer;font-size:10px;}
+  .tl-wrap{position:relative;padding-inline-start:22px;margin-top:8px;}
+  .tl-wrap::before{content:'';position:absolute;top:4px;bottom:4px;inline-size:2px;background:var(--line);inset-inline-start:6px;}
+  .tl-item{position:relative;margin-bottom:14px;}
+  .tl-item::before{content:'';position:absolute;top:3px;inset-inline-start:-22px;width:11px;height:11px;border-radius:50%;background:var(--gold);border:2px solid var(--navy);}
+  .tl-date{font-size:11px;color:var(--muted);font-weight:700;}
+  .tl-buyer{font-size:11.5px;color:var(--navy);font-weight:800;}
+  .tl-desc{font-size:12.5px;margin-top:2px;}
+  .tl-result{font-size:11.5px;color:#8a5a00;margin-top:2px;}
 </style>
 </head>
 <body>
@@ -97,7 +105,7 @@
 <script>
 let CURRENT_PROFILE = null;
 let BIZ = null;
-let ALL_MATCHES = [], BUYERS_BY_ID = {}, ACTIVITY_BY_MATCH = {}, MEETINGS_BY_MATCH = {}, TASKS_BY_MATCH = {};
+let ALL_MATCHES = [], BUYERS_BY_ID = {}, ACTIVITY_BY_MATCH = {}, MEETINGS_BY_MATCH = {}, TASKS_BY_MATCH = {}, STATUS_HIST_BY_MATCH = {};
 let REPORT_ROW = null; // current draft/final row being edited, or null if none loaded yet
 let SNAPSHOT = null;
 let PREVIEWED = false;
@@ -139,14 +147,16 @@ async function loadAll(){
   }
   const matchIds = ALL_MATCHES.map(m=>m.id);
   if (matchIds.length){
-    const [{data: activity}, {data: meetings}, {data: tasks}] = await Promise.all([
+    const [{data: activity}, {data: meetings}, {data: tasks}, {data: statusHist}] = await Promise.all([
       sb.from('match_activity_log').select('*').in('match_id', matchIds).is('deleted_at', null).order('occurred_at',{ascending:true}),
       sb.from('match_meetings').select('*').in('match_id', matchIds).is('deleted_at', null),
-      sb.from('tasks').select('*').in('match_id', matchIds)
+      sb.from('tasks').select('*').in('match_id', matchIds),
+      sb.from('match_status_history').select('*').in('match_id', matchIds).order('changed_at',{ascending:true})
     ]);
     (activity||[]).forEach(a=>{ (ACTIVITY_BY_MATCH[a.match_id] = ACTIVITY_BY_MATCH[a.match_id]||[]).push(a); });
     (meetings||[]).forEach(m=>{ (MEETINGS_BY_MATCH[m.match_id] = MEETINGS_BY_MATCH[m.match_id]||[]).push(m); });
     (tasks||[]).forEach(t=>{ (TASKS_BY_MATCH[t.match_id] = TASKS_BY_MATCH[t.match_id]||[]).push(t); });
+    (statusHist||[]).forEach(h=>{ (STATUS_HIST_BY_MATCH[h.match_id] = STATUS_HIST_BY_MATCH[h.match_id]||[]).push(h); });
   }
 
   renderConfigForm();
@@ -250,6 +260,26 @@ async function editReport(id){
   document.getElementById('draftEditorBox').scrollIntoView({behavior:'smooth'});
 }
 
+// ד' - ציר זמן: מאחד את כל הפעולות/פגישות/שינויי סטטוס מכל הקונים הכלולים
+// לרצף כרונולוגי אחד של פעילות BSD סביב העסק, ולא רק רשימה בתוך כל כרטיס קונה.
+function buildTimeline(buyers){
+  const events = [];
+  buyers.forEach(b=>{
+    if (!b.include) return;
+    (b.activity||[]).filter(a=>a.include).forEach(a=>{
+      events.push({ date: a.date, buyer: b.label, type: a.type||'פעולה', description: a.description||'', result: a.note||'' });
+    });
+    (b.meetings||[]).forEach(mt=>{
+      events.push({ date: mt.date, buyer: b.label, type: mt.type||'פגישה', description: 'התקיימה ' + (mt.type||'פגישה'), result: '' });
+    });
+    (b.status_changes||[]).forEach(sc=>{
+      events.push({ date: sc.date, buyer: b.label, type: 'שינוי סטטוס', description: 'הסטטוס עודכן ל"' + (STATUS_LABEL_CLIENT[sc.status]||sc.status) + '"', result: sc.note||'' });
+    });
+  });
+  events.sort((x,y)=> new Date(x.date) - new Date(y.date));
+  return events;
+}
+
 function computeExecSummary(buyers){
   return {
     total: buyers.length,
@@ -293,6 +323,7 @@ function buildDraft(){
     }));
     const meetings = showMeetings ? (MEETINGS_BY_MATCH[m.id]||[]).map(mt=>({ type: mt.meeting_type, date: mt.meeting_date })) : [];
     const tasks = showTasks ? (TASKS_BY_MATCH[m.id]||[]).filter(t=>t.status==='הושלמה').map(t=>({ title: t.title, completed_at: t.updated_at })) : [];
+    const status_changes = (STATUS_HIST_BY_MATCH[m.id]||[]).map(h=>({ date: h.changed_at, status: h.status, note: h.note||'' }));
 
     return {
       match_id: m.id, label, include: true,
@@ -300,7 +331,7 @@ function buildDraft(){
       material_type: m.material_type, material_sent_at: m.material_sent_at,
       agreement_status: buyer?.agreement_status || 'אין הסכם',
       buyer_response: showResponses ? (m.buyer_response||'') : '',
-      activity, meetings, tasks,
+      activity, meetings, tasks, status_changes,
       next_action: showNextAction ? (m.next_action||'') : '',
       next_action_at: showNextAction ? m.next_action_at : null,
       drop_reason: m.stopped_reason || ''
@@ -450,6 +481,15 @@ function renderPreview(){
     if (b.next_action) html += `<div style="margin-top:4px;">הפעולה הבאה: ${esc(b.next_action)}</div>`;
     html += `</div>`;
   });
+  const timeline = buildTimeline(included);
+  if (timeline.length){
+    html += `<h4>🕒 ציר זמן</h4><div class="tl-wrap">` + timeline.map(ev=>`
+      <div class="tl-item">
+        <div class="tl-date">${fmtDate(ev.date)} · ${esc(ev.buyer)}</div>
+        <div class="tl-desc"><b>${esc(ev.type)}</b> — ${esc(ev.description)}</div>
+        ${ev.result?`<div class="tl-result">${esc(ev.result)}</div>`:''}
+      </div>`).join('') + `</div>`;
+  }
   if (s.closing.professional_summary) html += `<h4>סיכום מקצועי</h4><p>${esc(s.closing.professional_summary)}</p>`;
   if (s.closing.recommendations) html += `<h4>המלצות להמשך</h4><p>${esc(s.closing.recommendations)}</p>`;
   html += `</div></div>`;
@@ -495,6 +535,25 @@ function buildPdfBodyElement(){
     sec.innerHTML = h;
     wrap.appendChild(sec);
   });
+
+  const timeline = buildTimeline(included);
+  if (timeline.length){
+    const tlDiv = document.createElement('div');
+    tlDiv.style.cssText = 'margin-bottom:16px;padding:12px 14px;background:#fff;border:1px solid #e3ddcf;border-radius:10px;';
+    let h = `<div style="font-weight:800;color:#0e1b34;margin-bottom:8px;">🕒 ציר זמן</div>`;
+    h += `<div style="position:relative;padding-inline-start:20px;">`;
+    timeline.forEach(ev=>{
+      h += `<div style="position:relative;margin-bottom:10px;border-inline-start:2px solid #e3ddcf;padding-inline-start:14px;">
+        <div style="position:absolute;inset-inline-start:-6px;top:2px;width:9px;height:9px;border-radius:50%;background:#c9a24b;border:1.5px solid #0e1b34;"></div>
+        <div style="font-size:10.5px;color:#8a93ab;font-weight:700;">${fmtDate(ev.date)} · ${esc(ev.buyer)}</div>
+        <div style="font-size:12px;"><b>${esc(ev.type)}</b> — ${esc(ev.description)}</div>
+        ${ev.result?`<div style="font-size:11px;color:#8a5a00;">${esc(ev.result)}</div>`:''}
+      </div>`;
+    });
+    h += `</div>`;
+    tlDiv.innerHTML = h;
+    wrap.appendChild(tlDiv);
+  }
 
   if (s.closing.professional_summary || s.closing.recommendations){
     const closeDiv = document.createElement('div');
