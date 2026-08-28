@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608281530';
+    var PAGE_BUILD = '202608281645';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -644,6 +644,7 @@ function renderTable(){
               <a href="javascript:void(0)" onclick="openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(b.id))}${notesIconStyle(b.id) ? ' 🔵' : ''}</a>
               <a href="matches.html?view=by_business&business_id=${b.id}" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔗 קונים שהוצגו (התאמות)</a>
               <a href="javascript:void(0)" onclick="openAddBuyerToMatchModal('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">➕ הוסף קונה להתאמה</a>
+              <a href="javascript:void(0)" onclick="openActivityReportModal('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 הפק דוח פעילות לעסק</a>
               ${(canSendAgreement() && b.agreement_status !== 'יש הסכם חתום') ? `<a href="javascript:void(0)" onclick="sendAgreementForBiz('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
               ${(CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager')) ? `<a href="javascript:void(0)" onclick="deleteBiz('${b.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
             </div>
@@ -1701,6 +1702,132 @@ async function confirmAddBuyerToMatch(bizId){
     statusBox.style.color = '#b3402c';
     statusBox.textContent = 'שגיאה ביצירת ההתאמה: ' + (e.message || String(e));
     if (btn){ btn.disabled = false; btn.textContent = '➕ צור התאמה'; }
+  }
+}
+
+// 📊 הפק דוח פעילות לעסק - סעיף ו' בהנחיית שדרוג מודול ההתאמות (28.08.2026)
+const ACTIVITY_REPORT_STATUS_LABEL = {
+  'התאמה חדשה':'התאמה חדשה נפתחה', 'ממתין לחתימת סודיות':'ממתין לחתימת הסכם סודיות',
+  'נחתמה סודיות':'הסכם סודיות נחתם', 'מידע ראשוני נשלח':'מידע ראשוני הועבר לקונה',
+  'תקציר נשלח':'תקציר הועבר לקונה', 'חומרים מלאים נשלחו':'חומרים מלאים הועברו לקונה',
+  'ממתין לתגובה':'ממתינים לתגובת הקונה', 'הקונה מעוניין':'הקונה הביע עניין',
+  'הקונה לא מעוניין':'הקונה סיים את הבדיקה ללא המשך', 'נקבעה פגישה':'נקבעה פגישה',
+  'התקיימה פגישה':'התקיימה פגישה', 'בבדיקת נתונים':'הקונה בודק נתונים',
+  'במשא ומתן':'מתנהל משא ומתן', 'הוקפא':'הטיפול מוקפא זמנית',
+  'נסגר ללא עסקה':'ההתאמה נסגרה ללא עסקה', 'עסקה הושלמה':'העסקה הושלמה בהצלחה',
+  'נדרש עדכון':'בבדיקה'
+};
+const ACTIVITY_REPORT_CLOSED_STATUSES = ['נסגר ללא עסקה','הקונה לא מעוניין','הוקפא'];
+
+function openActivityReportModal(bizId){
+  const biz = ALL_BIZ.find(b => b.id === bizId);
+  const today = new Date().toISOString().slice(0,10);
+  const ninetyDaysAgo = new Date(Date.now() - 90*86400000).toISOString().slice(0,10);
+  document.getElementById('modalBox').innerHTML = `
+    <h3>📊 הפק דוח פעילות לעסק — ${esc(biz ? (biz.internal_name||'') : '')}</h3>
+    <div style="display:flex;gap:10px;margin-bottom:10px;">
+      <div class="field" style="flex:1;"><label>מתאריך</label><input type="date" id="repFrom" value="${ninetyDaysAgo}"></div>
+      <div class="field" style="flex:1;"><label>עד תאריך</label><input type="date" id="repTo" value="${today}"></div>
+    </div>
+    <div class="field full" style="margin-bottom:6px;"><label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="repActiveOnly" checked> לכלול רק התאמות פעילות (לא סגורות)</label></div>
+    <div class="field full" style="margin-bottom:6px;"><label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="repRealNames"> הצג שמות מלאים של קונים (במקום "קונה A", "קונה B"...)</label></div>
+    <div class="field full" style="margin-bottom:10px;"><label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="repInternalNotes"> לכלול הערות פנימיות</label></div>
+    <div style="font-size:.78rem;color:#8a8368;margin-bottom:10px;">הדוח לעולם לא כולל טלפון/אימייל של קונים ולא מידע חסוי אחר. ברירת המחדל בטוחה לשליחה לבעל העסק.</div>
+    <div id="activityReportStatus" style="min-height:20px;margin-bottom:8px;font-size:.85rem;font-weight:600;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button type="button" class="btn btn-primary" id="genActivityReportBtn" onclick="generateActivityReport('${bizId}')">📄 הפק PDF</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+}
+
+async function generateActivityReport(bizId){
+  const biz = ALL_BIZ.find(b => b.id === bizId);
+  const statusEl = document.getElementById('activityReportStatus');
+  const btn = document.getElementById('genActivityReportBtn');
+  const fromDate = document.getElementById('repFrom').value;
+  const toDate = document.getElementById('repTo').value;
+  const activeOnly = document.getElementById('repActiveOnly').checked;
+  const realNames = document.getElementById('repRealNames').checked;
+  const includeInternal = document.getElementById('repInternalNotes').checked;
+  if (btn){ btn.disabled = true; btn.textContent = 'טוען נתונים...'; }
+  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = 'אוסף את פעילות ההתאמות...'; }
+  try {
+    const { data: matches, error: mErr } = await window.supabaseClient
+      .from('matches').select('*').eq('business_id', bizId)
+      .gte('created_at', fromDate).lte('created_at', toDate + 'T23:59:59');
+    if (mErr) throw new Error(mErr.message);
+    let rows = matches || [];
+    if (activeOnly) rows = rows.filter(m => !ACTIVITY_REPORT_CLOSED_STATUSES.includes(m.status));
+    if (!rows.length){ statusEl.style.color = '#8a5a00'; statusEl.textContent = 'לא נמצאו התאמות תואמות לטווח/לסינון שנבחר.'; if(btn){btn.disabled=false;btn.textContent='📄 הפק PDF';} return; }
+
+    const buyerIds = [...new Set(rows.map(m=>m.buyer_id))];
+    const matchIds = rows.map(m=>m.id);
+    const [{data: buyers}, {data: activity}, {data: meetings}] = await Promise.all([
+      window.supabaseClient.from('leads').select('id,full_name').in('id', buyerIds),
+      window.supabaseClient.from('match_activity_log').select('*').in('match_id', matchIds).is('deleted_at', null).order('occurred_at',{ascending:true}),
+      window.supabaseClient.from('match_meetings').select('*').in('match_id', matchIds).is('deleted_at', null)
+    ]);
+    const buyerById = {}; (buyers||[]).forEach(b=>buyerById[b.id]=b);
+
+    rows.sort((a,b)=> new Date(b.updated_at) - new Date(a.updated_at));
+    const anonLabel = (idx)=> 'קונה ' + String.fromCharCode(65+idx);
+
+    const bodyEl = document.createElement('div');
+    bodyEl.style.cssText = 'font-size:12.5px;line-height:1.8;';
+    const summaryDiv = document.createElement('div');
+    summaryDiv.style.cssText = 'margin-bottom:14px;padding:10px 14px;background:#fff;border-inline-start:4px solid #c9a24b;border-radius:8px;';
+    summaryDiv.innerHTML = `<b>מספר עסק:</b> ${esc(biz.business_number||'—')} &nbsp;|&nbsp; <b>תקופת הדוח:</b> ${new Date(fromDate).toLocaleDateString('he-IL')} — ${new Date(toDate).toLocaleDateString('he-IL')} &nbsp;|&nbsp; <b>מספר קונים בתקופה:</b> ${rows.length}`;
+    bodyEl.appendChild(summaryDiv);
+
+    rows.forEach((m, idx) => {
+      const buyer = buyerById[m.buyer_id];
+      const label = realNames ? (buyer ? esc(buyer.full_name) : anonLabel(idx)) : anonLabel(idx);
+      const statusLabel = ACTIVITY_REPORT_STATUS_LABEL[m.status] || m.status || '—';
+      const matchActivity = (activity||[]).filter(a=>a.match_id===m.id);
+      const matchMeetings = (meetings||[]).filter(mt=>mt.match_id===m.id);
+
+      const sec = document.createElement('div');
+      sec.style.cssText = 'margin-bottom:16px;padding:12px 14px;background:#fff;border:1px solid #e3ddcf;border-radius:10px;';
+      let html = `<div style="font-size:13.5px;font-weight:800;color:#0e1b34;margin-bottom:4px;">${label}</div>`;
+      html += `<div style="margin-bottom:6px;"><b>סטטוס נוכחי:</b> ${esc(statusLabel)}</div>`;
+      if (m.material_sent_at) html += `<div style="margin-bottom:6px;"><b>העברת חומר אחרונה:</b> ${new Date(m.material_sent_at).toLocaleDateString('he-IL')}${m.material_type?' - '+esc(m.material_type):''}</div>`;
+      if (matchMeetings.length){
+        html += `<div style="margin-bottom:6px;"><b>פגישות:</b> ${matchMeetings.map(mt=>esc(mt.meeting_type||'פגישה')+' - '+(mt.meeting_date?new Date(mt.meeting_date).toLocaleDateString('he-IL'):'')).join('; ')}</div>`;
+      }
+      if (matchActivity.length){
+        html += `<div style="margin-bottom:4px;"><b>פעולות מעקב שבוצעו:</b></div><ul style="margin:0 0 6px;padding-inline-start:18px;">`;
+        matchActivity.forEach(a=>{
+          const desc = includeInternal ? (a.description || a.action_type || 'פעולה') : (a.action_type || 'פעולה');
+          html += `<li>${new Date(a.occurred_at).toLocaleDateString('he-IL')} - ${esc(desc)}</li>`;
+        });
+        html += `</ul>`;
+      }
+      if (m.next_action) html += `<div><b>השלב הבא:</b> ${esc(m.next_action)}${m.next_action_at?' (עד '+new Date(m.next_action_at).toLocaleDateString('he-IL')+')':''}</div>`;
+      sec.innerHTML = html;
+      bodyEl.appendChild(sec);
+    });
+
+    if (statusEl) statusEl.textContent = '📄 מפיק PDF...';
+    const producerName = (CURRENT_PROFILE && (CURRENT_PROFILE.full_name || CURRENT_PROFILE.email)) || '';
+    const { blob } = await bsdRenderBrandedPdf({
+      titleText: `דוח פעילות — ${biz.internal_name || 'עסק'}`,
+      subtitleText: `הופק ${new Date().toLocaleDateString('he-IL')} ע"י ${producerName}`,
+      bodyEl,
+      tagline: 'שקיפות מלאה בכל שלב בתהליך המכירה',
+    });
+    const { versionNum } = await saveAutoGeneratedSummaryPdf(bizId, 'activity_report', blob, 'דוח פעילות');
+    statusEl.style.color = '#1e7b34'; statusEl.textContent = `✓ הדוח הופק ונשמר (גרסה ${versionNum})`;
+    toast(`דוח פעילות הופק ונשמר (גרסה ${versionNum})`);
+    await loadSaleFileModule(bizId);
+    openSaleFileCategory(bizId, 'exec_summary');
+    const box = document.getElementById('saleFileModuleBox');
+    if (box) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch(e){
+    const msg = e && e.message ? e.message : String(e);
+    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
+    if (btn){ btn.disabled = false; btn.textContent = '📄 הפק PDF'; }
   }
 }
 
