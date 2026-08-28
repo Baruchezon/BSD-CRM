@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202608282110';
+    var PAGE_BUILD = '202608282230';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -332,7 +332,7 @@ function renderByBusiness(){
         </div>
         <div class="th-actions">
           <button class="mini-btn" data-addbuyer="${s.bid}">➕ הוסף קונה</button>
-          <button class="mini-btn" data-bizreport="${s.bid}">📊 דוח לעסק</button>
+          <button class="mini-btn" data-bizreport="${s.bid}">📊 הפק דוח ללקוח</button>
         </div>
       </div>
       <div class="tree-body">
@@ -351,7 +351,7 @@ function renderByBusiness(){
     render();
   }));
   wrap.querySelectorAll('[data-addbuyer]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openAddBuyerModal(el.dataset.addbuyer); }));
-  wrap.querySelectorAll('[data-bizreport]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='businesses.html?open='+el.dataset.bizreport; }));
+  wrap.querySelectorAll('[data-bizreport]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='business-report-builder.html?business_id='+el.dataset.bizreport; }));
   wireBranchActions(wrap);
 }
 
