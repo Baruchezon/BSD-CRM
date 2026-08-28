@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608262252';
+    var PAGE_BUILD = '202608281530';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -643,6 +643,7 @@ function renderTable(){
               <a href="javascript:void(0)" onclick="openBizForm('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>
               <a href="javascript:void(0)" onclick="openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(b.id))}${notesIconStyle(b.id) ? ' 🔵' : ''}</a>
               <a href="matches.html?view=by_business&business_id=${b.id}" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔗 קונים שהוצגו (התאמות)</a>
+              <a href="javascript:void(0)" onclick="openAddBuyerToMatchModal('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">➕ הוסף קונה להתאמה</a>
               ${(canSendAgreement() && b.agreement_status !== 'יש הסכם חתום') ? `<a href="javascript:void(0)" onclick="sendAgreementForBiz('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
               ${(CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager')) ? `<a href="javascript:void(0)" onclick="deleteBiz('${b.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
             </div>
@@ -1601,7 +1602,7 @@ async function recordAnonDistribution({ bizId, file, summarySnapshot, buyer, cha
       matchId = existingMatch.id;
     } else {
       const { data: newMatch, error: matchErr } = await window.supabaseClient
-        .from('matches').insert({ business_id: bizId, buyer_id: buyer.id, status: 'נשלח לקונה - ממתין לתגובה (אנונימי)', created_by: CURRENT_PROFILE.id })
+        .from('matches').insert({ business_id: bizId, buyer_id: buyer.id, status: 'מידע ראשוני נשלח', match_source: 'הפצת פרופיל אנונימי', created_by: CURRENT_PROFILE.id })
         .select('id').single();
       if (!matchErr) matchId = newMatch.id;
     }
@@ -1618,6 +1619,89 @@ async function recordAnonDistribution({ bizId, file, summarySnapshot, buyer, cha
     delivery_error: deliveryError || null,
   });
   if (distErr) console.warn('שמירת תיעוד ההפצה נכשלה (השליחה בכל זאת בוצעה/נכשלה כפי שדווח):', distErr.message);
+}
+
+// ➕ הוסף קונה להתאמה - מתוך כרטיס עסק (סעיף ב' בהנחיית שדרוג מודול ההתאמות, 28.08.2026)
+async function openAddBuyerToMatchModal(bizId){
+  const biz = ALL_BIZ.find(b => b.id === bizId);
+  document.getElementById('modalBox').innerHTML = `
+    <h3>➕ הוסף קונה להתאמה — ${esc(biz ? (biz.internal_name||'') : '')}</h3>
+    <div class="field full" style="margin-bottom:10px;">
+      <label>בחר קונה</label>
+      <div id="addBuyerMatchBox">טוען רשימת קונים...</div>
+    </div>
+    <div id="addBuyerMatchStatus" style="min-height:20px;margin-bottom:8px;font-size:.85rem;font-weight:600;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button type="button" class="btn btn-primary" id="addBuyerMatchBtn" style="opacity:.5;" onclick="confirmAddBuyerToMatch('${bizId}')">➕ צור התאמה</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+
+  const box = document.getElementById('addBuyerMatchBox');
+  let buyers = [];
+  try {
+    let buyerQuery = window.supabaseClient
+      .from('leads')
+      .select('id,full_name,first_name,last_name,email,phone,client_number,created_by,handled_by')
+      .eq('type', 'buyer')
+      .order('full_name', { ascending: true });
+    if (CURRENT_PROFILE && !['admin','manager'].includes(CURRENT_PROFILE.role)) {
+      buyerQuery = buyerQuery.or(`created_by.eq.${CURRENT_PROFILE.id},handled_by.eq.${CURRENT_PROFILE.id}`);
+    }
+    const { data, error } = await withTimeout(buyerQuery, 15000, 'טעינת רשימת קונים');
+    if (error) throw new Error(error.message);
+    buyers = data || [];
+  } catch(e){
+    box.innerHTML = `<span style="color:#b3402c;">שגיאה בטעינת רשימת הקונים: ${esc(e.message || String(e))}</span>`;
+    return;
+  }
+  if (!buyers.length){
+    box.innerHTML = `<span style="color:#8a5a00;">אין לך קונים ברשימה - הוסף קונה תחילה.</span>`;
+    return;
+  }
+  box.innerHTML = window.searchSelectHTML({ boxId: 'addBuyerMatchSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
+  window.initSearchSelect('addBuyerMatchSelect', buyers, {
+    getId: b => b.id,
+    getLabel: b => (b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || b.email || 'קונה ללא שם') + (b.client_number ? ' (' + b.client_number + ')' : ''),
+    onChange: (buyerId) => {
+      window.ADD_BUYER_MATCH_SELECTED = buyers.find(b => b.id === buyerId) || null;
+      const btn = document.getElementById('addBuyerMatchBtn');
+      if (btn) btn.style.opacity = window.ADD_BUYER_MATCH_SELECTED ? '1' : '.5';
+      document.getElementById('addBuyerMatchStatus').textContent = '';
+    }
+  });
+}
+
+async function confirmAddBuyerToMatch(bizId){
+  const buyer = window.ADD_BUYER_MATCH_SELECTED;
+  const statusBox = document.getElementById('addBuyerMatchStatus');
+  if (!buyer){ statusBox.textContent = 'יש לבחור קונה מהרשימה'; statusBox.style.color = '#b3402c'; return; }
+  const btn = document.getElementById('addBuyerMatchBtn');
+  if (btn){ btn.disabled = true; btn.textContent = 'בודק...'; }
+  try {
+    // סעיף ב'.5-6: בדיקת כפילות לפני יצירה - אם קיימת התאמה פעילה, מציגים אזהרה ופותחים אותה במקום ליצור כפולה.
+    const { data: existing, error: existErr } = await window.supabaseClient
+      .from('matches').select('id,status').eq('business_id', bizId).eq('buyer_id', buyer.id).maybeSingle();
+    if (existErr) throw new Error(existErr.message);
+    if (existing){
+      statusBox.style.color = '#8a5a00';
+      statusBox.innerHTML = `כבר קיימת התאמה בין העסק לקונה הזה (סטטוס: ${esc(existing.status||'—')}). <a href="javascript:void(0)" onclick="location.href='match-detail.html?id=${existing.id}'" style="color:#1d4e89;font-weight:700;">פתח את ההתאמה הקיימת</a>`;
+      if (btn){ btn.disabled = false; btn.textContent = '➕ צור התאמה'; }
+      return;
+    }
+    const { data: newMatch, error: insErr } = await window.supabaseClient
+      .from('matches').insert({ business_id: bizId, buyer_id: buyer.id, status: 'התאמה חדשה', match_source: 'ידני - מכרטיס עסק', created_by: CURRENT_PROFILE.id })
+      .select('id').single();
+    if (insErr) throw new Error(insErr.message);
+    closeModal();
+    toast('ההתאמה נוצרה בהצלחה');
+    location.href = 'match-detail.html?id=' + newMatch.id;
+  } catch(e){
+    statusBox.style.color = '#b3402c';
+    statusBox.textContent = 'שגיאה ביצירת ההתאמה: ' + (e.message || String(e));
+    if (btn){ btn.disabled = false; btn.textContent = '➕ צור התאמה'; }
+  }
 }
 
 async function confirmSendAnonFile(){
