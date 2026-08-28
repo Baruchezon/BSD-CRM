@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<script>
+(function(){
+  try{
+    var PAGE_BUILD = '202608282230';
+    window.PAGE_BUILD = PAGE_BUILD;
+    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      }).catch(function(){});
+  }catch(e){}
+})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>הפקת דוח ללקוח | BSD CRM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/permissions.js"></script>
+<script src="js/pdfPipeline.js?v=202608261"></script>
+<script src="js/saleFileModule2.js?v=202608261"></script>
+<style>
+  :root{
+    --navy:#0e1b34; --navy-light:#16264a; --gold:#c9a24b; --gold-light:#e8cf8a;
+    --bg:#f6f5ef; --card:#ffffff; --text:#1c2333; --muted:#6b7280; --line:#e3ddcf;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{font-family:'Heebo',Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+  .topbar{background:linear-gradient(135deg,var(--navy),var(--navy-light));color:#fff;padding:14px 20px;border-bottom:3px solid var(--gold);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;position:sticky;top:0;z-index:40;}
+  .topbar h1{margin:0;font-size:16px;}
+  .topbar .sub{margin:2px 0 0;font-size:11px;color:var(--gold-light);}
+  .back-btn{background:transparent;border:1px solid rgba(255,255,255,0.35);color:#fff;font-family:inherit;font-size:12px;padding:6px 12px;border-radius:8px;cursor:pointer;text-decoration:none;}
+  .page{max-width:920px;margin:16px auto 60px;padding:0 16px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:16px;box-shadow:0 1px 4px rgba(14,27,52,0.06);}
+  .card h2{font-size:15px;color:var(--navy);margin:0 0 12px;border-bottom:2px solid var(--gold);padding-bottom:6px;}
+  .field-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .field{flex:1;min-width:150px;}
+  .field label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:4px;}
+  .field input, .field select, .field textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;}
+  .field textarea{resize:vertical;}
+  .checkline{display:flex;align-items:center;gap:7px;font-size:13px;padding:4px 0;font-weight:400;}
+  .checkgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:2px 16px;}
+  @media(max-width:600px){.checkgrid{grid-template-columns:1fr;}}
+  .btn-primary{background:var(--navy);color:#fff;border:none;padding:10px 18px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+  .btn-ghost{background:#f1eee2;color:var(--text);border:none;padding:10px 18px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+  .btn-danger{background:#fbe2df;color:#a32d21;border:none;padding:6px 12px;border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+  .buyer-card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:#fbfaf6;}
+  .buyer-card .bc-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;}
+  .buyer-card .bc-name{font-weight:800;color:var(--navy);font-size:13.5px;}
+  .buyer-card textarea{width:100%;margin-top:6px;}
+  .action-line{display:flex;align-items:flex-start;gap:8px;font-size:12px;padding:4px 0;border-bottom:1px dashed #eee;}
+  .action-line.internal{opacity:.6;}
+  .tag-internal{background:#f1eee2;color:#8a5a00;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:700;}
+  .status-msg{min-height:20px;font-size:13px;font-weight:600;margin-top:8px;}
+  .report-row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px;background:#fff;}
+  .report-row .rr-meta{font-size:11.5px;color:var(--muted);}
+  .badge-draft{background:#fdedcf;color:#95590a;font-size:10.5px;padding:2px 8px;border-radius:10px;font-weight:700;}
+  .badge-final{background:#e2f6ea;color:#166534;font-size:10.5px;padding:2px 8px;border-radius:10px;font-weight:700;}
+  .preview-box{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px;font-size:13px;line-height:1.8;}
+  .preview-box h3{color:var(--navy);border-bottom:2px solid var(--gold);padding-bottom:4px;}
+  .move-btns{display:flex;flex-direction:column;gap:2px;}
+  .move-btns button{background:#f1eee2;border:none;border-radius:5px;width:22px;height:20px;cursor:pointer;font-size:10px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <h1>📊 הפקת דוח ללקוח</h1>
+    <p class="sub" id="bizSubtitle">טוען...</p>
+  </div>
+  <a class="back-btn" href="#" id="backLink">🔙 חזרה לכרטיס העסק</a>
+</div>
+
+<div class="page" id="mainContent">
+  <div class="card">טוען נתוני עסק...</div>
+</div>
+
+<div id="toastRoot"></div>
+
+<script>
+let CURRENT_PROFILE = null;
+let BIZ = null;
+let ALL_MATCHES = [], BUYERS_BY_ID = {}, ACTIVITY_BY_MATCH = {}, MEETINGS_BY_MATCH = {}, TASKS_BY_MATCH = {};
+let REPORT_ROW = null; // current draft/final row being edited, or null if none loaded yet
+let SNAPSHOT = null;
+let PREVIEWED = false;
+
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function fmtDate(iso){ if(!iso) return '—'; const d = new Date(iso); if(isNaN(d)) return '—'; return d.toLocaleDateString('he-IL'); }
+function toast(msg){ const el=document.createElement('div'); el.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0e1b34;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;z-index:200;'; el.textContent=msg; document.getElementById('toastRoot').appendChild(el); setTimeout(()=>el.remove(),3200); }
+
+const STATUS_LABEL_CLIENT = {
+  'התאמה חדשה':'העסק הוצג לקונה', 'ממתין לחתימת סודיות':'ממתין לחתימת הסכם סודיות',
+  'נחתמה סודיות':'הסכם סודיות נחתם', 'מידע ראשוני נשלח':'הועבר מידע ראשוני',
+  'תקציר נשלח':'הועבר תקציר', 'חומרים מלאים נשלחו':'הועברו חומרים מלאים',
+  'ממתין לתגובה':'ממתין לתגובת הקונה', 'הקונה מעוניין':'הקונה הביע עניין בהמשך',
+  'הקונה לא מעוניין':'התהליך הסתיים ללא המשך', 'נקבעה פגישה':'נקבעה פגישה',
+  'התקיימה פגישה':'התקיימה פגישה', 'בבדיקת נתונים':'הקונה בודק נתונים',
+  'במשא ומתן':'מתנהל משא ומתן', 'הוקפא':'התהליך מוקפא זמנית',
+  'נסגר ללא עסקה':'התהליך נסגר ללא עסקה', 'עסקה הושלמה':'העסקה הושלמה בהצלחה', 'נדרש עדכון':'בבדיקה'
+};
+
+function getParam(name){ return new URLSearchParams(location.search).get(name); }
+
+async function loadAll(){
+  const bizId = getParam('business_id');
+  if (!bizId){ document.getElementById('mainContent').innerHTML = '<div class="card">חסר מזהה עסק בכתובת.</div>'; return; }
+  document.getElementById('backLink').href = 'businesses.html?open=' + bizId;
+
+  const sb = window.supabaseClient;
+  const { data: biz, error: bizErr } = await sb.from('businesses').select('*').eq('id', bizId).maybeSingle();
+  if (bizErr || !biz){ document.getElementById('mainContent').innerHTML = '<div class="card">העסק לא נמצא, או שאין לך הרשאה לצפות בו.</div>'; return; }
+  BIZ = biz;
+  document.getElementById('bizSubtitle').textContent = `${biz.internal_name||''} ${biz.business_number?'('+biz.business_number+')':''}`;
+
+  const { data: matches } = await sb.from('matches').select('*').eq('business_id', bizId).order('created_at',{ascending:true});
+  ALL_MATCHES = matches || [];
+  const buyerIds = [...new Set(ALL_MATCHES.map(m=>m.buyer_id))];
+  if (buyerIds.length){
+    const { data: buyers } = await sb.from('leads').select('id,full_name,agreement_status').in('id', buyerIds);
+    (buyers||[]).forEach(b=>BUYERS_BY_ID[b.id]=b);
+  }
+  const matchIds = ALL_MATCHES.map(m=>m.id);
+  if (matchIds.length){
+    const [{data: activity}, {data: meetings}, {data: tasks}] = await Promise.all([
+      sb.from('match_activity_log').select('*').in('match_id', matchIds).is('deleted_at', null).order('occurred_at',{ascending:true}),
+      sb.from('match_meetings').select('*').in('match_id', matchIds).is('deleted_at', null),
+      sb.from('tasks').select('*').in('match_id', matchIds)
+    ]);
+    (activity||[]).forEach(a=>{ (ACTIVITY_BY_MATCH[a.match_id] = ACTIVITY_BY_MATCH[a.match_id]||[]).push(a); });
+    (meetings||[]).forEach(m=>{ (MEETINGS_BY_MATCH[m.match_id] = MEETINGS_BY_MATCH[m.match_id]||[]).push(m); });
+    (tasks||[]).forEach(t=>{ (TASKS_BY_MATCH[t.match_id] = TASKS_BY_MATCH[t.match_id]||[]).push(t); });
+  }
+
+  renderConfigForm();
+  await loadExistingReports();
+}
+
+function renderConfigForm(){
+  const today = new Date().toISOString().slice(0,10);
+  const ninetyAgo = new Date(Date.now()-90*86400000).toISOString().slice(0,10);
+  document.getElementById('mainContent').innerHTML = `
+    <div class="card">
+      <h2>📁 דוחות פעילות קיימים</h2>
+      <div id="existingReportsList">טוען...</div>
+    </div>
+
+    <div class="card">
+      <h2>⚙️ הגדרות הדוח</h2>
+      <div class="field-row">
+        <div class="field"><label>מתאריך</label><input type="date" id="cfgFrom" value="${ninetyAgo}"></div>
+        <div class="field"><label>עד תאריך</label><input type="date" id="cfgTo" value="${today}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>הצגת שמות קונים</label>
+          <select id="cfgNameMode">
+            <option value="full">שם מלא</option>
+            <option value="partial">חלקי (שם פרטי + אות)</option>
+            <option value="anon" selected>מוגן (קונה A, B, C...)</option>
+          </select>
+        </div>
+      </div>
+      <div class="checkgrid">
+        <label class="checkline"><input type="checkbox" id="cfgActiveOnly" checked> לכלול רק התאמות פעילות</label>
+        <label class="checkline"><input type="checkbox" id="cfgResponses" checked> להציג תגובות קונים</label>
+        <label class="checkline"><input type="checkbox" id="cfgMeetings" checked> להציג פגישות</label>
+        <label class="checkline"><input type="checkbox" id="cfgTasks" checked> להציג משימות שבוצעו</label>
+        <label class="checkline"><input type="checkbox" id="cfgNextAction" checked> להציג הפעולה הבאה</label>
+        <label class="checkline"><input type="checkbox" id="cfgClosed"> לכלול התאמות שנסגרו</label>
+      </div>
+      <div class="btn-row"><button class="btn-primary" onclick="buildDraft()">🔄 בנה טיוטת דוח מהנתונים</button></div>
+    </div>
+
+    <div id="draftEditorBox"></div>
+  `;
+}
+
+async function loadExistingReports(){
+  const box = document.getElementById('existingReportsList');
+  const { data, error } = await window.supabaseClient.from('business_client_reports')
+    .select('*').eq('business_id', BIZ.id).is('deleted_at', null).order('created_at',{ascending:false});
+  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה: ${esc(error.message)}</span>`; return; }
+  const rows = data || [];
+  if (!rows.length){ box.innerHTML = '<div style="color:#999;font-size:13px;">אין עדיין דוחות עבור עסק זה.</div>'; return; }
+  const { data: profiles } = await window.supabaseClient.from('profiles').select('id,full_name');
+  const nameById = {}; (profiles||[]).forEach(p=>nameById[p.id]=p.full_name);
+  box.innerHTML = rows.map(r=>`
+    <div class="report-row">
+      <div>
+        <div style="font-weight:700;">${esc(r.title)} ${r.status==='final'?`<span class="badge-final">סופי · גרסה ${r.version_number}</span>`:`<span class="badge-draft">טיוטה</span>`}</div>
+        <div class="rr-meta">${r.period_from?fmtDate(r.period_from)+' — '+fmtDate(r.period_to):''} · נוצר ${fmtDate(r.created_at)} ע"י ${esc(nameById[r.created_by]||'—')}</div>
+      </div>
+      <div class="btn-row" style="margin-top:0;">
+        <button class="btn-ghost" style="padding:6px 12px;font-size:12px;" onclick="editReport('${r.id}')">✏️ ${r.status==='final'?'צור גרסה חדשה':'המשך עריכה'}</button>
+        ${r.status==='final' ? `<button class="btn-ghost" style="padding:6px 12px;font-size:12px;" onclick="downloadReportPdf('${r.sale_file_id}','${esc((r.title||'דוח').replace(/'/g,''))}')">📄 הורד PDF</button>` : ''}
+        <button class="btn-danger" onclick="deleteReport('${r.id}')">🗑️ מחק</button>
+      </div>
+    </div>`).join('');
+}
+
+async function downloadReportPdf(saleFileId, titleForFile){
+  if (!saleFileId){ toast('לא נמצא קובץ מקושר'); return; }
+  const { data, error } = await window.supabaseClient.from('business_sale_files').select('storage_path,file_name').eq('id', saleFileId).maybeSingle();
+  if (error || !data){ toast('שגיאה באיתור הקובץ'); return; }
+  await downloadSaleFile(data.storage_path, data.file_name || (titleForFile + '.pdf'));
+}
+
+async function deleteReport(id){
+  if (!confirm('למחוק את הדוח? הפעולה הזו לא ניתנת לביטול מהתצוגה (המחיקה רכה - נשמר תיעוד).')) return;
+  const { error } = await window.supabaseClient.from('business_client_reports')
+    .update({ deleted_at: new Date().toISOString(), deleted_by: CURRENT_PROFILE.id }).eq('id', id);
+  if (error){ toast('שגיאה: '+error.message); return; }
+  bsdLogActivity('delete_client_report', 'business_client_reports', id);
+  toast('הדוח נמחק');
+  loadExistingReports();
+}
+
+async function editReport(id){
+  const { data, error } = await window.supabaseClient.from('business_client_reports').select('*').eq('id', id).maybeSingle();
+  if (error || !data){ toast('שגיאה בטעינת הדוח'); return; }
+  if (data.status === 'final'){
+    // גרסה חדשה: מעתיקים את התמונה הקפואה לטיוטה חדשה, לא נוגעים בגרסה הסופית הקיימת (סעיף ח')
+    REPORT_ROW = { ...data, id: null, status: 'draft', version_number: null, sale_file_id: null, created_at: null };
+    toast('נפתחה טיוטה חדשה מתוך הגרסה הסופית - הגרסה המקורית לא נפגעה');
+  } else {
+    REPORT_ROW = data;
+  }
+  SNAPSHOT = data.snapshot;
+  PREVIEWED = false;
+  document.getElementById('cfgFrom').value = data.period_from || document.getElementById('cfgFrom').value;
+  document.getElementById('cfgTo').value = data.period_to || document.getElementById('cfgTo').value;
+  renderDraftEditor();
+  document.getElementById('draftEditorBox').scrollIntoView({behavior:'smooth'});
+}
+
+function computeExecSummary(buyers){
+  return {
+    total: buyers.length,
+    informed: buyers.filter(b=>b.status && b.status!=='התאמה חדשה').length,
+    checked: buyers.filter(b=>['בבדיקת נתונים','במשא ומתן','נקבעה פגישה','התקיימה פגישה'].includes(b.status)).length,
+    interested: buyers.filter(b=>b.status==='הקונה מעוניין').length,
+    meetings: buyers.reduce((s,b)=>s+(b.meetings?.length||0),0),
+    inProgress: buyers.filter(b=>!['נסגר ללא עסקה','הקונה לא מעוניין','הוקפא','עסקה הושלמה'].includes(b.status)).length,
+    negotiation: buyers.filter(b=>b.status==='במשא ומתן').length,
+    closed: buyers.filter(b=>['נסגר ללא עסקה','הקונה לא מעוניין','עסקה הושלמה'].includes(b.status)).length
+  };
+}
+
+function buildDraft(){
+  const fromDate = document.getElementById('cfgFrom').value;
+  const toDate = document.getElementById('cfgTo').value;
+  const nameMode = document.getElementById('cfgNameMode').value;
+  const activeOnly = document.getElementById('cfgActiveOnly').checked;
+  const showResponses = document.getElementById('cfgResponses').checked;
+  const showMeetings = document.getElementById('cfgMeetings').checked;
+  const showTasks = document.getElementById('cfgTasks').checked;
+  const showNextAction = document.getElementById('cfgNextAction').checked;
+  const includeClosed = document.getElementById('cfgClosed').checked;
+  const closedStatuses = ['נסגר ללא עסקה','הקונה לא מעוניין','הוקפא'];
+
+  let rows = ALL_MATCHES.filter(m => m.created_at >= fromDate && m.created_at <= toDate+'T23:59:59');
+  if (activeOnly && !includeClosed) rows = rows.filter(m=>!closedStatuses.includes(m.status));
+
+  const buyers = rows.map((m, idx) => {
+    const buyer = BUYERS_BY_ID[m.buyer_id];
+    let label;
+    if (nameMode === 'full') label = buyer?.full_name || 'קונה';
+    else if (nameMode === 'partial'){
+      const parts = (buyer?.full_name||'').trim().split(' ');
+      label = parts.length>1 ? parts[0]+' '+parts[parts.length-1][0]+"'" : (buyer?.full_name||'קונה');
+    } else label = 'קונה ' + String.fromCharCode(65+idx);
+
+    const activity = (ACTIVITY_BY_MATCH[m.id]||[]).map(a=>({
+      id: a.id, date: a.occurred_at, type: a.action_type, description: a.description, note: a.note,
+      visible_to_client: !!a.visible_to_client, include: !!a.visible_to_client
+    }));
+    const meetings = showMeetings ? (MEETINGS_BY_MATCH[m.id]||[]).map(mt=>({ type: mt.meeting_type, date: mt.meeting_date })) : [];
+    const tasks = showTasks ? (TASKS_BY_MATCH[m.id]||[]).filter(t=>t.status==='הושלמה').map(t=>({ title: t.title, completed_at: t.updated_at })) : [];
+
+    return {
+      match_id: m.id, label, include: true,
+      created_at: m.created_at, status: m.status, status_label: STATUS_LABEL_CLIENT[m.status]||m.status,
+      material_type: m.material_type, material_sent_at: m.material_sent_at,
+      agreement_status: buyer?.agreement_status || 'אין הסכם',
+      buyer_response: showResponses ? (m.buyer_response||'') : '',
+      activity, meetings, tasks,
+      next_action: showNextAction ? (m.next_action||'') : '',
+      next_action_at: showNextAction ? m.next_action_at : null,
+      drop_reason: m.stopped_reason || ''
+    };
+  });
+
+  SNAPSHOT = {
+    meta: {
+      business_name: BIZ.internal_name, business_number: BIZ.business_number,
+      owner_name: BIZ.owner_name || '', period_from: fromDate, period_to: toDate,
+      generated_date: new Date().toISOString(), handler_name: (CURRENT_PROFILE.full_name||CURRENT_PROFILE.email)
+    },
+    exec_summary: computeExecSummary(buyers),
+    buyers,
+    closing: { professional_summary: '', recommendations: '' },
+    title: 'דוח פעילות והתאמות שבוצעו'
+  };
+  REPORT_ROW = REPORT_ROW && REPORT_ROW.status==='draft' ? REPORT_ROW : null;
+  PREVIEWED = false;
+  renderDraftEditor();
+  document.getElementById('draftEditorBox').scrollIntoView({behavior:'smooth'});
+}
+
+function renderDraftEditor(){
+  const box = document.getElementById('draftEditorBox');
+  const s = SNAPSHOT;
+  box.innerHTML = `
+    <div class="card">
+      <h2>✏️ עריכת הטיוטה</h2>
+      <div class="field"><label>כותרת הדוח</label><input type="text" id="editTitle" value="${esc(s.title)}"></div>
+      <div class="field" style="margin-top:8px;"><label>סיכום מקצועי (יופיע בסוף הדוח)</label><textarea id="editSummaryText" rows="3" placeholder="למשל: הפעילות מתקדמת בקצב טוב, מספר קונים בבדיקה מתקדמת...">${esc(s.closing.professional_summary)}</textarea></div>
+      <div class="field" style="margin-top:8px;"><label>המלצות להמשך טיפול</label><textarea id="editRecommendations" rows="3">${esc(s.closing.recommendations)}</textarea></div>
+
+      <h2 style="margin-top:18px;">👥 קונים בדוח (${s.buyers.length})</h2>
+      <div id="buyersEditList">${s.buyers.map((b,i)=>renderBuyerEditCard(b,i)).join('')}</div>
+
+      <div class="status-msg" id="draftStatus"></div>
+      <div class="btn-row">
+        <button class="btn-ghost" onclick="saveDraft()">💾 שמור טיוטה</button>
+        <button class="btn-ghost" onclick="renderPreview()">👁️ תצוגה מקדימה</button>
+        <button class="btn-primary" id="genPdfBtn" onclick="generateReportPdf()" ${PREVIEWED?'':'disabled title="יש לצפות בתצוגה מקדימה קודם"'}>📄 הפק PDF</button>
+      </div>
+    </div>
+    <div id="previewBox"></div>
+  `;
+}
+
+function renderBuyerEditCard(b, idx){
+  const activityHtml = b.activity.map((a,ai)=>`
+    <div class="action-line ${a.visible_to_client?'':'internal'}">
+      <input type="checkbox" ${a.include?'checked':''} onchange="toggleActivityInclude(${idx},${ai},this.checked)">
+      <span>${fmtDate(a.date)} - ${esc(a.description||a.type)} ${a.visible_to_client?'':'<span class=\"tag-internal\">פנימי</span>'}</span>
+    </div>`).join('') || '<div style="color:#999;font-size:12px;">אין פעולות מתועדות בטווח שנבחר</div>';
+  return `
+  <div class="buyer-card" data-buyer-idx="${idx}">
+    <div class="bc-head">
+      <label class="checkline"><input type="checkbox" ${b.include?'checked':''} onchange="toggleBuyerInclude(${idx},this.checked)"> <span class="bc-name">${esc(b.label)}</span></label>
+      <div class="move-btns">
+        <button type="button" onclick="moveBuyer(${idx},-1)" title="הזז למעלה">▲</button>
+        <button type="button" onclick="moveBuyer(${idx},1)" title="הזז למטה">▼</button>
+      </div>
+    </div>
+    <div style="font-size:12px;color:#8a93ab;margin-top:4px;">נוצר: ${fmtDate(b.created_at)} · סטטוס: ${esc(b.status_label)} · הסכם סודיות: ${esc(b.agreement_status)}</div>
+    <label style="display:block;font-size:11.5px;color:#8a93ab;font-weight:700;margin-top:8px;">תגובת הקונה (לעריכה)</label>
+    <textarea rows="2" onchange="updateBuyerField(${idx},'buyer_response',this.value)">${esc(b.buyer_response)}</textarea>
+    <div style="margin-top:8px;font-size:11.5px;color:#8a93ab;font-weight:700;">פעולות שבוצעו:</div>
+    ${activityHtml}
+    <label style="display:block;font-size:11.5px;color:#8a93ab;font-weight:700;margin-top:8px;">הפעולה הבאה (לעריכה)</label>
+    <textarea rows="1" onchange="updateBuyerField(${idx},'next_action',this.value)">${esc(b.next_action)}</textarea>
+  </div>`;
+}
+
+function toggleBuyerInclude(idx, val){ SNAPSHOT.buyers[idx].include = val; }
+function toggleActivityInclude(bidx, aidx, val){ SNAPSHOT.buyers[bidx].activity[aidx].include = val; }
+function updateBuyerField(idx, field, val){ SNAPSHOT.buyers[idx][field] = val; }
+function moveBuyer(idx, dir){
+  const arr = SNAPSHOT.buyers;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= arr.length) return;
+  [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+  renderDraftEditor();
+}
+
+function syncEditsIntoSnapshot(){
+  SNAPSHOT.title = document.getElementById('editTitle').value.trim() || SNAPSHOT.title;
+  SNAPSHOT.closing.professional_summary = document.getElementById('editSummaryText').value;
+  SNAPSHOT.closing.recommendations = document.getElementById('editRecommendations').value;
+}
+
+async function saveDraft(){
+  syncEditsIntoSnapshot();
+  const statusEl = document.getElementById('draftStatus');
+  statusEl.style.color = '#999'; statusEl.textContent = 'שומר טיוטה...';
+  const payload = {
+    business_id: BIZ.id, title: SNAPSHOT.title,
+    period_from: SNAPSHOT.meta.period_from, period_to: SNAPSHOT.meta.period_to,
+    snapshot: SNAPSHOT, status: 'draft'
+  };
+  try {
+    if (REPORT_ROW && REPORT_ROW.id){
+      const { error } = await window.supabaseClient.from('business_client_reports').update(payload).eq('id', REPORT_ROW.id);
+      if (error) throw new Error(error.message);
+      bsdLogActivity('edit_client_report_draft', 'business_client_reports', REPORT_ROW.id);
+    } else {
+      payload.created_by = CURRENT_PROFILE.id;
+      const { data, error } = await window.supabaseClient.from('business_client_reports').insert(payload).select().single();
+      if (error) throw new Error(error.message);
+      REPORT_ROW = data;
+      bsdLogActivity('create_client_report_draft', 'business_client_reports', data.id);
+    }
+    statusEl.style.color = '#1e7b34'; statusEl.textContent = '✓ הטיוטה נשמרה';
+    toast('הטיוטה נשמרה');
+    loadExistingReports();
+  } catch(e){
+    statusEl.style.color = '#b3402c'; statusEl.textContent = 'שגיאה: ' + (e.message||String(e));
+  }
+}
+
+function renderPreview(){
+  syncEditsIntoSnapshot();
+  PREVIEWED = true;
+  const s = SNAPSHOT;
+  const included = s.buyers.filter(b=>b.include);
+  const es = computeExecSummary(included);
+  let html = `<div class="card"><h2>👁️ תצוגה מקדימה</h2><div class="preview-box">`;
+  html += `<h3>${esc(s.title)}</h3>`;
+  html += `<div>עסק: <b>${esc(s.meta.business_name)}</b> (${esc(s.meta.business_number||'')}) · תקופה: ${fmtDate(s.meta.period_from)} — ${fmtDate(s.meta.period_to)} · הופק: ${fmtDate(s.meta.generated_date)} · מטפל: ${esc(s.meta.handler_name)}</div>`;
+  html += `<h4>תקציר מנהלים</h4><ul>
+    <li>מספר קונים שהעסק הוצג להם: ${es.total}</li>
+    <li>קונים שקיבלו מידע: ${es.informed}</li>
+    <li>קונים בבדיקה/פגישה: ${es.checked}</li>
+    <li>קונים שהביעו עניין: ${es.interested}</li>
+    <li>פגישות שהתקיימו: ${es.meetings}</li>
+    <li>התאמות בהמשך טיפול: ${es.inProgress}</li>
+    <li>התאמות במשא ומתן: ${es.negotiation}</li>
+    <li>התאמות שהסתיימו: ${es.closed}</li>
+  </ul>`;
+  html += `<h4>פירוט הקונים</h4>`;
+  included.forEach(b=>{
+    html += `<div style="margin-bottom:14px;padding:10px;border:1px solid #eee;border-radius:8px;">
+      <b>${esc(b.label)}</b> · ${esc(b.status_label)}<br>
+      <span style="font-size:12px;color:#666;">נוצר: ${fmtDate(b.created_at)} · הסכם סודיות: ${esc(b.agreement_status)}</span>`;
+    if (b.buyer_response) html += `<div style="margin-top:4px;">תגובת הקונה: ${esc(b.buyer_response)}</div>`;
+    const includedActs = b.activity.filter(a=>a.include);
+    if (includedActs.length) html += `<div style="margin-top:4px;">פעולות: ${includedActs.map(a=>fmtDate(a.date)+' - '+esc(a.description||a.type)).join('; ')}</div>`;
+    if (b.meetings.length) html += `<div style="margin-top:4px;">פגישות: ${b.meetings.map(m=>esc(m.type||'פגישה')+' ('+fmtDate(m.date)+')').join('; ')}</div>`;
+    if (b.next_action) html += `<div style="margin-top:4px;">הפעולה הבאה: ${esc(b.next_action)}</div>`;
+    html += `</div>`;
+  });
+  if (s.closing.professional_summary) html += `<h4>סיכום מקצועי</h4><p>${esc(s.closing.professional_summary)}</p>`;
+  if (s.closing.recommendations) html += `<h4>המלצות להמשך</h4><p>${esc(s.closing.recommendations)}</p>`;
+  html += `</div></div>`;
+  document.getElementById('previewBox').innerHTML = html;
+  document.getElementById('previewBox').scrollIntoView({behavior:'smooth'});
+  const btn = document.getElementById('genPdfBtn'); if (btn){ btn.disabled = false; btn.removeAttribute('title'); }
+}
+
+function buildPdfBodyElement(){
+  const s = SNAPSHOT;
+  const included = s.buyers.filter(b=>b.include);
+  const es = computeExecSummary(included);
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'font-size:12.5px;line-height:1.8;';
+
+  const meta = document.createElement('div');
+  meta.style.cssText = 'margin-bottom:14px;padding:10px 14px;background:#fff;border-inline-start:4px solid #c9a24b;border-radius:8px;';
+  meta.innerHTML = `<b>מספר עסק:</b> ${esc(s.meta.business_number||'—')} &nbsp;|&nbsp; <b>תקופת הדוח:</b> ${fmtDate(s.meta.period_from)} — ${fmtDate(s.meta.period_to)} &nbsp;|&nbsp; <b>מטפל מטעם BSD:</b> ${esc(s.meta.handler_name)}`;
+  wrap.appendChild(meta);
+
+  const execDiv = document.createElement('div');
+  execDiv.style.cssText = 'margin-bottom:16px;padding:12px 14px;background:#fff;border:1px solid #e3ddcf;border-radius:10px;';
+  execDiv.innerHTML = `<div style="font-weight:800;color:#0e1b34;margin-bottom:6px;">תקציר מנהלים</div>
+    <div>מספר קונים פוטנציאליים: ${es.total} &nbsp;|&nbsp; קיבלו מידע: ${es.informed} &nbsp;|&nbsp; בבדיקה/פגישה: ${es.checked}</div>
+    <div>הביעו עניין: ${es.interested} &nbsp;|&nbsp; פגישות שהתקיימו: ${es.meetings} &nbsp;|&nbsp; בהמשך טיפול: ${es.inProgress}</div>
+    <div>במשא ומתן: ${es.negotiation} &nbsp;|&nbsp; הסתיימו: ${es.closed}</div>`;
+  wrap.appendChild(execDiv);
+
+  included.forEach(b=>{
+    const sec = document.createElement('div');
+    sec.style.cssText = 'margin-bottom:14px;padding:12px 14px;background:#fff;border:1px solid #e3ddcf;border-radius:10px;';
+    let h = `<div style="font-size:13.5px;font-weight:800;color:#0e1b34;margin-bottom:4px;">${esc(b.label)}</div>`;
+    h += `<div style="margin-bottom:4px;"><b>סטטוס:</b> ${esc(b.status_label)} &nbsp;|&nbsp; <b>הסכם סודיות:</b> ${esc(b.agreement_status)}</div>`;
+    if (b.buyer_response) h += `<div style="margin-bottom:4px;"><b>תגובת הקונה:</b> ${esc(b.buyer_response)}</div>`;
+    const acts = b.activity.filter(a=>a.include);
+    if (acts.length){
+      h += `<div style="margin-bottom:4px;"><b>פעולות שבוצעו:</b></div><ul style="margin:0 0 6px;padding-inline-start:18px;">`;
+      acts.forEach(a=>{ h += `<li>${fmtDate(a.date)} - ${esc(a.description||a.type)}</li>`; });
+      h += `</ul>`;
+    }
+    if (b.meetings.length) h += `<div style="margin-bottom:4px;"><b>פגישות:</b> ${b.meetings.map(m=>esc(m.type||'פגישה')+' ('+fmtDate(m.date)+')').join('; ')}</div>`;
+    if (b.next_action) h += `<div><b>הפעולה הבאה:</b> ${esc(b.next_action)}</div>`;
+    sec.innerHTML = h;
+    wrap.appendChild(sec);
+  });
+
+  if (s.closing.professional_summary || s.closing.recommendations){
+    const closeDiv = document.createElement('div');
+    closeDiv.style.cssText = 'margin-top:16px;padding:12px 14px;background:#fff;border:1px solid #e3ddcf;border-radius:10px;';
+    let h = '';
+    if (s.closing.professional_summary) h += `<div style="font-weight:800;color:#0e1b34;margin-bottom:4px;">סיכום מקצועי</div><div style="margin-bottom:10px;">${esc(s.closing.professional_summary)}</div>`;
+    if (s.closing.recommendations) h += `<div style="font-weight:800;color:#0e1b34;margin-bottom:4px;">המלצות להמשך טיפול</div><div>${esc(s.closing.recommendations)}</div>`;
+    closeDiv.innerHTML = h;
+    wrap.appendChild(closeDiv);
+  }
+  return wrap;
+}
+
+async function generateReportPdf(){
+  if (!PREVIEWED){ toast('יש לצפות בתצוגה מקדימה לפני ההפקה'); return; }
+  syncEditsIntoSnapshot();
+  const statusEl = document.getElementById('draftStatus');
+  const btn = document.getElementById('genPdfBtn');
+  if (btn){ btn.disabled = true; btn.textContent = 'מפיק...'; }
+  statusEl.style.color = '#999'; statusEl.textContent = '📄 מפיק PDF...';
+  try {
+    // שומרים תחילה כטיוטה עדכנית, כדי שהתמונה תישמר לפני ההקפאה לגרסה סופית
+    await saveDraft();
+    const bodyEl = buildPdfBodyElement();
+    const { blob } = await bsdRenderBrandedPdf({
+      titleText: SNAPSHOT.title,
+      subtitleText: `הופק ${fmtDate(new Date().toISOString())} עבור ${BIZ.internal_name||''}`,
+      bodyEl,
+      tagline: 'שקיפות מלאה בכל שלב בתהליך המכירה',
+    });
+    // גרסה: חדשה תמיד, לעולם לא דורסת - שימוש חוזר במנגנון הגרסאות הקיים
+    const { versionNum, path, fileName } = await saveAutoGeneratedSummaryPdf(BIZ.id, 'client_report', blob, SNAPSHOT.title);
+    const { data: sfRow } = await window.supabaseClient.from('business_sale_files').select('id').eq('storage_path', path).maybeSingle();
+    const { error: upErr } = await window.supabaseClient.from('business_client_reports').update({
+      status: 'final', version_number: versionNum, sale_file_id: sfRow ? sfRow.id : null, snapshot: SNAPSHOT
+    }).eq('id', REPORT_ROW.id);
+    if (upErr) throw new Error(upErr.message);
+    bsdLogActivity('generate_client_report_pdf', 'business_client_reports', REPORT_ROW.id, { version: versionNum });
+    statusEl.style.color = '#1e7b34'; statusEl.textContent = `✓ הדוח הופק ונשמר (גרסה ${versionNum})`;
+    toast(`הדוח הופק בהצלחה (גרסה ${versionNum})`);
+    loadExistingReports();
+  } catch(e){
+    statusEl.style.color = '#b3402c'; statusEl.textContent = 'שגיאה: ' + (e.message||String(e));
+  } finally {
+    if (btn){ btn.disabled = false; btn.textContent = '📄 הפק PDF'; }
+  }
+}
+
+(async function init(){
+  const profile = await requireAuth();
+  if (!profile) return;
+  CURRENT_PROFILE = profile;
+  window.CURRENT_PROFILE = profile;
+  await loadAll();
+})();
+</script>
+</body>
+</html>

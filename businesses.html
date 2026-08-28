@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608282010';
+    var PAGE_BUILD = '202608282230';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -2374,7 +2374,9 @@ async function loadBizMatchesModule(bizId){
         ${rows.length} קונים &nbsp;·&nbsp; <span style="color:#1e7b34;font-weight:700;">${activeCount} פעילות</span> &nbsp;·&nbsp; <span style="color:#8a8368;">${closedCount} שהסתיימו</span>
       </div>
       <button type="button" class="btn btn-ghost" onclick="openAddBuyerToMatchModal('${bizId}')">➕ הוסף קונה להתאמה</button>
-    </div>`;
+      <a class="btn btn-ghost" href="business-report-builder.html?business_id=${bizId}" style="text-decoration:none;display:inline-flex;align-items:center;">📊 הפק דוח ללקוח</a>
+    </div>
+    <div id="bizClientReportsBox_${bizId}" style="margin-bottom:10px;"></div>`;
 
   if (!rows.length){
     html += `<div style="color:#999;font-size:.82rem;">אין עדיין קונים מותאמים לעסק זה.</div>`;
@@ -2419,6 +2421,21 @@ async function loadBizMatchesModule(bizId){
       tr.style.display = (!q || (tr.dataset.hay||'').includes(q)) ? '' : 'none';
     });
   });
+  loadBizClientReportsList(bizId);
+}
+
+// 📋 "דוחות פעילות" - רשימת הדוחות המקצועיים ללקוח שהופקו עבור העסק (סעיף ז')
+async function loadBizClientReportsList(bizId){
+  const box = document.getElementById('bizClientReportsBox_' + bizId);
+  if (!box) return;
+  const { data, error } = await window.supabaseClient.from('business_client_reports')
+    .select('*').eq('business_id', bizId).is('deleted_at', null).order('created_at',{ascending:false});
+  if (error || !data || !data.length){ box.innerHTML = ''; return; }
+  box.innerHTML = `<div style="font-size:.78rem;font-weight:700;color:#665;margin-bottom:6px;">📋 דוחות פעילות שהופקו:</div>` +
+    data.map(r => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid #e3ddcf;border-radius:8px;padding:6px 10px;margin-bottom:4px;font-size:.78rem;">
+      <span>${esc(r.title)} ${r.status==='final'?`<span style="background:#e2f6ea;color:#166534;border-radius:8px;padding:1px 7px;font-size:.7rem;font-weight:700;">סופי · גרסה ${r.version_number}</span>`:`<span style="background:#fdedcf;color:#95590a;border-radius:8px;padding:1px 7px;font-size:.7rem;font-weight:700;">טיוטה</span>`} · ${fmtDate(r.created_at)}</span>
+      <a href="business-report-builder.html?business_id=${bizId}" style="color:#1d4e89;font-weight:700;text-decoration:underline;">פתח</a>
+    </div>`).join('');
 }
 
 const MAX_FILE_MB = 20;
