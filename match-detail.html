@@ -11,7 +11,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608282010';
+    var PAGE_BUILD = '202608282045';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -201,9 +201,9 @@
 <script src="js/permissions.js?v=202608251215"></script>
 <script>
 const DISCLOSURE_LABELS = {1:'רמה 1 · אנונימי', 2:'רמה 2 · מורחב', 3:'רמה 3 · מלא'};
-const MATCH_STATUSES = ['מידע ראשוני','ממתין לתגובת קונה','מתעניין','ממתין להסכם או NDA','חומר מורחב נשלח',
-  'בבדיקת הקונה','ממתין למידע מהעסק','ממתין לקונה','שיחה עם בעל העסק','פגישה','משא ומתן',
-  'הצעה התקבלה','כתב כוונות','בדיקת נאותות','עורכי דין','לקראת סגירה','נסגר בהצלחה','בהשהיה','לא רלוונטי'];
+const MATCH_STATUSES = ['התאמה חדשה','ממתין לחתימת סודיות','נחתמה סודיות','מידע ראשוני נשלח','תקציר נשלח',
+  'חומרים מלאים נשלחו','ממתין לתגובה','הקונה מעוניין','הקונה לא מעוניין','נקבעה פגישה','התקיימה פגישה',
+  'בבדיקת נתונים','במשא ומתן','הוקפא','נסגר ללא עסקה','עסקה הושלמה','נדרש עדכון'];
 const DROP_REASON_CATEGORIES = ['מחיר','תחום','מיקום','רווחיות','מימון','גודל העסק','סיכון',
   'לא מתאים לקונה','לא מתאים לבעל העסק','בחר עסק אחר','הקונה עצר חיפוש','אחר'];
 
@@ -414,7 +414,7 @@ async function saveMeeting(id, btn){
     if (a.follow_up_meeting_date) matchUpdate.next_action_at = a.follow_up_meeting_date;
     if (a.suggested_status && MATCH_STATUSES.includes(a.suggested_status)){
       matchUpdate.status = a.suggested_status;
-      if (a.suggested_status === 'לא רלוונטי' && a.drop_reason_category) matchUpdate.drop_reason_category = a.drop_reason_category;
+      if ((a.suggested_status === 'נסגר ללא עסקה' || a.suggested_status === 'הקונה לא מעוניין') && a.drop_reason_category) matchUpdate.drop_reason_category = a.drop_reason_category;
     }
     await window.supabaseClient.from('matches').update(matchUpdate).eq('id', MATCH_ID);
     if (matchUpdate.status){
@@ -567,7 +567,7 @@ async function saveAiApproval(btn){
   if (nextAction) matchUpdate.next_action = nextAction;
   if (suggestedStatus && MATCH_STATUSES.includes(suggestedStatus)){
     matchUpdate.status = suggestedStatus;
-    if (suggestedStatus === 'לא רלוונטי' && CURRENT_AI_APPLY?.drop_reason_category) matchUpdate.drop_reason_category = CURRENT_AI_APPLY.drop_reason_category;
+    if ((suggestedStatus === 'נסגר ללא עסקה' || suggestedStatus === 'הקונה לא מעוניין') && CURRENT_AI_APPLY?.drop_reason_category) matchUpdate.drop_reason_category = CURRENT_AI_APPLY.drop_reason_category;
   }
   await window.supabaseClient.from('matches').update(matchUpdate).eq('id', MATCH_ID);
   if (matchUpdate.status){
@@ -1106,7 +1106,7 @@ function openStatusModal(){
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>שינוי סטטוס</h3>
-    <div class="field"><label>סטטוס חדש</label><select id="newStatus" onchange="onStatusModalChange()">${MATCH_STATUSES.map(s=>`<option value="${s}" ${s===MATCH.status?'selected':''}>${s}</option>`).join('')}</select></div>
+    <div class="field"><label>סטטוס חדש</label><select id="newStatus" onchange="onStatusModalChange()">${(!MATCH_STATUSES.includes(MATCH.status) && MATCH.status) ? `<option value="${esc(MATCH.status)}" selected>${esc(MATCH.status)} (ישן - יש לבחור סטטוס עדכני)</option>` : ''}${MATCH_STATUSES.map(s=>`<option value="${s}" ${s===MATCH.status?'selected':''}>${s}</option>`).join('')}</select></div>
     <div class="field">
       <label>רמת חשיפה נוכחית להתאמה זו</label>
       <select id="newDisclosure" onchange="onStatusModalChange()">
@@ -1127,11 +1127,11 @@ function openStatusModal(){
 }
 // סטטוסים שבהם בפועל מועבר מידע לקונה - אם רמת החשיפה עדיין נמוכה כאן, זה
 // בדיוק הרגע לוודא שלא נשלח בטעות יותר ממה שהקונה מורשה לקבל (סעיף 5).
-const STATUSES_THAT_SHARE_INFO = ['חומר מורחב נשלח','בבדיקת הקונה','שיחה עם בעל העסק','פגישה','משא ומתן','הצעה התקבלה','כתב כוונות','בדיקת נאותות'];
+const STATUSES_THAT_SHARE_INFO = ['חומרים מלאים נשלחו','תקציר נשלח','בבדיקת נתונים','נקבעה פגישה','התקיימה פגישה','במשא ומתן'];
 function onStatusModalChange(){
   const status = document.getElementById('newStatus').value;
   const disclosure = Number(document.getElementById('newDisclosure').value);
-  const isDrop = status === 'לא רלוונטי';
+  const isDrop = (status === 'נסגר ללא עסקה' || status === 'הקונה לא מעוניין');
   document.getElementById('dropReasonField').style.display = isDrop ? '' : 'none';
   document.getElementById('dropReasonNoteField').style.display = isDrop ? '' : 'none';
 
@@ -1139,9 +1139,9 @@ function onStatusModalChange(){
   if (STATUSES_THAT_SHARE_INFO.includes(status) && disclosure < 2){
     warnBox.style.display = 'block';
     warnBox.innerHTML = '⚠️ הסטטוס הזה מניח שכבר הועבר מידע לקונה, אבל רמת החשיפה עדיין <b>רמה 1 · אנונימי</b>. ודא שרמת החשיפה מעודכנת נכון לפני שממשיכים, כדי שלא יישלח בטעות מידע מזהה למי שלא מורשה לקבל אותו.';
-  } else if (status === 'בדיקת נאותות' && disclosure < 3){
+  } else if (status === 'במשא ומתן' && disclosure < 3){
     warnBox.style.display = 'block';
-    warnBox.innerHTML = '⚠️ בדיקת נאותות בדרך כלל דורשת <b>רמה 3 · מלא</b>. ודא שזה אכן המצב.';
+    warnBox.innerHTML = '⚠️ שלב משא ומתן בדרך כלל דורש <b>רמה 3 · מלא</b>. ודא שזה אכן המצב.';
   } else {
     warnBox.style.display = 'none';
   }
@@ -1151,7 +1151,7 @@ async function saveStatusChange(btn){
   try {
   const newStatus = document.getElementById('newStatus').value;
   const newDisclosure = Number(document.getElementById('newDisclosure').value);
-  const isDrop = newStatus === 'לא רלוונטי';
+  const isDrop = (newStatus === 'נסגר ללא עסקה' || newStatus === 'הקונה לא מעוניין');
   const dropCat = isDrop ? document.getElementById('dropReasonCat').value : null;
   if (isDrop && !dropCat){ toast('יש לבחור קטגוריית סיבה'); return; }
   const dropNote = isDrop ? document.getElementById('dropReasonNote').value : null;
