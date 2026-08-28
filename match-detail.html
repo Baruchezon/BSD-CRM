@@ -11,7 +11,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608281745';
+    var PAGE_BUILD = '202608282010';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -140,14 +140,14 @@
   <div class="nav">
     <a href="tasks.html" class="nav-tasks">✅ משימות</a>
     <a href="needs-attention.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">🚨 דורש טיפול</a>
-    <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
+    <a href="matches-workspace.html" style="color:#ffdd33;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">📁 מרכז ההתאמות</a>
     <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
   </div>
   </div>
 </div>
 
 <div class="wrap">
-  <div class="breadcrumb"><a href="matches.html">התאמות</a> ‹ תיק התאמה</div>
+  <div class="breadcrumb"><a href="matches-workspace.html">מרכז ההתאמות</a> ‹ תיק התאמה</div>
 
   <div class="hero" id="heroBox">טוען...</div>
 
@@ -1375,7 +1375,7 @@ async function deleteMatchConfirm(){
   const { error } = await window.supabaseClient.from('matches').delete().eq('id', MATCH_ID);
   if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
   toast('ההתאמה נמחקה');
-  setTimeout(()=>{ location.href = 'matches.html'; }, 900);
+  setTimeout(()=>{ location.href = 'matches-workspace.html'; }, 900);
 }
 
 (async function init(){

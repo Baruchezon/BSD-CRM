@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608281900';
+    var PAGE_BUILD = '202608282010';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -161,7 +161,7 @@
   <div class="nav">
     <a href="tasks.html" class="nav-tasks">✅ משימות</a>
     <a href="messages.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;position:relative;">💬 הודעות<span id="navMsgBadge" style="display:none;position:absolute;top:2px;left:2px;background:#b3402c;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;font-weight:700;"></span></a>
-    <a href="matches.html">התאמות</a>
+    <a href="matches-workspace.html">📁 מרכז ההתאמות</a>
     <div id="navToolsWrap" style="position:relative;display:inline-block;">
     <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">🛠️ כלים ▾</button>
     <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
@@ -559,7 +559,7 @@ async function quickChangeRating(leadId, newLevelId){
 function matchCountBadge(leadId){
   const count = MATCH_COUNT_BY_BUYER[leadId] || 0;
   if (!count) return '';
-  return `<span onclick="event.stopPropagation();location.href='matches.html?view=by_buyer&buyer_id=${leadId}'" title="עסקים שהותאמו לקונה זה" style="cursor:pointer;font-size:.7rem;color:#3a5cad !important;font-weight:700;white-space:nowrap;background:#fff !important;border:1px solid #3a5cad;border-radius:10px;padding:1px 8px;">🔗 עסקים שהותאמו: ${count}</span>`;
+  return `<span onclick="event.stopPropagation();location.href='leads.html?open=${leadId}'" title="עסקים שהותאמו לקונה זה" style="cursor:pointer;font-size:.7rem;color:#3a5cad !important;font-weight:700;white-space:nowrap;background:#fff !important;border:1px solid #3a5cad;border-radius:10px;padding:1px 8px;">🔗 עסקים שהותאמו: ${count}</span>`;
 }
 function userName(id){
   const u = ALL_USERS.find(x=>x.id===id);
@@ -778,7 +778,6 @@ function renderTable(){
             <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
               <a href="javascript:void(0)" onclick="openLeadForm('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">${isGrantOnlyViewer(l) ? '👁️ צפייה' : '✏️ ערוך'}</a>
               ${isGrantOnlyViewer(l) ? '' : `<a href="javascript:void(0)" onclick="openNotesPanel('leads','${l.id}','${esc((l.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(l.id))}${notesIconStyle(l.id) ? ' 🔵' : ''}</a>`}
-              <a href="matches.html?view=by_buyer&buyer_id=${l.id}" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔗 עסקים שהוצגו (התאמות)</a>
               ${(l.type === 'buyer' && !isGrantOnlyViewer(l)) ? `<a href="javascript:void(0)" onclick="openAddBizToMatchModal('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">➕ הוסף עסק להתאמה</a>` : ''}
               ${(canSendAgreement() && l.agreement_status !== 'יש הסכם חתום' && !isGrantOnlyViewer(l)) ? `<a href="javascript:void(0)" onclick="sendAgreementForLead('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
               ${canDeleteLead(l) ? `<a href="javascript:void(0)" onclick="deleteLead('${l.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}

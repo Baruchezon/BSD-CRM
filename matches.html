@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608251215';
+    var PAGE_BUILD = '202608282010';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -31,7 +31,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>BSD CRM - התאמות</title>
+<title>BSD CRM - ארכיון התאמות ישן</title>
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
@@ -144,9 +144,11 @@
 </div>
 
 <div class="wrap">
+  <div style="background:#fdf3d9;border:2px solid #c9a24b;border-radius:10px;padding:12px 16px;margin-bottom:14px;color:#7a5a10;font-weight:700;text-align:center;font-size:.9rem;">
+    🗄️ ארכיון זמני של מערכת ההתאמות הישנה. אין לעדכן כאן מידע. העבודה השוטפת מתבצעת ב<a href="matches-workspace.html" style="color:#0e1b34;text-decoration:underline;">מרכז ההתאמות החדש</a>.
+  </div>
   <div class="toolbar">
-    <h2>התאמות בין קונים לעסקים</h2>
-    <button class="btn btn-primary" onclick="openMatchForm(null)">+ התאמה חדשה</button>
+    <h2>🗄️ ארכיון התאמות ישן (קריאה בלבד)</h2>
   </div>
 
   <div class="filters">
@@ -267,6 +269,17 @@ const DISCLOSURE_LABELS = {1:'רמה 1 · אנונימי', 2:'רמה 2 · מור
 
 let ALL_MATCHES = [], ALL_BUYERS = [], ALL_BIZ = [], ALL_USERS = [], CURRENT_PROFILE = null;
 let AGENT_OWN_BIZ_IDS = [], AGENT_OWN_LEAD_IDS = [];
+// ארכיון התאמות ישן (28.08.2026) - מסך זה הפך לקריאה בלבד. העבודה השוטפת
+// עברה למרכז ההתאמות החדש (matches-workspace.html). שתי הטבלה זהה
+// (matches) - אין "שני מקורות נתונים" נפרדים למגר, רק שני ממשקים; לכן
+// החסימה כאן היא ברמת הממשק (כל פונקציית כתיבה בודקת את הדגל ועוצרת),
+// לא ברמת RLS - RLS על matches נשאר כפי שהוא כי אותה מדיניות בדיוק
+// חייבת להמשיך לשרת את מרכז ההתאמות הפעיל על אותה טבלה בדיוק.
+const ARCHIVE_READ_ONLY = true;
+function blockArchiveWrite(){
+  toast('🗄️ זהו ארכיון לקריאה בלבד. לעדכון או יצירת התאמות יש להשתמש במרכז ההתאמות החדש.');
+  return true;
+}
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
@@ -567,6 +580,7 @@ async function loadParticipants(matchId){
 }
 
 async function addParticipant(matchId){
+  if (ARCHIVE_READ_ONLY){ blockArchiveWrite(); return; }
   const userId = document.getElementById('addParticipantUser').value;
   if (!userId){ toast('בחר משתמש'); return; }
   const { error } = await window.supabaseClient.from('match_participants').insert({ match_id: matchId, user_id: userId });
@@ -587,6 +601,7 @@ async function loadHistory(matchId){
 }
 
 async function saveMatch(e){
+  if (ARCHIVE_READ_ONLY){ e.preventDefault(); blockArchiveWrite(); return; }
   e.preventDefault();
   const form = e.target;
   const submitBtn = form.querySelector('button[type="submit"]');
@@ -694,6 +709,7 @@ async function saveMatch(e){
 }
 
 async function deleteMatch(id){
+  if (ARCHIVE_READ_ONLY){ blockArchiveWrite(); return; }
   if (!confirm('למחוק את ההתאמה הזו? הפעולה אינה הפיכה.')) return;
   const { error } = await window.supabaseClient.from('matches').delete().eq('id', id);
   if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
@@ -705,6 +721,9 @@ async function deleteMatch(id){
 (async function init(){
   CURRENT_PROFILE = await requireAuth();
   if (!CURRENT_PROFILE) return;
+  // ארכיון זמין לאדמין בלבד (סעיף ט', 28.08.2026) - כל שאר המשתמשים מופנים
+  // למרכז ההתאמות הפעיל.
+  if (CURRENT_PROFILE.role !== 'admin'){ location.href = 'matches-workspace.html'; return; }
   await loadLookups();
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
   refreshNavMsgBadge();
