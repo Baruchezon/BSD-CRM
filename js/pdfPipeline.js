@@ -89,9 +89,10 @@ async function bsdRenderElementToPdf(el, opts){
 const BSD_BRAND = {
   pageW: 210, pageH: 297, headerH: 30, footerH: 26,
   marginSide: 16, contentTopPad: 10, contentBottomPad: 6,
-  navy: '#0e1b34', navy2: '#16264a', gold: '#c9a24b',
+  navy: '#17365D', navy2: '#1f4577', gold: '#C89B2C',
   cream: '#f3e7c4', bg: '#fbfaf6', text: '#1c2333',
-  tagline: 'משביחים עסקים, מלווים בנאמנות, ומובילים לעסקה הנכונה',
+  tagline: 'משביחים עסקים. מחברים הזדמנויות. מובילים עסקאות.',
+  footerTagline: 'עסקים טובים יוצרים הזדמנויות. החלטות נכונות הופכות אותן להצלחה.',
 };
 
 function bsdEsc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -117,9 +118,9 @@ function bsdBuildFooterEl(tagline){
   const el = document.createElement('div');
   el.style.cssText = `width:${BSD_BRAND.pageW}mm;height:${BSD_BRAND.footerH}mm;background:${BSD_BRAND.navy};color:#e7e2d2;padding:5mm 14mm 4mm 14mm;box-sizing:border-box;border-top:2px solid ${BSD_BRAND.gold};font-family:'Heebo','Rubik','Arial Hebrew',sans-serif;direction:rtl;position:relative;`;
   el.innerHTML = `
-    <div style="text-align:center;font-size:10.5pt;color:${BSD_BRAND.cream};font-weight:600;letter-spacing:.3px;margin-bottom:3mm;">${bsdEsc(tagline || BSD_BRAND.tagline)}</div>
+    <div style="text-align:center;font-size:10.5pt;color:${BSD_BRAND.cream};font-weight:600;letter-spacing:.3px;margin-bottom:3mm;">${bsdEsc(tagline || BSD_BRAND.footerTagline)}</div>
     <div style="display:flex;justify-content:center;align-items:center;gap:4px;font-size:8.5pt;color:#c7cee2;flex-wrap:wrap;">
-      <span>ברוך עזון</span>&nbsp;&nbsp;&nbsp;<span style="width:3px;height:3px;border-radius:50%;background:${BSD_BRAND.gold};display:inline-block;"></span>&nbsp;&nbsp;&nbsp;<span dir="ltr">054-2424999</span>&nbsp;&nbsp;&nbsp;<span style="width:3px;height:3px;border-radius:50%;background:${BSD_BRAND.gold};display:inline-block;"></span>&nbsp;&nbsp;&nbsp;<span dir="ltr">baruch@bsd-bbi.co.il</span>&nbsp;&nbsp;&nbsp;<span style="width:3px;height:3px;border-radius:50%;background:${BSD_BRAND.gold};display:inline-block;"></span>&nbsp;&nbsp;&nbsp;<span dir="ltr">bsd-bbi.co.il</span>
+      <span dir="ltr">www.bsd-bbi.co.il</span>&nbsp;&nbsp;&nbsp;<span style="width:3px;height:3px;border-radius:50%;background:${BSD_BRAND.gold};display:inline-block;"></span>&nbsp;&nbsp;&nbsp;<span dir="ltr">info@bsd-bbi.co.il</span>&nbsp;&nbsp;&nbsp;<span style="width:3px;height:3px;border-radius:50%;background:${BSD_BRAND.gold};display:inline-block;"></span>&nbsp;&nbsp;&nbsp;<span dir="ltr">054-2424999</span>
     </div>`;
   return el;
 }
