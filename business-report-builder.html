@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202608282315';
+    var PAGE_BUILD = '202608291000';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -31,8 +31,8 @@
 <script src="js/supabaseClient.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/permissions.js"></script>
-<script src="js/pdfPipeline.js?v=202608261"></script>
-<script src="js/saleFileModule2.js?v=202608261"></script>
+<script src="js/pdfPipeline.js?v=202608291000"></script>
+<script src="js/saleFileModule2.js?v=202608291000"></script>
 <style>
   :root{
     --navy:#0e1b34; --navy-light:#16264a; --gold:#c9a24b; --gold-light:#e8cf8a;
@@ -229,7 +229,20 @@ async function downloadReportPdf(saleFileId, titleForFile){
   if (!saleFileId){ toast('לא נמצא קובץ מקושר'); return; }
   const { data, error } = await window.supabaseClient.from('business_sale_files').select('storage_path,file_name').eq('id', saleFileId).maybeSingle();
   if (error || !data){ toast('שגיאה באיתור הקובץ'); return; }
-  await downloadSaleFile(data.storage_path, data.file_name || (titleForFile + '.pdf'));
+  try {
+    // הורדה אמיתית וכפויה למכשיר (fetch+blob), במקום פתיחת טאב עם URL חתום
+    // שדפדפנים רבים (בעיקר בטלפון) רק מציגים בתוכו ולא מורידים בפועל.
+    const { data: signed, error: signErr } = await window.supabaseClient.storage.from('business-files').createSignedUrl(data.storage_path, 300);
+    if (signErr) throw new Error(signErr.message);
+    const res = await fetch(signed.signedUrl);
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = data.file_name || (titleForFile + '.pdf');
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch(e){
+    toast('שגיאה בהורדה: ' + (e.message||String(e)));
+  }
 }
 
 async function deleteReport(id){
@@ -338,12 +351,16 @@ function buildDraft(){
     };
   });
 
+  const ownerFirstName = (BIZ.owner_name||'').trim().split(' ')[0] || '';
+  const defaultIntro = `${ownerFirstName ? 'שלום ' + ownerFirstName + ',' : 'שלום רב,'}\n\nאנו ב-BSD Business Brokers Israel ממשיכים לפעול באופן שוטף ובמסירות רבה לקידום מכירת העסק שלך. הצוות שלנו עובד מול מגוון קונים פוטנציאליים, מקדם את החשיפה של העסק בצורה מקצועית ודיסקרטית, ומלווה כל תהליך צעד אחר צעד עד לעסקה הנכונה. להלן דוח מפורט המסכם את הפעילות שבוצעה בתקופה האחרונה.`;
+
   SNAPSHOT = {
     meta: {
       business_name: BIZ.internal_name, business_number: BIZ.business_number,
       owner_name: BIZ.owner_name || '', period_from: fromDate, period_to: toDate,
       generated_date: new Date().toISOString(), handler_name: (CURRENT_PROFILE.full_name||CURRENT_PROFILE.email)
     },
+    intro: defaultIntro,
     exec_summary: computeExecSummary(buyers),
     buyers,
     closing: { professional_summary: '', recommendations: '' },
@@ -362,6 +379,7 @@ function renderDraftEditor(){
     <div class="card">
       <h2>✏️ עריכת הטיוטה</h2>
       <div class="field"><label>כותרת הדוח</label><input type="text" id="editTitle" value="${esc(s.title)}"></div>
+      <div class="field" style="margin-top:8px;"><label>פתיח חם לבעל העסק (יופיע בראש הדוח)</label><textarea id="editIntro" rows="4">${esc(s.intro||'')}</textarea></div>
       <div class="field" style="margin-top:8px;"><label>סיכום מקצועי (יופיע בסוף הדוח)</label><textarea id="editSummaryText" rows="3" placeholder="למשל: הפעילות מתקדמת בקצב טוב, מספר קונים בבדיקה מתקדמת...">${esc(s.closing.professional_summary)}</textarea></div>
       <div class="field" style="margin-top:8px;"><label>המלצות להמשך טיפול</label><textarea id="editRecommendations" rows="3">${esc(s.closing.recommendations)}</textarea></div>
 
@@ -417,6 +435,7 @@ function moveBuyer(idx, dir){
 
 function syncEditsIntoSnapshot(){
   SNAPSHOT.title = document.getElementById('editTitle').value.trim() || SNAPSHOT.title;
+  SNAPSHOT.intro = document.getElementById('editIntro').value;
   SNAPSHOT.closing.professional_summary = document.getElementById('editSummaryText').value;
   SNAPSHOT.closing.recommendations = document.getElementById('editRecommendations').value;
 }
@@ -459,6 +478,7 @@ function renderPreview(){
   let html = `<div class="card"><h2>👁️ תצוגה מקדימה</h2><div class="preview-box">`;
   html += `<h3>${esc(s.title)}</h3>`;
   html += `<div>עסק: <b>${esc(s.meta.business_name)}</b> (${esc(s.meta.business_number||'')}) · תקופה: ${fmtDate(s.meta.period_from)} — ${fmtDate(s.meta.period_to)} · הופק: ${fmtDate(s.meta.generated_date)} · מטפל: ${esc(s.meta.handler_name)}</div>`;
+  if (s.intro) html += `<div style="margin-top:10px;padding:12px 14px;background:#fbfaf6;border-inline-start:4px solid #C89B2C;border-radius:8px;white-space:pre-wrap;">${esc(s.intro)}</div>`;
   html += `<h4>תקציר מנהלים</h4><ul>
     <li>מספר קונים שהעסק הוצג להם: ${es.total}</li>
     <li>קונים שקיבלו מידע: ${es.informed}</li>
@@ -509,6 +529,13 @@ function buildPdfBodyElement(){
   meta.style.cssText = 'margin-bottom:14px;padding:10px 14px;background:#fff;border-inline-start:4px solid #c9a24b;border-radius:8px;';
   meta.innerHTML = `<b>מספר עסק:</b> ${esc(s.meta.business_number||'—')} &nbsp;|&nbsp; <b>תקופת הדוח:</b> ${fmtDate(s.meta.period_from)} — ${fmtDate(s.meta.period_to)} &nbsp;|&nbsp; <b>מטפל מטעם BSD:</b> ${esc(s.meta.handler_name)}`;
   wrap.appendChild(meta);
+
+  if (s.intro){
+    const introDiv = document.createElement('div');
+    introDiv.style.cssText = 'margin-bottom:16px;padding:14px 16px;background:#fbfaf6;border-inline-start:4px solid #C89B2C;border-radius:8px;white-space:pre-wrap;font-size:12.5px;line-height:1.9;';
+    introDiv.textContent = s.intro;
+    wrap.appendChild(introDiv);
+  }
 
   const execDiv = document.createElement('div');
   execDiv.style.cssText = 'margin-bottom:16px;padding:12px 14px;background:#fff;border:1px solid #e3ddcf;border-radius:10px;';
@@ -582,7 +609,6 @@ async function generateReportPdf(){
       titleText: SNAPSHOT.title,
       subtitleText: `הופק ${fmtDate(new Date().toISOString())} עבור ${BIZ.internal_name||''}`,
       bodyEl,
-      tagline: 'שקיפות מלאה בכל שלב בתהליך המכירה',
     });
     // גרסה: חדשה תמיד, לעולם לא דורסת - שימוש חוזר במנגנון הגרסאות הקיים
     const { versionNum, path, fileName } = await saveAutoGeneratedSummaryPdf(BIZ.id, 'client_report', blob, SNAPSHOT.title);
@@ -592,7 +618,13 @@ async function generateReportPdf(){
     }).eq('id', REPORT_ROW.id);
     if (upErr) throw new Error(upErr.message);
     bsdLogActivity('generate_client_report_pdf', 'business_client_reports', REPORT_ROW.id, { version: versionNum });
-    statusEl.style.color = '#1e7b34'; statusEl.textContent = `✓ הדוח הופק ונשמר (גרסה ${versionNum})`;
+    // הורדה בפועל למכשיר מיד עם ההפקה - זה מה שהיה חסר: הקובץ נשמר בענן אבל
+    // מעולם לא ירד בפועל למחשב/לטלפון של המשתמש בסיום ההפקה.
+    const dlLink = document.createElement('a');
+    dlLink.href = URL.createObjectURL(blob);
+    dlLink.download = fileName || (SNAPSHOT.title + '.pdf');
+    document.body.appendChild(dlLink); dlLink.click(); dlLink.remove();
+    statusEl.style.color = '#1e7b34'; statusEl.textContent = `✓ הדוח הופק, נשמר וירד למחשב (גרסה ${versionNum})`;
     toast(`הדוח הופק בהצלחה (גרסה ${versionNum})`);
     loadExistingReports();
   } catch(e){
