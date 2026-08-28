@@ -11,7 +11,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608260746';
+    var PAGE_BUILD = '202608281745';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1007,8 +1007,8 @@ function renderHero(){
   document.getElementById('heroBox').innerHTML = `
     <div class="hero-top">
       <div>
-        <div class="hero-title">🏢 <span class="biz-name">${esc(BIZ?.internal_name||'—')}</span></div>
-        <div class="hero-title buyer-name" style="margin-top:2px;">🧍 קונה בוחן: ${esc(BUYER?.full_name||'—')}</div>
+        <div class="hero-title">🏢 <a href="businesses.html?open=${MATCH.business_id}" style="color:inherit;text-decoration:underline;" class="biz-name">${esc(BIZ?.internal_name||'—')}</a>${BIZ?.business_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BIZ.business_number)})</span>`:''}</div>
+        <div class="hero-title buyer-name" style="margin-top:2px;">🧍 <a href="leads.html?open=${MATCH.buyer_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>${BUYER?.client_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BUYER.client_number)})</span>`:''}</div>
         <div class="hero-sub">
           נוצרה ע"י ${esc(userName(MATCH.created_by))} בתאריך ${fmtDate(MATCH.created_at)}
           · מטפל כרגע: <b>${esc(userName(MATCH.current_handler))}</b>
@@ -1019,6 +1019,7 @@ function renderHero(){
         <span class="disclosure-badge disc-${dl}">${DISCLOSURE_LABELS[dl]}</span>
       </div>
     </div>
+    <div id="matchNavBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid #eee;font-size:.78rem;"></div>
     <div id="disclosureWarning" class="disclosure-warning"></div>
     <div class="grid2" style="margin-top:16px;">
       <div>
@@ -1032,6 +1033,32 @@ function renderHero(){
       </div>
     </div>
   `;
+  loadMatchNav();
+}
+
+// ו' - מעבר מהיר בין המסכים (הנחיית שדרוג המשך, 28.08.2026)
+async function loadMatchNav(){
+  const box = document.getElementById('matchNavBar');
+  if (!box) return;
+  const [{data:bizMatches}, {data:buyerMatches}] = await Promise.all([
+    window.supabaseClient.from('matches').select('id,created_at').eq('business_id', MATCH.business_id).order('created_at',{ascending:true}),
+    window.supabaseClient.from('matches').select('id').eq('buyer_id', MATCH.buyer_id)
+  ]);
+  const list = bizMatches || [];
+  const idx = list.findIndex(m=>m.id===MATCH_ID);
+  const prevId = idx > 0 ? list[idx-1].id : null;
+  const nextId = (idx >= 0 && idx < list.length-1) ? list[idx+1].id : null;
+  const linkBtn = (label, href, disabled) => disabled
+    ? `<span style="padding:5px 11px;border-radius:8px;background:#f1eee2;color:#bbb;">${label}</span>`
+    : `<a href="${href}" style="padding:5px 11px;border-radius:8px;background:#f1eee2;color:#0e1b34;text-decoration:none;font-weight:600;">${label}</a>`;
+  box.innerHTML = [
+    linkBtn('🏢 כרטיס העסק', `businesses.html?open=${MATCH.business_id}`),
+    linkBtn('🧍 כרטיס הקונה', `leads.html?open=${MATCH.buyer_id}`),
+    linkBtn('⬅️ ההתאמה הקודמת', prevId ? `match-detail.html?id=${prevId}` : '#', !prevId),
+    linkBtn('➡️ ההתאמה הבאה', nextId ? `match-detail.html?id=${nextId}` : '#', !nextId),
+    linkBtn(`📋 כל ${list.length} ההתאמות של העסק`, `businesses.html?open=${MATCH.business_id}`),
+    linkBtn(`📋 כל ${(buyerMatches||[]).length} ההתאמות של הקונה`, `leads.html?open=${MATCH.buyer_id}`)
+  ].join('');
 }
 
 async function loadLastActions(){

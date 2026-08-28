@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608281645';
+    var PAGE_BUILD = '202608281745';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -870,6 +870,11 @@ function openBizForm(id){
       </div>
 
       ${biz ? `
+      <div class="section-h" style="margin-top:14px;">🤝 קונים פוטנציאליים והתאמות</div>
+      <div id="bizMatchesModuleBox" style="margin-bottom:6px;">טוען...</div>
+      ` : ``}
+
+      ${biz ? `
       <div class="section-h" style="margin-top:14px;">📋 טופס פגישה ראשונה</div>
       <div class="field full" style="background:${biz.intake_form_path ? '#eef8f1' : '#f7f5ef'};border-radius:8px;padding:10px 12px;">
         <div style="font-size:.85rem;">
@@ -1024,6 +1029,7 @@ function openBizForm(id){
   document.getElementById('bizForm').addEventListener('submit', saveBiz);
   if (biz) { loadBizFiles(biz.id); initBizDropzone(biz.id); }
   if (biz) loadBizMeetings(biz.id);
+  if (biz) loadBizMatchesModule(biz.id);
   if (biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz)) loadBizAccessGrants(biz.id);
   if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadAnonDistSummary(biz.id);
   if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadSaleFileModule(biz.id);
@@ -2341,6 +2347,79 @@ async function loadBizMeetings(bizId){
         <button type="button" class="btn btn-ghost" style="padding:5px 10px;font-size:.78rem;" onclick='window.downloadStandaloneMeetingPdf(${JSON.stringify(m)}, ${JSON.stringify(bizName)})'>📄 הורד PDF</button>
       </div>
     </div>`).join('');
+}
+
+// 🤝 "קונים פוטנציאליים והתאמות" - אזור מוטמע בכרטיס העסק (הנחיית שדרוג המשך, 28.08.2026 שלב ב')
+const BIZ_MATCH_CLOSED_STATUSES = ['נסגר ללא עסקה','הקונה לא מעוניין','הוקפא','עסקה הושלמה'];
+async function loadBizMatchesModule(bizId){
+  const box = document.getElementById('bizMatchesModuleBox');
+  if (!box) return;
+  const biz = ALL_BIZ.find(b=>b.id===bizId);
+  const { data: matches, error } = await window.supabaseClient.from('matches').select('*').eq('business_id', bizId).order('updated_at',{ascending:false});
+  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה בטעינת ההתאמות: ${esc(error.message)}</span>`; return; }
+  const rows = matches || [];
+  const buyerIds = [...new Set(rows.map(m=>m.buyer_id))];
+  let buyers = [];
+  if (buyerIds.length){
+    const { data } = await window.supabaseClient.from('leads').select('id,full_name,client_number,agreement_status').in('id', buyerIds);
+    buyers = data || [];
+  }
+  const buyerById = {}; buyers.forEach(b=>buyerById[b.id]=b);
+  const activeCount = rows.filter(m=>!BIZ_MATCH_CLOSED_STATUSES.includes(m.status)).length;
+  const closedCount = rows.length - activeCount;
+
+  let html = `
+    <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:.85rem;">
+        <b>${esc(biz?.internal_name||'')}</b> ${biz?.business_number?`(${esc(biz.business_number)})`:''} &nbsp;·&nbsp;
+        ${rows.length} קונים &nbsp;·&nbsp; <span style="color:#1e7b34;font-weight:700;">${activeCount} פעילות</span> &nbsp;·&nbsp; <span style="color:#8a8368;">${closedCount} שהסתיימו</span>
+      </div>
+      <button type="button" class="btn btn-ghost" onclick="openAddBuyerToMatchModal('${bizId}')">➕ הוסף קונה להתאמה</button>
+    </div>`;
+
+  if (!rows.length){
+    html += `<div style="color:#999;font-size:.82rem;">אין עדיין קונים מותאמים לעסק זה.</div>`;
+  } else {
+    html += `<input type="text" id="bizMatchSearch" placeholder="חיפוש בטבלה: שם קונה, מספר, סטטוס, מטפל, הערה..." style="width:100%;padding:7px 10px;border:1px solid #d8d3c4;border-radius:8px;margin-bottom:8px;font-family:inherit;font-size:.8rem;box-sizing:border-box;">
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.78rem;" id="bizMatchTable">
+      <thead><tr style="background:#0e1b34;color:#fff;">
+        <th style="padding:6px 8px;text-align:right;">קונה</th>
+        <th style="padding:6px 8px;text-align:right;">נוצרה</th>
+        <th style="padding:6px 8px;text-align:right;">הסכם סודיות</th>
+        <th style="padding:6px 8px;text-align:right;">הועבר</th>
+        <th style="padding:6px 8px;text-align:right;">סטטוס</th>
+        <th style="padding:6px 8px;text-align:right;">פעילות אחרונה</th>
+        <th style="padding:6px 8px;text-align:right;">מעקב הבא</th>
+        <th style="padding:6px 8px;text-align:right;">מטפל</th>
+        <th style="padding:6px 8px;text-align:right;">תגובת קונה</th>
+        <th></th>
+      </tr></thead><tbody>
+      ${rows.map(m=>{
+        const buyer = buyerById[m.buyer_id];
+        const searchHay = [buyer?.full_name, buyer?.client_number, m.status, userName(m.current_handler), m.buyer_response, m.notes].filter(Boolean).join(' ').toLowerCase();
+        return `<tr data-hay="${esc(searchHay)}" style="border-bottom:1px solid #eee;cursor:pointer;" onclick="location.href='match-detail.html?id=${m.id}'">
+          <td style="padding:6px 8px;" onclick="event.stopPropagation();location.href='leads.html?open=${m.buyer_id}'"><span style="color:#1d4e89;font-weight:700;text-decoration:underline;">${esc(buyer?.full_name||'—')}</span>${buyer?.client_number?` <span style="color:#999;">(${esc(buyer.client_number)})</span>`:''}</td>
+          <td style="padding:6px 8px;">${fmtDate(m.created_at)}</td>
+          <td style="padding:6px 8px;">${esc(buyer?.agreement_status||'אין הסכם')}</td>
+          <td style="padding:6px 8px;">${esc(m.material_type||'—')}</td>
+          <td style="padding:6px 8px;"><span style="background:#eef1f8;border-radius:10px;padding:2px 8px;">${esc(m.status||'—')}</span></td>
+          <td style="padding:6px 8px;">${fmtDate(m.updated_at)}</td>
+          <td style="padding:6px 8px;">${m.next_action_at?fmtDate(m.next_action_at):'—'}</td>
+          <td style="padding:6px 8px;">${esc(userName(m.current_handler)||'—')}</td>
+          <td style="padding:6px 8px;">${esc(m.buyer_response||'—')}</td>
+          <td style="padding:6px 8px;"><button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;" onclick="event.stopPropagation();location.href='match-detail.html?id=${m.id}'">📁 פתח תיק</button></td>
+        </tr>`;
+      }).join('')}
+      </tbody></table></div>`;
+  }
+  box.innerHTML = html;
+  const searchBox = document.getElementById('bizMatchSearch');
+  if (searchBox) searchBox.addEventListener('input', ()=>{
+    const q = searchBox.value.trim().toLowerCase();
+    document.querySelectorAll('#bizMatchTable tbody tr').forEach(tr=>{
+      tr.style.display = (!q || (tr.dataset.hay||'').includes(q)) ? '' : 'none';
+    });
+  });
 }
 
 const MAX_FILE_MB = 20;
