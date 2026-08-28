@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608262252';
+    var PAGE_BUILD = '202608281530';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -256,6 +256,7 @@
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/standaloneRecording.js?v=202608251709"></script>
 <script src="js/notesRecording.js?v=2"></script>
+<script src="js/searchSelect.js?v=202608281530"></script>
 <script>
 let ALL_LEADS = [];
 let ARCHIVED_LEADS = [];
@@ -306,6 +307,82 @@ function cancelLeadForm(){
 function closeModal(){
   document.getElementById('overlay').classList.remove('open');
   document.getElementById('modalBox').innerHTML = '';
+}
+
+// ➕ הוסף עסק להתאמה - מתוך כרטיס קונה (סעיף ג' בהנחיית שדרוג מודול ההתאמות, 28.08.2026)
+async function openAddBizToMatchModal(buyerId){
+  const buyer = (ALL_LEADS || []).find(l => l.id === buyerId);
+  document.getElementById('modalBox').innerHTML = `
+    <h3>➕ הוסף עסק להתאמה — ${esc(buyer ? (buyer.full_name||'') : '')}</h3>
+    <div class="field full" style="margin-bottom:10px;">
+      <label>בחר עסק</label>
+      <div id="addBizMatchBox">טוען רשימת עסקים...</div>
+    </div>
+    <div id="addBizMatchStatus" style="min-height:20px;margin-bottom:8px;font-size:.85rem;font-weight:600;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button type="button" class="btn btn-primary" id="addBizMatchBtn" style="opacity:.5;" onclick="confirmAddBizToMatch('${buyerId}')">➕ צור התאמה</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+
+  const box = document.getElementById('addBizMatchBox');
+  let bizList = [];
+  try {
+    const { data, error } = await window.supabaseClient
+      .from('businesses').select('id,internal_name,business_number,field')
+      .order('internal_name', { ascending: true });
+    if (error) throw new Error(error.message);
+    bizList = data || [];
+  } catch(e){
+    box.innerHTML = `<span style="color:#b3402c;">שגיאה בטעינת רשימת העסקים: ${esc(e.message || String(e))}</span>`;
+    return;
+  }
+  if (!bizList.length){
+    box.innerHTML = `<span style="color:#8a5a00;">אין עסקים ברשימה שלך.</span>`;
+    return;
+  }
+  box.innerHTML = window.searchSelectHTML({ boxId: 'addBizMatchSelect', placeholder: 'הקלד שם עסק או מספר עסק לחיפוש...' });
+  window.initSearchSelect('addBizMatchSelect', bizList, {
+    getId: b => b.id,
+    getLabel: b => (b.internal_name || 'עסק ללא שם') + (b.business_number ? ' (' + b.business_number + ')' : '') + (b.field ? ' - ' + b.field : ''),
+    onChange: (bizId) => {
+      window.ADD_BIZ_MATCH_SELECTED = bizList.find(b => b.id === bizId) || null;
+      const btn = document.getElementById('addBizMatchBtn');
+      if (btn) btn.style.opacity = window.ADD_BIZ_MATCH_SELECTED ? '1' : '.5';
+      document.getElementById('addBizMatchStatus').textContent = '';
+    }
+  });
+}
+
+async function confirmAddBizToMatch(buyerId){
+  const biz = window.ADD_BIZ_MATCH_SELECTED;
+  const statusBox = document.getElementById('addBizMatchStatus');
+  if (!biz){ statusBox.textContent = 'יש לבחור עסק מהרשימה'; statusBox.style.color = '#b3402c'; return; }
+  const btn = document.getElementById('addBizMatchBtn');
+  if (btn){ btn.disabled = true; btn.textContent = 'בודק...'; }
+  try {
+    const { data: existing, error: existErr } = await window.supabaseClient
+      .from('matches').select('id,status').eq('business_id', biz.id).eq('buyer_id', buyerId).maybeSingle();
+    if (existErr) throw new Error(existErr.message);
+    if (existing){
+      statusBox.style.color = '#8a5a00';
+      statusBox.innerHTML = `כבר קיימת התאמה בין העסק לקונה הזה (סטטוס: ${esc(existing.status||'—')}). <a href="javascript:void(0)" onclick="location.href='match-detail.html?id=${existing.id}'" style="color:#1d4e89;font-weight:700;">פתח את ההתאמה הקיימת</a>`;
+      if (btn){ btn.disabled = false; btn.textContent = '➕ צור התאמה'; }
+      return;
+    }
+    const { data: newMatch, error: insErr } = await window.supabaseClient
+      .from('matches').insert({ business_id: biz.id, buyer_id: buyerId, status: 'התאמה חדשה', match_source: 'ידני - מכרטיס קונה', created_by: CURRENT_PROFILE.id })
+      .select('id').single();
+    if (insErr) throw new Error(insErr.message);
+    closeModal();
+    toast('ההתאמה נוצרה בהצלחה');
+    location.href = 'match-detail.html?id=' + newMatch.id;
+  } catch(e){
+    statusBox.style.color = '#b3402c';
+    statusBox.textContent = 'שגיאה ביצירת ההתאמה: ' + (e.message || String(e));
+    if (btn){ btn.disabled = false; btn.textContent = '➕ צור התאמה'; }
+  }
 }
 
 async function loadUsers(){
@@ -588,6 +665,7 @@ function renderTable(){
               <a href="javascript:void(0)" onclick="openLeadForm('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">${isGrantOnlyViewer(l) ? '👁️ צפייה' : '✏️ ערוך'}</a>
               ${isGrantOnlyViewer(l) ? '' : `<a href="javascript:void(0)" onclick="openNotesPanel('leads','${l.id}','${esc((l.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(l.id))}${notesIconStyle(l.id) ? ' 🔵' : ''}</a>`}
               <a href="matches.html?view=by_buyer&buyer_id=${l.id}" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔗 עסקים שהוצגו (התאמות)</a>
+              ${(l.type === 'buyer' && !isGrantOnlyViewer(l)) ? `<a href="javascript:void(0)" onclick="openAddBizToMatchModal('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">➕ הוסף עסק להתאמה</a>` : ''}
               ${(canSendAgreement() && l.agreement_status !== 'יש הסכם חתום' && !isGrantOnlyViewer(l)) ? `<a href="javascript:void(0)" onclick="sendAgreementForLead('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
               ${canDeleteLead(l) ? `<a href="javascript:void(0)" onclick="deleteLead('${l.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
             </div>
