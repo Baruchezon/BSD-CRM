@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608281745';
+    var PAGE_BUILD = '202608281900';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -257,6 +257,7 @@
 <script src="js/standaloneRecording.js?v=202608251709"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/searchSelect.js?v=202608281530"></script>
+<script src="js/pdfPipeline.js?v=202608261"></script>
 <script>
 let ALL_LEADS = [];
 let ARCHIVED_LEADS = [];
@@ -382,6 +383,119 @@ async function confirmAddBizToMatch(buyerId){
     statusBox.style.color = '#b3402c';
     statusBox.textContent = 'שגיאה ביצירת ההתאמה: ' + (e.message || String(e));
     if (btn){ btn.disabled = false; btn.textContent = '➕ צור התאמה'; }
+  }
+}
+
+// 📊 הפק דוח עסקים לקונה - סעיף י' בהנחיית שדרוג המשך (28.08.2026)
+// דוח הפוך לדוח הפעילות לבעל העסק: מוצג לקונה עצמו, לכן לעולם לא כולל
+// הערות פנימיות, פרטי קשר של הקונה עצמו אינם רלוונטיים כאן, ובעיקר -
+// לעולם לא נחשף מידע ששייך לקונים אחרים של אותם עסקים.
+const BUYER_REPORT_STATUS_LABEL = {
+  'התאמה חדשה':'העסק הועבר אליך לבדיקה', 'ממתין לחתימת סודיות':'ממתין לחתימת הסכם סודיות',
+  'נחתמה סודיות':'הסכם סודיות נחתם', 'מידע ראשוני נשלח':'הועבר אליך מידע ראשוני',
+  'תקציר נשלח':'הועבר אליך תקציר', 'חומרים מלאים נשלחו':'הועברו אליך חומרים מלאים',
+  'ממתין לתגובה':'ממתינים לתגובתך', 'הקונה מעוניין':'הבעת עניין בהמשך התהליך',
+  'הקונה לא מעוניין':'התהליך הסתיים ללא המשך', 'נקבעה פגישה':'נקבעה פגישה',
+  'התקיימה פגישה':'התקיימה פגישה', 'בבדיקת נתונים':'בבדיקת נתונים',
+  'במשא ומתן':'בשלב משא ומתן', 'הוקפא':'התהליך מוקפא זמנית',
+  'נסגר ללא עסקה':'התהליך נסגר ללא עסקה', 'עסקה הושלמה':'העסקה הושלמה בהצלחה',
+  'נדרש עדכון':'בבדיקה'
+};
+const BUYER_REPORT_CLOSED_STATUSES = ['נסגר ללא עסקה','הקונה לא מעוניין','הוקפא'];
+
+function openBuyerActivityReportModal(leadId){
+  const lead = ALL_LEADS.find(l => l.id === leadId);
+  const leadName = (lead?.full_name) || [lead?.first_name,lead?.last_name].filter(Boolean).join(' ') || 'קונה';
+  const today = new Date().toISOString().slice(0,10);
+  const ninetyDaysAgo = new Date(Date.now() - 90*86400000).toISOString().slice(0,10);
+  document.getElementById('modalBox').innerHTML = `
+    <h3>📊 הפק דוח עסקים לקונה — ${esc(leadName)}</h3>
+    <div style="display:flex;gap:10px;margin-bottom:10px;">
+      <div class="field" style="flex:1;"><label>מתאריך</label><input type="date" id="bRepFrom" value="${ninetyDaysAgo}"></div>
+      <div class="field" style="flex:1;"><label>עד תאריך</label><input type="date" id="bRepTo" value="${today}"></div>
+    </div>
+    <div class="field full" style="margin-bottom:10px;"><label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="bRepActiveOnly" checked> לכלול רק תהליכים פעילים (לא סגורים)</label></div>
+    <div style="font-size:.78rem;color:#8a8368;margin-bottom:10px;">הדוח מיועד לקונה עצמו - לעולם לא יכלול הערות פנימיות של BSD ולא כל מידע השייך לקונים אחרים.</div>
+    <div id="buyerReportStatus" style="min-height:20px;margin-bottom:8px;font-size:.85rem;font-weight:600;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button type="button" class="btn btn-primary" id="genBuyerReportBtn" onclick="generateBuyerActivityReport('${leadId}')">📄 הפק PDF</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+}
+
+async function generateBuyerActivityReport(leadId){
+  const lead = ALL_LEADS.find(l => l.id === leadId);
+  const leadName = (lead?.full_name) || [lead?.first_name,lead?.last_name].filter(Boolean).join(' ') || 'קונה';
+  const statusEl = document.getElementById('buyerReportStatus');
+  const btn = document.getElementById('genBuyerReportBtn');
+  const fromDate = document.getElementById('bRepFrom').value;
+  const toDate = document.getElementById('bRepTo').value;
+  const activeOnly = document.getElementById('bRepActiveOnly').checked;
+  if (btn){ btn.disabled = true; btn.textContent = 'טוען נתונים...'; }
+  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = 'אוסף את פעילות ההתאמות...'; }
+  try {
+    const { data: matches, error: mErr } = await window.supabaseClient
+      .from('matches').select('*').eq('buyer_id', leadId)
+      .gte('created_at', fromDate).lte('created_at', toDate + 'T23:59:59');
+    if (mErr) throw new Error(mErr.message);
+    let rows = matches || [];
+    if (activeOnly) rows = rows.filter(m => !BUYER_REPORT_CLOSED_STATUSES.includes(m.status));
+    if (!rows.length){ statusEl.style.color = '#8a5a00'; statusEl.textContent = 'לא נמצאו עסקים תואמים לטווח/לסינון שנבחר.'; if(btn){btn.disabled=false;btn.textContent='📄 הפק PDF';} return; }
+
+    const bizIds = [...new Set(rows.map(m=>m.business_id))];
+    const matchIds = rows.map(m=>m.id);
+    const [{data: bizList}, {data: meetings}] = await Promise.all([
+      window.supabaseClient.from('businesses').select('id,internal_name,business_number,anon_display_name').in('id', bizIds),
+      window.supabaseClient.from('match_meetings').select('*').in('match_id', matchIds).is('deleted_at', null)
+    ]);
+    const bizById = {}; (bizList||[]).forEach(b=>bizById[b.id]=b);
+
+    rows.sort((a,b)=> new Date(b.updated_at) - new Date(a.updated_at));
+
+    const bodyEl = document.createElement('div');
+    bodyEl.style.cssText = 'font-size:12.5px;line-height:1.8;';
+    const summaryDiv = document.createElement('div');
+    summaryDiv.style.cssText = 'margin-bottom:14px;padding:10px 14px;background:#fff;border-inline-start:4px solid #c9a24b;border-radius:8px;';
+    summaryDiv.innerHTML = `<b>תקופת הדוח:</b> ${new Date(fromDate).toLocaleDateString('he-IL')} — ${new Date(toDate).toLocaleDateString('he-IL')} &nbsp;|&nbsp; <b>מספר עסקים בתקופה:</b> ${rows.length}`;
+    bodyEl.appendChild(summaryDiv);
+
+    rows.forEach(m => {
+      const biz = bizById[m.business_id];
+      const bizLabel = biz ? (biz.internal_name || biz.anon_display_name || 'עסק') : 'עסק';
+      const statusLabel = BUYER_REPORT_STATUS_LABEL[m.status] || m.status || '—';
+      const matchMeetings = (meetings||[]).filter(mt=>mt.match_id===m.id);
+
+      const sec = document.createElement('div');
+      sec.style.cssText = 'margin-bottom:16px;padding:12px 14px;background:#fff;border:1px solid #e3ddcf;border-radius:10px;';
+      let html = `<div style="font-size:13.5px;font-weight:800;color:#0e1b34;margin-bottom:4px;">${esc(bizLabel)}${biz?.business_number?' ('+esc(biz.business_number)+')':''}</div>`;
+      html += `<div style="margin-bottom:6px;"><b>מצב נוכחי:</b> ${esc(statusLabel)}</div>`;
+      if (m.material_sent_at) html += `<div style="margin-bottom:6px;"><b>תאריך העברת מידע:</b> ${new Date(m.material_sent_at).toLocaleDateString('he-IL')}</div>`;
+      if (matchMeetings.length){
+        html += `<div style="margin-bottom:6px;"><b>פגישות:</b> ${matchMeetings.map(mt=>esc(mt.meeting_type||'פגישה')+' - '+(mt.meeting_date?new Date(mt.meeting_date).toLocaleDateString('he-IL'):'')).join('; ')}</div>`;
+      }
+      if (m.next_action) html += `<div><b>השלב הבא:</b> ${esc(m.next_action)}${m.next_action_at?' (עד '+new Date(m.next_action_at).toLocaleDateString('he-IL')+')':''}</div>`;
+      sec.innerHTML = html;
+      bodyEl.appendChild(sec);
+    });
+
+    if (statusEl) statusEl.textContent = '📄 מפיק PDF...';
+    const producerName = (CURRENT_PROFILE && (CURRENT_PROFILE.full_name || CURRENT_PROFILE.email)) || '';
+    const { blob } = await bsdRenderBrandedPdf({
+      titleText: `דוח עסקים — ${leadName}`,
+      subtitleText: `הופק ${new Date().toLocaleDateString('he-IL')} ע"י ${producerName}`,
+      bodyEl,
+      tagline: 'שקיפות מלאה בכל שלב בתהליך החיפוש',
+    });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `דוח עסקים - ${leadName}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    statusEl.style.color = '#1e7b34'; statusEl.textContent = '✓ הדוח הופק והורד בהצלחה';
+    toast('דוח עסקים לקונה הופק בהצלחה');
+  } catch(e){
+    const msg = e && e.message ? e.message : String(e);
+    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
+    if (btn){ btn.disabled = false; btn.textContent = '📄 הפק PDF'; }
   }
 }
 
@@ -1127,6 +1241,7 @@ async function loadLeadMatchesModule(leadId){
         ${rows.length} עסקים &nbsp;·&nbsp; <span style="color:#1e7b34;font-weight:700;">${activeCount} פעילות</span> &nbsp;·&nbsp; <span style="color:#8a8368;">${closedCount} שהסתיימו</span>
       </div>
       <button type="button" class="btn btn-ghost" onclick="openAddBizToMatchModal('${leadId}')">➕ הוסף עסק להתאמה</button>
+      <button type="button" class="btn btn-ghost" onclick="openBuyerActivityReportModal('${leadId}')">📊 הפק דוח עסקים לקונה</button>
     </div>`;
 
   if (!rows.length){
