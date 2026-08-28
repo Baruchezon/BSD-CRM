@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608281530';
+    var PAGE_BUILD = '202608281745';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -921,6 +921,10 @@ function openLeadForm(id, forcedType, prefillData){
           <div id="leadMeetingsList" style="margin-top:10px;font-size:.82rem;">טוען...</div>
         </div>
         ` : ''}
+        ${(lead && type === 'buyer') ? `
+        <div class="section-h">🏢 עסקים שהוצעו לקונה</div>
+        <div class="field full" id="leadMatchesModuleBox">טוען...</div>
+        ` : ''}
         ${(lead && (type === 'buyer' || type === 'partner') && canManageLeadAccess(lead)) ? `
         <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;">
           <span>🔓 שחרור לצפייה</span>
@@ -949,6 +953,7 @@ function openLeadForm(id, forcedType, prefillData){
   document.getElementById('leadForm').addEventListener('submit', saveLead);
   if (lead && !isGrantOnlyViewer(lead)) loadLeadMeetings(lead.id);
   if (lead && type === 'buyer') loadAnonReceived(lead.id);
+  if (lead && type === 'buyer') loadLeadMatchesModule(lead.id);
   if (lead && (type === 'buyer' || type === 'partner') && canManageLeadAccess(lead)) loadLeadAccessGrants(lead.id);
   if (lead && isGrantOnlyViewer(lead)) applyReadOnlyLeadForm();
 }
@@ -1093,6 +1098,81 @@ async function loadLeadMeetings(leadId){
         <button type="button" class="btn btn-ghost" style="padding:5px 10px;font-size:.78rem;" onclick='window.downloadStandaloneMeetingPdf(${JSON.stringify(m)}, ${JSON.stringify(leadName)})'>📄 הורד PDF</button>
       </div>
     </div>`).join('');
+}
+
+// 🏢 "עסקים שהוצעו לקונה" - אזור מוטמע בכרטיס הקונה (הנחיית שדרוג המשך, 28.08.2026 שלב ב')
+const LEAD_MATCH_CLOSED_STATUSES = ['נסגר ללא עסקה','הקונה לא מעוניין','הוקפא','עסקה הושלמה'];
+async function loadLeadMatchesModule(leadId){
+  const box = document.getElementById('leadMatchesModuleBox');
+  if (!box) return;
+  const lead = ALL_LEADS.find(l=>l.id===leadId);
+  const { data: matches, error } = await window.supabaseClient.from('matches').select('*').eq('buyer_id', leadId).order('updated_at',{ascending:false});
+  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה בטעינת ההתאמות: ${esc(error.message)}</span>`; return; }
+  const rows = matches || [];
+  const bizIds = [...new Set(rows.map(m=>m.business_id))];
+  let bizList = [];
+  if (bizIds.length){
+    const { data } = await window.supabaseClient.from('businesses').select('id,internal_name,business_number,anon_display_name').in('id', bizIds);
+    bizList = data || [];
+  }
+  const bizById = {}; bizList.forEach(b=>bizById[b.id]=b);
+  const activeCount = rows.filter(m=>!LEAD_MATCH_CLOSED_STATUSES.includes(m.status)).length;
+  const closedCount = rows.length - activeCount;
+  const leadName = (lead?.full_name) || [lead?.first_name,lead?.last_name].filter(Boolean).join(' ') || 'קונה';
+
+  let html = `
+    <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:.85rem;">
+        <b>${esc(leadName)}</b> ${lead?.client_number?`(${esc(lead.client_number)})`:''} &nbsp;·&nbsp;
+        ${rows.length} עסקים &nbsp;·&nbsp; <span style="color:#1e7b34;font-weight:700;">${activeCount} פעילות</span> &nbsp;·&nbsp; <span style="color:#8a8368;">${closedCount} שהסתיימו</span>
+      </div>
+      <button type="button" class="btn btn-ghost" onclick="openAddBizToMatchModal('${leadId}')">➕ הוסף עסק להתאמה</button>
+    </div>`;
+
+  if (!rows.length){
+    html += `<div style="color:#999;font-size:.82rem;">אין עדיין עסקים שהוצעו לקונה זה.</div>`;
+  } else {
+    html += `<input type="text" id="leadMatchSearch" placeholder="חיפוש בטבלה: שם עסק, מספר, סטטוס, מטפל..." style="width:100%;padding:7px 10px;border:1px solid #d8d3c4;border-radius:8px;margin-bottom:8px;font-family:inherit;font-size:.8rem;box-sizing:border-box;">
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.78rem;" id="leadMatchTable">
+      <thead><tr style="background:#0e1b34;color:#fff;">
+        <th style="padding:6px 8px;text-align:right;">עסק</th>
+        <th style="padding:6px 8px;text-align:right;">מספר עסק</th>
+        <th style="padding:6px 8px;text-align:right;">נוצרה</th>
+        <th style="padding:6px 8px;text-align:right;">הועבר</th>
+        <th style="padding:6px 8px;text-align:right;">סטטוס</th>
+        <th style="padding:6px 8px;text-align:right;">פעילות אחרונה</th>
+        <th style="padding:6px 8px;text-align:right;">מעקב הבא</th>
+        <th style="padding:6px 8px;text-align:right;">מטפל</th>
+        <th style="padding:6px 8px;text-align:right;">תוצאה</th>
+        <th></th>
+      </tr></thead><tbody>
+      ${rows.map(m=>{
+        const biz = bizById[m.business_id];
+        const bizLabel = biz ? (biz.internal_name || biz.anon_display_name || 'עסק') : 'עסק מוגן (אין הרשאת צפייה)';
+        const searchHay = [bizLabel, biz?.business_number, m.status, userName(m.current_handler), m.final_result, m.notes].filter(Boolean).join(' ').toLowerCase();
+        return `<tr data-hay="${esc(searchHay)}" style="border-bottom:1px solid #eee;cursor:pointer;" onclick="location.href='match-detail.html?id=${m.id}'">
+          <td style="padding:6px 8px;" onclick="event.stopPropagation();${biz?`location.href='businesses.html?open=${m.business_id}'`:''}"><span style="${biz?'color:#1d4e89;font-weight:700;text-decoration:underline;':'color:#999;'}">${esc(bizLabel)}</span></td>
+          <td style="padding:6px 8px;">${esc(biz?.business_number||'—')}</td>
+          <td style="padding:6px 8px;">${fmtDate(m.created_at)}</td>
+          <td style="padding:6px 8px;">${esc(m.material_type||'—')}</td>
+          <td style="padding:6px 8px;"><span style="background:#eef1f8;border-radius:10px;padding:2px 8px;">${esc(m.status||'—')}</span></td>
+          <td style="padding:6px 8px;">${fmtDate(m.updated_at)}</td>
+          <td style="padding:6px 8px;">${m.next_action_at?fmtDate(m.next_action_at):'—'}</td>
+          <td style="padding:6px 8px;">${esc(userName(m.current_handler)||'—')}</td>
+          <td style="padding:6px 8px;">${esc(m.final_result||'—')}</td>
+          <td style="padding:6px 8px;"><button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;" onclick="event.stopPropagation();location.href='match-detail.html?id=${m.id}'">📁 פתח תיק</button></td>
+        </tr>`;
+      }).join('')}
+      </tbody></table></div>`;
+  }
+  box.innerHTML = html;
+  const searchBox = document.getElementById('leadMatchSearch');
+  if (searchBox) searchBox.addEventListener('input', ()=>{
+    const q = searchBox.value.trim().toLowerCase();
+    document.querySelectorAll('#leadMatchTable tbody tr').forEach(tr=>{
+      tr.style.display = (!q || (tr.dataset.hay||'').includes(q)) ? '' : 'none';
+    });
+  });
 }
 
 function switchLeadType(newType, leadId){
