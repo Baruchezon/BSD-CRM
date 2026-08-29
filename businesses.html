@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608282230';
+    var PAGE_BUILD = '202608292100';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -947,6 +947,9 @@ function openBizForm(id){
       </div>
 
       <div class="section-h" style="margin-top:14px;">📁 תיק מכירה (כולל מצגת אנונימית להעלאה)</div>
+      <div style="margin:6px 0 12px;">
+        <a href="https://bsd-sale-file-builder.onrender.com/?business_id=${encodeURIComponent(biz.id)}&business_number=${encodeURIComponent(biz.business_number||'')}&business_name=${encodeURIComponent(biz.internal_name||biz.anonymous_name||'')}" target="_blank" rel="noopener" class="btn btn-primary" style="text-decoration:none;display:inline-block;">📄 יצירת מסמכים ותיק מכירה</a>
+      </div>
       <div id="saleFileModuleBox" style="margin-bottom:6px;"></div>
       <div id="anonDistSummaryBox" style="margin-top:10px;"></div>
       ` : ``}
