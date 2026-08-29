@@ -9,20 +9,54 @@
 // הבדיקות כאן הן נוחות ממשק בלבד ולא תחליף לה.
 // ============================================================
 
+// ------------------------------------------------------------------
+// 6 buckets exactly as specified (29.08.2026), replacing the previous
+// 6 raw-category tiles whose labels/mapping didn't match what's actually
+// needed (e.g. market-research files had no tile of their own and landed
+// under "מסמכים נוספים"; "מצגת אנונימית"/"הערכת שווי" didn't match the
+// Sale File Builder's real document types). Each bucket carries the real
+// DB (category, document_type) pair to WRITE when a file is filed into it
+// (manual upload or category change) - see sfBucketKeyForFile() below for
+// the READ side, which maps existing rows (including legacy ones written
+// before this scheme, verified against real production data) into the
+// same 6 buckets.
 const SALE_FILE_CATEGORIES = [
-  { key: 'anon_presentation', label: 'מצגת אנונימית', icon: '📊', confidentiality: 1 },
-  { key: 'exec_summary',      label: 'תקציר מנהלים',   icon: '📝', confidentiality: 2 },
-  { key: 'economic_analysis', label: 'ניתוח כלכלי',    icon: '📈', confidentiality: 2 },
-  { key: 'valuation',         label: 'הערכת שווי',     icon: '💰', confidentiality: 2 },
-  { key: 'business_photo',    label: 'תמונות העסק',    icon: '🖼️', confidentiality: 1 },
-  { key: 'other',             label: 'מסמכים נוספים',  icon: '📁', confidentiality: 2 },
+  { key: 'anonymous_summary', label: 'תקציר אנונימי', icon: '🕶️', confidentiality: 1, dbCategory: 'exec_summary',     dbDocumentType: 'anonymous_summary' },
+  { key: 'full_summary',      label: 'תקציר מלא',      icon: '📋', confidentiality: 2, dbCategory: 'exec_summary',     dbDocumentType: 'internal_full_summary' },
+  { key: 'market_research',   label: 'חקר שוק',        icon: '📊', confidentiality: 2, dbCategory: 'other',            dbDocumentType: 'market_research' },
+  { key: 'economic_analysis', label: 'ניתוח כלכלי',    icon: '💰', confidentiality: 2, dbCategory: 'economic_analysis', dbDocumentType: null },
+  { key: 'business_photo',    label: 'תמונות',         icon: '🖼️', confidentiality: 1, dbCategory: 'business_photo',   dbDocumentType: null },
+  { key: 'other',             label: 'קבצים נוספים',   icon: '📁', confidentiality: 2, dbCategory: 'other',            dbDocumentType: null },
 ];
 const SALE_FILE_MAX_MB = 20;
 const SALE_FILE_MAX_PHOTOS = 3;
 const SALE_FILE_BUCKET = 'business-files';
 
 function sfCategoryMeta(key){
-  return SALE_FILE_CATEGORIES.find(c => c.key === key) || { key, label: key, icon: '📁', confidentiality: 2 };
+  return SALE_FILE_CATEGORIES.find(c => c.key === key) || { key, label: key, icon: '📁', confidentiality: 2, dbCategory: 'other', dbDocumentType: null };
+}
+
+// Maps a real DB row (raw category + document_type, however it was written -
+// including legacy rows from before this bucket scheme) to one of the 6
+// display buckets above. Verified against every distinct (category,
+// document_type) combination actually present in production before writing
+// this (8 combos, 25 active rows) - not guessed:
+//  business_photo/null, exec_summary/null, economic_analysis/null, other/null,
+//  anon_presentation/null, exec_summary/anonymous_summary,
+//  exec_summary/internal_full_summary, exec_summary/client_report.
+function sfBucketKeyForFile(f){
+  if (f.category === 'anon_presentation') return 'anonymous_summary'; // legacy raw category, pre-dates this scheme
+  if (f.category === 'exec_summary'){
+    // Only a real 'anonymous_summary' document_type counts as the anonymous
+    // bucket; everything else under exec_summary (null, internal_full_summary,
+    // short_summary, client_report) defaults to "תקציר מלא" - all of those are
+    // internal/full-style documents, never anonymous ones.
+    return f.document_type === 'anonymous_summary' ? 'anonymous_summary' : 'full_summary';
+  }
+  if (f.category === 'economic_analysis' || f.category === 'valuation') return 'economic_analysis';
+  if (f.category === 'business_photo') return 'business_photo';
+  if (f.category === 'other') return f.document_type === 'market_research' ? 'market_research' : 'other';
+  return 'other'; // safety net for any category value not seen in the data above
 }
 
 // אבחון אמיתי של כשל העלאה - לא מסתפק בהודעה שהמערכת מציגה למשתמש.
@@ -95,7 +129,8 @@ async function loadSaleFileModule(bizId){
   }
   SF_FILES_BY_CATEGORY = {};
   (data || []).forEach(f => {
-    (SF_FILES_BY_CATEGORY[f.category] = SF_FILES_BY_CATEGORY[f.category] || []).push(f);
+    const bucket = sfBucketKeyForFile(f);
+    (SF_FILES_BY_CATEGORY[bucket] = SF_FILES_BY_CATEGORY[bucket] || []).push(f);
   });
   renderSaleFileCards(bizId);
   // רענון הסימון "מצגת אנונימית: יש/אין" ברשימה הראשית של עסקים, אם היא טעונה כרגע
@@ -179,7 +214,7 @@ function openSaleFileCategory(bizId, categoryKey){
   const canUpload = hasUploadPermission && !isAndroidMobile();
   const isPhotoCat = categoryKey === 'business_photo';
   const rows = sfGroupForDisplay(files);
-  const summaryPdfBar = categoryKey === 'exec_summary' ? `
+  const summaryPdfBar = (categoryKey === 'anonymous_summary' || categoryKey === 'full_summary') ? `
     <div style="background:#eef3fb;border:1px solid #cfe0f5;border-radius:10px;padding:10px 12px;margin-bottom:12px;">
       <div style="font-size:.78rem;color:#1a4d8f;font-weight:700;margin-bottom:6px;">✨ הפקת תקציר PDF חדש (גרסה חדשה, לא דורס קובץ קודם)</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -201,14 +236,14 @@ function openSaleFileCategory(bizId, categoryKey){
         ${rows.length === 0
           ? '<div style="color:#999;font-size:.82rem;">אין עדיין קבצים בקטגוריה זו</div>'
           : rows.map(r => {
-              const row = sfFileRow(r.latest, sfCanManageFile(r.latest));
+              const row = sfFileRow(r.latest, sfCanManageFile(r.latest), bizId, categoryKey);
               if (!r.history.length) return row;
               const gid = r.latest.version_group_id;
               return row + `
                 <div style="padding:2px 0 8px;">
                   <a href="#" onclick="toggleSfVersionHistory('${gid}');return false;" style="font-size:.72rem;color:#8a93ab;text-decoration:underline;">🕘 היסטוריית גרסאות קודמות (${r.history.length})</a>
                   <div id="sfHistory_${gid}" style="display:none;margin-inline-start:12px;">
-                    ${r.history.map(h => sfFileRow(h, false)).join('')}
+                    ${r.history.map(h => sfFileRow(h, false, bizId, categoryKey)).join('')}
                   </div>
                 </div>`;
             }).join('')}
@@ -227,22 +262,72 @@ function openSaleFileCategory(bizId, categoryKey){
   `;
 }
 
-function sfFileRow(f, canManage){
+function sfFileRow(f, canManage, bizId, categoryKey){
   const isAuto = f.source === 'auto_generated';
+  const updatedDiffers = f.updated_at && f.updated_at !== f.created_at;
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e5e1d5;font-size:.83rem;flex-wrap:wrap;gap:4px;">
       <span>📄 ${esc(f.file_name)} <span style="color:#8a93ab;font-size:.75rem;">${f.confidentiality_level === 1 ? '· אנונימי' : '· חסוי'}</span> ${sfSourceBadge(f)}
-        <span style="color:#b3a98a;font-size:.7rem;">${fmtDateTime ? fmtDateTime(f.created_at) : ''}${f.uploaded_by ? (' · ' + (typeof userName === 'function' ? userName(f.uploaded_by) : '')) : ''}</span>
+        <span style="color:#b3a98a;font-size:.7rem;">נוצר: ${fmtDateTime ? fmtDateTime(f.created_at) : ''}${updatedDiffers ? (' · עודכן: ' + fmtDateTime(f.updated_at)) : ''}${f.version_number ? (' · גרסה ' + f.version_number) : ''}${f.uploaded_by ? (' · ' + (typeof userName === 'function' ? userName(f.uploaded_by) : '')) : ''}</span>
       </span>
       <span style="display:flex;gap:4px;flex-wrap:wrap;">
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="viewSaleFile('${f.id}','${esc(f.storage_path)}')">👁️ צפייה</button>
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="downloadSaleFile('${esc(f.storage_path)}','${esc(f.file_name.replace(/'/g,''))}')">📂 הורדה</button>
         ${canManage && !isAuto ? `
+        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="replaceSaleFile('${f.id}','${bizId}','${categoryKey}')">🔄 גרסה חדשה</button>
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="renameSaleFile('${f.id}','${esc(f.file_name.replace(/'/g,''))}')">✏️ שינוי שם</button>
-        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="changeSaleFileCategory('${f.id}','${f.category}')">🔀 שינוי קטגוריה</button>` : ''}
+        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="changeSaleFileCategory('${f.id}','${sfBucketKeyForFile(f)}')">🔀 שינוי קטגוריה</button>` : ''}
         ${canManage ? `<button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;color:#b3402c;" onclick="deleteSaleFile('${f.id}')">מחק</button>` : ''}
       </span>
     </div>`;
+}
+
+// Replace a file with a new version - reuses the same version_group_id
+// mechanism already used for auto-generated summaries, so the new version
+// becomes primary and the old one moves into the same "🕘 היסטוריית גרסאות"
+// expandable history that already existed - no new UI mechanism.
+async function replaceSaleFile(fileId, bizId, categoryKey){
+  if (!sfCanUpload()){ toast('אין לך הרשאת העלאת קבצים'); return; }
+  const oldFile = sfAllActiveFiles().find(f => f.id === fileId);
+  if (!oldFile){ toast('הקובץ המקורי לא נמצא'); return; }
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.onchange = async () => {
+    const rawFile = input.files[0];
+    if (!rawFile) return;
+    if (rawFile.size > SALE_FILE_MAX_MB * 1024 * 1024){ toast(`הקובץ גדול מדי (מקסימום ${SALE_FILE_MAX_MB}MB)`); return; }
+    try {
+      const groupId = oldFile.version_group_id || crypto.randomUUID();
+      const { data: versionNum, error: verErr } = await window.supabaseClient.rpc('allocate_sale_file_version', { p_group_id: groupId });
+      if (verErr) throw new Error('שגיאה בהקצאת מספר גרסה: ' + verErr.message);
+      if (!oldFile.version_group_id){
+        await window.supabaseClient.from('business_sale_files')
+          .update({ version_group_id: groupId, version_number: 1 }).eq('id', fileId);
+      }
+      const cat = sfCategoryMeta(categoryKey);
+      const extMatch = rawFile.name.match(/\.[A-Za-z0-9]+$/);
+      const safeExt = extMatch ? extMatch[0] : '';
+      const safeRand = Math.random().toString(36).slice(2, 8);
+      const path = `${bizId}/sale-file/${categoryKey}/${Date.now()}_${safeRand}${safeExt}`;
+      const { error: upErr } = await bsdUploadFile(SALE_FILE_BUCKET, path, rawFile, { contentType: rawFile.type || undefined });
+      if (upErr) throw new Error('שגיאה בהעלאת הקובץ: ' + upErr.message);
+      const { error: dbErr } = await window.supabaseClient.from('business_sale_files').insert({
+        business_id: bizId, category: cat.dbCategory, document_type: cat.dbDocumentType,
+        file_name: rawFile.name, storage_path: path,
+        file_type: rawFile.type || safeExt, file_size: rawFile.size,
+        confidentiality_level: cat.confidentiality, uploaded_by: CURRENT_PROFILE.id,
+        version_group_id: groupId, version_number: versionNum,
+      });
+      if (dbErr) throw new Error('הקובץ הועלה אך רישום נכשל: ' + dbErr.message);
+      toast('גרסה חדשה נשמרה');
+      await sfLogAudit(bizId, 'replace_sale_file', { old_file_id: fileId, new_version: versionNum, category: categoryKey });
+      await loadSaleFileModule(bizId);
+      openSaleFileCategory(bizId, categoryKey);
+    } catch (e) {
+      toast('שגיאה: ' + e.message);
+    }
+  };
+  input.click();
 }
 
 // ---------------------------------------------------------------
@@ -337,7 +422,8 @@ async function uploadSaleFiles(bizId, categoryKey){
       }
       const { error: dbErr } = await window.supabaseClient.from('business_sale_files').insert({
         business_id: bizId,
-        category: categoryKey,
+        category: cat.dbCategory,
+        document_type: cat.dbDocumentType,
         file_name: rawFile.name,
         storage_path: path,
         file_type: rawFile.type || (rawFile.name.match(/\.[A-Za-z0-9]+$/) || [''])[0],
@@ -399,17 +485,17 @@ async function renameSaleFile(fileId, currentName){
   await loadSaleFileModule(SF_CURRENT_BIZ);
 }
 
-async function changeSaleFileCategory(fileId, currentCategory){
+async function changeSaleFileCategory(fileId, currentBucketKey){
   const options = SALE_FILE_CATEGORIES.map(c => `${c.key} - ${c.label}`).join('\n');
-  const input = prompt(`הקלד את מפתח הקטגוריה החדשה:\n${options}`, currentCategory);
+  const input = prompt(`הקלד את מפתח הקטגוריה החדשה:\n${options}`, currentBucketKey);
   if (!input) return;
   const newCat = sfCategoryMeta(input.trim());
   if (!SALE_FILE_CATEGORIES.some(c => c.key === newCat.key)){ toast('קטגוריה לא מזוהה'); return; }
   const { error } = await window.supabaseClient.from('business_sale_files')
-    .update({ category: newCat.key, confidentiality_level: newCat.confidentiality, updated_at: new Date().toISOString() }).eq('id', fileId);
+    .update({ category: newCat.dbCategory, document_type: newCat.dbDocumentType, confidentiality_level: newCat.confidentiality, updated_at: new Date().toISOString() }).eq('id', fileId);
   if (error){ toast('שגיאה בשינוי קטגוריה: ' + error.message); return; }
   toast('הקטגוריה עודכנה');
-  await sfLogAudit(SF_CURRENT_BIZ, 'change_sale_file_category', { file_id: fileId, old_category: currentCategory, new_category: newCat.key });
+  await sfLogAudit(SF_CURRENT_BIZ, 'change_sale_file_category', { file_id: fileId, old_bucket: currentBucketKey, new_bucket: newCat.key });
   await loadSaleFileModule(SF_CURRENT_BIZ);
 }
 
@@ -481,7 +567,7 @@ async function openSendToBuyerModal(bizId, bizName){
       <div style="font-weight:700;font-size:.85rem;color:var(--navy);margin-top:10px;">בחר קבצים לשליחה:</div>
       <div id="sfSendFilesList" style="max-height:220px;overflow-y:auto;margin:8px 0;border:1px solid #e5e1d5;border-radius:8px;padding:8px;">
         ${files.map(f => {
-          const cat = sfCategoryMeta(f.category);
+          const cat = sfCategoryMeta(sfBucketKeyForFile(f));
           return `
           <label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:.83rem;cursor:pointer;">
             <input type="checkbox" class="sfSendFileChk" data-conf="${f.confidentiality_level}" value="${f.id}" data-name="${esc(f.file_name)}" data-cat="${esc(cat.label)}" data-path="${esc(f.storage_path)}" style="width:auto;">
