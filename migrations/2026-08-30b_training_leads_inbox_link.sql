@@ -16,3 +16,13 @@ create index if not exists idx_training_leads_lead_id on training_leads(lead_id)
 -- אבל עד כה בלי שום התראה לאדמין - אם הכישלון נמשך, אף אחד לא היה יודע.
 -- error_alerted_at מונע הצפה: מתריעים פעם אחת בלבד לכל מייל כושל, לא בכל ריצה חוזרת.
 alter table site123_lead_emails add column if not exists error_alerted_at timestamptz;
+
+-- הרחבה שנייה (30.08.2026): מחיקה רכה למתעניינים, במקום DELETE אמיתי -
+-- אותה מוסכמה בדיוק כמו leads.is_archived/archived_at/archived_by/
+-- archive_reason (leads.html: archiveLead/restoreLeadFromArchive), כדי
+-- שלא לאבד מידע בטעות בלחיצת מחיקה. לא נוגע במחיקה בפועל בשום מקום.
+alter table training_leads add column if not exists is_archived boolean not null default false;
+alter table training_leads add column if not exists archived_at timestamptz;
+alter table training_leads add column if not exists archived_by uuid references profiles(id);
+alter table training_leads add column if not exists archive_reason text;
+create index if not exists idx_training_leads_is_archived on training_leads(is_archived) where is_archived=true;
