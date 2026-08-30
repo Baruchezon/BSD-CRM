@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608300456';
+    var PAGE_BUILD = '202608301202';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -70,6 +70,30 @@
   .timeline{margin-top:6px;}
   .timeline-item{padding:8px 12px;border-right:3px solid #c9a24b;background:#faf8f2;border-radius:6px;margin-bottom:6px;font-size:.82rem;}
   .timeline-item .t-date{color:#999;font-size:.72rem;}
+
+  /* ============================================================
+     תיקון שורש שתי התקלות (30.08.2026): כללי ה-overlay/.modal הבסיסיים
+     היו חסרים לגמרי מהדף הזה (בניגוד לכל שאר דפי המערכת - leads.html,
+     businesses.html, leads-hub.html, tasks.html - שכולם מגדירים אותם
+     מקומית). התוצאה: openLeadCard/openAddLeadModal בנו בפועל את תוכן
+     המודל ל-DOM, אבל בלי position:fixed/display:flex זה נכנס לזרימת
+     העמוד הרגילה בלי רקע/מיקוד - נראה כאילו "כלום לא קרה" בלחיצה.
+     ============================================================ */
+  .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
+  .overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:14px;max-width:680px;width:100%;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  @media (max-width:639px){
+    .overlay{padding:0;align-items:stretch;}
+    .modal{max-width:100%;width:100%;min-height:100%;border-radius:0;padding:16px 14px 100px;}
+  }
+
+  /* טאבים - לידים / מתעניינים (אותה מוסכמה ויזואלית כמו leads-hub.html) */
+  .lead-tabs{display:flex;gap:8px;margin-bottom:18px;border-bottom:2px solid #eee6d4;}
+  .lead-tab{padding:12px 20px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:.95rem;font-weight:700;color:#8a8578;border-bottom:3px solid transparent;margin-bottom:-2px;}
+  .lead-tab.active{color:var(--navy);border-bottom-color:var(--gold);}
+  .lead-tab .count{display:inline-block;background:#eee6d4;color:#665;border-radius:10px;padding:1px 8px;font-size:.75rem;margin-right:6px;}
+  .lead-tab.active .count{background:var(--gold);color:#1c2333;}
+  .lead-tab .count.alert{background:#b3402c;color:#fff;}
 </style>
 </head>
 <body>
@@ -133,6 +157,36 @@
     </div>
   </div>
 
+  <div class="lead-tabs">
+    <button type="button" class="lead-tab" data-tab="inbox" onclick="switchTrainingTab('inbox')">📥 לידים <span class="count" id="countInbox">0</span></button>
+    <button type="button" class="lead-tab active" data-tab="interested" onclick="switchTrainingTab('interested')">📇 מתעניינים <span class="count" id="countInterested">0</span></button>
+  </div>
+
+  <!-- ============================================================
+       טאב "לידים" - תיבת קליטה ללידים גולמיים שזוהו כמתעניינים בהכשרה
+       (leads.website_intake_stage='training'), עד להעברתם למתעניינים.
+       ============================================================ -->
+  <div id="inboxTabPanel" style="display:none;">
+    <div style="background:#f7f5ef;border-radius:8px;padding:10px 14px;font-size:.8rem;color:#665;margin-bottom:14px;">
+      לידים שזוהו (אוטומטית לפי תוכן הפנייה, או ידנית מ"לידים") כמתעניינים בהכשרה. לאחר שיחה עם הפונה, לחצו "העבר למתעניינים" כדי לפתוח/לעדכן את הכרטיס שלו למטה - הליד המקורי לא נמחק וההיסטוריה נשמרת.
+    </div>
+    <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr><th>שם</th><th>טלפון</th><th>אימייל</th><th>מקור</th><th>התקבל</th><th>תוכן הפנייה</th><th>סטטוס</th><th></th></tr>
+      </thead>
+      <tbody id="inboxBody">
+        <tr class="empty-row"><td colspan="8">טוען...</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       טאב "מתעניינים" - הרשימה הקיימת (training_leads), ללא שינוי
+       בלוגיקה שלה עצמה, רק עטופה בטאב.
+       ============================================================ -->
+  <div id="interestedTabPanel">
   <div class="filters">
     <input type="text" id="fSearch" placeholder="חיפוש לפי שם, טלפון, אימייל...">
     <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
@@ -156,6 +210,7 @@
       <tr class="empty-row"><td colspan="6">טוען...</td></tr>
     </tbody>
   </table>
+  </div>
   </div>
 </div>
 
@@ -270,6 +325,8 @@ async function loadLeads(){
   const { data, error } = await window.supabaseClient.from('training_leads').select('*').order('created_at', { ascending: false });
   if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
   ALL_LEADS = data || [];
+  const countEl = document.getElementById('countInterested');
+  if (countEl) countEl.textContent = ALL_LEADS.length;
   renderKpis();
   renderTable();
 }
@@ -290,6 +347,163 @@ function renderKpis(){
     { num: conversion + '%', lbl: 'יחס המרה (שולם/סה"כ)' }
   ];
   document.getElementById('kpiGrid').innerHTML = kpis.map(k => `<div class="kpi"><div class="num">${k.num}</div><div class="lbl">${k.lbl}</div></div>`).join('');
+}
+
+// ============================================================
+// טאב "לידים" - תיבת קליטה (leads.website_intake_stage='training')
+// לא נוגע בשום שאילתה/דף אחר שקורא מ-leads - זו שאילתה נפרדת ומבודדת,
+// בדיוק כמו checkNewLeadPopup ב-app.html שקוראת website_intake_stage='new'.
+// ============================================================
+let CURRENT_TRAINING_TAB = 'interested';
+let ALL_INBOX_LEADS = [];
+
+function switchTrainingTab(tab){
+  CURRENT_TRAINING_TAB = tab;
+  document.querySelectorAll('.lead-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('inboxTabPanel').style.display = tab === 'inbox' ? 'block' : 'none';
+  document.getElementById('interestedTabPanel').style.display = tab === 'interested' ? 'block' : 'none';
+}
+
+async function loadInboxLeads(){
+  const { data, error } = await window.supabaseClient
+    .from('leads')
+    .select('id, full_name, first_name, last_name, phone, email, source, notes, status, created_at, website_purpose_guess')
+    .eq('website_intake_stage', 'training')
+    .order('created_at', { ascending: false });
+  if (error){ toast('שגיאה בטעינת לידים להכשרה: ' + error.message); return; }
+  ALL_INBOX_LEADS = data || [];
+  document.getElementById('countInbox').textContent = ALL_INBOX_LEADS.length;
+  document.getElementById('countInbox').classList.toggle('alert', ALL_INBOX_LEADS.length > 0);
+  renderInboxTable();
+}
+
+function renderInboxTable(){
+  const body = document.getElementById('inboxBody');
+  if (ALL_INBOX_LEADS.length === 0){
+    body.innerHTML = '<tr class="empty-row"><td colspan="8">אין כרגע לידים חדשים להכשרה</td></tr>';
+    return;
+  }
+  body.innerHTML = ALL_INBOX_LEADS.map(l => {
+    const name = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || 'שם לא זוהה';
+    const messagePreview = (l.notes || '').replace(/\n/g,' ').slice(0,120) || '—';
+    return `
+    <tr style="cursor:pointer;" onclick="openInboxLeadDetail('${l.id}')">
+      <td>${esc(name)}</td>
+      <td>${esc(fmtPhone(l.phone))}${waBtn(l.phone)}</td>
+      <td>${esc(l.email||'—')}</td>
+      <td>${esc(l.source||'—')}</td>
+      <td>${fmtDateTime(l.created_at)}</td>
+      <td style="max-width:260px;color:#777;font-size:.8rem;" title="${esc(l.notes||'')}">${esc(messagePreview)}${messagePreview.length>=120?'…':''}</td>
+      <td><span class="badge" style="background:#eef1f6;color:#333;">${esc(l.status || 'חדש לטיפול')}</span></td>
+      <td onclick="event.stopPropagation()"><button type="button" class="btn btn-success" style="padding:6px 10px;font-size:.75rem;" onclick="promoteInboxLead('${l.id}')">➡️ העבר למתעניינים</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function openInboxLeadDetail(id){
+  const l = ALL_INBOX_LEADS.find(x => x.id === id);
+  if (!l) return;
+  const name = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || 'שם לא זוהה';
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>📥 ליד להכשרה - ${esc(name)}</h3>
+    <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;margin-bottom:14px;">
+      התקבל: ${fmtDateTime(l.created_at)} · מקור: ${esc(l.source||'—')} · סטטוס: ${esc(l.status||'חדש לטיפול')}
+    </div>
+    <div class="field"><label>טלפון</label><div style="padding:9px 0;">${esc(fmtPhone(l.phone))}${waBtn(l.phone)}</div></div>
+    <div class="field"><label>אימייל</label><div style="padding:9px 0;">${esc(l.email||'—')}</div></div>
+    <div class="field full"><label>תוכן הפנייה המקורי</label><div style="white-space:pre-wrap;background:#faf8f2;border-radius:8px;padding:10px 12px;font-size:.85rem;">${esc(l.notes||'—')}</div></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">סגירה</button>
+      <button type="button" class="btn btn-success" onclick="closeModal();promoteInboxLead('${l.id}')">➡️ העבר למתעניינים</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+}
+
+function normPhone9(phone){
+  const d = String(phone||'').replace(/\D/g,'');
+  return d.length >= 9 ? d.slice(-9) : d;
+}
+
+// "העבר למתעניינים": בדיקת כפילות אמיתית מול training_leads (טלפון/מייל,
+// לא רק שם), יצירה או מיזוג + קישור lead_id, שמירת תוכן הפנייה המקורי,
+// ותיעוד באירועים - הליד המקורי עצמו לעולם לא נמחק, רק website_intake_stage
+// מתאפס (אותה מוסכמה בדיוק כמו שסיווג סופי לקונה/מוכר עובד ב-leads-hub.html).
+async function promoteInboxLead(id){
+  const l = ALL_INBOX_LEADS.find(x => x.id === id);
+  if (!l) return;
+  const name = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || 'שם לא זוהה';
+  const last9 = normPhone9(l.phone);
+  const emailNorm = (l.email||'').trim().toLowerCase();
+
+  const { data: candidates, error: candErr } = await window.supabaseClient
+    .from('training_leads').select('id, first_name, last_name, phone, email, lead_id');
+  if (candErr){ toast('שגיאה בבדיקת כפילויות: ' + candErr.message); return; }
+
+  const existing = (candidates||[]).find(c =>
+    (last9 && normPhone9(c.phone) === last9) ||
+    (emailNorm && (c.email||'').trim().toLowerCase() === emailNorm)
+  );
+
+  const nowStr = new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
+
+  if (existing){
+    if (!confirm(`נמצא כבר מתעניין קיים בשם "${[existing.first_name,existing.last_name].filter(Boolean).join(' ')||'שם לא זוהה'}" עם אותו טלפון/מייל.\n\nהפנייה החדשה תתווסף להיסטוריה שלו ולא ייפתח כרטיס כפול. להמשיך?`)) return;
+    const updatePayload = { original_inquiry: (l.notes || existing.original_inquiry || null) };
+    if (!existing.lead_id) updatePayload.lead_id = l.id;
+    const { error: updErr } = await window.supabaseClient.from('training_leads').update(updatePayload).eq('id', existing.id);
+    if (updErr){ toast('שגיאה בעדכון המתעניין: ' + updErr.message); return; }
+    await logEvent(existing.id, `[${nowStr}] פנייה נוספת מהאתר (מקור: ${l.source||'—'}) — שם בפנייה: ${name}. תוכן: ${(l.notes||'').slice(0,300) || '—'}`);
+
+    const { error: leadUpdErr } = await window.supabaseClient.from('leads').update({
+      website_intake_stage: null, status: 'מוזג עם מתעניין קיים בהכשרה'
+    }).eq('id', l.id);
+    if (leadUpdErr){ toast('המתעניין עודכן, אך עדכון הליד המקורי נכשל: ' + leadUpdErr.message); }
+
+    toast('הפנייה מוזגה לכרטיס המתעניין הקיים');
+    await loadInboxLeads();
+    if (CURRENT_TRAINING_TAB === 'interested') await loadLeads();
+    return;
+  }
+
+  const nameParts = name === 'שם לא זוהה' ? [] : name.split(/\s+/).filter(Boolean);
+  const { data: newLead, error: insErr } = await window.supabaseClient.from('training_leads').insert({
+    first_name: nameParts[0] || l.first_name || null,
+    last_name: nameParts.slice(1).join(' ') || l.last_name || null,
+    phone: l.phone || null,
+    email: l.email || null,
+    admin_notes: `[הועבר מליד אתר ב-${nowStr}] ${l.notes || ''}`.trim(),
+    status: 'שיחה טלפונית',
+    registration_number: makeRegistrationNumber(),
+    form_token: randomToken(),
+    lead_id: l.id,
+    source: l.source || null,
+    original_inquiry: l.notes || null,
+    created_by: CURRENT_PROFILE.id
+  }).select('id').single();
+
+  if (insErr){ toast('שגיאה ביצירת המתעניין: ' + insErr.message); return; }
+
+  // אימות אמיתי בקריאה נפרדת - לא רק "לא החזיר שגיאה"
+  const { data: verifyRow, error: verifyErr } = await window.supabaseClient
+    .from('training_leads').select('id, lead_id').eq('id', newLead.id).maybeSingle();
+  if (verifyErr || !verifyRow || verifyRow.lead_id !== l.id){
+    toast('שגיאה: לא ניתן היה לאמת שהמתעניין נשמר כראוי');
+    return;
+  }
+
+  await logEvent(newLead.id, `מתעניין נוצר מליד אתר (מקור: ${l.source||'—'})`);
+
+  const { error: leadUpdErr2 } = await window.supabaseClient.from('leads').update({
+    website_intake_stage: null, status: 'הועבר למתעניין הכשרה'
+  }).eq('id', l.id);
+  if (leadUpdErr2){ toast('המתעניין נוצר, אך עדכון הליד המקורי נכשל: ' + leadUpdErr2.message); }
+
+  toast('המתעניין נוצר בהצלחה מהליד');
+  await loadInboxLeads();
+  if (CURRENT_TRAINING_TAB === 'interested') await loadLeads();
 }
 
 function renderTable(){
@@ -583,6 +797,7 @@ async function openLeadCard(id){
       מספר רישום: <b>${esc(lead.registration_number||'—')}</b> · נוצר: ${fmtDateTime(lead.created_at)}
     </div>
     ${lead.signed_at ? `<div style="background:#d9f2e3;color:#1a5c38;border-radius:8px;padding:10px 14px;font-size:.88rem;font-weight:700;margin-bottom:14px;">✅ הטופס נחתם בתאריך ${fmtDateTime(lead.signed_at)}${lead.signed_name ? ' על ידי ' + esc(lead.signed_name) : ''}</div>` : ''}
+    ${lead.lead_id ? `<div style="background:#eef3fb;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#33507a;margin-bottom:14px;">🔗 מתעניין זה נוצר מליד אתר (מקור: ${esc(lead.source||'—')})${lead.original_inquiry ? '<br>תוכן הפנייה המקורי: ' + esc(lead.original_inquiry) : ''}</div>` : ''}
     <form id="cardForm">
       <div class="form-grid">
         ${fieldRow('cf_first','שם פרטי', lead.first_name)}
@@ -795,7 +1010,21 @@ async function saveTrainingSettings(e){
 
   document.getElementById('mainWrap').style.display = 'block';
   await loadSettings();
+  await loadInboxLeads();
   await loadLeads();
+
+  // תמיכה בקישור עומק מהתראת פוש ("מתעניין חדש בהכשרה") - פותח ישירות
+  // את הטאב והכרטיס הרלוונטיים במקום להשאיר את המשתמש לחפש ידנית.
+  const params = new URLSearchParams(location.search);
+  const openId = params.get('open');
+  const tabParam = params.get('tab');
+  if (tabParam === 'inbox' || (openId && ALL_INBOX_LEADS.some(l => l.id === openId))){
+    switchTrainingTab('inbox');
+  }
+  if (openId){
+    if (ALL_INBOX_LEADS.some(l => l.id === openId)) openInboxLeadDetail(openId);
+    else if (ALL_LEADS.some(l => l.id === openId)) openLeadCard(openId);
+  }
 })();
 </script>
 </body>
