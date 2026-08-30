@@ -143,6 +143,9 @@ function renderSaleFileCards(bizId){
   const box = document.getElementById('saleFileModuleBox');
   if (!box) return;
   box.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+      <button type="button" class="btn btn-primary" style="font-size:.78rem;padding:6px 14px;" onclick="sfOpenSendModalForCurrentBiz('${bizId}')">📤 שלח לקונה</button>
+    </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;">
       ${SALE_FILE_CATEGORIES.map(cat => {
         const count = (SF_FILES_BY_CATEGORY[cat.key] || []).length;
@@ -162,6 +165,16 @@ function renderSaleFileCards(bizId){
     style.textContent = '.sf-card:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(14,27,52,.16);}.sf-card:active{transform:translateY(1px) scale(.97);box-shadow:0 2px 6px rgba(14,27,52,.14);}';
     document.head.appendChild(style);
   }
+}
+
+// 30.08.2026: תוקן באג אמיתי שנמצא בבדיקה - openSendToBuyerModal הייתה
+// פונקציה קיימת אבל בלי שום כפתור בממשק שקורא לה בפועל (קוד "יתום").
+// הכפתור מעל נוסף עכשיו; העטיפה הזו רק פותרת את שם העסק מתוך ה-cache
+// הגלובלי הקיים (ALL_BIZ) כדי לא לשנות את חתימת הפונקציה עצמה.
+function sfOpenSendModalForCurrentBiz(bizId){
+  const biz = (typeof ALL_BIZ !== 'undefined' ? ALL_BIZ : []).find(b => b.id === bizId);
+  const bizName = (biz && (biz.internal_name || biz.anonymous_name)) || 'עסק';
+  openSendToBuyerModal(bizId, bizName);
 }
 
 // ---------------------------------------------------------------
