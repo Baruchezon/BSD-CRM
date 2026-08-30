@@ -227,27 +227,19 @@ function openSaleFileCategory(bizId, categoryKey){
   const canUpload = hasUploadPermission && !isAndroidMobile();
   const isPhotoCat = categoryKey === 'business_photo';
   const rows = sfGroupForDisplay(files);
-  const summaryPdfBar = (categoryKey === 'anonymous_summary' || categoryKey === 'full_summary') ? `
-    <div style="background:#eef3fb;border:1px solid #cfe0f5;border-radius:10px;padding:10px 12px;margin-bottom:12px;">
-      <div style="font-size:.78rem;color:#1a4d8f;font-weight:700;margin-bottom:6px;">✨ הפקת תקציר PDF חדש (גרסה חדשה, לא דורס קובץ קודם)</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button type="button" class="btn btn-ghost" onclick="generateAndSaveSummaryPdf('${bizId}','short_summary')">📄 תקציר קצר</button>
-        <button type="button" class="btn btn-ghost" onclick="generateAndSaveSummaryPdf('${bizId}','internal_full_summary')">📄 תקציר עסקי מלא</button>
-        <button type="button" class="btn btn-ghost" onclick="generateAndSaveSummaryPdf('${bizId}','anonymous_summary')">📄 תקציר אנונימי</button>
-        <button type="button" class="btn btn-ghost" disabled title="בקרוב" style="opacity:.55;cursor:not-allowed;">☁️ שמירה ב-Google Drive (בקרוב)</button>
-      </div>
-      <div id="sfPdfGenStatus" style="font-size:.78rem;color:#999;margin-top:6px;min-height:1.1em;"></div>
-    </div>` : '';
+  // 30.08.2026: הוסר "הפקת תקציר PDF חדש" (היה כאן כפילות מיותרת מול
+  // הפקת התקצירים הקיימת כבר במקום אחר בתיק המכירה - לפי הנחיה מפורשת).
+  // generateAndSaveSummaryPdf עצמה לא נמחקה, רק הכפתורים כאן שקראו לה.
   panel.innerHTML = `
     <div style="background:#f7f5ef;border-radius:12px;padding:14px 16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
         <div style="font-weight:700;color:#0e1b34;">${cat.icon} ${esc(cat.label)}</div>
         <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="document.getElementById('saleFileCategoryPanel').innerHTML=''">סגור</button>
       </div>
-      ${summaryPdfBar}
       <div id="sfFilesList">
         ${rows.length === 0
-          ? '<div style="color:#999;font-size:.82rem;">אין עדיין קבצים בקטגוריה זו</div>'
+          ? `<div style="color:#5a6172;font-size:.85rem;margin-bottom:10px;">לא קיים עדיין קובץ ${esc(cat.label)}</div>` +
+            (canUpload ? `<button type="button" class="btn btn-primary" style="font-size:.8rem;padding:6px 14px;" onclick="document.getElementById('sfUploadInput').click()">📤 העלה קובץ מהמחשב</button>` : '')
           : rows.map(r => {
               const row = sfFileRow(r.latest, sfCanManageFile(r.latest), bizId, categoryKey);
               if (!r.history.length) return row;
