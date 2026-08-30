@@ -10,3 +10,9 @@ alter table training_leads add column if not exists source text;
 alter table training_leads add column if not exists original_inquiry text;
 
 create index if not exists idx_training_leads_lead_id on training_leads(lead_id) where lead_id is not null;
+
+-- הרחבה (30.08.2026, אותו יום): מנגנון "לא לאבד ליד בשקט" - מייל שנכשל
+-- בעיבוד (parse/classify/DB) כבר מסומן action='error' ומנוסה שוב אוטומטית,
+-- אבל עד כה בלי שום התראה לאדמין - אם הכישלון נמשך, אף אחד לא היה יודע.
+-- error_alerted_at מונע הצפה: מתריעים פעם אחת בלבד לכל מייל כושל, לא בכל ריצה חוזרת.
+alter table site123_lead_emails add column if not exists error_alerted_at timestamptz;

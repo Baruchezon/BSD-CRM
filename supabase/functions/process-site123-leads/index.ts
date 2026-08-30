@@ -93,6 +93,10 @@ async function processOneEmail(row: {
   const last9 = last9Digits(parsed.phone);
   const emailNorm = parsed.email ? parsed.email.trim().toLowerCase() : '';
 
+  // חריג הכשרות (ראו הרחבה למטה ליד "ליד חדש") - מחושב כבר כאן כי הוא
+  // צריך להשפיע על החלטת המיזוג/כפילות, לא רק על יצירת ליד חדש.
+  const isClearTraining = classification === 'training' && !needsReview;
+
   // ---- בדיקת כפילות מול leads קיימים ----
   let existing: any = null;
   if (last9 || emailNorm) {
@@ -108,6 +112,20 @@ async function processOneEmail(row: {
     existing = findDuplicate(parsed.phone, parsed.email, (candidates ?? []) as any);
   }
 
+  // תיקון שורש (30.08.2026): פנייה חד-משמעית להכשרה שמזוהה כ"כפילות" מול
+  // איש קשר שכבר קיים במערכת מסיבה אחרת לגמרי (למשל ליד קונה/מוכר ישן
+  // שנסגר) לא אמורה "להיבלע" כהערה על אותה רשומה לא-קשורה - זה בדיוק מה
+  // שקרה בפועל (בדיקה אמיתית 30.08: פנייה על "רישום לקורס" נכנסה כהערה+
+  // משימה על ליד קונה ישן, בלי שהיא הגיעה בכלל לתיבת הלידים להכשרה).
+  // ההבחנה: אם הרשומה הקיימת היא כבר בעצמה ליד-הכשרה פתוח
+  // (website_intake_stage='training') - זו אכן אותה פנייה נמשכת, וממשיכים
+  // למיזוג הרגיל. אחרת (ליד מסוג/עניין אחר לגמרי) - לא ממזגים; ממשיכים
+  // לנתיב "ליד חדש" ויוצרים ליד הכשרה נפרד, עם הפניה צולבת להערה (לא
+  // נוגעים ברשומה הישנה בכלל - אפס סיכון לניתוב הקיים שלה).
+  const existingIsUnrelatedToTraining = isClearTraining && existing && existing.website_intake_stage !== 'training';
+  const crossRefExisting = existingIsUnrelatedToTraining ? existing : null;
+  if (existingIsUnrelatedToTraining) existing = null;
+
   const adminId = await getAdminProfileId();
   // שם התצוגה של הליד: אף פעם לא שם בעל התיבה/BSD, ואף פעם לא מומצא - אם
   // אין שם ברור בשדה "שם ושם משפחה" של הטופס, "שם לא זוהה" בלבד.
@@ -122,12 +140,16 @@ async function processOneEmail(row: {
       + `שם הפונה בטופס הנוכחי: ${displayName}${sameName ? '' : ` (שונה משם הרשומה הקיימת: ${existing.full_name || 'שם לא זוהה'})`}\n`
       + `תיבות סימון שנבחרו (כל הבחירות): ${parsed.checkboxes.length ? parsed.checkboxes.join(', ') : '(לא סומן)'} | הודעה: ${parsed.message || '—'}`;
     // אם הרשומה הקיימת היא עדיין ליד-אתר פתוח (עוד לא סווג/הועבר) - מחזירים
-    // אותה ל-'new' כדי שהפנייה הנוספת תקפוץ שוב בתיבת הקליטה ולא תיבלע
-    // בתוך הערה על ליד שממתין ממילא. לידים שכבר הועברו סופית (stage=null)
-    // לא נפתחים מחדש אוטומטית - רק מקבלים הערה + משימה, כמו קודם.
-    const stillOpenIntake = existing.website_intake_stage === 'new' || existing.website_intake_stage === 'contacted';
+    // אותה ל-'new' (או 'training' אם זו פנייה חוזרת להכשרה) כדי שהפנייה
+    // הנוספת תקפוץ שוב בתיבת הקליטה הרלוונטית ולא תיבלע בתוך הערה על ליד
+    // שממתין ממילא. לידים שכבר הועברו סופית (stage=null) לא נפתחים מחדש
+    // אוטומטית - רק מקבלים הערה + משימה, כמו קודם.
+    const stillOpenIntake = existing.website_intake_stage === 'new' || existing.website_intake_stage === 'contacted' || existing.website_intake_stage === 'training';
     const updatePayload: Record<string, any> = { notes: (existing.notes || '') + addNote };
-    if (stillOpenIntake) { updatePayload.website_intake_stage = 'new'; updatePayload.status = 'חדש'; }
+    if (stillOpenIntake) {
+      updatePayload.website_intake_stage = existing.website_intake_stage === 'training' ? 'training' : 'new';
+      updatePayload.status = existing.website_intake_stage === 'training' ? 'חדש לטיפול' : 'חדש';
+    }
     const { error: updErr } = await supabase.from('leads').update(updatePayload).eq('id', existing.id);
     if (updErr) throw new Error('update existing lead failed: ' + updErr.message);
 
@@ -173,7 +195,7 @@ async function processOneEmail(row: {
   // (website_intake_stage='training') במקום לתיבת הקליטה הכללית - כדי
   // שלא "ייבלע" בין לידי קונה/מוכר. שום סיווג אחר (מוכר/קונה/שותף/לא
   // ברור) לא משתנה - כולם ממשיכים בדיוק כמו קודם ל-website_intake_stage='new'.
-  const isClearTraining = classification === 'training' && !needsReview;
+  // (isClearTraining עצמו מחושב למעלה, לפני בדיקת הכפילות - ראו שם.)
 
   const nameParts = displayName === 'שם לא זוהה' ? [] : displayName.split(/\s+/).filter(Boolean);
   const firstName = nameParts[0] || null;
@@ -191,6 +213,7 @@ async function processOneEmail(row: {
     + `תיבות סימון שנבחרו בטופס (כל הבחירות שסומנו, לא רק אחת): ${parsed.checkboxes.length ? parsed.checkboxes.join(', ') : '(לא סומנה אף תיבה)'}\n`
     + `הודעה חופשית מהפונה: ${parsed.message || '(לא צוין)'}\n`
     + (parsed.city ? `עיר/מיקום כפי שנרשם: ${parsed.city}\n` : '')
+    + (crossRefExisting ? `\n⚠️ לתשומת לב: אותו טלפון/מייל קיים כבר במערכת ברשומה אחרת (לא הכשרה) - "${crossRefExisting.full_name || 'שם לא זוהה'}" (סוג: ${crossRefExisting.type || '—'}, מזהה: ${crossRefExisting.id}). לא מוזג אוטומטית כדי לא לאבד את פנייתו החדשה על ההכשרה - כדאי לבדוק ידנית אם זה אותו איש קשר.\n` : '')
     + (!parsed.recognizedTemplate ? `\nהמייל לא תאם אף אחת משתי תבניות הטופס המוכרות - טקסט מקורי מלא:\n${stripPipes(row.raw_body).slice(0, 2000)}` : '');
 
   const payload: Record<string, any> = {
@@ -334,10 +357,32 @@ Deno.serve(async (req) => {
           // לא נוגעים בשורות שכבר הגיעו ל-created/merged בהצלחה.
           if (currentMessageId) {
             try {
-              await supabase.from('site123_lead_emails')
+              const { data: errRow } = await supabase.from('site123_lead_emails')
                 .update({ action: 'error', error_message: String(perMsgErr?.message || perMsgErr), processed_at: new Date().toISOString() })
                 .eq('gmail_message_id', currentMessageId)
-                .not('action', 'in', '("created","merged")');
+                .not('action', 'in', '("created","merged")')
+                .select('id, raw_subject, error_alerted_at')
+                .maybeSingle();
+
+              // התראה לאדמין - פעם אחת בלבד לכל מייל כושל (לא בכל ריצה חוזרת של ה-cron),
+              // כדי שמייל שנכשל לא "ייעלם בשקט" גם אם הפרסינג/הסיווג נכשל שוב ושוב.
+              if (errRow && !errRow.error_alerted_at) {
+                const adminIdForAlert = await getAdminProfileId();
+                await supabase.from('tasks').insert({
+                  title: `⚠️ מייל מהאתר לא נקלט - נדרשת בדיקה ידנית`,
+                  description: `מייל בנושא "${errRow.raw_subject || '—'}" נכשל בעיבוד האוטומטי (${String(perMsgErr?.message || perMsgErr).slice(0, 300)}). המייל לא אבד - הוא שמור בטבלת site123_lead_emails (מזהה ${errRow.id}) וממתין לבדיקה/עיבוד ידני.`,
+                  priority: 'גבוהה', assigned_to: adminIdForAlert, status: 'פתוחה',
+                  related_type: 'site123_lead_email', related_id: errRow.id
+                });
+                await sendPushToAdmins({
+                  title: '⚠️ מייל מהאתר לא נקלט אוטומטית',
+                  body: errRow.raw_subject || 'נדרשת בדיקה ידנית',
+                  kind: 'morning',
+                  url: `training-admin.html`,
+                  tag: `bsd-site123-error-${errRow.id}`
+                });
+                await supabase.from('site123_lead_emails').update({ error_alerted_at: new Date().toISOString() }).eq('id', errRow.id);
+              }
             } catch (_) { /* best-effort - לא עוצרים את שאר הריצה בגלל זה */ }
           }
         }
