@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608301202';
+    var PAGE_BUILD = '202608301351';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -192,6 +192,7 @@
     <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
     <input type="date" id="fDateFrom" title="מתאריך">
     <input type="date" id="fDateTo" title="עד תאריך">
+    <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;color:#665;padding:0 6px;"><input type="checkbox" id="fShowArchived" onchange="loadLeads()"> הצג ארכיון</label>
   </div>
 
   <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:.78rem;color:#665;margin-bottom:8px;">
@@ -324,7 +325,11 @@ async function loadSettings(){
 async function loadLeads(){
   const { data, error } = await window.supabaseClient.from('training_leads').select('*').order('created_at', { ascending: false });
   if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
-  ALL_LEADS = data || [];
+  // מחיקה רכה (30.08.2026): רשומות בארכיון לא מוצגות ברשימה הרגילה,
+  // אותה מוסכמה בדיוק כמו leads.html (is_archived) - נשמרות במסד הנתונים,
+  // לא נמחקות בפועל. תיבת "הצג ארכיון" מציגה אותן בנפרד.
+  const showArchived = document.getElementById('fShowArchived') && document.getElementById('fShowArchived').checked;
+  ALL_LEADS = (data || []).filter(l => showArchived ? l.is_archived : !l.is_archived);
   const countEl = document.getElementById('countInterested');
   if (countEl) countEl.textContent = ALL_LEADS.length;
   renderKpis();
@@ -362,16 +367,24 @@ function switchTrainingTab(tab){
   document.querySelectorAll('.lead-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.getElementById('inboxTabPanel').style.display = tab === 'inbox' ? 'block' : 'none';
   document.getElementById('interestedTabPanel').style.display = tab === 'interested' ? 'block' : 'none';
+  // תיקון שורש (30.08.2026): כל מעבר טאב טוען מחדש את הנתונים של אותו טאב
+  // מהשרת, ולא מסתמך על מערך זיכרון שאולי כבר לא עדכני. זה מונע בדיוק את
+  // התקלה שנמצאה בבדיקה אמיתית - מתעניין שנוצר בהצלחה במסד הנתונים אך
+  // "נעלם" מבחינת המשתמש כי הרשימה בזיכרון (ALL_LEADS) מעולם לא רועננה.
+  if (tab === 'inbox') loadInboxLeads();
+  else loadLeads();
 }
 
 async function loadInboxLeads(){
   const { data, error } = await window.supabaseClient
     .from('leads')
-    .select('id, full_name, first_name, last_name, phone, email, source, notes, status, created_at, website_purpose_guess')
+    .select('id, full_name, first_name, last_name, phone, email, city, source, notes, status, created_at, website_purpose_guess, is_archived')
     .eq('website_intake_stage', 'training')
     .order('created_at', { ascending: false });
   if (error){ toast('שגיאה בטעינת לידים להכשרה: ' + error.message); return; }
-  ALL_INBOX_LEADS = data || [];
+  // מחיקה רכה (30.08.2026): לידים בארכיון לא מוצגים בתיבת הקליטה הרגילה -
+  // אותה מוסכמה בדיוק כמו leads.html (is_archived), לא נוצר מנגנון חדש.
+  ALL_INBOX_LEADS = (data || []).filter(l => !l.is_archived);
   document.getElementById('countInbox').textContent = ALL_INBOX_LEADS.length;
   document.getElementById('countInbox').classList.toggle('alert', ALL_INBOX_LEADS.length > 0);
   renderInboxTable();
@@ -395,16 +408,47 @@ function renderInboxTable(){
       <td>${fmtDateTime(l.created_at)}</td>
       <td style="max-width:260px;color:#777;font-size:.8rem;" title="${esc(l.notes||'')}">${esc(messagePreview)}${messagePreview.length>=120?'…':''}</td>
       <td><span class="badge" style="background:#eef1f6;color:#333;">${esc(l.status || 'חדש לטיפול')}</span></td>
-      <td onclick="event.stopPropagation()"><button type="button" class="btn btn-success" style="padding:6px 10px;font-size:.75rem;" onclick="promoteInboxLead('${l.id}')">➡️ העבר למתעניינים</button></td>
+      <td onclick="event.stopPropagation()" style="white-space:nowrap;">
+        <button type="button" class="btn btn-ghost" style="padding:6px 8px;font-size:.75rem;" onclick="openInboxLeadDetail('${l.id}', true)" title="ערוך">✏️</button>
+        <button type="button" class="btn btn-success" style="padding:6px 10px;font-size:.75rem;" onclick="promoteInboxLead('${l.id}')">➡️ העבר למתעניינים</button>
+        <button type="button" class="btn btn-ghost" style="padding:6px 8px;font-size:.75rem;color:#a33;" onclick="archiveInboxLead('${l.id}')" title="מחק (ארכיון)">🗑️</button>
+      </td>
     </tr>`;
   }).join('');
 }
 
-function openInboxLeadDetail(id){
+function openInboxLeadDetail(id, editMode){
   const l = ALL_INBOX_LEADS.find(x => x.id === id);
   if (!l) return;
   const name = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || 'שם לא זוהה';
   const modal = document.getElementById('modalBox');
+
+  if (editMode){
+    // עריכה מלאה (30.08.2026, סעיף 5 בהנחיה): שינוי פרטי הליד עצמו לפני
+    // העברה, ולא רק צפייה. שומר ישירות על שורת ה-leads המקורית.
+    modal.innerHTML = `
+      <h3>✏️ עריכת ליד להכשרה - ${esc(name)}</h3>
+      <form id="editInboxForm">
+        <div class="form-grid">
+          <div class="field"><label>שם פרטי</label><input type="text" id="ei_first" value="${esc(l.first_name||'')}"></div>
+          <div class="field"><label>שם משפחה</label><input type="text" id="ei_last" value="${esc(l.last_name||'')}"></div>
+          <div class="field"><label>טלפון</label><input type="tel" id="ei_phone" value="${esc(l.phone||'')}"></div>
+          <div class="field"><label>אימייל</label><input type="email" id="ei_email" value="${esc(l.email||'')}"></div>
+          <div class="field"><label>עיר</label><input type="text" id="ei_city" value="${esc(l.city||'')}"></div>
+          <div class="field full"><label>תוכן הפנייה / הערות</label><textarea id="ei_notes" rows="4">${esc(l.notes||'')}</textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+          <button type="submit" class="btn btn-primary">שמירה</button>
+        </div>
+      </form>
+    `;
+    document.getElementById('overlay').classList.add('open');
+    document.getElementById('overlay').scrollTop = 0;
+    document.getElementById('editInboxForm').addEventListener('submit', (e) => saveInboxLeadEdit(e, id));
+    return;
+  }
+
   modal.innerHTML = `
     <h3>📥 ליד להכשרה - ${esc(name)}</h3>
     <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;margin-bottom:14px;">
@@ -415,11 +459,47 @@ function openInboxLeadDetail(id){
     <div class="field full"><label>תוכן הפנייה המקורי</label><div style="white-space:pre-wrap;background:#faf8f2;border-radius:8px;padding:10px 12px;font-size:.85rem;">${esc(l.notes||'—')}</div></div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="closeModal()">סגירה</button>
+      <button type="button" class="btn btn-ghost" onclick="openInboxLeadDetail('${l.id}', true)">✏️ ערוך</button>
       <button type="button" class="btn btn-success" onclick="closeModal();promoteInboxLead('${l.id}')">➡️ העבר למתעניינים</button>
     </div>
   `;
   document.getElementById('overlay').classList.add('open');
   document.getElementById('overlay').scrollTop = 0;
+}
+
+async function saveInboxLeadEdit(e, id){
+  e.preventDefault();
+  const payload = {
+    first_name: document.getElementById('ei_first').value.trim() || null,
+    last_name: document.getElementById('ei_last').value.trim() || null,
+    phone: document.getElementById('ei_phone').value.trim() || null,
+    email: document.getElementById('ei_email').value.trim() || null,
+    city: document.getElementById('ei_city').value.trim() || null,
+    notes: document.getElementById('ei_notes').value
+  };
+  payload.full_name = [payload.first_name, payload.last_name].filter(Boolean).join(' ') || null;
+  const { error } = await window.supabaseClient.from('leads').update(payload).eq('id', id);
+  if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+  toast('הליד עודכן בהצלחה');
+  closeModal();
+  await loadInboxLeads();
+}
+
+// מחיקה רכה ללידים (30.08.2026, סעיף 6) - אותה מוסכמה בדיוק כמו
+// archiveLead/restoreLeadFromArchive ב-leads.html (is_archived), עם
+// חלון אישור מפורש לפני הפעולה - לא מחיקה מיידית.
+async function archiveInboxLead(id){
+  const l = ALL_INBOX_LEADS.find(x => x.id === id);
+  const name = l ? (l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || 'ליד זה') : 'ליד זה';
+  if (!confirm(`להעביר את "${name}" לארכיון? הליד לא יימחק בפועל ואפשר לשחזר אותו מארכיון הלידים הרגיל (leads-hub.html). להמשיך?`)) return;
+  const { error } = await window.supabaseClient.from('leads').update({
+    is_archived: true, archived_at: new Date().toISOString(), archived_by: CURRENT_PROFILE.id,
+    archive_reason: 'הועבר לארכיון מתוך תיבת הלידים להכשרה'
+  }).eq('id', id);
+  if (error){ toast('שגיאה בהעברה לארכיון: ' + error.message); return; }
+  toast('הליד הועבר לארכיון');
+  closeModal();
+  await loadInboxLeads();
 }
 
 function normPhone9(phone){
@@ -463,8 +543,10 @@ async function promoteInboxLead(id){
     if (leadUpdErr){ toast('המתעניין עודכן, אך עדכון הליד המקורי נכשל: ' + leadUpdErr.message); }
 
     toast('הפנייה מוזגה לכרטיס המתעניין הקיים');
+    // תיקון (30.08.2026): רענון שתי הרשימות תמיד, לא רק כשטאב מתעניינים
+    // כבר פתוח - אחרת מתעניין שנוצר בהצלחה נראה "נעלם" עד רענון ידני.
     await loadInboxLeads();
-    if (CURRENT_TRAINING_TAB === 'interested') await loadLeads();
+    await loadLeads();
     return;
   }
 
@@ -481,7 +563,8 @@ async function promoteInboxLead(id){
     lead_id: l.id,
     source: l.source || null,
     original_inquiry: l.notes || null,
-    created_by: CURRENT_PROFILE.id
+    created_by: CURRENT_PROFILE.id,
+    created_at: l.created_at || undefined // שימור תאריך היצירה המקורי של הליד, לא תאריך ההעברה
   }).select('id').single();
 
   if (insErr){ toast('שגיאה ביצירת המתעניין: ' + insErr.message); return; }
@@ -502,8 +585,9 @@ async function promoteInboxLead(id){
   if (leadUpdErr2){ toast('המתעניין נוצר, אך עדכון הליד המקורי נכשל: ' + leadUpdErr2.message); }
 
   toast('המתעניין נוצר בהצלחה מהליד');
+  // תיקון (30.08.2026): רענון שתי הרשימות תמיד - ראו הערה למעלה.
   await loadInboxLeads();
-  if (CURRENT_TRAINING_TAB === 'interested') await loadLeads();
+  await loadLeads();
 }
 
 function renderTable(){
@@ -544,7 +628,9 @@ function renderTable(){
               <a href="javascript:void(0)" onclick="copyLink('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔗 העתק קישור</a>
               ${l.form_pdf_path ? `<a href="javascript:void(0)" onclick="downloadTrainingPdf('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 הורד PDF חתום</a>` : ''}
               <a href="javascript:void(0)" onclick="markPaid('${l.id}')" style="display:block;color:#9be3ab;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">✅ סמן שולם</a>
-              <a href="javascript:void(0)" onclick="deleteLead('${l.id}')" style="display:block;color:#ff8f7a;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק מתעניין</a>
+              ${l.is_archived
+                ? `<a href="javascript:void(0)" onclick="restoreTrainingLead('${l.id}')" style="display:block;color:#9be3ab;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">↩️ שחזר מארכיון</a>`
+                : `<a href="javascript:void(0)" onclick="deleteLead('${l.id}')" style="display:block;color:#ff8f7a;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק מתעניין</a>`}
             </div>
           </div>
           <div>
@@ -831,7 +917,9 @@ async function openLeadCard(id){
         <button type="button" class="btn btn-ghost" style="color:#128C4A;" onclick="waOpenSendModal({entityType:'training_lead', entityId:'${lead.id}', phone:'${esc(lead.phone||'')}', recipientName:'${esc([lead.first_name, lead.last_name].filter(Boolean).join(' ').replace(/'/g,''))}', templateKey:'training_candidate', ctx:{firstName:'${esc((lead.first_name||'').replace(/'/g,''))}'}, onLogged: () => waRenderHistory('training_lead','${lead.id}','trainingWaHistoryBox')})">שלח WhatsApp</button>
         <button type="button" class="btn btn-ghost" onclick="copyLink('${lead.id}')">🔗 העתק קישור</button>
         ${lead.form_pdf_path ? `<button type="button" class="btn btn-ghost" onclick="downloadTrainingPdf('${lead.id}')">📄 הורד PDF חתום</button>` : ''}
-        <button type="button" class="btn btn-danger" onclick="deleteLead('${lead.id}')">🗑️ מחק מתעניין</button>
+        ${lead.is_archived
+          ? `<button type="button" class="btn btn-success" onclick="restoreTrainingLead('${lead.id}')">↩️ שחזר מארכיון</button>`
+          : `<button type="button" class="btn btn-danger" onclick="deleteLead('${lead.id}')">🗑️ מחק מתעניין</button>`}
       </div>
 
       <div class="section-h">היסטוריית הודעות WhatsApp</div>
@@ -896,13 +984,28 @@ async function saveLeadCard(e){
 async function deleteLead(id){
   const lead = ALL_LEADS.find(l => l.id === id);
   const name = lead ? [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'מתעניין זה' : 'מתעניין זה';
-  if (!confirm(`למחוק לצמיתות את "${name}"? הפעולה אינה הפיכה.`)) return;
+  if (!confirm(`להעביר את "${name}" לארכיון? הרשומה לא תימחק בפועל ותהיה נגישה דרך "הצג ארכיון". להמשיך?`)) return;
 
-  await window.supabaseClient.from('training_lead_events').delete().eq('lead_id', id);
-  const { error } = await window.supabaseClient.from('training_leads').delete().eq('id', id);
-  if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
+  // מחיקה רכה (30.08.2026): לא מוחקים בפועל - מסמנים is_archived, אותה
+  // מוסכמה בדיוק כמו archiveLead ב-leads.html. שום נתון לא הולך לאיבוד.
+  const { error } = await window.supabaseClient.from('training_leads').update({
+    is_archived: true, archived_at: new Date().toISOString(), archived_by: CURRENT_PROFILE.id
+  }).eq('id', id);
+  if (error){ toast('שגיאה בהעברה לארכיון: ' + error.message); return; }
+  await logEvent(id, `[${new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' })}] הועבר לארכיון`);
 
-  toast('נמחק בהצלחה');
+  toast('הועבר לארכיון בהצלחה');
+  closeModal();
+  await loadLeads();
+}
+
+async function restoreTrainingLead(id){
+  const { error } = await window.supabaseClient.from('training_leads').update({
+    is_archived: false, archived_at: null, archived_by: null
+  }).eq('id', id);
+  if (error){ toast('שגיאה בשחזור: ' + error.message); return; }
+  await logEvent(id, `[${new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' })}] שוחזר מהארכיון`);
+  toast('שוחזר מהארכיון בהצלחה');
   closeModal();
   await loadLeads();
 }
