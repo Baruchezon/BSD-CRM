@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608282010';
+    var PAGE_BUILD = '202608300456';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -172,6 +172,7 @@
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202608251215"></script>
 <script src="js/permissions.js?v=202608251215"></script>
+<script src="js/waSendModule.js?v=202608300456"></script>
 <script>
 let CURRENT_PROFILE = null;
 let ALL_LEADS = [];
@@ -612,10 +613,14 @@ async function openLeadCard(id){
         <button type="button" class="btn btn-success" onclick="openSendFormModal('${lead.id}')">📤 שלח טופס רישום</button>
         <button type="button" class="btn btn-ghost" onclick="resendBrochure('${lead.id}')">📄 שלח שוב ברושור</button>
         <button type="button" class="btn btn-ghost" onclick="resendWhatsapp('${lead.id}')">📲 שלח שוב טופס</button>
+        <button type="button" class="btn btn-ghost" style="color:#128C4A;" onclick="waOpenSendModal({entityType:'training_lead', entityId:'${lead.id}', phone:'${esc(lead.phone||'')}', recipientName:'${esc([lead.first_name, lead.last_name].filter(Boolean).join(' ').replace(/'/g,''))}', templateKey:'training_candidate', ctx:{firstName:'${esc((lead.first_name||'').replace(/'/g,''))}'}, onLogged: () => waRenderHistory('training_lead','${lead.id}','trainingWaHistoryBox')})">שלח WhatsApp</button>
         <button type="button" class="btn btn-ghost" onclick="copyLink('${lead.id}')">🔗 העתק קישור</button>
         ${lead.form_pdf_path ? `<button type="button" class="btn btn-ghost" onclick="downloadTrainingPdf('${lead.id}')">📄 הורד PDF חתום</button>` : ''}
         <button type="button" class="btn btn-danger" onclick="deleteLead('${lead.id}')">🗑️ מחק מתעניין</button>
       </div>
+
+      <div class="section-h">היסטוריית הודעות WhatsApp</div>
+      <div id="trainingWaHistoryBox" style="font-size:.82rem;margin-bottom:10px;">טוען...</div>
 
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
@@ -627,6 +632,7 @@ async function openLeadCard(id){
   document.getElementById('overlay').scrollTop = 0;
   document.getElementById('cardForm').dataset.leadId = id;
   document.getElementById('cardForm').addEventListener('submit', saveLeadCard);
+  waRenderHistory('training_lead', id, 'trainingWaHistoryBox');
 }
 
 function fieldRow(id,label,value,type='text'){

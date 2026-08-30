@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608282010';
+    var PAGE_BUILD = '202608300456';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -258,6 +258,7 @@
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/searchSelect.js?v=202608281530"></script>
 <script src="js/pdfPipeline.js?v=202608291000"></script>
+<script src="js/waSendModule.js?v=202608300456"></script>
 <script>
 let ALL_LEADS = [];
 let ARCHIVED_LEADS = [];
@@ -1028,6 +1029,13 @@ function openLeadForm(id, forcedType, prefillData){
         </div>
         ${textareaRow('notes','הערות', lead?.notes || pf.notes, 180)}
         ${(lead && !isGrantOnlyViewer(lead)) ? `
+        <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>📲 WhatsApp</span>
+          <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;color:#128C4A;" onclick="waOpenSendModal({entityType:'lead', entityId:'${lead.id}', phone:'${esc(lead.phone||'')}', recipientName:'${esc((lead.full_name||'').replace(/'/g,''))}', templateKey:'${type}', ctx:{firstName:'${esc((lead.first_name||'').replace(/'/g,''))}', area:'${esc((lead.requested_area||'').replace(/'/g,''))}', businessName:'${esc((lead.business_name||'').replace(/'/g,''))}'}, onLogged: () => waRenderHistory('lead','${lead.id}','leadWaHistoryBox')})">שלח WhatsApp</button>
+        </div>
+        <div class="field full" id="leadWaHistoryBox" style="font-size:.82rem;">טוען...</div>
+        ` : ''}
+        ${(lead && !isGrantOnlyViewer(lead)) ? `
         <div class="section-h">🎙️ הקלטות ותמלולים</div>
         <div class="field full">
           ${CURRENT_PROFILE.can_record!==false ? `<button type="button" class="btn btn-ghost" onclick="window.openStandaloneRecording({type:'buyer', id:'${lead.id}', label:'${esc((lead.full_name||'קונה').replace(/'/g,''))}', currentProfile:CURRENT_PROFILE, onSaved: () => loadLeadMeetings('${lead.id}')})">🔴 הקלט שיחה/פגישה</button>` : ''}
@@ -1065,6 +1073,7 @@ function openLeadForm(id, forcedType, prefillData){
   document.getElementById('leadForm').dataset.leadType = type;
   document.getElementById('leadForm').addEventListener('submit', saveLead);
   if (lead && !isGrantOnlyViewer(lead)) loadLeadMeetings(lead.id);
+  if (lead && !isGrantOnlyViewer(lead)) waRenderHistory('lead', lead.id, 'leadWaHistoryBox');
   if (lead && type === 'buyer') loadAnonReceived(lead.id);
   if (lead && type === 'buyer') loadLeadMatchesModule(lead.id);
   if (lead && (type === 'buyer' || type === 'partner') && canManageLeadAccess(lead)) loadLeadAccessGrants(lead.id);

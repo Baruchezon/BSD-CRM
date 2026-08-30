@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608300443';
+    var PAGE_BUILD = '202608300456';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -244,6 +244,7 @@
 <script src="js/pdfPipeline.js?v=202608291000"></script>
 <script src="js/saleFileModule2.js?v=202608300443"></script>
 <script src="js/notesRecording.js?v=2"></script>
+<script src="js/waSendModule.js?v=202608300456"></script>
 <script>
 let ALL_BIZ = [];
 let ARCHIVED_BIZ = [];
@@ -781,6 +782,13 @@ function openBizForm(id){
         ${fieldRowPhone('owner_phone','טלפון הבעלים', biz?.owner_phone)}
         ${fieldRow('owner_email','אימייל הבעלים', biz?.owner_email, 'email')}
         ${fieldRow('id_number','ת.ז / ח.פ', biz?.id_number)}
+        ${biz ? `
+        <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>📲 WhatsApp</span>
+          <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;color:#128C4A;" onclick="waOpenSendModal({entityType:'business', entityId:'${biz.id}', phone:'${esc(biz.owner_phone||'')}', recipientName:'${esc((biz.owner_name||'').replace(/'/g,''))}', templateKey:'business_owner', ctx:{firstName:'${esc((biz.owner_name||'').split(' ')[0].replace(/'/g,''))}', businessName:'${esc((biz.internal_name||'').replace(/'/g,''))}'}, onLogged: () => waRenderHistory('business','${biz.id}','bizWaHistoryBox')})">שלח WhatsApp</button>
+        </div>
+        <div class="field full" id="bizWaHistoryBox" style="font-size:.82rem;">טוען...</div>
+        ` : ''}
 
         <div class="section-h">תיאור</div>
         <div class="field full">
@@ -1031,6 +1039,7 @@ function openBizForm(id){
   document.getElementById('bizForm').addEventListener('submit', saveBiz);
   if (biz) { loadBizFiles(biz.id); initBizDropzone(biz.id); }
   if (biz) loadBizMeetings(biz.id);
+  if (biz) waRenderHistory('business', biz.id, 'bizWaHistoryBox');
   if (biz) loadBizMatchesModule(biz.id);
   if (biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz)) loadBizAccessGrants(biz.id);
   if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadAnonDistSummary(biz.id);
