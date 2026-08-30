@@ -671,49 +671,60 @@ function sfOnBuyerChange(){
 // בפועל. השליחה בפועל (sfConfirmSend) קוראת רק ל-Edge Function הקשיחה;
 // שום קישור/קובץ לא נבחר או נבנה כאן - רק טקסט חופשי לעריכה.
 function sfShowSendPreview(bizId, bizName){
-  const buyerSel = document.getElementById('sfSendBuyer');
-  const buyerId = buyerSel.value;
-  if (!buyerId){ toast('יש לבחור קונה'); return; }
-  const buyer = SF_SEND_BUYERS_CACHE[buyerId];
-  if (!buyer?.email){ toast('לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם'); return; }
+  const statusEl = document.getElementById('sfSendStatus');
+  const fail = (msg) => {
+    toast(msg);
+    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
+  };
+  try {
+    const buyerSel = document.getElementById('sfSendBuyer');
+    const buyerId = buyerSel.value;
+    if (!buyerId){ fail('יש לבחור קונה'); return; }
+    const buyer = SF_SEND_BUYERS_CACHE[buyerId];
+    if (!buyer?.email){ fail('לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם'); return; }
 
-  const selected = Array.from(document.querySelectorAll('.sfSendFileChk:checked'));
-  if (!selected.length){ toast('יש לבחור לפחות קובץ אחד'); return; }
-  const signed = buyer.agreement_status === 'יש הסכם חתום';
-  const blockedNow = selected.filter(c => !signed && c.dataset.conf === '2');
-  if (blockedNow.length){
-    // רשת ביטחון בממשק בלבד - השרת יחסום את זה בכל מקרה גם אם זה נעקף
-    toast(`לא ניתן לשלוח את הקבצים הבאים: ${blockedNow.map(c=>c.dataset.name).join(', ')}. לקונה אין הסכם סודיות חתום.`);
-    return;
-  }
+    const selected = Array.from(document.querySelectorAll('.sfSendFileChk:checked'));
+    if (!selected.length){ fail('יש לבחור לפחות קובץ אחד מהרשימה למעלה (סמן ✔️ ליד הקובץ)'); return; }
+    const signed = buyer.agreement_status === 'יש הסכם חתום';
+    const blockedNow = selected.filter(c => !signed && c.dataset.conf === '2');
+    if (blockedNow.length){
+      // רשת ביטחון בממשק בלבד - השרת יחסום את זה בכל מקרה גם אם זה נעקף
+      fail(`לא ניתן לשלוח את הקבצים הבאים: ${blockedNow.map(c=>c.dataset.name).join(', ')}. לקונה אין הסכם סודיות חתום.`);
+      return;
+    }
+    if (statusEl) statusEl.textContent = '';
 
-  const buyerName = buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || 'קונה';
-  const fileIds = selected.map(c => c.value);
-  const defaultSubject = `חומרי מכירה${signed ? ' - ' + bizName : ' (אנונימי)'}`;
-  const defaultBody = `שלום ${buyerName},\n\nמצורפים קישורים להורדת החומרים בנוגע ל${bizName} (בתוקף לשבוע):`;
+    const buyerName = buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || 'קונה';
+    const fileIds = selected.map(c => c.value);
+    const defaultSubject = `חומרי מכירה${signed ? ' - ' + bizName : ' (אנונימי)'}`;
+    const defaultBody = `שלום ${buyerName},\n\nמצורפים קישורים להורדת החומרים בנוגע ל${bizName} (בתוקף לשבוע):`;
 
-  const body = document.getElementById('sfSendModalBody');
-  body.innerHTML = `
-    <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">📄 תצוגה מקדימה לפני שליחה</h3>
-    <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.85rem;">
-      <div><b>${esc(buyerName)}</b> · ${esc(buyer.email)}</div>
-      <div style="color:#5a6172;">${esc(bizName)}</div>
-    </div>
-    <div style="font-weight:700;font-size:.85rem;color:var(--navy);margin-bottom:6px;">קבצים מצורפים:</div>
-    <div style="margin-bottom:12px;font-size:.83rem;">
-      ${selected.map(c => `<div>📄 ${esc(c.dataset.name)} <span style="color:#8a93ab;font-size:.75rem;">(${esc(c.dataset.cat)})</span></div>`).join('')}
-    </div>
-    <div class="field"><label>נושא</label>
-      <input type="text" id="sfPreviewSubject" value="${esc(defaultSubject)}">
-    </div>
-    <div class="field"><label>תוכן ההודעה</label>
-      <textarea id="sfPreviewBody" rows="5" style="width:100%;">${esc(defaultBody)}</textarea>
-    </div>
-    <div id="sfSendStatus" style="font-size:.8rem;min-height:18px;margin-top:6px;"></div>
+    const body = document.getElementById('sfSendModalBody');
+    body.innerHTML = `
+      <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">📄 תצוגה מקדימה לפני שליחה</h3>
+      <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.85rem;">
+        <div><b>${esc(buyerName)}</b> · ${esc(buyer.email)}</div>
+        <div style="color:#5a6172;">${esc(bizName)}</div>
+      </div>
+      <div style="font-weight:700;font-size:.85rem;color:var(--navy);margin-bottom:6px;">קבצים מצורפים:</div>
+      <div style="margin-bottom:12px;font-size:.83rem;">
+        ${selected.map(c => `<div>📄 ${esc(c.dataset.name)} <span style="color:#8a93ab;font-size:.75rem;">(${esc(c.dataset.cat)})</span></div>`).join('')}
+      </div>
+      <div class="field"><label>נושא</label>
+        <input type="text" id="sfPreviewSubject" value="${esc(defaultSubject)}">
+      </div>
+      <div class="field"><label>תוכן ההודעה</label>
+        <textarea id="sfPreviewBody" rows="5" style="width:100%;">${esc(defaultBody)}</textarea>
+      </div>
+      <div id="sfSendStatus" style="font-size:.8rem;min-height:18px;margin-top:6px;"></div>
     <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
       <button type="button" class="btn btn-ghost" onclick="document.getElementById('sfSendOverlay').remove()">ביטול</button>
       <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend('${bizId}', '${buyerId}', ${JSON.stringify(fileIds)})">📤 שלח מייל לקונה</button>
     </div>`;
+  } catch(e){
+    console.error('sfShowSendPreview error:', e);
+    fail('שגיאה בפתיחת התצוגה המקדימה: ' + ((e && e.message) ? e.message : String(e)));
+  }
 }
 
 async function sfConfirmSend(bizId, buyerId, fileIds){
