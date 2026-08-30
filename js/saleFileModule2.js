@@ -271,6 +271,9 @@ function openSaleFileCategory(bizId, categoryKey){
       <div style="margin-top:12px;border-top:1px solid #e5e1d5;padding-top:10px;color:#8a5a00;background:#fff8e6;border-radius:8px;padding:10px 12px;font-size:.82rem;">
         📱 העלאת קבצים זמינה כרגע מהמחשב בלבד
       </div>` : '')}
+      <div style="margin-top:12px;border-top:1px solid #e5e1d5;padding-top:10px;text-align:end;">
+        <button type="button" class="btn btn-primary" style="font-size:.78rem;padding:6px 14px;" onclick="sfOpenSendModalForCurrentBiz('${bizId}')">📤 שלח לקונה</button>
+      </div>
     </div>
   `;
 }
