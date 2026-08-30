@@ -165,6 +165,16 @@ async function processOneEmail(row: {
   // (ראה לידים-hub.html / דרישה מפורשת: "אל תסווג את הליד סופית לבד").
   // ה-type/needsReview כאן הם ניחוש בלבד לתצוגה במסך הקליטה - לא קובעים
   // לאן הליד "שייך" במערכת.
+  //
+  // חריג יחיד, לפי הנחיה מפורשת (30.08.2026): הכשרות/קורס. כשההודעה
+  // מכילה אזכור ברור וחד-משמעי (לא ניחוש - classifyPurpose כבר קבע
+  // needsReview=false רק כשהיה אזכור מפורש של "קורס"/"הכשרה"/"לימוד")
+  // הליד מנותב ישירות לתיבת "לידים" במודול הכשרות ומתעניינים
+  // (website_intake_stage='training') במקום לתיבת הקליטה הכללית - כדי
+  // שלא "ייבלע" בין לידי קונה/מוכר. שום סיווג אחר (מוכר/קונה/שותף/לא
+  // ברור) לא משתנה - כולם ממשיכים בדיוק כמו קודם ל-website_intake_stage='new'.
+  const isClearTraining = classification === 'training' && !needsReview;
+
   const nameParts = displayName === 'שם לא זוהה' ? [] : displayName.split(/\s+/).filter(Boolean);
   const firstName = nameParts[0] || null;
   const lastName = nameParts.slice(1).join(' ') || null;
@@ -172,11 +182,12 @@ async function processOneEmail(row: {
   const guessLabel = classification === 'seller' ? 'מעוניין למכור עסק (ניחוש)'
     : classification === 'buyer' ? 'מחפש לקנות עסק (ניחוש)'
     : classification === 'partner' ? 'מעוניין בשותפות/השקעה (ניחוש)'
-    : classification === 'training' ? 'מתעניין בהכשרת מתווכי עסקים (ניחוש)'
+    : classification === 'training' ? 'מתעניין בהכשרת מתווכי עסקים' // לא "ניחוש" - זו זיהוי ודאי לפי תוכן, לא שדה טכני
     : 'דורש בדיקה - לא ניתן היה לזהות תחום התעניינות בוודאות';
 
-  const notes = `[נוצר אוטומטית ע"י המערכת - ליד מהאתר, טרם סווג, ${nowStr}]\n`
-    + `ניחוש ראשוני (לא סופי): ${guessLabel}\n`
+  const notes = (isClearTraining
+      ? `[זוהה אוטומטית ע"י המערכת לפי תוכן ההודעה כמתעניין בהכשרה, ${nowStr}]\n`
+      : `[נוצר אוטומטית ע"י המערכת - ליד מהאתר, טרם סווג, ${nowStr}]\nניחוש ראשוני (לא סופי): ${guessLabel}\n`)
     + `תיבות סימון שנבחרו בטופס (כל הבחירות שסומנו, לא רק אחת): ${parsed.checkboxes.length ? parsed.checkboxes.join(', ') : '(לא סומנה אף תיבה)'}\n`
     + `הודעה חופשית מהפונה: ${parsed.message || '(לא צוין)'}\n`
     + (parsed.city ? `עיר/מיקום כפי שנרשם: ${parsed.city}\n` : '')
@@ -185,8 +196,8 @@ async function processOneEmail(row: {
   const payload: Record<string, any> = {
     type, first_name: firstName, last_name: lastName, full_name: displayName,
     phone: parsed.phone || null, email: parsed.email || null, city: parsed.city || null,
-    source: 'SITE123 / אתר BSD', status: 'חדש', notes,
-    website_intake_stage: 'new', website_purpose_guess: guessLabel,
+    source: 'SITE123 / אתר BSD', status: isClearTraining ? 'חדש לטיפול' : 'חדש', notes,
+    website_intake_stage: isClearTraining ? 'training' : 'new', website_purpose_guess: guessLabel,
     created_by: adminId, handled_by: adminId, agreement_status: 'אין הסכם'
   };
   if (type === 'buyer' || type === 'partner') {
@@ -201,25 +212,34 @@ async function processOneEmail(row: {
   // אימות אמיתי (לא רק "לא החזיר שגיאה"): שליפה חוזרת בקריאה נפרדת ובדיקה
   // שהשורה אכן קיימת עם הערכים שביקשנו - כדי שלעולם לא נדווח "נוצר" בלי
   // שזה באמת נשמר במסד הנתונים.
+  const expectedStage = isClearTraining ? 'training' : 'new';
   const { data: verifyRow, error: verifyErr } = await supabase
     .from('leads').select('id, website_intake_stage, status').eq('id', newLead.id).maybeSingle();
-  if (verifyErr || !verifyRow || verifyRow.website_intake_stage !== 'new') {
+  if (verifyErr || !verifyRow || verifyRow.website_intake_stage !== expectedStage) {
     throw new Error('lead insert could not be verified after write: ' + (verifyErr?.message || 'row not found or mismatched after insert'));
   }
 
   await supabase.from('audit_log').insert({
     table_name: 'leads', record_id: newLead.id, action: 'create',
-    actor_id: adminId, details: { source: 'site123_email_intake', gmail_message_id: row.gmail_message_id }
+    actor_id: adminId, details: { source: 'site123_email_intake', gmail_message_id: row.gmail_message_id, classification }
   });
 
   const { data: task } = await supabase.from('tasks').insert({
-    title: `צור קשר עם ליד חדש מהאתר - ${displayName}`,
+    title: isClearTraining
+      ? `מתעניין חדש בהכשרה ממתין לטיפול - ${displayName}`
+      : `צור קשר עם ליד חדש מהאתר - ${displayName}`,
     description: `תיבות שסומנו: ${parsed.checkboxes.join(', ') || '—'}\nהודעה: ${parsed.message || '—'}\nטלפון: ${parsed.phone || '—'} | מייל: ${parsed.email || '—'}`,
     priority: 'רגילה', assigned_to: adminId, status: 'פתוחה',
     related_type: 'lead', related_id: newLead.id
   }).select('id').single();
 
-  await sendPushToAdmins({
+  await sendPushToAdmins(isClearTraining ? {
+    title: '🎓 מתעניין חדש בהכשרה ממתין לטיפול',
+    body: `${displayName}${parsed.phone ? ' | ' + parsed.phone : ''}`,
+    kind: 'morning',
+    url: `training-admin.html?tab=inbox&open=${newLead.id}`,
+    tag: `bsd-site123-${row.id}`
+  } : {
     title: '🆕 ליד חדש התקבל מהאתר',
     body: `${displayName}${parsed.phone ? ' | ' + parsed.phone : ''} - ${guessLabel}`,
     kind: 'morning',
