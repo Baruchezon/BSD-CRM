@@ -534,6 +534,19 @@ function sfAllActiveFiles(){
   return Object.values(SF_FILES_BY_CATEGORY).flat();
 }
 
+// 30.08.2026: שודרג לפי הנחיה מפורשת (מנגנון הרשאות קשיח, לא רק אזהרת
+// ממשק). שינויים עיקריים מול הגרסה הקודמת:
+//  - רשימת הקונים מציגה גם טלפון וגם סטטוס התאמה לעסק הזה (לא רק שם),
+//    וסטטוס ההסכם מוצג בלשון 3 המצבים המדויקת (אין הסכם / הסכם נשלח /
+//    הסכם חתום) ולא רק "חתום/לא חתום".
+//  - נוסף שלב תצוגה מקדימה (sfShowSendPreview) עם נושא ותוכן ניתנים
+//    לעריכה, לפני שנשלח בפועל - השליחה בפועל היא רק מתוך התצוגה המקדימה.
+//  - השליחה עברה לפונקציית שרת ייעודית וקשיחה, send-sale-files-to-buyer
+//    (supabase/functions/send-sale-files-to-buyer) - הלקוח שולח רק
+//    business_id/buyer_id/file_ids/נושא/פתיח; הבדיקה שקובץ חסוי מותר רק
+//    לקונה עם הסכם חתום מתבצעת שם, בשרת, מול ה-DB בזמן אמת - לא ניתנת
+//    לעקיפה מקריאת API ישירה. הנטרול כאן בממשק (sfOnBuyerChange) נשאר
+//    כפי שהיה כרשת ביטחון/חוויית משתמש בלבד, לא כהגנה יחידה.
 async function openSendToBuyerModal(bizId, bizName){
   // מגן הכרחי: אם ניסיון קודם השאיר overlay ישן בדף (למשל אחרי שגיאה שלא
   // נסגרה), פתיחה חוזרת הייתה יוצרת שני אלמנטים עם אותם id - ואז
@@ -543,33 +556,42 @@ async function openSendToBuyerModal(bizId, bizName){
 
   const files = sfAllActiveFiles();
   if (!files.length){ toast('אין עדיין קבצים בתיק המכירה לשליחה'); return; }
-  const { data: buyers, error } = await window.supabaseClient
-    .from('leads').select('id, full_name, first_name, last_name, email, agreement_status')
-    .eq('type', 'buyer').order('full_name');
+
+  const [{ data: buyers, error }, { data: bizMatches }] = await Promise.all([
+    window.supabaseClient.from('leads')
+      .select('id, full_name, first_name, last_name, email, phone, agreement_status')
+      .eq('type', 'buyer').order('full_name'),
+    window.supabaseClient.from('matches').select('buyer_id, status').eq('business_id', bizId),
+  ]);
   if (error){ toast('שגיאה בטעינת רשימת קונים: ' + error.message); return; }
+  const matchStatusByBuyer = {};
+  (bizMatches || []).forEach(m => { matchStatusByBuyer[m.buyer_id] = m.status; });
   SF_SEND_BUYERS_CACHE = {};
-  (buyers || []).forEach(b => { SF_SEND_BUYERS_CACHE[b.id] = b.agreement_status; });
+  (buyers || []).forEach(b => { SF_SEND_BUYERS_CACHE[b.id] = b; });
 
   const overlay = document.createElement('div');
   overlay.id = 'sfSendOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:150;padding:40px 20px;';
   const buyerOptions = (buyers || []).map(b => {
     const name = b.full_name || [b.first_name, b.last_name].filter(Boolean).join(' ') || '(ללא שם)';
-    return `<option value="${b.id}">${esc(name)}${b.email ? '' : ' — ⚠️ אין אימייל'}</option>`;
+    const match = matchStatusByBuyer[b.id];
+    const extra = [match ? `התאמה: ${match}` : null, b.email ? null : 'אין אימייל'].filter(Boolean).join(' · ');
+    return `<option value="${b.id}">${esc(name)}${extra ? ' — ⚠️ ' + esc(extra) : ''}</option>`;
   }).join('');
   overlay.innerHTML = `
-    <div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:inherit;">
-      <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">📤 שליחת חומרים לקונה <span style="font-size:.6rem;color:#bbb;">v2</span></h3>
+    <div id="sfSendModalBody" style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:inherit;">
+      <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">📤 שליחת חומרים לקונה</h3>
       <div class="field"><label>קונה</label>
         <select id="sfSendBuyer" onchange="sfOnBuyerChange()"><option value="">— בחר קונה —</option>${buyerOptions}</select>
       </div>
-      <div id="sfSendAgreementNote" style="font-size:.8rem;margin:8px 0;"></div>
+      <div id="sfSendBuyerDetails" style="font-size:.8rem;margin:6px 0;color:#5a6172;"></div>
+      <div id="sfSendAgreementNote" style="font-size:.8rem;margin:8px 0;font-weight:700;"></div>
       <div style="font-weight:700;font-size:.85rem;color:var(--navy);margin-top:10px;">בחר קבצים לשליחה:</div>
       <div id="sfSendFilesList" style="max-height:220px;overflow-y:auto;margin:8px 0;border:1px solid #e5e1d5;border-radius:8px;padding:8px;">
         ${files.map(f => {
           const cat = sfCategoryMeta(sfBucketKeyForFile(f));
           return `
-          <label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:.83rem;cursor:pointer;">
+          <label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:.83rem;cursor:pointer;" onclick="sfOnFileLabelClick(event,this)">
             <input type="checkbox" class="sfSendFileChk" data-conf="${f.confidentiality_level}" value="${f.id}" data-name="${esc(f.file_name)}" data-cat="${esc(cat.label)}" data-path="${esc(f.storage_path)}" style="width:auto;">
             ${cat.icon} ${esc(f.file_name)} <span style="color:#8a93ab;font-size:.75rem;">(${esc(cat.label)}${f.confidentiality_level === 2 ? ' · חסוי' : ' · אנונימי'})</span>
           </label>`;
@@ -578,31 +600,48 @@ async function openSendToBuyerModal(bizId, bizName){
       <div id="sfSendStatus" style="font-size:.8rem;min-height:18px;margin-top:6px;"></div>
       <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
         <button type="button" class="btn btn-ghost" onclick="document.getElementById('sfSendOverlay').remove()">ביטול</button>
-        <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend('${bizId}','${esc((bizName || 'עסק').replace(/'/g,''))}')">שלח</button>
+        <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfShowSendPreview('${bizId}','${esc((bizName || 'עסק').replace(/'/g,''))}')">המשך לתצוגה מקדימה</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
   sfOnBuyerChange();
 }
 
+// לחיצה על label של קובץ חסוי המנוטרל (checkbox disabled) לא עושה כלום
+// מבחינת הדפדפן - כך שהמשתמש רואה "שום דבר לא קרה" בלי הסבר. זה מציג את
+// ההודעה המפורשת שנדרשה בהנחיה ("לא ניתן לשלוח קובץ זה...") בכל לחיצה כזו.
+function sfOnFileLabelClick(ev, labelEl){
+  const chk = labelEl.querySelector('.sfSendFileChk');
+  if (chk && chk.disabled){
+    ev.preventDefault();
+    toast(`לא ניתן לשלוח קובץ זה. לקונה אין הסכם סודיות חתום. (${chk.dataset.name})`);
+  }
+}
+
 function sfOnBuyerChange(){
   const sel = document.getElementById('sfSendBuyer');
   const buyerId = sel.value;
   const note = document.getElementById('sfSendAgreementNote');
+  const detailsEl = document.getElementById('sfSendBuyerDetails');
   const checkboxes = Array.from(document.querySelectorAll('.sfSendFileChk'));
-  if (!buyerId){
+  const buyer = buyerId && SF_SEND_BUYERS_CACHE ? SF_SEND_BUYERS_CACHE[buyerId] : null;
+  if (!buyer){
     note.textContent = '';
+    if (detailsEl) detailsEl.textContent = '';
     checkboxes.forEach(c => { c.disabled = false; c.closest('label').style.opacity = '1'; });
     return;
   }
-  const option = sel.selectedOptions[0];
-  // agreement_status לא נשלף שוב מהשרת כאן - כבר נטען עם רשימת הקונים; קוראים מה-dataset שנשמר ברגע הפתיחה
-  const signed = SF_SEND_BUYERS_CACHE && SF_SEND_BUYERS_CACHE[buyerId] === 'יש הסכם חתום';
+  if (detailsEl){
+    detailsEl.textContent = `📞 ${buyer.phone || 'אין טלפון'} · 📧 ${buyer.email || 'אין אימייל'}`;
+  }
+  const status = buyer.agreement_status || 'אין הסכם';
+  const signed = status === 'יש הסכם חתום';
   if (signed){
-    note.innerHTML = '<span style="color:#1f7a45;">✅ יש הסכם חתום — כל הקבצים זמינים לשליחה</span>';
+    note.innerHTML = '<span style="color:#1f7a45;">✅ הסכם סודיות חתום, ניתן לשלוח חומר מלא</span>';
     checkboxes.forEach(c => { c.disabled = false; c.closest('label').style.opacity = '1'; });
   } else {
-    note.innerHTML = '<span style="color:#b3402c;">🚫 אין הסכם חתום לקונה זה — ניתן לשלוח רק קבצים אנונימיים</span>';
+    const statusLabel = status === 'נשלח הסכם לחתימה' ? 'הסכם נשלח לחתימה (טרם נחתם)' : 'אין הסכם';
+    note.innerHTML = `<span style="color:#b3402c;">🚫 ${esc(statusLabel)} — ניתן לשלוח חומר אנונימי בלבד</span>`;
     checkboxes.forEach(c => {
       const confidential = c.dataset.conf === '2';
       c.disabled = confidential;
@@ -612,77 +651,70 @@ function sfOnBuyerChange(){
   }
 }
 
-async function sfConfirmSend(bizId, bizName){
+// שלב תצוגה מקדימה (סעיף 5 בהנחיה) - נושא ותוכן ניתנים לעריכה, לפני שנשלח
+// בפועל. השליחה בפועל (sfConfirmSend) קוראת רק ל-Edge Function הקשיחה;
+// שום קישור/קובץ לא נבחר או נבנה כאן - רק טקסט חופשי לעריכה.
+function sfShowSendPreview(bizId, bizName){
+  const buyerSel = document.getElementById('sfSendBuyer');
+  const buyerId = buyerSel.value;
+  if (!buyerId){ toast('יש לבחור קונה'); return; }
+  const buyer = SF_SEND_BUYERS_CACHE[buyerId];
+  if (!buyer?.email){ toast('לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם'); return; }
+
+  const selected = Array.from(document.querySelectorAll('.sfSendFileChk:checked'));
+  if (!selected.length){ toast('יש לבחור לפחות קובץ אחד'); return; }
+  const signed = buyer.agreement_status === 'יש הסכם חתום';
+  const blockedNow = selected.filter(c => !signed && c.dataset.conf === '2');
+  if (blockedNow.length){
+    // רשת ביטחון בממשק בלבד - השרת יחסום את זה בכל מקרה גם אם זה נעקף
+    toast(`לא ניתן לשלוח את הקבצים הבאים: ${blockedNow.map(c=>c.dataset.name).join(', ')}. לקונה אין הסכם סודיות חתום.`);
+    return;
+  }
+
+  const buyerName = buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || 'קונה';
+  const fileIds = selected.map(c => c.value);
+  const defaultSubject = `חומרי מכירה${signed ? ' - ' + bizName : ' (אנונימי)'}`;
+  const defaultBody = `שלום ${buyerName},\n\nמצורפים קישורים להורדת החומרים בנוגע ל${bizName} (בתוקף לשבוע):`;
+
+  const body = document.getElementById('sfSendModalBody');
+  body.innerHTML = `
+    <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">📄 תצוגה מקדימה לפני שליחה</h3>
+    <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.85rem;">
+      <div><b>${esc(buyerName)}</b> · ${esc(buyer.email)}</div>
+      <div style="color:#5a6172;">${esc(bizName)}</div>
+    </div>
+    <div style="font-weight:700;font-size:.85rem;color:var(--navy);margin-bottom:6px;">קבצים מצורפים:</div>
+    <div style="margin-bottom:12px;font-size:.83rem;">
+      ${selected.map(c => `<div>📄 ${esc(c.dataset.name)} <span style="color:#8a93ab;font-size:.75rem;">(${esc(c.dataset.cat)})</span></div>`).join('')}
+    </div>
+    <div class="field"><label>נושא</label>
+      <input type="text" id="sfPreviewSubject" value="${esc(defaultSubject)}">
+    </div>
+    <div class="field"><label>תוכן ההודעה</label>
+      <textarea id="sfPreviewBody" rows="5" style="width:100%;">${esc(defaultBody)}</textarea>
+    </div>
+    <div id="sfSendStatus" style="font-size:.8rem;min-height:18px;margin-top:6px;"></div>
+    <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button type="button" class="btn btn-ghost" onclick="document.getElementById('sfSendOverlay').remove()">ביטול</button>
+      <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend('${bizId}', '${buyerId}', ${JSON.stringify(fileIds)})">📤 שלח מייל לקונה</button>
+    </div>`;
+}
+
+async function sfConfirmSend(bizId, buyerId, fileIds){
   const btn = document.getElementById('sfSendBtn');
   const statusEl = document.getElementById('sfSendStatus');
   if (btn) bsdSetButtonLoading(btn, true, 'שולח...');
   try {
-    const buyerSel = document.getElementById('sfSendBuyer');
-    const buyerId = buyerSel.value;
-    if (!buyerId){ throw new Error('יש לבחור קונה'); }
-    const buyerOption = buyerSel.selectedOptions[0];
-    const buyerName = buyerOption.textContent.replace(' — ⚠️ אין אימייל', '');
-
-    if (statusEl) statusEl.textContent = 'בודק פרטי קונה...';
-    const { data: buyerRow, error: buyerErr } = await window.supabaseClient
-      .from('leads').select('email, agreement_status').eq('id', buyerId).maybeSingle();
-    if (buyerErr) throw new Error('שגיאה בטעינת פרטי הקונה: ' + buyerErr.message);
-    if (!buyerRow?.email) throw new Error('לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם');
-    // נשלף עכשיו מהשרת, לא מה-cache שנטען כשהמודל נפתח - למקרה שמצב ההסכם השתנה בינתיים
-    const signed = buyerRow.agreement_status === 'יש הסכם חתום';
-
-    const selected = Array.from(document.querySelectorAll('.sfSendFileChk:checked'));
-    if (!selected.length) throw new Error('יש לבחור לפחות קובץ אחד');
-
-    // הגנה כפולה: לא סומכים רק על ה-UI (checkbox מנוטרל) - גם כאן, ברגע השליחה
-    // בפועל, מסננים שוב כל קובץ חסוי אם אין הסכם חתום. אם ה-UI תקין זה תמיד
-    // no-op; זו רשת ביטחון למקרה של תקלת מצב ב-JS ולא ההגנה היחידה.
-    const blocked = signed ? [] : selected.filter(c => c.dataset.conf === '2');
-    const allowed = signed ? selected : selected.filter(c => c.dataset.conf !== '2');
-    if (!allowed.length) throw new Error('כל הקבצים שנבחרו חסויים ולקונה הזה אין הסכם חתום - לא ניתן לשלוח');
-    if (blocked.length) toast(`${blocked.length} קבצים חסויים הוסרו אוטומטית מהשליחה (אין הסכם חתום לקונה זה)`);
-
-    if (statusEl) statusEl.textContent = 'יוצר קישורים מאובטחים...';
-    const linkItems = []; // [{cat, name, url}]
-    const fileIds = [];
-    for (const chk of allowed){
-      const { data, error } = await window.supabaseClient.storage.from(SALE_FILE_BUCKET)
-        .createSignedUrl(chk.dataset.path, SF_SIGNED_URL_SECONDS);
-      if (error){ throw new Error(`יצירת קישור נכשלה עבור "${chk.dataset.name}": ${error.message}`); }
-      linkItems.push({ cat: chk.dataset.cat, name: chk.dataset.name, url: data.signedUrl });
-      fileIds.push(chk.value);
-    }
-
-    const subject = `חומרי מכירה${signed ? ' - ' + bizName : ' (אנונימי)'}`;
-
-    // גרסת טקסט רגיל (fallback, לתוכנות מייל שלא מציגות HTML)
-    const bodyText =
-      `שלום ${buyerName},\n\n` +
-      `מצורפים קישורים להורדת החומרים (בתוקף לשבוע):\n\n` +
-      linkItems.map(l => `${l.cat} - ${l.name}:\n${l.url}`).join('\n\n') +
-      `\n\nבברכה,\nBSD Business Brokers Israel`;
-
-    // גרסת HTML - קישור לחיץ יפה במקום URL גולמי וארוך
-    const htmlBody = `
-      <div dir="rtl" style="font-family:Heebo,Rubik,Arial,sans-serif;color:#0e1b34;max-width:520px;">
-        <p style="font-size:15px;">שלום ${esc(buyerName)},</p>
-        <p style="font-size:14px;color:#444;">מצורפים קישורים להורדת החומרים (בתוקף לשבוע):</p>
-        <div style="margin:18px 0;">
-          ${linkItems.map(l => `
-            <div style="border:1px solid #e5e1d5;border-radius:10px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
-              <div>
-                <div style="font-weight:700;font-size:14px;">${esc(l.name)}</div>
-                <div style="font-size:12px;color:#8a93ab;">${esc(l.cat)}</div>
-              </div>
-              <a href="${l.url}" style="background:#c9a24b;color:#1c2333;text-decoration:none;font-weight:700;font-size:13px;padding:8px 16px;border-radius:8px;white-space:nowrap;">📥 הורדה</a>
-            </div>`).join('')}
-        </div>
-        <p style="font-size:13px;color:#8a93ab;">בברכה,<br>BSD Business Brokers Israel</p>
-      </div>`;
+    const subject = document.getElementById('sfPreviewSubject').value.trim();
+    const introText = document.getElementById('sfPreviewBody').value;
+    if (!subject) throw new Error('נושא המייל לא יכול להיות ריק');
 
     if (statusEl) statusEl.textContent = 'שולח מייל...';
-    const { data: sendResult, error: sendErr } = await window.supabaseClient.functions.invoke('send-match-summary', {
-      body: { to: buyerRow.email, subject, body_text: bodyText, html_body: htmlBody, reply_to: CURRENT_PROFILE.email }
+    // כל הבדיקה האמיתית (סטטוס הסכם, רמת סודיות כל קובץ, שליפת האימייל,
+    // בניית קישורי ההורדה) מתבצעת בתוך send-sale-files-to-buyer בשרת -
+    // לא כאן. הלקוח שולח רק מזהים וטקסט חופשי לעריכה.
+    const { data: sendResult, error: sendErr } = await window.supabaseClient.functions.invoke('send-sale-files-to-buyer', {
+      body: { business_id: bizId, buyer_id: buyerId, file_ids: fileIds, subject, intro_text: introText, reply_to: CURRENT_PROFILE.email }
     });
     if (sendErr || sendResult?.error){
       let detail = sendResult?.error || sendErr?.message || 'שגיאה לא ידועה';
@@ -692,12 +724,6 @@ async function sfConfirmSend(bizId, bizName){
       throw new Error(detail);
     }
 
-    await sfLogAudit(bizId, 'send_sale_files', {
-      buyer_id: buyerId, buyer_email: buyerRow.email, file_ids: fileIds,
-      file_names: allowed.map(c => c.dataset.name),
-      agreement_status_at_send: signed ? 'יש הסכם חתום' : 'ללא הסכם חתום',
-      method: 'email'
-    });
     toast('החומרים נשלחו בהצלחה');
     document.getElementById('sfSendOverlay').remove();
   } catch(e){
