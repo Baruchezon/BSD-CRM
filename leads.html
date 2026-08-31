@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608300456';
+    var PAGE_BUILD = '202608311530';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -258,6 +258,7 @@
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/searchSelect.js?v=202608281530"></script>
 <script src="js/pdfPipeline.js?v=202608291000"></script>
+<script src="js/dedupeCheckModule.js?v=202608311200"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
 <script>
 let ALL_LEADS = [];
@@ -298,6 +299,11 @@ function toast(msg){
   box.appendChild(el);
   setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
 }
+function openLeadFormFromDup(id){
+  closeModal();
+  openLeadForm(id);
+}
+
 function cancelLeadForm(){
   if (new URLSearchParams(location.search).get('from') === 'leads-hub'){
     location.href = 'leads-hub.html';
@@ -963,6 +969,7 @@ function openLeadForm(id, forcedType, prefillData){
       <button type="button" class="${type==='partner'?'active partner':''}" onclick="switchLeadType('partner', null)">שותפות/השקעה</button>
       <button type="button" class="${type==='seller'?'active seller':''}" onclick="switchLeadType('seller', null)">מוכר</button>
     </div>`}
+    ${!lead ? '<div id="leadDupBanner" style="display:none;"></div>' : ''}
     <form id="leadForm">
       <div class="form-grid">
         ${lead ? `<div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;">
@@ -1072,6 +1079,26 @@ function openLeadForm(id, forcedType, prefillData){
   document.getElementById('leadForm').dataset.leadId = lead ? lead.id : '';
   document.getElementById('leadForm').dataset.leadType = type;
   document.getElementById('leadForm').addEventListener('submit', saveLead);
+  // בדיקת כפילות בזמן הקלדה - רק בהוספת קונה/ליד חדש (לא בעריכת רשומה קיימת)
+  if (!lead){
+    const dupCheck = bsdDupDebounce(async () => {
+      const fName = document.getElementById('first_name').value;
+      const lName = document.getElementById('last_name').value;
+      const fullName = [fName, lName].filter(Boolean).join(' ');
+      const phone = document.getElementById('phone').value;
+      const idNumEl = document.getElementById('id_number');
+      const idNum = idNumEl ? idNumEl.value : '';
+      if (!fullName && !phone) { bsdRenderDupBanner('leadDupBanner', [], 'openLeadFormFromDup'); return; }
+      const { data, error } = await window.supabaseClient.rpc('bsd_check_lead_duplicate', {
+        p_full_name: fullName || null, p_phone: phone || null, p_id_number: idNum || null, p_exclude_id: null
+      });
+      if (!error) bsdRenderDupBanner('leadDupBanner', data || [], 'openLeadFormFromDup');
+    }, 600);
+    ['first_name', 'last_name', 'phone'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', dupCheck);
+    });
+  }
   if (lead && !isGrantOnlyViewer(lead)) loadLeadMeetings(lead.id);
   if (lead && !isGrantOnlyViewer(lead)) waRenderHistory('lead', lead.id, 'leadWaHistoryBox');
   if (lead && type === 'buyer') loadAnonReceived(lead.id);
@@ -1357,20 +1384,28 @@ async function saveLead(e){
     ({ error } = await window.supabaseClient.from('leads').update(payload).eq('id', leadId));
     if (!error) bsdLogActivity('update', 'leads', leadId);
   } else {
-    // מניעת כפילויות: לפני יצירת ליד חדש, בודקים אם כבר קיים ליד עם אותו
-    // טלפון (מנורמל, בלי קשר לפורמט) או אותו מייל. אם כן - לא יוצרים אוטומטית
-    // כפילות; נותנים לבחור בין פתיחת הרשומה הקיימת לבין יצירה בכל זאת.
-    const dup = await findPossibleDuplicateLead(payload.phone, payload.email);
-    if (dup){
-      const proceedAnyway = confirm(
-        `ייתכן שהליד כבר קיים במערכת:\n"${dup.full_name || 'שם לא זוהה'}"${dup.phone ? ' · ' + dup.phone : ''}${dup.email ? ' · ' + dup.email : ''}\n\n` +
-        `אישור (OK) = פתח את הליד הקיים\nביטול (Cancel) = צור בכל זאת ליד חדש נפרד`
-      );
-      if (!proceedAnyway){
-        closeModal();
-        openLeadForm(dup.id);
-        return;
-      }
+    // בדיקה כפולה לפני שמירה (סעיף 5 באפיון): גם אם כבר בוצעה בדיקה בזמן
+    // ההקלדה, בודקים שוב ממש לפני היצירה. בדיקת טלפון/ת.ז מרוכזת דרך
+    // bsd_check_lead_duplicate (RPC); בדיקת מייל נשארת בנוסף דרך
+    // findPossibleDuplicateLead הקיימת - שתי הבדיקות משלימות זו את זו.
+    const [dupMatchesResult, emailDup] = await Promise.all([
+      window.supabaseClient.rpc('bsd_check_lead_duplicate', {
+        p_full_name: payload.full_name || null, p_phone: payload.phone || null,
+        p_id_number: payload.id_number || null, p_exclude_id: null
+      }),
+      findPossibleDuplicateLead(null, payload.email)
+    ]);
+    const dupMatches = dupMatchesResult.data || [];
+    const strongMatches = dupMatches.filter(m => m.match_level === 'phone' || m.match_level === 'id_number');
+    if (strongMatches.length || emailDup){
+      const combined = strongMatches.length ? dupMatches : (emailDup ? [{
+        id: emailDup.id, full_name: emailDup.full_name, phone: emailDup.phone,
+        match_level: 'email'
+      }] : dupMatches);
+      const decision = await bsdShowDupConfirmDialog({ matches: combined, entityLabel: type === 'buyer' ? 'קונה' : 'ליד' });
+      if (decision.action === 'cancel'){ bsdSetButtonLoading(submitBtn, false); return; }
+      if (decision.action === 'open'){ closeModal(); openLeadForm(decision.id); return; }
+      if (decision.action === 'override'){ payload.dedupe_override_reason = decision.reason; }
     }
     payload.created_by = CURRENT_PROFILE ? CURRENT_PROFILE.id : null;
     const insertResult = await window.supabaseClient.from('leads').insert(payload).select('id').single();
@@ -1378,7 +1413,16 @@ async function saveLead(e){
     if (!error && insertResult.data) bsdLogActivity('create', 'leads', insertResult.data.id);
   }
 
-  if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+  if (error){
+    const serverMatches = bsdParseServerDupError(error);
+    if (serverMatches){
+      toast('⚠️ קיים כבר במערכת קונה/ליד שעשוי להתאים לפרטים שהוזנו');
+      bsdRenderDupBanner('leadDupBanner', serverMatches, 'openLeadFormFromDup');
+      document.getElementById('leadDupBanner')?.scrollIntoView({behavior:'smooth', block:'nearest'});
+      return;
+    }
+    toast('שגיאה בשמירה: ' + error.message); return;
+  }
   // תיקון 25.08.2026 (כלל עסקי מחייב): הצגת ליד במסך הזה לעולם לא מותנית
   // בהסכם (ראו loadLeads) - לכן אין יותר צורך להעביר החוצה ל"לידים" כשאין
   // הסכם. ליד חדש נשאר ומופיע כאן מיד אחרי השמירה, בדיוק כמו כל ליד אחר.

@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608300545';
+    var PAGE_BUILD = '202608311530';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -245,6 +245,7 @@
 <script src="js/saleFileModule2.js?v=202608300521"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
+<script src="js/dedupeCheckModule.js?v=202608311200"></script>
 <script>
 let ALL_BIZ = [];
 let ARCHIVED_BIZ = [];
@@ -303,6 +304,11 @@ function toast(msg){
   box.appendChild(el);
   setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
 }
+function openBizFormFromDup(id){
+  closeModal();
+  openBizForm(id);
+}
+
 function cancelBizForm(){
   if (new URLSearchParams(location.search).get('from') === 'leads-hub'){
     location.href = 'leads-hub.html';
@@ -757,6 +763,7 @@ function openBizForm(id){
     <h3>${biz ? 'עריכת עסק' : 'עסק חדש'}</h3>
     ${biz ? agreementBanner(biz.agreement_status, biz.agreement_number, 'businesses', biz.id, biz.agreement_pdf_path, biz.agreement_pdf_uploaded_at) : ''}
     <div id="bizFormError" style="display:none;background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.85rem;color:#8a2c1f;"></div>
+    ${!biz ? '<div id="bizDupBanner" style="display:none;"></div>' : ''}
     <form id="bizForm">
       <div class="form-grid">
         <div class="section-h">זיהוי</div>
@@ -1037,6 +1044,23 @@ function openBizForm(id){
   document.getElementById('overlay').scrollTop = 0;
   document.getElementById('bizForm').dataset.bizId = biz ? biz.id : '';
   document.getElementById('bizForm').addEventListener('submit', saveBiz);
+  // בדיקת כפילות בזמן הקלדה - רק בפתיחת עסק חדש (לא בעריכת עסק קיים)
+  if (!biz){
+    const dupCheck = bsdDupDebounce(async () => {
+      const name = document.getElementById('internal_name').value;
+      const owner = document.getElementById('owner_name').value;
+      const phone = document.getElementById('owner_phone').value;
+      if (!name && !owner && !phone) { bsdRenderDupBanner('bizDupBanner', [], 'openBizFormFromDup'); return; }
+      const { data, error } = await window.supabaseClient.rpc('bsd_check_business_duplicate', {
+        p_internal_name: name || null, p_owner_name: owner || null, p_owner_phone: phone || null, p_exclude_id: null
+      });
+      if (!error) bsdRenderDupBanner('bizDupBanner', data || [], 'openBizFormFromDup');
+    }, 600);
+    ['internal_name', 'owner_name', 'owner_phone'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', dupCheck);
+    });
+  }
   if (biz) { loadBizFiles(biz.id); initBizDropzone(biz.id); }
   if (biz) loadBizMeetings(biz.id);
   if (biz) waRenderHistory('business', biz.id, 'bizWaHistoryBox');
@@ -3720,6 +3744,22 @@ async function saveBiz(e){
 
   if (!payload.internal_name){ showFormError('שם העסק הוא שדה חובה - השמירה לא בוצעה'); return; }
 
+  // בדיקה כפולה לפני שמירה (סעיף 5 באפיון): גם אם כבר בוצעה בדיקה בזמן
+  // ההקלדה, בודקים שוב ממש לפני היצירה - רק כשמדובר בעסק חדש.
+  if (!bizId){
+    const { data: dupMatches } = await window.supabaseClient.rpc('bsd_check_business_duplicate', {
+      p_internal_name: payload.internal_name || null, p_owner_name: payload.owner_name || null,
+      p_owner_phone: payload.owner_phone || null, p_exclude_id: null
+    });
+    const strongMatches = (dupMatches || []).filter(m => m.match_level === 'phone' || m.match_level === 'name_owner');
+    if (strongMatches.length){
+      const decision = await bsdShowDupConfirmDialog({ matches: dupMatches, entityLabel: 'עסק' });
+      if (decision.action === 'cancel'){ bsdSetButtonLoading(submitBtn, false); return; }
+      if (decision.action === 'open'){ closeModal(); openBizForm(decision.id); return; }
+      if (decision.action === 'override'){ payload.dedupe_override_reason = decision.reason; }
+    }
+  }
+
   let error;
   let savedBizId = bizId || null;
   if (bizId){
@@ -3731,7 +3771,19 @@ async function saveBiz(e){
     error = insertResult.error;
     if (!error && insertResult.data){ savedBizId = insertResult.data.id; bsdLogActivity('create', 'businesses', insertResult.data.id); }
   }
-  if (error){ showFormError('❌ שגיאה בשמירה: ' + error.message); return; }
+  if (error){
+    // רשת ביטחון: אם הטריגר בשרת חסם למרות הבדיקה המוקדמת (למשל race
+    // condition בין שני משתמשים, או קריאה ישירה שעקפה את הבדיקה) - אותו
+    // דיאלוג ידידותי, לא שגיאת DB גולמית.
+    const serverMatches = bsdParseServerDupError(error);
+    if (serverMatches){
+      toast('⚠️ קיים כבר במערכת עסק שעשוי להתאים לפרטים שהוזנו');
+      bsdRenderDupBanner('bizFormError', serverMatches, 'openBizFormFromDup');
+      document.getElementById('bizFormError').scrollIntoView({behavior:'smooth', block:'nearest'});
+      return;
+    }
+    showFormError('❌ שגיאה בשמירה: ' + error.message); return;
+  }
   AI_EDIT_PENDING = {}; AI_EDIT_REVERTED = {}; // נשמרו בהצלחה - לא צריך לשלוח שוב
   const nowAnonActive = (document.getElementById('anon_card_active') && !anonBlocked) ? cb('anon_card_active') : wasAnonActive;
   // סעיף 1 באפיון: עסק שכבר היה מופץ (wasAnonActive=true, כלומר התוכן
