@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608282010';
+    var PAGE_BUILD = '202608311530';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -254,6 +254,7 @@
 <script src="js/auth.js?v=202608251215"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/push.js?v=202608122320"></script>
+<script src="js/dedupeCheckModule.js?v=202608311200"></script>
 <script>
 const BIZ_FILES_BUCKET = window.BSD_CONFIG.STORAGE_BUCKET;
 let CURRENT_PROFILE = null;
@@ -467,9 +468,27 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
     }
     bizId = EXISTING_BUSINESS_ID;
   } else {
+    // בדיקת כפילות לפני שמירה - טופס שטח (טאבלט), אין כאן ממשק הקלדה חי
+    const { data: dupMatches } = await window.supabaseClient.rpc('bsd_check_business_duplicate', {
+      p_internal_name: payload.internal_name || null, p_owner_name: payload.owner_name || null,
+      p_owner_phone: payload.owner_phone || null, p_exclude_id: null
+    });
+    const strongMatches = (dupMatches || []).filter(m => m.match_level === 'phone' || m.match_level === 'name_owner');
+    if (strongMatches.length){
+      const decision = await bsdShowDupConfirmDialog({ matches: dupMatches, entityLabel: 'עסק' });
+      if (decision.action === 'cancel'){ bsdSetButtonLoading(submitBtn, false); return; }
+      if (decision.action === 'open'){ location.href = `businesses.html?open=${decision.id}`; return; }
+      if (decision.action === 'override'){ payload.dedupe_override_reason = decision.reason; }
+    }
     const { data: inserted, error } = await window.supabaseClient.from('businesses').insert(payload).select().single();
     if (error){
       bsdSetButtonLoading(submitBtn, false);
+      const serverMatches = bsdParseServerDupError(error);
+      if (serverMatches){
+        toast('⚠️ קיים כבר במערכת עסק שעשוי להתאים לפרטים שהוזנו');
+        console.error(error);
+        return;
+      }
       toast('שגיאה בשמירת העסק: ' + error.message);
       console.error(error);
       return;
