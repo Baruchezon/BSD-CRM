@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<script>
+// בדיקת גרסה אוטומטית - עוקפת בעיות קאשינג של דפדפני מובייל (אותה תבנית כמו בכל שאר הדפים)
+(function(){
+  try{
+    var PAGE_BUILD = '202609010736';
+    window.PAGE_BUILD = PAGE_BUILD;
+    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - סימולטור עמלות</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=202608251215">
+<link rel="stylesheet" href="css/commission-simulator.css?v=202609010736">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span id="bsdVerLabel" style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה</span><script>(function(){var e=document.getElementById('bsdVerLabel');var b=window.PAGE_BUILD;if(e&&b&&b.length>=12){e.textContent='גרסה '+b.slice(6,8)+'.'+b.slice(4,6)+'.'+b.slice(0,4)+' '+b.slice(8,10)+':'+b.slice(10,12);}})();</script></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+  <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
+  <div class="nav">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="leads-hub.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לידים</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+  </div>
+  <div class="nav">
+    <a href="tasks.html" class="nav-tasks">✅ משימות</a>
+    <a href="messages.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;position:relative;">💬 הודעות<span id="navMsgBadge" style="display:none;position:absolute;top:2px;left:2px;background:#b3402c;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;font-weight:700;"></span></a>
+    <a href="matches-workspace.html" style="color:#ffdd33;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;border:1px solid rgba(255,221,51,.4);">📁 מרכז ההתאמות</a>
+    <a href="commission-simulator.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;border:1px solid rgba(201,162,75,.4);">🧮 סימולטור עמלות</a>
+    <a href="https://bsd-sale-file-builder.onrender.com" target="_blank" rel="noopener" style="color:#9fd6c9;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;border:1px solid rgba(159,214,201,.4);">📄 מערכת יצירת מסמכים</a>
+    <div id="navToolsWrap" style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">🛠️ כלים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="recordings.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🎙️ הקלטות</a>
+      <a href="training-admin.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🎓 הכשרות ומתעניינים</a>
+      <a href="messages.html?admin_view=1" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ כל ההודעות במערכת</a>
+      <a href="stats.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 סטטיסטיקה</a>
+      <a href="users.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👥 משתמשים</a>
+    </div>
+  </div>
+    <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+  </div>
+  </div>
+</div>
+
+<div class="cs-wrap">
+<main class="page-shell">
+
+  <div class="page-intro">
+    <h1>מי אתה במודל BSD?</h1>
+    <p>בחר את סוג המשתמש שלך — הסימולטור המתאים ייפתח מיד.</p>
+  </div>
+
+  <div class="cs-card">
+    <div class="user-type-grid" id="userTypeSelector"></div>
+  </div>
+
+  <div class="cs-card" id="referrerTrackCard" style="display:none;">
+    <h2>באיזה מסלול הייתה העסקה?</h2>
+    <div class="pill-group" id="referrerTrackSelector"></div>
+  </div>
+
+  <div id="viewingAsBanner" class="viewing-as-banner" style="display:none;"></div>
+
+  <div id="simulatorBody" style="display:none;">
+
+    <div class="cs-card">
+      <h2><span class="step-num">1</span> שווי העסקה</h2>
+      <div class="deal-value-input-wrap">
+        <input id="dealValueInput" class="deal-value-input" type="text" inputmode="numeric" value="2,000,000" />
+        <span class="deal-value-currency">₪</span>
+      </div>
+      <div class="deal-value-words" id="dealValueWords"></div>
+    </div>
+
+    <div class="cs-card">
+      <h2><span class="step-num">2</span> איפה אתה נמצא בעסקה?</h2>
+      <div class="sides-grid">
+        <div class="side-config" id="sellerSideConfig" data-side="seller">
+          <div class="side-title">🏪 צד המוכר</div>
+        </div>
+        <div class="side-config" id="buyerSideConfig" data-side="buyer">
+          <div class="side-title">🤝 צד הקונה</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="user-earnings-card">
+      <div class="label" id="userEarningsLabel">העמלה שלך בעסקה</div>
+      <div class="amount" id="userEarningsAmount">₪0</div>
+      <div class="breakdown" id="userEarningsBreakdown"></div>
+    </div>
+
+    <div id="validationBanner" class="validation-banner ok">✓ החישוב תקין</div>
+
+    <div class="cs-card">
+      <h2>מפת העסקה</h2>
+      <div id="flowDiagramContainer"></div>
+      <div class="legend" id="legendContainer"></div>
+    </div>
+
+    <div class="cs-card">
+      <h2>הסיכום שלך</h2>
+      <div class="summary-grid" id="personalSummaryGrid"></div>
+    </div>
+
+    <div class="cs-card">
+      <h2>חלוקת העסקה המלאה</h2>
+      <div class="summary-grid" id="summaryGrid"></div>
+    </div>
+
+    <!-- מסך ניהול אחוזים מוטמע כאן ע"י commissionSimulatorUI.js, אך ורק אם
+         המשתמש המחובר הוא role==='admin' בפועל (נבדק מול הפרופיל האמיתי
+         מ-requireAuth() המשותף לכל ה-CRM). למשתמש אחר התוכן הזה לא קיים
+         כלל ב-DOM, לא רק מוסתר. -->
+    <div id="adminSectionHost"></div>
+
+  </div>
+
+  <div id="noSelectionPlaceholder" class="no-selection-placeholder">
+    בחר את סוג המשתמש שלך למעלה כדי להתחיל
+  </div>
+
+</main>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js?v=202608251215"></script>
+<script src="js/permissions.js?v=202608251215"></script>
+<script src="js/commissionCalculationEngine.js"></script>
+<script src="js/commissionMapRenderer.js"></script>
+<script src="js/commissionRulesSupabase.js"></script>
+<script src="js/commissionSimulatorUI.js"></script>
+</body>
+</html>
