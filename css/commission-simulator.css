@@ -1,0 +1,766 @@
+/* =====================================================================
+   BSD Commission Simulator — Design System
+   נבנה סביב הזהות המותגית של BSD: נייבי + זהב, אמינות ושקיפות פיננסית.
+   ===================================================================== */
+
+/* גופן: נשענים על ערכת גופנים מובנית התומכת בעברית בכל מערכת (ללא תלות ברשת חיצונית,
+   כך שהאפליקציה טעונה ועובדת גם ללא חיבור לאינטרנט לאחר טעינת הקבצים הראשונית). */
+
+:root {
+  /* ---------- בסיס מותג BSD ---------- */
+  --navy-deep: #0e1b34;
+  --navy-mid: #16264a;
+  --gold: #c9a24b;
+  --gold-light: #e8cf8a;
+  --cream: #fbfaf6;
+  --ink: #1c2333;
+
+  /* ---------- צבעי תפקידים קבועים (זהים בכל המערכת) ---------- */
+  --role-bsd: #c9a24b;         /* זהב — BSD */
+  --role-bsd-bg: #fbf3de;
+  --role-agent: #1f6f5b;       /* ירוק-אזמרגד עמוק — סוכן מטפל */
+  --role-agent-bg: #e5f2ee;
+  --role-office: #3f6b96;      /* כחול פלדה — משרד */
+  --role-office-bg: #e8eff6;
+  --role-regional: #8a3b47;    /* בורדו — נציגות/זכיין */
+  --role-regional-bg: #f5e9eb;
+  --role-referral: #6b4c7a;    /* סגול עמוק — מפנה */
+  --role-referral-bg: #efe7f2;
+  --role-dev: #6b5b4f;         /* חום-אפור — מנהל פיתוח */
+  --role-dev-bg: #efece9;
+
+  --success: #2f7d5c;
+  --danger: #b3423a;
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+
+  --shadow-card: 0 2px 14px rgba(14, 27, 52, 0.08);
+  --shadow-card-hover: 0 6px 24px rgba(14, 27, 52, 0.12);
+
+  font-family: 'Segoe UI', 'Arial Hebrew', Arial, 'Noto Sans Hebrew', system-ui, sans-serif;
+}
+
+/* אין כאן * { box-sizing } או html,body גלובליים בכוונה — זה עמוד בתוך
+   ה-CRM הקיים, עם ה-header/nav המשותפים שלו (css/style.css) כבר טעון
+   לפני קובץ זה. במקום זאת כל כלל כאן ממוסגר תחת .cs-wrap כדי לא לגעת
+   בכלום מחוץ לגוף הסימולטור עצמו. */
+.cs-wrap, .cs-wrap * { box-sizing: border-box; }
+
+.cs-wrap {
+  background: var(--cream);
+  color: var(--ink);
+  direction: rtl;
+  text-align: right;
+  font-family: 'Segoe UI', 'Arial Hebrew', Arial, 'Noto Sans Hebrew', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 60vh;
+}
+
+.cs-wrap a { color: inherit; }
+
+/* הערה: אין כאן CSS ל-header — עמוד זה משתמש בכותרת/תפריט הניווט
+   המשותפים של ה-CRM עצמו (מוגדרים ב-css/style.css, נטען לפני קובץ זה),
+   לא בכותרת עצמאית משלו. */
+
+/* ---------------------------------------------------------------------
+   Page shell
+   --------------------------------------------------------------------- */
+.page-shell {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 28px 18px 60px;
+}
+
+.page-intro {
+  text-align: center;
+  margin-bottom: 26px;
+}
+
+.page-intro h1 {
+  font-size: 1.7rem;
+  font-weight: 800;
+  margin: 0 0 6px;
+  color: var(--navy-deep);
+}
+
+.page-intro p {
+  margin: 0;
+  color: #5a6376;
+  font-size: 0.95rem;
+}
+
+/* ---------------------------------------------------------------------
+   Cards
+   --------------------------------------------------------------------- */
+.cs-card {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.cs-card h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0 0 14px;
+  color: var(--navy-deep);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cs-card h2 .step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--gold);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------
+   Deal value input — the hero field
+   --------------------------------------------------------------------- */
+.deal-value-input-wrap {
+  position: relative;
+}
+
+.deal-value-input {
+  width: 100%;
+  font-size: 2rem;
+  font-weight: 800;
+  padding: 18px 60px 18px 20px;
+  border: 2px solid #e3ddd0;
+  border-radius: var(--radius-md);
+  color: var(--navy-deep);
+  background: var(--cream);
+  text-align: center;
+  direction: ltr;
+  transition: border-color 0.15s ease;
+}
+.deal-value-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.deal-value-currency {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--gold);
+  pointer-events: none;
+}
+
+.deal-value-words {
+  text-align: center;
+  color: #8a8f9d;
+  font-size: 0.85rem;
+  margin-top: 8px;
+}
+
+/* ---------------------------------------------------------------------
+   Track selector (pills)
+   --------------------------------------------------------------------- */
+.pill-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  flex: 1 1 auto;
+  min-width: 140px;
+  text-align: center;
+  padding: 12px 16px;
+  border: 2px solid #e3ddd0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--navy-deep);
+  background: #fff;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.pill:hover { border-color: var(--gold-light); }
+
+.pill.active {
+  background: var(--navy-deep);
+  border-color: var(--navy-deep);
+  color: #fff;
+}
+
+.pill.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f2f0eb;
+}
+
+.pill .soon-badge {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--gold);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------
+   Side configuration blocks (מוכר / קונה)
+   --------------------------------------------------------------------- */
+.sides-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 620px) {
+  .sides-grid { grid-template-columns: 1fr; }
+}
+
+.side-config {
+  border: 2px solid #eee7d8;
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.side-config .side-title {
+  font-weight: 700;
+  color: var(--navy-deep);
+  margin-bottom: 10px;
+  font-size: 0.98rem;
+}
+
+.field-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #666f80;
+  margin: 12px 0 6px;
+}
+.field-label:first-child { margin-top: 0; }
+
+.radio-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.88rem;
+  transition: background 0.12s ease;
+}
+.radio-option:hover { background: #faf8f2; }
+.radio-option input { accent-color: var(--gold); width: 16px; height: 16px; flex-shrink: 0; }
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: #faf8f2;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.checkbox-row input { accent-color: var(--role-referral); width: 16px; height: 16px; }
+
+.sub-block {
+  margin-top: 8px;
+  padding-right: 14px;
+  border-right: 2px solid var(--role-referral-bg);
+}
+
+/* ---------------------------------------------------------------------
+   Flow diagram — the visual heart of the simulator
+   --------------------------------------------------------------------- */
+.flow-diagram {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+
+.flow-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.flow-node .node-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.flow-node .node-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.flow-node .node-sub {
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.flow-node.side-node {
+  background: #f2f0eb;
+  color: var(--navy-deep);
+}
+
+.flow-node.commission-node {
+  background: var(--role-referral-bg);
+  border: 2px dashed #d8cbe0;
+}
+
+.flow-node.deal-node {
+  background: linear-gradient(135deg, var(--navy-deep), var(--navy-mid));
+  color: #fff;
+  padding: 26px 18px;
+  margin: 6px 0;
+  box-shadow: var(--shadow-card-hover);
+}
+.flow-node.deal-node .node-label { color: var(--gold-light); opacity: 1; }
+.flow-node.deal-node .node-value { font-size: 2rem; color: #fff; }
+
+.flow-arrow {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 26px;
+  color: #b9b2a1;
+}
+.flow-arrow svg { width: 20px; height: 26px; }
+
+/* distribution row: horizontal chips under each commission node showing the split */
+.distribution-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 10px 0 4px;
+}
+
+.dist-chip {
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  text-align: center;
+  min-width: 96px;
+  color: #fff;
+}
+
+.dist-chip .chip-label { font-size: 0.72rem; font-weight: 600; opacity: 0.92; }
+.dist-chip .chip-amount { font-size: 1.05rem; font-weight: 800; margin-top: 2px; }
+.dist-chip .chip-pct { font-size: 0.68rem; opacity: 0.85; }
+
+.dist-chip.role-bsd { background: var(--role-bsd); }
+.dist-chip.role-agent { background: var(--role-agent); }
+.dist-chip.role-office { background: var(--role-office); }
+.dist-chip.role-regional { background: var(--role-regional); }
+.dist-chip.role-referral { background: var(--role-referral); }
+.dist-chip.role-dev { background: var(--role-dev); }
+
+.dist-chip.is-user {
+  outline: 3px solid var(--navy-deep);
+  outline-offset: 2px;
+  transform: scale(1.04);
+}
+
+/* ---------------------------------------------------------------------
+   "העמלה שלך" — hero result
+   --------------------------------------------------------------------- */
+.user-earnings-card {
+  background: linear-gradient(135deg, var(--gold), var(--gold-light));
+  border-radius: var(--radius-lg);
+  padding: 26px;
+  text-align: center;
+  box-shadow: var(--shadow-card-hover);
+  margin-bottom: 18px;
+}
+
+.user-earnings-card .label {
+  color: var(--navy-deep);
+  font-weight: 700;
+  font-size: 1rem;
+  opacity: 0.9;
+}
+
+.user-earnings-card .amount {
+  color: var(--navy-deep);
+  font-size: 2.6rem;
+  font-weight: 800;
+  margin: 4px 0;
+}
+
+.user-earnings-card .breakdown {
+  color: #5c4a1f;
+  font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------------------
+   Summary strip
+   --------------------------------------------------------------------- */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 560px) {
+  .summary-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.summary-item {
+  background: #faf8f2;
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  text-align: center;
+}
+
+.summary-item .s-label {
+  font-size: 0.74rem;
+  color: #666f80;
+  font-weight: 600;
+}
+
+.summary-item .s-value {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--navy-deep);
+  margin-top: 2px;
+}
+
+/* ---------------------------------------------------------------------
+   Validation banner
+   --------------------------------------------------------------------- */
+.validation-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 18px;
+}
+
+.validation-banner.ok {
+  background: #e5f2ec;
+  color: var(--success);
+}
+
+.validation-banner.error {
+  background: #fbe9e7;
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------------------------
+   Optional dev-manager toggle block
+   --------------------------------------------------------------------- */
+.optional-block {
+  border: 1px dashed #d9d2c1;
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.optional-block summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--navy-deep);
+  font-size: 0.9rem;
+}
+
+.optional-block .optional-body {
+  margin-top: 12px;
+}
+
+.year-pill-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.year-pill {
+  flex: 1;
+  text-align: center;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  border: 2px solid #e3ddd0;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.year-pill.active { background: var(--role-dev); border-color: var(--role-dev); color: #fff; }
+
+/* ---------------------------------------------------------------------
+   בורר "מי אתה במודל BSD" — 5 כרטיסי סוג משתמש
+   --------------------------------------------------------------------- */
+.user-type-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 560px) {
+  .user-type-grid { grid-template-columns: 1fr; }
+}
+
+.user-type-card {
+  border: 2px solid #e3ddd0;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  background: #fff;
+}
+
+.user-type-card:hover { border-color: var(--gold-light); }
+
+.user-type-card.active {
+  background: var(--navy-deep);
+  border-color: var(--navy-deep);
+}
+
+.user-type-card .ut-title {
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: var(--navy-deep);
+}
+.user-type-card.active .ut-title { color: #fff; }
+
+.user-type-card .ut-sub {
+  font-size: 0.78rem;
+  color: #8a8f9d;
+  margin-top: 4px;
+}
+.user-type-card.active .ut-sub { color: var(--gold-light); }
+
+.user-type-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f2f0eb;
+}
+
+.user-type-card .soon-badge {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--gold);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.viewing-as-banner {
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--navy-deep);
+  background: var(--gold-light);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-bottom: 18px;
+}
+
+.no-selection-placeholder {
+  text-align: center;
+  color: #8a8f9d;
+  font-size: 0.95rem;
+  padding: 40px 20px;
+}
+
+/* ---------------------------------------------------------------------
+   Admin styles
+   --------------------------------------------------------------------- */
+.admin-login {
+  max-width: 380px;
+  margin: 90px auto;
+  text-align: center;
+}
+
+.admin-login input {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 1rem;
+  border: 2px solid #e3ddd0;
+  border-radius: var(--radius-md);
+  text-align: center;
+  margin: 14px 0;
+}
+
+.cs-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.92rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cs-btn-primary { background: var(--navy-deep); color: #fff; }
+.cs-btn-primary:hover { background: var(--navy-mid); }
+
+.cs-btn-gold { background: var(--gold); color: #fff; }
+.cs-btn-gold:hover { background: #b58f3b; }
+
+.cs-btn-ghost { background: #f2f0eb; color: var(--navy-deep); }
+.cs-btn-ghost:hover { background: #e9e5d9; }
+
+.cs-btn-danger-ghost { background: #fbe9e7; color: var(--danger); }
+.cs-btn-danger-ghost:hover { background: #f6d8d4; }
+
+.cs-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.admin-error {
+  color: var(--danger);
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-height: 20px;
+}
+
+.rate-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 10px 14px;
+  align-items: center;
+}
+
+.rate-field-grid label {
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+
+.rate-input-wrap {
+  position: relative;
+}
+
+.rate-input {
+  width: 100%;
+  padding: 8px 30px 8px 10px;
+  border: 2px solid #e3ddd0;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-align: center;
+  direction: ltr;
+}
+
+.rate-input.invalid {
+  border-color: var(--danger);
+  background: #fff5f4;
+}
+
+.rate-pct-sign {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.85rem;
+  color: #8a8f9d;
+}
+
+.track-check-line {
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+}
+.track-check-line.ok { background: #e5f2ec; color: var(--success); }
+.track-check-line.error { background: #fbe9e7; color: var(--danger); }
+
+.admin-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+
+.save-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--navy-deep);
+  color: #fff;
+  padding: 12px 22px;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  box-shadow: var(--shadow-card-hover);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.25s ease;
+  pointer-events: none;
+  z-index: 100;
+}
+.save-toast.show { opacity: 1; transform: translateY(0); }
+
+.disabled-track-note {
+  background: #fbf3de;
+  border: 1px solid var(--gold-light);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  color: #6b5518;
+  margin-bottom: 12px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: #666f80;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
