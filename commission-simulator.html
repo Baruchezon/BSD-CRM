@@ -5,7 +5,7 @@
 // בדיקת גרסה אוטומטית - עוקפת בעיות קאשינג של דפדפני מובייל (אותה תבנית כמו בכל שאר הדפים)
 (function(){
   try{
-    var PAGE_BUILD = '202609010736';
+    var PAGE_BUILD = '202609011340';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -33,7 +33,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="css/style.css?v=202608251215">
-<link rel="stylesheet" href="css/commission-simulator.css?v=202609010736">
+<link rel="stylesheet" href="css/commission-simulator.css?v=202609011340">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -74,6 +74,7 @@
 
   <div class="page-intro">
     <h1>מי אתה במודל BSD?</h1>
+    <p class="page-disclaimer">הסימולטור נועד לצורכי הערכה והמחשה בלבד. החישובים המוצגים בו מבוססים על הנתונים והאחוזים שהוזנו ואינם מהווים התחייבות, הסכם או אישור לעמלה בפועל. העמלה הקובעת תהיה בהתאם להסכמים המחייבים של BSD.</p>
     <p>בחר את סוג המשתמש שלך — הסימולטור המתאים ייפתח מיד.</p>
   </div>
 
