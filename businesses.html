@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609021145';
+    var PAGE_BUILD = '202609021230';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -4057,6 +4057,7 @@ async function loadAnonDistSummary(bizId){
 }
 
 async function archiveBiz(id){
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
   const b = ALL_BIZ.find(x=>x.id===id) || (await window.supabaseClient.from('businesses').select('*').eq('id', id).maybeSingle()).data;
   if (!canManageBiz(b)){ toast('אין לך הרשאה להעביר עסק זה לארכיון'); return; }
   openArchiveReasonModal('העברת "' + (b.internal_name||'העסק') + '" לארכיון', async (reason)=>{
@@ -4068,6 +4069,7 @@ async function archiveBiz(id){
   });
 }
 async function restoreBizFromArchive(id){
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
   const b = ARCHIVED_BIZ.find(x=>x.id===id);
   if (!canRestoreBiz(b)){ toast('שחזור מהארכיון מותר רק לאדמין או למי שהעביר את הכרטיס לארכיון'); return; }
   if (!confirm('לשחזר עסק זה מהארכיון לרשימה הרגילה?')) return;

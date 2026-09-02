@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609021145';
+    var PAGE_BUILD = '202609021230';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1595,6 +1595,7 @@ async function addNote(tableName, recordId){
 }
 
 async function archiveLead(id){
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
   const l = ALL_LEADS.find(x=>x.id===id);
   if (!canManageLead(l)){ toast('אין לך הרשאה להעביר רשומה זו לארכיון'); return; }
   const personName = l ? (l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ')) : '';
@@ -1606,6 +1607,7 @@ async function archiveLead(id){
   });
 }
 async function restoreLeadFromArchive(id){
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
   const l = ARCHIVED_LEADS.find(x=>x.id===id);
   if (!canRestoreLead(l)){ toast('שחזור מהארכיון מותר רק לאדמין או למי שהעביר את הכרטיס לארכיון'); return; }
   if (!confirm('לשחזר רשומה זו מהארכיון?')) return;
