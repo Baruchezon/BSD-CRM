@@ -64,6 +64,8 @@
   .btn-done{ background:linear-gradient(180deg,#3fa96b,#2e7d4f); color:#fff; }
   .btn-snooze{ background:#fff3d6; color:#8a6d1f; border:1.5px solid #e8cf8a !important; }
   .btn-open{ background:#eef1f6; color:var(--navy); }
+  .btn-stop{ background:linear-gradient(180deg,var(--navy),#1c2f4d); color:#fff; }
+  .actions-divider{ height:1px; background:#eee; margin:2px 0 6px; }
   .loading, .error-state{ padding:60px 24px; text-align:center; color:#fff; }
   .spinner{ width:34px;height:34px;border:3px solid rgba(255,255,255,.25); border-top-color:#fff; border-radius:50%; margin:0 auto 14px; animation:spin .8s linear infinite; }
   @keyframes spin{ to{transform:rotate(360deg);} }
@@ -160,9 +162,11 @@ function renderTask(task){
       ${task.description ? `<div class="task-desc">${esc(task.description)}</div>` : ''}
     </div>
     <div class="actions">
+      <button class="action btn-stop" onclick="stopAlert()">✋ קראתי, הפסק התראה</button>
+      <button class="action btn-open" onclick="openFull()">📂 פתח משימה</button>
+      <div class="actions-divider"></div>
       <button class="action btn-done" onclick="markDone()">✅ בוצע</button>
       <button class="action btn-snooze" onclick="postponeToTomorrow()">📅 דחה למחר</button>
-      <button class="action btn-open" onclick="openFull()">📂 פתח ב-BSD CRM</button>
     </div>
   `;
 }
@@ -172,6 +176,30 @@ function renderAlreadyDone(task){
     <div class="done-state">
       <div class="icon">✅</div>
       <p>המשימה "${esc(task.title)}" כבר סומנה כהושלמה.</p>
+      <button class="action btn-open" style="margin-top:16px;" onclick="location.href='tasks.html'">לרשימת המשימות</button>
+    </div>
+  `;
+}
+
+// "קראתי, הפסק התראה" (30.08.2026) - the ONLY thing this does is set read_at.
+// It never touches status, due_date, due_time, or notify_count - the task stays
+// exactly as it was and remains fully visible in tasks.html. Setting read_at is
+// what tells the task-reminders Edge Function to stop the repeat push cycle for
+// this task; see the comment there for the other side of this.
+// Also doubles as the plain "סגור" action (merged into one button, as he said
+// is fine if the implementation ends up identical) - both just stop the nagging
+// and get out of the way without opening anything.
+async function stopAlert(){
+  root.innerHTML = `<div class="loading" style="color:var(--navy);"><div class="spinner" style="border-color:rgba(14,27,52,.2);border-top-color:var(--navy);"></div>עוצר את ההתראה...</div>`;
+  const { error } = await window.supabaseClient.from('tasks').update({ read_at: new Date().toISOString() }).eq('id', taskId);
+  if (error){
+    root.innerHTML = `<div class="error-state"><div style="font-size:2.5rem;">⚠️</div><p style="color:#40485c;margin-top:10px;">שגיאה בעצירת ההתראה: ${esc(error.message)}</p><button class="action btn-open" style="margin-top:16px;" onclick="location.href='tasks.html'">לרשימת המשימות</button></div>`;
+    return;
+  }
+  root.innerHTML = `
+    <div class="done-state">
+      <div class="icon">✋</div>
+      <p>ההתראה נעצרה. המשימה "${esc(CURRENT_TASK ? CURRENT_TASK.title : '')}" נשארת ברשימת המשימות שלך בדיוק כפי שהייתה.</p>
       <button class="action btn-open" style="margin-top:16px;" onclick="location.href='tasks.html'">לרשימת המשימות</button>
     </div>
   `;
