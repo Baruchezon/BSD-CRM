@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609021230';
+    var PAGE_BUILD = '202609022112';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -2822,8 +2822,9 @@ async function loadBizFiles(bizId){
       </div>
     </div>`;
   }).join('')
-    + `<div style="margin-top:10px;">
+    + `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
          <button type="button" class="btn btn-ghost" id="bizSendEmailBtn" disabled title="סמן קובץ אחד לפחות למעלה כדי להפעיל" onclick="openSendFilesToBuyer('${bizId}')">📧 שלח לקונה במייל</button>
+         <button type="button" class="btn btn-ghost" id="bizSendWaBtn" disabled title="סמן קובץ אחד לפחות למעלה כדי להפעיל" onclick="openSendFilesToBuyerWhatsApp('${bizId}')">📱 שלח לקונה ב-WhatsApp</button>
        </div>`;
 }
 
@@ -2907,10 +2908,17 @@ function blobToBase64(blob){
 function updateBizSendBtn(bizId){
   const n = document.querySelectorAll('.bizfSendCheck:checked').length;
   const btn = document.getElementById('bizSendEmailBtn');
-  if (!btn) return;
-  btn.disabled = n === 0;
-  btn.textContent = n ? `📧 שלח ${n} קבצים לקונה במייל` : '📧 שלח לקונה במייל';
-  btn.title = n === 0 ? 'סמן קובץ אחד לפחות למעלה כדי להפעיל' : '';
+  if (btn){
+    btn.disabled = n === 0;
+    btn.textContent = n ? `📧 שלח ${n} קבצים לקונה במייל` : '📧 שלח לקונה במייל';
+    btn.title = n === 0 ? 'סמן קובץ אחד לפחות למעלה כדי להפעיל' : '';
+  }
+  const waBtnEl = document.getElementById('bizSendWaBtn');
+  if (waBtnEl){
+    waBtnEl.disabled = n === 0;
+    waBtnEl.textContent = n ? `📱 שלח ${n} קבצים לקונה ב-WhatsApp` : '📱 שלח לקונה ב-WhatsApp';
+    waBtnEl.title = n === 0 ? 'סמן קובץ אחד לפחות למעלה כדי להפעיל' : '';
+  }
 }
 
 // עוטף כל await ברשת/Supabase בטיימאאוט מפורש - כדי שאם קריאה כלשהי "נתקעת"
@@ -3165,6 +3173,173 @@ async function confirmSendFilesToBuyer(){
     toast(errMsg);
     if (sendBtn){ sendBtn.disabled = false; sendBtn.textContent = '📤 שלח'; }
   }
+}
+
+// ============================================================================
+// שליחת קובץ/קבצים מצורפים לקונה ב-WhatsApp (02.09.2026)
+// לא מנגנון שליחה אוטומטי - פותח שיחת WhatsApp/WhatsApp Web עם טקסט מוכן
+// הניתן לעריכה, ומכין את הקבצים להורדה/פתיחה לצירוף ידני. לחיצת ה-Send
+// בפועל בתוך WhatsApp נשארת תמיד ביד המשתמש - שום הודעה לא נשלחת מכאן.
+// לא נוגע במנגנון השליחה הקיים באימייל (openSendFilesToBuyer/confirmSendFilesToBuyer) בכלל.
+// ============================================================================
+let SEND_WA_BIZ_ID = null;
+let SEND_WA_CURRENT_BUYER = null;
+let SEND_WA_SELECTED_IDX = []; // מוקפא בפתיחת המודל, לא נקרא מחדש מה-DOM - כמו במנגנון האימייל
+
+async function openSendFilesToBuyerWhatsApp(bizId){
+  const selectedIdx = Array.from(document.querySelectorAll('.bizfSendCheck:checked')).map(el => el.getAttribute('data-idx'));
+  if (!selectedIdx.length){ toast('יש לבחור לפחות קובץ אחד לשליחה'); return; }
+  SEND_WA_BIZ_ID = bizId;
+  SEND_WA_CURRENT_BUYER = null;
+  SEND_WA_SELECTED_IDX = selectedIdx;
+
+  const filesInfo = selectedIdx.map(idx => (BIZ_FILES_CACHE[bizId] || [])[idx]).filter(Boolean);
+  if (filesInfo.length !== selectedIdx.length){
+    toast('שגיאה: חלק מהקבצים שסומנו לא נמצאו יותר ברשימה - רענן את הדף ונסה שוב');
+    return;
+  }
+  const biz = ALL_BIZ.find(b => b.id === bizId);
+
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>שליחת קבצים לקונה ב-WhatsApp</h3>
+    <div style="background:#fff8e6;color:#8a5a00;border-radius:8px;padding:8px 12px;font-size:.8rem;margin-bottom:12px;">
+      ⚠️ WhatsApp לא מאפשר צירוף קובץ אוטומטי דרך הדפדפן. השיחה תיפתח עם הודעה מוכנה, והקבצים ייפתחו/יורדו בנפרד להורדה ידנית לתוך השיחה. ה-Send בפועל תמיד בידיך.
+    </div>
+
+    <div class="field full" style="margin-bottom:14px;">
+      <label>קבצים לשליחה (לצירוף ידני)</label>
+      <div style="background:#f7f5ef;border-radius:8px;padding:8px 12px;font-size:.85rem;display:block;min-height:38px;line-height:1.6;box-sizing:border-box;">
+        ${filesInfo.map((f, i) => `<div>📄 ${esc(f.displayName)} <button type="button" class="btn btn-ghost" style="padding:0 8px;font-size:.7rem;" onclick="downloadBizFile('${bizId}', ${selectedIdx[i]})">📂 פתח / הורד</button></div>`).join('') || '<span style="color:#999;">לא נבחרו קבצים</span>'}
+      </div>
+    </div>
+
+    <div class="field full" style="margin-bottom:10px;overflow:visible;">
+      <label>בחר קונה</label>
+      <div id="sendWaBuyerBox" style="overflow:visible;">טוען קונים...</div>
+    </div>
+    <div id="sendWaBuyerInfo"></div>
+
+    <div class="field full" style="margin-bottom:10px;">
+      <label>תוכן ההודעה (ניתן לעריכה גם בתוך WhatsApp לפני השליחה)</label>
+      <textarea id="sendWaBody" rows="4" style="width:100%;">שלום,\n\nיש לי בשבילך קבצים${biz ? ' בנוגע ל' + biz.internal_name : ''} - שולח/ת עוד רגע כאן בשיחה.\n\nבברכה,\n${(CURRENT_PROFILE && CURRENT_PROFILE.full_name) || 'BSD Business Brokers Israel'}</textarea>
+    </div>
+
+    <div id="sendWaStatus" style="min-height:20px;margin-bottom:8px;font-size:.85rem;font-weight:600;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button type="button" class="btn btn-primary" id="sendWaBtn" style="opacity:.5;" onclick="openWhatsAppChatForBuyer()">📲 פתח WhatsApp</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+
+  const box = document.getElementById('sendWaBuyerBox');
+  let buyers = [];
+  try {
+    let buyerQuery = window.supabaseClient
+      .from('leads')
+      .select('id,full_name,first_name,last_name,email,phone,agreement_status,created_by')
+      .eq('type', 'buyer')
+      .eq('is_archived', false)
+      .order('full_name', { ascending: true });
+    if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
+      buyerQuery = buyerQuery.eq('created_by', CURRENT_PROFILE.id);
+    }
+    const { data, error } = await withTimeout(buyerQuery, 15000, 'טעינת רשימת קונים');
+    if (error) throw new Error(error.message);
+    buyers = data || [];
+  } catch(e){
+    console.error('[openSendFilesToBuyerWhatsApp] failed to load buyers', e);
+    box.innerHTML = `<span style="color:#b3402c;">שגיאה בטעינת רשימת הקונים: ${esc(e.message || String(e))} - אי אפשר לבחור קונה כרגע. סגור וחזור על הפעולה.</span>`;
+    toast('שגיאה בטעינת רשימת הקונים: ' + (e.message || e));
+    return;
+  }
+  if (!buyers.length){
+    box.innerHTML = `<span style="color:#8a5a00;">לא נמצאו קונים ברשימה (leads מסוג buyer) - אי אפשר לבחור קונה עד שיתווסף אחד עם טלפון.</span>`;
+    return;
+  }
+
+  box.innerHTML = window.searchSelectHTML({ boxId: 'sendWaBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
+  window.initSearchSelect('sendWaBuyerSelect', buyers, {
+    getId: b => b.id,
+    getLabel: b => b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || b.email || 'קונה ללא שם',
+    onChange: (buyerId) => {
+      SEND_WA_CURRENT_BUYER = buyers.find(b => b.id === buyerId) || null;
+      renderSendWaBuyerInfo();
+    }
+  });
+}
+
+function renderSendWaBuyerInfo(){
+  const infoBox = document.getElementById('sendWaBuyerInfo');
+  const sendBtn = document.getElementById('sendWaBtn');
+  const buyer = SEND_WA_CURRENT_BUYER;
+  if (!buyer){ infoBox.innerHTML = ''; sendBtn.style.opacity = '.5'; return; }
+
+  const buyerLabel = buyer.full_name || [buyer.first_name,buyer.last_name].filter(Boolean).join(' ') || '';
+  const waDigits = waPhoneDigits(buyer.phone);
+  const missingPhone = !waDigits;
+  const noAgreement = !buyer.agreement_status || buyer.agreement_status === 'אין הסכם';
+
+  infoBox.innerHTML = `
+    <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.85rem;">
+      <div><b>${esc(buyerLabel)}</b></div>
+      <div>📱 ${buyer.phone ? esc(fmtPhone(buyer.phone)) : 'אין טלפון'}</div>
+    </div>
+    ${missingPhone
+      ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:10px 12px;font-size:.85rem;">⚠️ לקונה הזה אין מספר טלפון תקין שמור - יש להוסיף טלפון בכרטיס הקונה תחילה.</div>`
+      : (noAgreement
+          ? `<div style="background:#fff8e6;color:#8a5a00;border-radius:8px;padding:10px 12px;font-size:.85rem;">⚠️ לקונה הזה אין עדיין הסכם התקשרות חתום. ודא שהקבצים שנבחרו מתאימים לשליחה במצב הזה לפני שתשלח.</div>`
+          : '')}
+  `;
+  sendBtn.style.opacity = missingPhone ? '.5' : '1';
+}
+
+// פותח את חלון/טאב ה-WhatsApp ומכין את קבצי ההורדה - הכל נפתח באופן סינכרוני
+// בתוך אירוע הלחיצה עצמו (חלונות ריקים תחילה, כתובת מוזנת אחרי ה-await)
+// כדי שחוסמי חלונות קופצים בדפדפן לא יחסמו את זה, כי הפעולה עדיין נחשבת
+// "ביוזמת המשתמש" מבחינת הדפדפן.
+async function openWhatsAppChatForBuyer(){
+  const buyer = SEND_WA_CURRENT_BUYER;
+  if (!buyer){ const m='יש לבחור קונה מהרשימה לפני הפתיחה (לחיצה על שם הקונה בתפריט הנפתח)'; toast(m); sendWaStatus(m, true); return; }
+  const waDigits = waPhoneDigits(buyer.phone);
+  if (!waDigits){ const m='לקונה הנבחר אין מספר טלפון תקין שמור - יש להוסיף טלפון בכרטיס הקונה תחילה'; toast(m); sendWaStatus(m, true); return; }
+
+  const bizId = SEND_WA_BIZ_ID;
+  const selectedIdx = SEND_WA_SELECTED_IDX;
+  const filesInfo = selectedIdx.map(idx => (BIZ_FILES_CACHE[bizId] || [])[idx]).filter(Boolean);
+  const bodyText = document.getElementById('sendWaBody').value;
+
+  // חלונות ריקים תחילה - מספר אחד ל-WhatsApp ואחד לכל קובץ - עוד לפני כל await
+  const waWindow = window.open('', '_blank');
+  const fileWindows = filesInfo.map(() => window.open('', '_blank'));
+
+  try {
+    for (let i = 0; i < filesInfo.length; i++){
+      const f = filesInfo[i];
+      const win = fileWindows[i];
+      if (!win) continue; // נחסם ע"י הדפדפן - הכפתור "📂 פתח / הורד" ברשימה למעלה עדיין עובד ידנית
+      const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(f.storagePath, 60 * 10);
+      if (error || !data?.signedUrl){ win.close(); continue; }
+      win.location.href = data.signedUrl;
+    }
+  } catch(e){
+    console.error('[openWhatsAppChatForBuyer] file open failed', e);
+  }
+
+  const waUrl = `https://wa.me/${waDigits}?text=${encodeURIComponent(bodyText)}`;
+  if (waWindow){ waWindow.location.href = waUrl; }
+  else { window.open(waUrl, '_blank'); }
+
+  bsdLogActivity('open_whatsapp_send_files', 'businesses', bizId);
+  sendWaStatus('✅ נפתחה שיחת WhatsApp עם הודעה מוכנה - הקבצים נפתחו לצירוף ידני. הלחיצה על Send בפועל היא בידיך בתוך WhatsApp.', false);
+  toast('נפתחה שיחת WhatsApp - שליחת ההודעה בפועל בידיך');
+}
+
+function sendWaStatus(msg, isError){
+  const el = document.getElementById('sendWaStatus');
+  if (el){ el.textContent = msg; el.style.color = isError ? '#b00020' : '#0e1b34'; }
 }
 
 function closeNotesPanel(){
