@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609020353';
+    var PAGE_BUILD = '202609021145';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -188,8 +188,8 @@ function leadById(id){ return ALL_LEADS.find(l=>l.id===id); }
 async function loadEverything(){
   const sb = window.supabaseClient;
   const [{data: leads}, {data: businesses}, {data: matches}, {data: profiles}, {data: tasks}] = await Promise.all([
-    sb.from('leads').select('id,full_name,phone,phone2,client_number,agreement_status,created_by,handled_by,type').eq('type','buyer'),
-    sb.from('businesses').select('id,internal_name,business_number,field,agreement_status,created_by,handled_by'),
+    sb.from('leads').select('id,full_name,phone,phone2,client_number,agreement_status,created_by,handled_by,type,is_archived').eq('type','buyer'),
+    sb.from('businesses').select('id,internal_name,business_number,field,agreement_status,created_by,handled_by,is_archived'),
     sb.from('matches').select('*'),
     sb.from('profiles').select('id,full_name,role'),
     sb.from('tasks').select('id,match_id,business_id,buyer_id,title,status,due_date,assigned_to')
@@ -436,7 +436,7 @@ async function openAddBuyerModal(bizId){
   document.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', ()=> document.getElementById('modalRoot').innerHTML=""));
   const box = document.getElementById('addBuyerBox');
   box.innerHTML = window.searchSelectHTML({ boxId: 'addBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
-  window.initSearchSelect('addBuyerSelect', ALL_LEADS, {
+  window.initSearchSelect('addBuyerSelect', ALL_LEADS.filter(l=>!l.is_archived), {
     getId: b => b.id,
     getLabel: b => (b.full_name||'קונה ללא שם') + (b.client_number?' ('+b.client_number+')':''),
     onChange: (id)=>{ window.WS_SELECTED_BUYER = ALL_LEADS.find(l=>l.id===id) || null; }
@@ -501,13 +501,13 @@ function openNewMatchModal(){
     </div></div>`;
   document.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', ()=> document.getElementById('modalRoot').innerHTML=""));
   document.getElementById('nmBuyerBox').innerHTML = window.searchSelectHTML({ boxId: 'nmBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
-  window.initSearchSelect('nmBuyerSelect', ALL_LEADS, {
+  window.initSearchSelect('nmBuyerSelect', ALL_LEADS.filter(l=>!l.is_archived), {
     getId: b => b.id,
     getLabel: b => (b.full_name||'קונה ללא שם') + (b.client_number?' ('+b.client_number+')':''),
     onChange: (id)=>{ window.NM_SELECTED_BUYER = ALL_LEADS.find(l=>l.id===id) || null; updateNewMatchUI(); }
   });
   document.getElementById('nmBizBox').innerHTML = window.searchSelectHTML({ boxId: 'nmBizSelect', placeholder: 'הקלד שם עסק או מספר עסק לחיפוש...' });
-  const bizList = Object.values(ALL_BUSINESSES);
+  const bizList = Object.values(ALL_BUSINESSES).filter(b=>!b.is_archived);
   window.initSearchSelect('nmBizSelect', bizList, {
     getId: b => b.id,
     getLabel: b => (b.internal_name||'עסק ללא שם') + (b.business_number?' ('+b.business_number+')':'') + (b.field?' - '+b.field:''),

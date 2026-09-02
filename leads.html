@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609010736';
+    var PAGE_BUILD = '202609021145';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -184,6 +184,8 @@
   <div class="toolbar">
     <h2>קונים ומשקיעים</h2>
     <div class="add-btns">
+      <button type="button" class="btn btn-primary" id="leadViewActiveBtn" onclick="setLeadViewMode('active')">📋 פעילים</button>
+      <button type="button" class="btn btn-ghost" id="leadViewArchiveBtn" onclick="setLeadViewMode('archive')">📁 ארכיון</button>
       <button class="btn btn-buyer" onclick="openLeadForm(null,'buyer')">+ קונה חדש</button>
       <button class="btn" style="background:#7a3fd1;color:#fff;" onclick="openLeadForm(null,'partner')">+ שותפות/השקעה</button>
     </div>
@@ -261,6 +263,7 @@
 <script src="js/pdfPipeline.js?v=202608291000"></script>
 <script src="js/dedupeCheckModule.js?v=202608311200"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
+<script src="js/archiveModule.js?v=202609021200"></script>
 <script>
 let ALL_LEADS = [];
 let ARCHIVED_LEADS = [];
@@ -340,6 +343,7 @@ async function openAddBizToMatchModal(buyerId){
   try {
     const { data, error } = await window.supabaseClient
       .from('businesses').select('id,internal_name,business_number,field')
+      .eq('is_archived', false)
       .order('internal_name', { ascending: true });
     if (error) throw new Error(error.message);
     bizList = data || [];
@@ -691,6 +695,7 @@ function switchLeadTypeTab(type){
 }
 
 function renderTable(){
+  if (typeof LEAD_VIEW_MODE !== 'undefined' && LEAD_VIEW_MODE === 'archive'){ renderArchiveLeadsTable(); return; }
   const search = document.getElementById('fSearch').value.trim().toLowerCase();
   const type = document.getElementById('fType').value;
   const status = document.getElementById('fStatus').value;
@@ -788,6 +793,7 @@ function renderTable(){
               ${isGrantOnlyViewer(l) ? '' : `<a href="javascript:void(0)" onclick="openNotesPanel('leads','${l.id}','${esc((l.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(l.id))}${notesIconStyle(l.id) ? ' 🔵' : ''}</a>`}
               ${(l.type === 'buyer' && !isGrantOnlyViewer(l)) ? `<a href="javascript:void(0)" onclick="openAddBizToMatchModal('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">➕ הוסף עסק להתאמה</a>` : ''}
               ${(canSendAgreement() && l.agreement_status !== 'יש הסכם חתום' && !isGrantOnlyViewer(l)) ? `<a href="javascript:void(0)" onclick="sendAgreementForLead('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
+              ${canManageLead(l) ? `<a href="javascript:void(0)" onclick="archiveLead('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 העבר לארכיון</a>` : ''}
               ${canDeleteLead(l) ? `<a href="javascript:void(0)" onclick="deleteLead('${l.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
             </div>
           </div>
@@ -814,13 +820,24 @@ function canEditRecord(createdBy){
   return createdBy === CURRENT_PROFILE.id;
 }
 
-// שחרור קונים/משקיעים לצפייה (24.08.2026) - תואם ל-RLS: leads_delete מאפשרת
-// מחיקת buyer/partner רק לאדמין (לא manager), seller ללא שינוי.
-function canDeleteLead(l){
+// הנחיה 02.09.2026 (הסדרת הרשאות + ארכיון): מי מורשה לנהל (ערוך/מחק/ארכב) ליד
+// נתון - תואם בדיוק ל-leads_update/leads_delete המעודכנות ב-DB: אדמין תמיד;
+// seller - manager/יוצר/מטפל; buyer/partner - יוצר בלבד (לא manager, לא handled_by).
+function canManageLead(l){
   if (!CURRENT_PROFILE || !l) return false;
   if (CURRENT_PROFILE.role === 'admin') return true;
-  if (l.type === 'seller') return CURRENT_PROFILE.role === 'manager';
-  return false;
+  if (l.type === 'seller') return CURRENT_PROFILE.role === 'manager' || l.created_by === CURRENT_PROFILE.id || l.handled_by === CURRENT_PROFILE.id;
+  return l.created_by === CURRENT_PROFILE.id;
+}
+// מחיקה עוברת כעת דרך אותה מדיניות בדיוק כמו עריכה/ארכוב (leads_delete עודכנה
+// ב-02.09.2026 להתאים ל-leads_update - כולל ענף יוצר לכל סוגי הליד).
+function canDeleteLead(l){ return canManageLead(l); }
+// שחזור מהארכיון - תואם לטריגר enforce_lead_archive_integrity: אדמין תמיד,
+// או מי שביצע בעצמו את הארכוב (archived_by).
+function canRestoreLead(l){
+  if (!CURRENT_PROFILE || !l) return false;
+  if (CURRENT_PROFILE.role === 'admin') return true;
+  return l.archived_by === CURRENT_PROFILE.id;
 }
 // תואם ל-leads_update/lag_insert/lag_update: רק יוצר הכרטיס (created_by) או
 // אדמין יכולים לנהל שחרור/ביטול צפייה על buyer/partner (לא manager).
@@ -977,7 +994,7 @@ function openLeadForm(id, forcedType, prefillData){
           ${lead.client_number ? `מספר קונה/משקיע: <b style="font-size:.95rem;">${esc(lead.client_number)}</b> · ` : ''}הוזן ע"י: <b>${esc(userName(lead.created_by))}</b> בתאריך ${fmtDate(lead.created_at)}
           ${(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin' && lead.internal_code) ? `<div style="margin-top:4px;font-size:.68rem;color:#aaa;">מזהה טכני (מנהל בלבד): ${esc(lead.internal_code)}</div>` : ''}
         </div>
-        ${lead.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 רשומה זו נמצאת בארכיון${lead.archive_reason ? ' — סיבה: '+esc(lead.archive_reason) : ''}${CURRENT_PROFILE && CURRENT_PROFILE.role==='admin' ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreLeadFromArchive('${lead.id}')">↩️ שחזר מהארכיון</button>` : ''}</div>` : (CURRENT_PROFILE && CURRENT_PROFILE.role==='admin' ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveLead('${lead.id}')">📁 העבר לארכיון</button></div>` : '')}` : ''}
+        ${lead.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 רשומה זו נמצאת בארכיון${lead.archive_reason ? ' — סיבה: '+esc(lead.archive_reason) : ''}${canRestoreLead(lead) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreLeadFromArchive('${lead.id}')">↩️ שחזר מהארכיון</button>` : ''}</div>` : (canManageLead(lead) ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveLead('${lead.id}')">📁 העבר לארכיון</button></div>` : '')}` : ''}
         <div class="field"><label>מטפל כרגע</label><select id="handled_by">${userOptions(lead?.handled_by)}</select></div>
         <div class="section-h">פרטים כלליים</div>
         ${fieldRow('first_name','שם פרטי', lead?.first_name || pf.first_name)}
@@ -1578,36 +1595,97 @@ async function addNote(tableName, recordId){
 }
 
 async function archiveLead(id){
-  if (CURRENT_PROFILE.role !== 'admin'){ toast('רק מנהל יכול להעביר לארכיון'); return; }
-  const { count: matchCount } = await window.supabaseClient.from('matches').select('id', {count:'exact', head:true}).eq('buyer_id', id);
-  const { count: taskCount } = await window.supabaseClient.from('tasks').select('id', {count:'exact', head:true}).eq('buyer_id', id);
-  if ((matchCount||0) > 0 || (taskCount||0) > 0){
-    toast(`לא ניתן להעביר לארכיון: קיימות ${matchCount||0} התאמות ו-${taskCount||0} משימות מקושרות. יש לטפל בהן תחילה.`);
-    return;
-  }
-  const reason = prompt('יש לציין סיבה להעברה לארכיון:');
-  if (!reason || !reason.trim()){ toast('העברה לארכיון בוטלה - נדרשת סיבה'); return; }
-  if (!confirm('להעביר רשומה זו לארכיון? היא לא תופיע ברשימות/חיפוש/התאמות, אך תישמר במלואה ואפשר לשחזר בכל עת.')) return;
-  const { error } = await window.supabaseClient.from('leads').update({ is_archived: true, archived_at: new Date().toISOString(), archived_by: CURRENT_PROFILE.id, archive_reason: reason.trim() }).eq('id', id);
-  if (error){ toast('שגיאה בהעברה לארכיון: ' + error.message); return; }
-  toast('הועבר לארכיון');
-  await loadLeads();
+  const l = ALL_LEADS.find(x=>x.id===id);
+  if (!canManageLead(l)){ toast('אין לך הרשאה להעביר רשומה זו לארכיון'); return; }
+  const personName = l ? (l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ')) : '';
+  openArchiveReasonModal('העברת "' + (personName||'הרשומה') + '" לארכיון', async (reason)=>{
+    const { error } = await window.supabaseClient.from('leads').update({ is_archived: true, archive_reason: reason }).eq('id', id);
+    if (error){ toast('שגיאה בהעברה לארכיון: ' + error.message); return; }
+    toast('הועבר לארכיון');
+    await loadLeads();
+  });
 }
 async function restoreLeadFromArchive(id){
-  if (CURRENT_PROFILE.role !== 'admin'){ toast('רק מנהל יכול לשחזר מארכיון'); return; }
+  const l = ARCHIVED_LEADS.find(x=>x.id===id);
+  if (!canRestoreLead(l)){ toast('שחזור מהארכיון מותר רק לאדמין או למי שהעביר את הכרטיס לארכיון'); return; }
   if (!confirm('לשחזר רשומה זו מהארכיון?')) return;
-  const { error } = await window.supabaseClient.from('leads').update({ is_archived: false, archived_at: null, archived_by: null, archive_reason: null }).eq('id', id);
+  const { error } = await window.supabaseClient.from('leads').update({ is_archived: false }).eq('id', id);
   if (error){ toast('שגיאה בשחזור: ' + error.message); return; }
   toast('שוחזר מהארכיון');
   await loadLeads();
 }
+// תיקון 02.09.2026: בדיוק כמו deleteBiz בעסקים - לפני מחיקה בודקים היסטוריה
+// אמיתית (get_lead_history_summary, SECURITY DEFINER) ולעולם לא ממשיכים
+// למחיקה פיזית אם הבדיקה עצמה נכשלה. אם יש היסטוריה קשורה - מעבירים
+// לארכיון אוטומטית במקום למחוק, כדי לשמר קבצים/הערות/התאמות/הסכמים.
+async function leadHasAnyHistory(id){
+  const { data, error } = await window.supabaseClient.rpc('get_lead_history_summary', { p_lead_id: id });
+  if (error) throw new Error('בדיקת היסטוריה נכשלה: ' + error.message);
+  const rows = (data || []).filter(r => r.row_count > 0);
+  return { hasHistory: rows.length > 0, details: rows.map(r => `${r.table_name}: ${r.row_count}`) };
+}
 async function deleteLead(id){
-  if (!confirm('למחוק רשומה זו? הפעולה בלתי הפיכה.')) return;
-  const { error } = await window.supabaseClient.from('leads').delete().eq('id', id);
-  if (error){ toast('אין הרשאה למחוק, או שגיאה: ' + error.message); return; }
-  bsdLogActivity('delete', 'leads', id);
-  toast('נמחק בהצלחה');
+  if (!confirm('להסיר רשומה זו מהמערכת? אם אין לה היסטוריה קשורה היא תימחק לצמיתות. אם יש לה היסטוריה (התאמות, משימות, הסכמים וכו׳) היא תועבר אוטומטית לארכיון כדי לשמר אותה.')) return;
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
+  let hasHistory, details;
+  try {
+    ({ hasHistory, details } = await leadHasAnyHistory(id));
+  } catch (e){
+    toast('❌ ' + e.message + ' - הפעולה בוטלה לביטחון');
+    return;
+  }
+  if (!hasHistory){
+    const { error } = await window.supabaseClient.from('leads').delete().eq('id', id);
+    if (error){ toast('❌ שגיאה במחיקה: ' + error.message); return; }
+    bsdLogActivity('delete', 'leads', id);
+    toast('✅ נמחק בהצלחה');
+    await loadLeads();
+    return;
+  }
+  const { error } = await window.supabaseClient.from('leads').update({
+    is_archived: true,
+    archive_reason: 'הועבר אוטומטית לארכיון בעת ניסיון מחיקה - קיימת היסטוריה קשורה (' + details.join(', ') + ')'
+  }).eq('id', id);
+  if (error){ toast('❌ שגיאה בהעברה לארכיון: ' + error.message); return; }
+  toast('📁 לרשומה זו יש היסטוריה קשורה - הועברה לארכיון (לא נמחקה) כדי לשמר אותה. ניתן לשחזר מהארכיון בכל עת.');
   await loadLeads();
+}
+// מסך ארכיון אמיתי (סעיף 5 בהנחיה) - טאב נפרד עם כל השדות הנדרשים.
+let LEAD_VIEW_MODE = 'active';
+function setLeadViewMode(mode){
+  LEAD_VIEW_MODE = mode;
+  const activeBtn = document.getElementById('leadViewActiveBtn'), archBtn = document.getElementById('leadViewArchiveBtn');
+  if (activeBtn && archBtn){
+    activeBtn.classList.toggle('btn-primary', mode==='active');
+    activeBtn.classList.toggle('btn-ghost', mode!=='active');
+    archBtn.classList.toggle('btn-primary', mode==='archive');
+    archBtn.classList.toggle('btn-ghost', mode!=='archive');
+  }
+  renderTable();
+}
+function renderArchiveLeadsTable(){
+  const body = document.getElementById('leadsBody');
+  if (!body) return;
+  if (!ARCHIVED_LEADS.length){ body.innerHTML = '<tr class="empty-row"><td colspan="10">אין רשומות בארכיון</td></tr>'; return; }
+  body.innerHTML = ARCHIVED_LEADS.map(l => {
+    const personName = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || (l.business_name||'—');
+    return `
+    <tr>
+      <td data-label="שם">${esc(personName)}</td>
+      <td data-label="סוג">${esc(l.type||'—')}</td>
+      <td data-label="טלפון" dir="ltr">${l.phone ? fmtPhone(l.phone) : '—'}</td>
+      <td data-label="הוזן ע&quot;י">${l.created_by ? esc(userName(l.created_by)) : 'לא ידוע'}</td>
+      <td data-label="הועבר ע&quot;י">${l.archived_by ? esc(userName(l.archived_by)) : '—'}</td>
+      <td data-label="סטטוס הסכם קודם">${agreementBadge(l.agreement_status)}</td>
+      <td data-label="נוצר">${fmtDate(l.created_at)}</td>
+      <td data-label="תאריך העברה">${fmtDate(l.archived_at)}</td>
+      <td data-label="סיבה">${esc(l.archive_reason||'—')}</td>
+      <td data-label="פעולות" style="white-space:nowrap;">
+        <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="openLeadForm('${l.id}')">📄 פתח כרטיס</button>
+        ${canRestoreLead(l) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="restoreLeadFromArchive('${l.id}')">↩️ החזר לפעילים</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
 }
 
 (async function init(){

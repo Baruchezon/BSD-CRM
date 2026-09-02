@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609010736';
+    var PAGE_BUILD = '202609021145';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -172,6 +172,8 @@
       </div>
     </div>
       <button class="btn btn-ghost" id="sendPresoToolbarBtn" onclick="openSendPresentationsModal()">📤 שלח מצגות לקונה</button>
+      <button type="button" class="btn btn-primary" id="bizViewActiveBtn" onclick="setBizViewMode('active')">📋 פעילים</button>
+      <button type="button" class="btn btn-ghost" id="bizViewArchiveBtn" onclick="setBizViewMode('archive')">📁 ארכיון</button>
       <button class="btn btn-primary" onclick="openBizForm(null)">+ עסק חדש</button>
     </div>
   </div>
@@ -247,6 +249,7 @@
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
 <script src="js/dedupeCheckModule.js?v=202608311200"></script>
+<script src="js/archiveModule.js?v=202609021200"></script>
 <script>
 let ALL_BIZ = [];
 let ARCHIVED_BIZ = [];
@@ -600,6 +603,7 @@ async function downloadAgreementPdf(tableName, recordId){
 }
 
 function renderTable(){
+  if (typeof BIZ_VIEW_MODE !== 'undefined' && BIZ_VIEW_MODE === 'archive'){ renderArchiveTable(); return; }
   const search = document.getElementById('fSearch').value.trim().toLowerCase();
   const status = document.getElementById('fStatus').value;
   const field = document.getElementById('fField').value;
@@ -653,7 +657,8 @@ function renderTable(){
               <a href="javascript:void(0)" onclick="openAddBuyerToMatchModal('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">➕ הוסף קונה להתאמה</a>
               <a href="javascript:void(0)" onclick="openActivityReportModal('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 הפק דוח פעילות לעסק</a>
               ${(canSendAgreement() && b.agreement_status !== 'יש הסכם חתום') ? `<a href="javascript:void(0)" onclick="sendAgreementForBiz('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
-              ${(CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager')) ? `<a href="javascript:void(0)" onclick="deleteBiz('${b.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
+              ${canManageBiz(b) ? `<a href="javascript:void(0)" onclick="archiveBiz('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 העבר לארכיון</a>` : ''}
+              ${canManageBiz(b) ? `<a href="javascript:void(0)" onclick="deleteBiz('${b.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
             </div>
           </div>
           <div>
@@ -707,6 +712,25 @@ function canSendPresentations(){
   if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
   return !!CURRENT_PROFILE.can_send_presentations;
 }
+
+// הנחיה 02.09.2026 (הסדרת הרשאות + ארכיון): מי מורשה לנהל (ערוך/מחק/ארכב) עסק
+// נתון - תואם בדיוק ל-businesses_update/businesses_delete ב-DB (has_full_business_access
+// + created_by/handled_by). אדמין/מנהל תמיד; יוצר/מטפל בעסק הספציפי הזה בלבד.
+function canManageBiz(b){
+  if (!CURRENT_PROFILE || !b) return false;
+  if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
+  return b.created_by === CURRENT_PROFILE.id || b.handled_by === CURRENT_PROFILE.id;
+}
+// מי מורשה לשחזר עסק מהארכיון - תואם לטריגר enforce_business_archive_integrity:
+// אדמין תמיד, או מי שביצע בעצמו את הארכוב (archived_by).
+function canRestoreBiz(b){
+  if (!CURRENT_PROFILE || !b) return false;
+  if (CURRENT_PROFILE.role === 'admin') return true;
+  return b.archived_by === CURRENT_PROFILE.id;
+}
+
+// ARCHIVE_REASONS + openArchiveReasonModal עברו ל-js/archiveModule.js המשותף
+// (02.09.2026) - נטען גם כאן וגם ב-leads.html, כדי לא לשכפל את אותה חלונית.
 
 ['fSearch','fStatus','fField','fAgreement','fCreatedBy','fSort'].forEach(id=>{
   document.getElementById(id).addEventListener('input', renderTable);
@@ -773,7 +797,7 @@ function openBizForm(id){
           ${biz ? ` · הוזן ע"י: <b>${esc(userName(biz.created_by))}</b> בתאריך ${fmtDate(biz.created_at)}` : ''}
           ${(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin' && biz?.internal_code) ? `<div style="margin-top:4px;font-size:.68rem;color:#aaa;">מזהה טכני (מנהל בלבד): ${esc(biz.internal_code)}</div>` : ''}
         </div>
-        ${biz?.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 עסק זה נמצא בארכיון${biz.archive_reason ? ' — סיבה: '+esc(biz.archive_reason) : ''}${CURRENT_PROFILE && CURRENT_PROFILE.role==='admin' ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${biz.id}')">↩️ שחזר מהארכיון</button>` : ''}</div>` : (biz && CURRENT_PROFILE && CURRENT_PROFILE.role==='admin' ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveBiz('${biz.id}')">📁 העבר לארכיון</button></div>` : '')}
+        ${biz?.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 עסק זה נמצא בארכיון${biz.archive_reason ? ' — סיבה: '+esc(biz.archive_reason) : ''}${canRestoreBiz(biz) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${biz.id}')">↩️ שחזר מהארכיון</button>` : ''}</div>` : (biz && canManageBiz(biz) ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveBiz('${biz.id}')">📁 העבר לארכיון</button></div>` : '')}
         ${fieldRow('internal_name','שם העסק (פנימי)', biz?.internal_name)}
         <div class="field">
           <label>שם אנונימי להצגה</label>
@@ -1570,6 +1594,7 @@ async function openSendAnonModal(bizId, file){
       .from('leads')
       .select('id,full_name,first_name,last_name,email,phone,created_by,handled_by')
       .eq('type', 'buyer')
+      .eq('is_archived', false)
       .order('full_name', { ascending: true });
     // סעיף 3+8 באפיון: קונה מתוך הרשימה של הסוכן בלבד - תמיד, לא רק לתפקיד agent.
     // אדמין/מנהל רואים הכל (RLS כבר מטפל בזה בפועל בצד השרת).
@@ -1688,6 +1713,7 @@ async function openAddBuyerToMatchModal(bizId){
       .from('leads')
       .select('id,full_name,first_name,last_name,email,phone,client_number,created_by,handled_by')
       .eq('type', 'buyer')
+      .eq('is_archived', false)
       .order('full_name', { ascending: true });
     if (CURRENT_PROFILE && !['admin','manager'].includes(CURRENT_PROFILE.role)) {
       buyerQuery = buyerQuery.or(`created_by.eq.${CURRENT_PROFILE.id},handled_by.eq.${CURRENT_PROFILE.id}`);
@@ -2975,6 +3001,7 @@ async function openSendFilesToBuyer(bizId){
       .from('leads')
       .select('id,full_name,first_name,last_name,email,phone,agreement_status,created_by')
       .eq('type', 'buyer')
+      .eq('is_archived', false)
       .order('full_name', { ascending: true });
     if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
       buyerQuery = buyerQuery.eq('created_by', CURRENT_PROFILE.id);
@@ -3887,6 +3914,7 @@ async function openSendPresentationsModal(){
     .from('leads')
     .select('id,full_name,first_name,last_name,email,phone,agreement_status,created_by')
     .eq('type', 'buyer')
+    .eq('is_archived', false)
     .order('full_name', { ascending: true });
   if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
     buyerQuery = buyerQuery.eq('created_by', CURRENT_PROFILE.id);
@@ -4029,37 +4057,63 @@ async function loadAnonDistSummary(bizId){
 }
 
 async function archiveBiz(id){
-  if (CURRENT_PROFILE.role !== 'admin'){ toast('רק מנהל יכול להעביר לארכיון'); return; }
-  const { count: matchCount } = await window.supabaseClient.from('matches').select('id', {count:'exact', head:true}).eq('business_id', id);
-  const { count: taskCount } = await window.supabaseClient.from('tasks').select('id', {count:'exact', head:true}).eq('business_id', id);
-  if ((matchCount||0) > 0 || (taskCount||0) > 0){
-    toast(`לא ניתן להעביר לארכיון: קיימות ${matchCount||0} התאמות ו-${taskCount||0} משימות מקושרות. יש לטפל בהן תחילה.`);
-    return;
-  }
-  const reason = prompt('יש לציין סיבה להעברה לארכיון:');
-  if (!reason || !reason.trim()){ toast('העברה לארכיון בוטלה - נדרשת סיבה'); return; }
-  if (!confirm('להעביר עסק זה לארכיון? הוא לא יופיע ברשימות/חיפוש/התאמות/אתר, אך יישמר במלואו ואפשר לשחזר בכל עת.')) return;
-  const { error } = await window.supabaseClient.from('businesses').update({ is_archived: true, archived_at: new Date().toISOString(), archived_by: CURRENT_PROFILE.id, archive_reason: reason.trim() }).eq('id', id);
-  if (error){ toast('שגיאה בהעברה לארכיון: ' + error.message); return; }
-  toast('הועבר לארכיון');
-  closeBizForm();
-  await loadBusinesses();
+  const b = ALL_BIZ.find(x=>x.id===id) || (await window.supabaseClient.from('businesses').select('*').eq('id', id).maybeSingle()).data;
+  if (!canManageBiz(b)){ toast('אין לך הרשאה להעביר עסק זה לארכיון'); return; }
+  openArchiveReasonModal('העברת "' + (b.internal_name||'העסק') + '" לארכיון', async (reason)=>{
+    const { error } = await window.supabaseClient.from('businesses').update({ is_archived: true, archive_reason: reason }).eq('id', id);
+    if (error){ toast('שגיאה בהעברה לארכיון: ' + error.message); return; }
+    toast('הועבר לארכיון');
+    closeBizForm();
+    await loadBusinesses();
+  });
 }
 async function restoreBizFromArchive(id){
-  if (CURRENT_PROFILE.role !== 'admin'){ toast('רק מנהל יכול לשחזר מארכיון'); return; }
+  const b = ARCHIVED_BIZ.find(x=>x.id===id);
+  if (!canRestoreBiz(b)){ toast('שחזור מהארכיון מותר רק לאדמין או למי שהעביר את הכרטיס לארכיון'); return; }
   if (!confirm('לשחזר עסק זה מהארכיון לרשימה הרגילה?')) return;
-  const { error } = await window.supabaseClient.from('businesses').update({ is_archived: false, archived_at: null, archived_by: null, archive_reason: null }).eq('id', id);
+  const { error } = await window.supabaseClient.from('businesses').update({ is_archived: false }).eq('id', id);
   if (error){ toast('שגיאה בשחזור: ' + error.message); return; }
   toast('שוחזר מהארכיון');
   closeBizForm();
   await loadBusinesses();
 }
-function openArchiveView(){
-  if (CURRENT_PROFILE.role !== 'admin'){ toast('רק מנהל יכול לצפות בארכיון'); return; }
-  const rows = ARCHIVED_BIZ.map(b => `<tr><td>${esc(b.internal_name)}</td><td>${esc(b.archive_reason||'—')}</td><td>${fmtDate(b.archived_at)}</td><td><button type="button" class="btn btn-ghost" onclick="restoreBizFromArchive('${b.id}')">↩️ שחזר</button></td></tr>`).join('') || '<tr><td colspan="4">אין עסקים בארכיון</td></tr>';
-  const modal = document.getElementById('bizFormModal') || document.getElementById('modalRoot');
-  toast(`${ARCHIVED_BIZ.length} עסקים בארכיון`);
-  alert('עסקים בארכיון:\n' + ARCHIVED_BIZ.map(b=>`- ${b.internal_name} (${b.archive_reason||'ללא סיבה'})`).join('\n') || 'אין עסקים בארכיון');
+// מסך ארכיון אמיתי (סעיף 5 בהנחיה) - טאב נפרד עם כל השדות הנדרשים, לא alert().
+let BIZ_VIEW_MODE = 'active';
+function setBizViewMode(mode){
+  BIZ_VIEW_MODE = mode;
+  const activeBtn = document.getElementById('bizViewActiveBtn'), archBtn = document.getElementById('bizViewArchiveBtn');
+  if (activeBtn && archBtn){
+    activeBtn.classList.toggle('btn-primary', mode==='active');
+    activeBtn.classList.toggle('btn-ghost', mode!=='active');
+    archBtn.classList.toggle('btn-primary', mode==='archive');
+    archBtn.classList.toggle('btn-ghost', mode!=='archive');
+  }
+  renderTable();
+}
+function openArchiveView(){ setBizViewMode('archive'); }
+function renderArchiveTable(){
+  const body = document.getElementById('bizBody');
+  if (!ARCHIVED_BIZ.length){ body.innerHTML = '<tr class="empty-row"><td colspan="13">אין עסקים בארכיון</td></tr>'; return; }
+  body.innerHTML = ARCHIVED_BIZ.map(b => `
+    <tr>
+      <td data-label="שם פנימי"><b>${esc(b.internal_name||'—')}</b>${bizNumberBadge(b)}</td>
+      <td data-label="טלפון בעלים" dir="ltr">${b.owner_phone ? fmtPhone(b.owner_phone) : '—'}</td>
+      <td data-label="תחום">${esc(b.field||'—')}</td>
+      <td data-label="עיר">${esc(b.city||'—')}</td>
+      <td data-label="מחיר מבוקש">${fmtMoney(b.asking_price)}</td>
+      <td data-label="סטטוס קודם"><span class="badge">${esc(b.status||'—')}</span></td>
+      <td data-label="הוזן ע&quot;י">${b.created_by ? esc(userName(b.created_by)) : 'לא ידוע'}</td>
+      <td data-label="הועבר ע&quot;י">${b.archived_by ? esc(userName(b.archived_by)) : '—'}</td>
+      <td data-label="סטטוס הסכם">${agreementBadge(b.agreement_status)}</td>
+      <td data-label="תקצירים">—</td>
+      <td data-label="נוצר">${fmtDate(b.created_at)}</td>
+      <td data-label="תאריך העברה">${fmtDate(b.archived_at)}</td>
+      <td data-label="פעולות" style="white-space:nowrap;">
+        <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="openBizForm('${b.id}')">📄 פתח כרטיס</button>
+        ${canRestoreBiz(b) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${b.id}')">↩️ החזר לפעילים</button>` : ''}
+        ${b.archive_reason ? `<div style="font-size:.7rem;color:#888;margin-top:2px;">סיבה: ${esc(b.archive_reason)}</div>` : ''}
+      </td>
+    </tr>`).join('');
 }
 // תיקון 25.08.2026: הבדיקה חייבת לעבור דרך RPC ולא ספירה ישירה מהלקוח.
 // נבדק בפועל: tasks_select חושף שורות רק ל-admin ולמשתמש שהמשימה שויכה
