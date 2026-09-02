@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609022135';
+    var PAGE_BUILD = '202609022156';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -245,7 +245,7 @@
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608251215"></script>
 <script src="js/pdfPipeline.js?v=202608291000"></script>
-<script src="js/saleFileModule2.js?v=202609022135"></script>
+<script src="js/saleFileModule2.js?v=202609022156"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
 <script src="js/dedupeCheckModule.js?v=202608311200"></script>
@@ -3189,11 +3189,14 @@ async function confirmSendFilesToBuyer(){
   }
 }
 
-// פותח את חלון/טאב ה-WhatsApp ומכין את קבצי ההורדה - הכל נפתח באופן סינכרוני
-// בתוך אירוע הלחיצה עצמו (חלונות ריקים תחילה, כתובת מוזנת אחרי ה-await)
-// כדי שחוסמי חלונות קופצים בדפדפן לא יחסמו את זה, כי הפעולה עדיין נחשבת
-// "ביוזמת המשתמש" מבחינת הדפדפן. לא שולח שום דבר אוטומטית - רק פותח שיחה
-// עם טקסט מוכן הניתן לעריכה; ה-Send בפועל תמיד ביד המשתמש בתוך WhatsApp.
+// פותח חלון WhatsApp אחד בלבד (דרך wa.me) עם טקסט מוכן הניתן לעריכה. לא
+// שולח שום דבר אוטומטית - ה-Send בפועל תמיד ביד המשתמש בתוך WhatsApp.
+// חשוב: פותחים חלון אחד בלבד ולא חלון נוסף לכל קובץ נבחר - ניסיון קודם
+// פתח חלון + חלון לכל קובץ בבת אחת, וברוב הדפדפנים בנייד (Chrome אנדרואיד,
+// Safari ב-iOS) זה גרם לחסימת *כל* החלונות כולל זה של WhatsApp עצמו (מותר
+// רק פופ-אפ אחד ל"תנועת משתמש" אחת) - בפועל "לוחצים ולא קורה כלום". לכן
+// הורדת הקבצים לצירוף ידני היא רק דרך כפתור "📂 פתח / הורד" הנפרד ליד כל
+// קובץ ברשימה למעלה - כל לחיצה כזו היא תנועת משתמש נפרדת ולעולם לא נחסמת.
 async function openWhatsAppChatForBuyer(){
   const buyer = SEND_UNI_BUYER;
   if (!buyer){ const m='יש לבחור קונה מהרשימה לפני הפתיחה (לחיצה על שם הקונה בתפריט הנפתח)'; toast(m); sendUniStatus(m, true); return; }
@@ -3201,34 +3204,13 @@ async function openWhatsAppChatForBuyer(){
   if (!waDigits){ const m='לקונה הנבחר אין מספר טלפון תקין שמור - יש להוסיף טלפון בכרטיס הקונה תחילה'; toast(m); sendUniStatus(m, true); return; }
 
   const bizId = SEND_UNI_BIZ_ID;
-  const selectedIdx = SEND_UNI_SELECTED_IDX;
-  const filesInfo = selectedIdx.map(idx => (BIZ_FILES_CACHE[bizId] || [])[idx]).filter(Boolean);
   const bodyText = document.getElementById('sendUniBody').value;
-
-  // חלונות ריקים תחילה - אחד ל-WhatsApp ואחד לכל קובץ - עוד לפני כל await
-  const waWindow = window.open('', '_blank');
-  const fileWindows = filesInfo.map(() => window.open('', '_blank'));
-
-  try {
-    for (let i = 0; i < filesInfo.length; i++){
-      const f = filesInfo[i];
-      const win = fileWindows[i];
-      if (!win) continue; // נחסם ע"י הדפדפן - הכפתור "📂 פתח / הורד" ברשימה למעלה עדיין עובד ידנית
-      const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(f.storagePath, 60 * 10);
-      if (error || !data?.signedUrl){ win.close(); continue; }
-      win.location.href = data.signedUrl;
-    }
-  } catch(e){
-    console.error('[openWhatsAppChatForBuyer] file open failed', e);
-  }
-
   const waUrl = `https://wa.me/${waDigits}?text=${encodeURIComponent(bodyText)}`;
-  if (waWindow){ waWindow.location.href = waUrl; }
-  else { window.open(waUrl, '_blank'); }
+  window.open(waUrl, '_blank');
 
   bsdLogActivity('open_whatsapp_send_files', 'businesses', bizId);
-  sendUniStatus('✅ נפתחה שיחת WhatsApp עם הודעה מוכנה - הקבצים נפתחו לצירוף ידני. הלחיצה על Send בפועל היא בידיך בתוך WhatsApp.', false);
-  toast('נפתחה שיחת WhatsApp - שליחת ההודעה בפועל בידיך');
+  sendUniStatus('✅ נפתחה שיחת WhatsApp עם הודעה מוכנה. השתמש בכפתור "📂 פתח / הורד" ליד כל קובץ למעלה כדי לצרף אותו ידנית לשיחה.', false);
+  toast('נפתחה שיחת WhatsApp - הורד קבצים למעלה כדי לצרף');
 }
 
 

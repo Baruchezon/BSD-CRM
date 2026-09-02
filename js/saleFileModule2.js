@@ -600,10 +600,13 @@ async function openSendToBuyerModal(bizId, bizName){
         ${files.map(f => {
           const cat = sfCategoryMeta(sfBucketKeyForFile(f));
           return `
-          <label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:.83rem;cursor:pointer;" onclick="sfOnFileLabelClick(event,this)">
-            <input type="checkbox" class="sfSendFileChk" data-conf="${f.confidentiality_level}" value="${f.id}" data-name="${esc(f.file_name)}" data-cat="${esc(cat.label)}" data-path="${esc(f.storage_path)}" style="width:auto;">
-            ${cat.icon} ${esc(f.file_name)} <span style="color:#8a93ab;font-size:.75rem;">(${esc(cat.label)}${f.confidentiality_level === 2 ? ' · חסוי' : ' · אנונימי'})</span>
-          </label>`;
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 2px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:.83rem;cursor:pointer;flex:1;min-width:0;" onclick="sfOnFileLabelClick(event,this)">
+              <input type="checkbox" class="sfSendFileChk" data-conf="${f.confidentiality_level}" value="${f.id}" data-name="${esc(f.file_name)}" data-cat="${esc(cat.label)}" data-path="${esc(f.storage_path)}" style="width:auto;flex-shrink:0;">
+              <span style="overflow-wrap:anywhere;">${cat.icon} ${esc(f.file_name)} <span style="color:#8a93ab;font-size:.75rem;">(${esc(cat.label)}${f.confidentiality_level === 2 ? ' · חסוי' : ' · אנונימי'})</span></span>
+            </label>
+            <button type="button" class="sfDlBtn btn btn-ghost" data-conf="${f.confidentiality_level}" data-name="${esc(f.file_name)}" style="padding:2px 8px;font-size:.7rem;flex-shrink:0;" onclick="sfDownloadFileForAttach('${esc(f.storage_path)}','${esc(f.file_name.replace(/'/g,''))}',this)">📂 הורד</button>
+          </div>`;
         }).join('')}
       </div>
       <div class="field"><label>נושא (למייל בלבד)</label>
@@ -611,6 +614,8 @@ async function openSendToBuyerModal(bizId, bizName){
       </div>
       <div class="field"><label>תוכן ההודעה (משותף למייל ול-WhatsApp, ניתן לעריכה)</label>
         <textarea id="sfSendBody" rows="4" style="width:100%;">שלום,\n\nמצורפים קישורים להורדת החומרים בנוגע ל${esc(bizName || 'העסק')} (בתוקף לשבוע):</textarea>
+      </div>
+      <div style="font-size:.75rem;color:#8a93ab;margin:-4px 0 8px;">💡 WhatsApp לא תומך בצירוף קובץ אוטומטי דרך הדפדפן - לחץ "📂 הורד" ליד כל קובץ שרוצים לצרף, ואז צרף אותו ידנית לשיחה שנפתחת.</div>
       </div>
       <div id="sfSendPreviewBox" style="display:none;background:#f0ede4;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.8rem;white-space:pre-wrap;line-height:1.6;"></div>
       <div id="sfSendStatus" style="font-size:.8rem;min-height:18px;margin-top:6px;"></div>
@@ -642,11 +647,13 @@ function sfOnBuyerChange(){
   const note = document.getElementById('sfSendAgreementNote');
   const detailsEl = document.getElementById('sfSendBuyerDetails');
   const checkboxes = Array.from(document.querySelectorAll('.sfSendFileChk'));
+  const dlButtons = Array.from(document.querySelectorAll('.sfDlBtn'));
   const buyer = buyerId && SF_SEND_BUYERS_CACHE ? SF_SEND_BUYERS_CACHE[buyerId] : null;
   if (!buyer){
     note.textContent = '';
     if (detailsEl) detailsEl.textContent = '';
     checkboxes.forEach(c => { c.disabled = false; c.closest('label').style.opacity = '1'; });
+    dlButtons.forEach(b => { b.disabled = false; b.style.opacity = '1'; });
     return;
   }
   if (detailsEl){
@@ -657,6 +664,7 @@ function sfOnBuyerChange(){
   if (signed){
     note.innerHTML = '<span style="color:#1f7a45;">✅ הסכם סודיות חתום, ניתן לשלוח חומר מלא</span>';
     checkboxes.forEach(c => { c.disabled = false; c.closest('label').style.opacity = '1'; });
+    dlButtons.forEach(b => { b.disabled = false; b.style.opacity = '1'; });
   } else {
     const statusLabel = status === 'נשלח הסכם לחתימה' ? 'הסכם נשלח לחתימה (טרם נחתם)' : 'אין הסכם';
     note.innerHTML = `<span style="color:#b3402c;">🚫 ${esc(statusLabel)} — ניתן לשלוח חומר אנונימי בלבד</span>`;
@@ -665,6 +673,14 @@ function sfOnBuyerChange(){
       c.disabled = confidential;
       if (confidential) c.checked = false;
       c.closest('label').style.opacity = confidential ? '.45' : '1';
+    });
+    // כפתור "הורד" (לצירוף ידני ל-WhatsApp) חסום לקבצים חסויים באותה מידה
+    // בדיוק כמו ה-checkbox - כדי שלא יהיה עוקף שקט להגבלת ההסכם.
+    dlButtons.forEach(b => {
+      const confidential = b.dataset.conf === '2';
+      b.disabled = confidential;
+      b.title = confidential ? 'לא ניתן להוריד קובץ זה - לקונה אין הסכם סודיות חתום' : '';
+      b.style.opacity = confidential ? '.45' : '1';
     });
   }
 }
@@ -776,11 +792,15 @@ function sfWaPhoneDigits(phone){
 }
 
 // פותח שיחת WhatsApp/WhatsApp Web (לפי המכשיר, דרך wa.me) עם טקסט מוכן
-// הניתן לעריכה, ומכין קבצים נבחרים להורדה/פתיחה בטאב נפרד לצירוף ידני -
-// WhatsApp לא תומך בצירוף אוטומטי דרך דפדפן. שום הודעה לא נשלחת אוטומטית;
-// ה-Send בפועל תמיד ביד המשתמש בתוך WhatsApp עצמו. קבצים חסויים בלי הסכם
-// חתום כבר מנוטרלים (disabled) ברשימת הסימון למעלה - כך שאותה הגנה בדיוק
-// חלה כאן וגם במייל.
+// הניתן לעריכה. שום הודעה לא נשלחת אוטומטית; ה-Send בפועל תמיד ביד המשתמש
+// בתוך WhatsApp עצמו.
+// חשוב: פותחים חלון אחד בלבד (ל-WhatsApp) ולא חלון נוסף לכל קובץ - ניסיון
+// קודם פתח חלון + חלון לכל קובץ נבחר בבת אחת, וברוב הדפדפנים בנייד (Chrome
+// אנדרואיד, Safari ב-iOS) זה גרם לחסימת *כל* החלונות כולל זה של WhatsApp
+// עצמו (מותר רק פופ-אפ אחד ל"תנועת משתמש" אחת) - בפועל "לוחצים ולא קורה
+// כלום". לכן הורדת הקבצים לצירוף ידני עברה לכפתור "📂 הורד" נפרד ליד כל
+// קובץ ברשימה למעלה (sfDownloadFileForAttach) - כל לחיצה כזו היא תנועת
+// משתמש נפרדת ולכן לעולם לא נחסמת, ללא תלות בכמה קבצים נבחרו.
 async function sfOpenWhatsAppForBuyer(bizId){
   const v = sfValidateSendSelection(true);
   if (!v) return;
@@ -790,33 +810,28 @@ async function sfOpenWhatsAppForBuyer(bizId){
 
   const bodyText = document.getElementById('sfSendBody').value;
   const statusEl = document.getElementById('sfSendStatus');
-
-  // חלונות ריקים תחילה - אחד ל-WhatsApp ואחד לכל קובץ - עוד לפני כל await,
-  // כדי שחוסמי חלונות קופצים בדפדפן לא יחסמו את זה (הפעולה עדיין נחשבת
-  // "ביוזמת המשתמש" מבחינת הדפדפן כל עוד לא עבר await קודם).
-  const waWindow = window.open('', '_blank');
-  const fileWindows = selected.map(() => window.open('', '_blank'));
-
-  try {
-    for (let i = 0; i < selected.length; i++){
-      const path = selected[i].dataset.path;
-      const win = fileWindows[i];
-      if (!win || !path) continue;
-      const { data, error } = await window.supabaseClient.storage.from(SALE_FILE_BUCKET).createSignedUrl(path, 60 * 10);
-      if (error || !data?.signedUrl){ win.close(); continue; }
-      win.location.href = data.signedUrl;
-    }
-  } catch(e){
-    console.error('[sfOpenWhatsAppForBuyer] file open failed', e);
-  }
-
   const waUrl = `https://wa.me/${waDigits}?text=${encodeURIComponent(bodyText)}`;
-  if (waWindow){ waWindow.location.href = waUrl; }
-  else { window.open(waUrl, '_blank'); }
+  window.open(waUrl, '_blank');
 
   try { await sfLogAudit(bizId, 'open_whatsapp_send_sale_files', { buyer_id: v.buyerId, file_ids: selected.map(c=>c.value) }); } catch(e){}
-  if (statusEl) statusEl.innerHTML = '✅ נפתחה שיחת WhatsApp עם הודעה מוכנה - הקבצים נפתחו לצירוף ידני. הלחיצה על Send בפועל היא בידיך בתוך WhatsApp.';
-  toast('נפתחה שיחת WhatsApp - שליחת ההודעה בפועל בידיך');
+  if (statusEl) statusEl.innerHTML = '✅ נפתחה שיחת WhatsApp עם הודעה מוכנה. השתמש בכפתור "📂 הורד" ליד כל קובץ ברשימה למעלה כדי לצרף אותו ידנית לשיחה. הלחיצה על Send בפועל היא בידיך בתוך WhatsApp.';
+  toast('נפתחה שיחת WhatsApp - הורד קבצים ל"📂 הורד" למעלה כדי לצרף');
+}
+
+// כפתור הורדה ידני ליד כל קובץ ברשימה - לצירוף ל-WhatsApp (או לכל שימוש
+// אחר). כל לחיצה יוצרת קישור הורדה מאובטח וזמני משלה ופותחת אותו בטאב
+// חדש - תנועת משתמש נפרדת ומלאה לכל קובץ, כך שאף פעם לא נחסמת ע"י חוסם
+// חלונות קופצים, גם אם המשתמש מוריד כמה קבצים ברצף.
+async function sfDownloadFileForAttach(path, name, btn){
+  if (btn && btn.disabled) return;
+  try {
+    const { data, error } = await window.supabaseClient.storage.from(SALE_FILE_BUCKET).createSignedUrl(path, 60 * 10, { download: name });
+    if (error || !data?.signedUrl){ toast('שגיאה בהורדת "' + name + '": ' + (error?.message || 'לא התקבל קישור')); return; }
+    window.open(data.signedUrl, '_blank');
+  } catch(e){
+    console.error('[sfDownloadFileForAttach] failed', e);
+    toast('שגיאה בהורדת "' + name + '": ' + (e.message || e));
+  }
 }
 
 // ---------------------------------------------------------------
