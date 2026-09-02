@@ -547,8 +547,9 @@ function sfAllActiveFiles(){
 //  - רשימת הקונים מציגה גם טלפון וגם סטטוס התאמה לעסק הזה (לא רק שם),
 //    וסטטוס ההסכם מוצג בלשון 3 המצבים המדויקת (אין הסכם / הסכם נשלח /
 //    הסכם חתום) ולא רק "חתום/לא חתום".
-//  - נוסף שלב תצוגה מקדימה (sfShowSendPreview) עם נושא ותוכן ניתנים
-//    לעריכה, לפני שנשלח בפועל - השליחה בפועל היא רק מתוך התצוגה המקדימה.
+//  - 02.09.2026: מסך "תצוגה מקדימה" הכפוי הוחלף במסך אחד - קבצים+קונה+נושא/
+//    תוכן+שני כפתורי שליחה (מייל/WhatsApp) גלויים יחד; "👁️ תצוגה מקדימה"
+//    נשארה רק כאופציה נוספת (תיבת טקסט בתוך אותו מסך), לא שלב חובה.
 //  - השליחה עברה לפונקציית שרת ייעודית וקשיחה, send-sale-files-to-buyer
 //    (supabase/functions/send-sale-files-to-buyer) - הלקוח שולח רק
 //    business_id/buyer_id/file_ids/נושא/פתיח; הבדיקה שקובץ חסוי מותר רק
@@ -605,10 +606,19 @@ async function openSendToBuyerModal(bizId, bizName){
           </label>`;
         }).join('')}
       </div>
+      <div class="field"><label>נושא (למייל בלבד)</label>
+        <input type="text" id="sfSendSubject" value="${esc('חומרי מכירה - ' + (bizName || 'עסק'))}">
+      </div>
+      <div class="field"><label>תוכן ההודעה (משותף למייל ול-WhatsApp, ניתן לעריכה)</label>
+        <textarea id="sfSendBody" rows="4" style="width:100%;">שלום,\n\nמצורפים קישורים להורדת החומרים בנוגע ל${esc(bizName || 'העסק')} (בתוקף לשבוע):</textarea>
+      </div>
+      <div id="sfSendPreviewBox" style="display:none;background:#f0ede4;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.8rem;white-space:pre-wrap;line-height:1.6;"></div>
       <div id="sfSendStatus" style="font-size:.8rem;min-height:18px;margin-top:6px;"></div>
-      <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:14px;">
         <button type="button" class="btn btn-ghost" onclick="document.getElementById('sfSendOverlay').remove()">ביטול</button>
-        <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfShowSendPreview('${bizId}','${esc((bizName || 'עסק').replace(/'/g,''))}')">המשך לתצוגה מקדימה</button>
+        <button type="button" class="btn btn-ghost" onclick="sfTogglePreview('${esc((bizName || 'עסק').replace(/'/g,''))}')">👁️ תצוגה מקדימה</button>
+        <button type="button" class="btn btn-primary" id="sfSendEmailBtn" onclick="sfSendEmailDirect('${bizId}')">📧 שלח במייל</button>
+        <button type="button" class="btn btn-primary" id="sfSendWaBtn" onclick="sfOpenWhatsAppForBuyer('${bizId}')">📱 פתח WhatsApp</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -659,75 +669,71 @@ function sfOnBuyerChange(){
   }
 }
 
-// שלב תצוגה מקדימה (סעיף 5 בהנחיה) - נושא ותוכן ניתנים לעריכה, לפני שנשלח
-// בפועל. השליחה בפועל (sfConfirmSend) קוראת רק ל-Edge Function הקשיחה;
-// שום קישור/קובץ לא נבחר או נבנה כאן - רק טקסט חופשי לעריכה.
-function sfShowSendPreview(bizId, bizName){
+// בדיקות משותפות לשני ערוצי השליחה (מייל/WhatsApp) - קונה נבחר עם הפרטים
+// הדרושים, ולפחות קובץ אחד מסומן שאינו חסום ע"י הסכם סודיות. מחזיר null
+// ורושם הודעת שגיאה (toast + שורת סטטוס) אם משהו חסר.
+function sfValidateSendSelection(requirePhone){
   const statusEl = document.getElementById('sfSendStatus');
   const fail = (msg) => {
     toast(msg);
     if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
+    return null;
   };
-  try {
+  const buyerSel = document.getElementById('sfSendBuyer');
+  const buyerId = buyerSel ? buyerSel.value : '';
+  if (!buyerId) return fail('יש לבחור קונה');
+  const buyer = SF_SEND_BUYERS_CACHE[buyerId];
+  if (requirePhone){
+    if (!buyer?.phone) return fail('לקונה הזה אין מספר טלפון שמור - יש להוסיף אחד בכרטיס הקונה קודם');
+  } else {
+    if (!buyer?.email) return fail('לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם');
+  }
+
+  const selected = Array.from(document.querySelectorAll('.sfSendFileChk:checked'));
+  if (!selected.length) return fail('יש לבחור לפחות קובץ אחד מהרשימה למעלה (סמן ✔️ ליד הקובץ)');
+  const signed = buyer.agreement_status === 'יש הסכם חתום';
+  const blockedNow = selected.filter(c => !signed && c.dataset.conf === '2');
+  if (blockedNow.length){
+    // רשת ביטחון בממשק בלבד - השרת יחסום את זה בכל מקרה גם אם זה נעקף (במייל)
+    return fail(`לא ניתן לשלוח את הקבצים הבאים: ${blockedNow.map(c=>c.dataset.name).join(', ')}. לקונה אין הסכם סודיות חתום.`);
+  }
+  if (statusEl) statusEl.textContent = '';
+  return { buyerId, buyer, selected };
+}
+
+// "תצוגה מקדימה" (👁️) - אופציה נוספת בלבד, לא שלב חובה בדרך לשליחה: מציגה
+// תיבת טקסט בתוך אותו מסך בדיוק (לא עוברת למסך אחר) ולא חוסמת את כפתורי
+// השליחה. אפשר לשלוח גם בלי ללחוץ עליה בכלל.
+function sfTogglePreview(bizName){
+  const box = document.getElementById('sfSendPreviewBox');
+  if (!box) return;
+  if (box.style.display === 'none' || !box.style.display){
     const buyerSel = document.getElementById('sfSendBuyer');
-    const buyerId = buyerSel.value;
-    if (!buyerId){ fail('יש לבחור קונה'); return; }
-    const buyer = SF_SEND_BUYERS_CACHE[buyerId];
-    if (!buyer?.email){ fail('לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם'); return; }
-
+    const buyer = buyerSel && buyerSel.value ? SF_SEND_BUYERS_CACHE[buyerSel.value] : null;
+    const buyerLabel = buyer ? (buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || 'קונה ללא שם') : '(לא נבחר קונה)';
     const selected = Array.from(document.querySelectorAll('.sfSendFileChk:checked'));
-    if (!selected.length){ fail('יש לבחור לפחות קובץ אחד מהרשימה למעלה (סמן ✔️ ליד הקובץ)'); return; }
-    const signed = buyer.agreement_status === 'יש הסכם חתום';
-    const blockedNow = selected.filter(c => !signed && c.dataset.conf === '2');
-    if (blockedNow.length){
-      // רשת ביטחון בממשק בלבד - השרת יחסום את זה בכל מקרה גם אם זה נעקף
-      fail(`לא ניתן לשלוח את הקבצים הבאים: ${blockedNow.map(c=>c.dataset.name).join(', ')}. לקונה אין הסכם סודיות חתום.`);
-      return;
-    }
-    if (statusEl) statusEl.textContent = '';
-
-    const buyerName = buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || 'קונה';
-    const fileIds = selected.map(c => c.value);
-    const defaultSubject = `חומרי מכירה${signed ? ' - ' + bizName : ' (אנונימי)'}`;
-    const defaultBody = `שלום ${buyerName},\n\nמצורפים קישורים להורדת החומרים בנוגע ל${bizName} (בתוקף לשבוע):`;
-
-    const body = document.getElementById('sfSendModalBody');
-    body.innerHTML = `
-      <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">📄 תצוגה מקדימה לפני שליחה</h3>
-      <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.85rem;">
-        <div><b>${esc(buyerName)}</b> · ${esc(buyer.email)}</div>
-        <div style="color:#5a6172;">${esc(bizName)}</div>
-      </div>
-      <div style="font-weight:700;font-size:.85rem;color:var(--navy);margin-bottom:6px;">קבצים מצורפים:</div>
-      <div style="margin-bottom:12px;font-size:.83rem;">
-        ${selected.map(c => `<div>📄 ${esc(c.dataset.name)} <span style="color:#8a93ab;font-size:.75rem;">(${esc(c.dataset.cat)})</span></div>`).join('')}
-      </div>
-      <div class="field"><label>נושא</label>
-        <input type="text" id="sfPreviewSubject" value="${esc(defaultSubject)}">
-      </div>
-      <div class="field"><label>תוכן ההודעה</label>
-        <textarea id="sfPreviewBody" rows="5" style="width:100%;">${esc(defaultBody)}</textarea>
-      </div>
-      <div id="sfSendStatus" style="font-size:.8rem;min-height:18px;margin-top:6px;"></div>
-    <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
-      <button type="button" class="btn btn-ghost" onclick="document.getElementById('sfSendOverlay').remove()">ביטול</button>
-      <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend('${bizId}', '${buyerId}', ${JSON.stringify(fileIds)})">📤 שלח מייל לקונה</button>
-    </div>`;
-  } catch(e){
-    console.error('sfShowSendPreview error:', e);
-    fail('שגיאה בפתיחת התצוגה המקדימה: ' + ((e && e.message) ? e.message : String(e)));
+    const subject = (document.getElementById('sfSendSubject') || {}).value || '';
+    const bodyText = (document.getElementById('sfSendBody') || {}).value || '';
+    box.textContent = `אל: ${buyerLabel}${buyer && buyer.email ? ' - ' + buyer.email : ''}${buyer && buyer.phone ? ' - ' + buyer.phone : ''}\n\nקבצים: ${selected.map(c=>c.dataset.name).join(', ') || '(לא נבחרו)'}\n\nנושא (למייל): ${subject}\n\nתוכן ההודעה:\n${bodyText}`;
+    box.style.display = 'block';
+  } else {
+    box.style.display = 'none';
   }
 }
 
-async function sfConfirmSend(bizId, buyerId, fileIds){
-  const btn = document.getElementById('sfSendBtn');
+async function sfSendEmailDirect(bizId){
+  const v = sfValidateSendSelection(false);
+  if (!v) return;
+  const { buyerId, selected } = v;
+  const fileIds = selected.map(c => c.value);
+  const subject = document.getElementById('sfSendSubject').value.trim();
+  const introText = document.getElementById('sfSendBody').value;
+  if (!subject){ toast('נושא המייל לא יכול להיות ריק'); return; }
+
+  const btn = document.getElementById('sfSendEmailBtn');
   const statusEl = document.getElementById('sfSendStatus');
   if (btn) bsdSetButtonLoading(btn, true, 'שולח...');
   try {
-    const subject = document.getElementById('sfPreviewSubject').value.trim();
-    const introText = document.getElementById('sfPreviewBody').value;
-    if (!subject) throw new Error('נושא המייל לא יכול להיות ריק');
-
     if (statusEl) statusEl.textContent = 'שולח מייל...';
     // כל הבדיקה האמיתית (סטטוס הסכם, רמת סודיות כל קובץ, שליפת האימייל,
     // בניית קישורי ההורדה) מתבצעת בתוך send-sale-files-to-buyer בשרת -
@@ -743,15 +749,74 @@ async function sfConfirmSend(bizId, buyerId, fileIds){
       throw new Error(detail);
     }
 
-    toast('החומרים נשלחו בהצלחה');
-    document.getElementById('sfSendOverlay').remove();
+    toast('החומרים נשלחו בהצלחה במייל');
+    if (statusEl) statusEl.innerHTML = '<span style="color:#1f7a45;">✅ החומרים נשלחו בהצלחה במייל</span>';
+    setTimeout(() => { const ov = document.getElementById('sfSendOverlay'); if (ov) ov.remove(); }, 900);
   } catch(e){
-    console.error('sfConfirmSend error:', e);
+    console.error('sfSendEmailDirect error:', e);
     const msg = (e && e.message) ? e.message : String(e);
     if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
     else toast('שגיאה: ' + msg);
+  } finally {
     if (btn) bsdSetButtonLoading(btn, false);
   }
+}
+
+// נורמליזציית טלפון ל-WhatsApp (972...) - מוגדרת מקומית בקובץ הזה כדי
+// שהמנגנון לא יהיה תלוי בכך שדף מסוים אחר (כמו businesses.html) הגדיר את
+// waPhoneDigits() הגלובלי - saleFileModule2.js צריך לעבוד גם אם ייטען
+// לבד בעתיד.
+function sfWaPhoneDigits(phone){
+  if (!phone) return null;
+  let d = String(phone).replace(/\D/g,'');
+  if (!d) return null;
+  if (d.startsWith('972')) return d;
+  if (d.startsWith('0')) return '972' + d.slice(1);
+  return null;
+}
+
+// פותח שיחת WhatsApp/WhatsApp Web (לפי המכשיר, דרך wa.me) עם טקסט מוכן
+// הניתן לעריכה, ומכין קבצים נבחרים להורדה/פתיחה בטאב נפרד לצירוף ידני -
+// WhatsApp לא תומך בצירוף אוטומטי דרך דפדפן. שום הודעה לא נשלחת אוטומטית;
+// ה-Send בפועל תמיד ביד המשתמש בתוך WhatsApp עצמו. קבצים חסויים בלי הסכם
+// חתום כבר מנוטרלים (disabled) ברשימת הסימון למעלה - כך שאותה הגנה בדיוק
+// חלה כאן וגם במייל.
+async function sfOpenWhatsAppForBuyer(bizId){
+  const v = sfValidateSendSelection(true);
+  if (!v) return;
+  const { buyer, selected } = v;
+  const waDigits = sfWaPhoneDigits(buyer.phone);
+  if (!waDigits){ toast('מספר הטלפון של הקונה אינו תקין לפתיחת WhatsApp'); return; }
+
+  const bodyText = document.getElementById('sfSendBody').value;
+  const statusEl = document.getElementById('sfSendStatus');
+
+  // חלונות ריקים תחילה - אחד ל-WhatsApp ואחד לכל קובץ - עוד לפני כל await,
+  // כדי שחוסמי חלונות קופצים בדפדפן לא יחסמו את זה (הפעולה עדיין נחשבת
+  // "ביוזמת המשתמש" מבחינת הדפדפן כל עוד לא עבר await קודם).
+  const waWindow = window.open('', '_blank');
+  const fileWindows = selected.map(() => window.open('', '_blank'));
+
+  try {
+    for (let i = 0; i < selected.length; i++){
+      const path = selected[i].dataset.path;
+      const win = fileWindows[i];
+      if (!win || !path) continue;
+      const { data, error } = await window.supabaseClient.storage.from(SALE_FILE_BUCKET).createSignedUrl(path, 60 * 10);
+      if (error || !data?.signedUrl){ win.close(); continue; }
+      win.location.href = data.signedUrl;
+    }
+  } catch(e){
+    console.error('[sfOpenWhatsAppForBuyer] file open failed', e);
+  }
+
+  const waUrl = `https://wa.me/${waDigits}?text=${encodeURIComponent(bodyText)}`;
+  if (waWindow){ waWindow.location.href = waUrl; }
+  else { window.open(waUrl, '_blank'); }
+
+  try { await sfLogAudit(bizId, 'open_whatsapp_send_sale_files', { buyer_id: v.buyerId, file_ids: selected.map(c=>c.value) }); } catch(e){}
+  if (statusEl) statusEl.innerHTML = '✅ נפתחה שיחת WhatsApp עם הודעה מוכנה - הקבצים נפתחו לצירוף ידני. הלחיצה על Send בפועל היא בידיך בתוך WhatsApp.';
+  toast('נפתחה שיחת WhatsApp - שליחת ההודעה בפועל בידיך');
 }
 
 // ---------------------------------------------------------------
