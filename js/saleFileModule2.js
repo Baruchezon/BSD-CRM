@@ -568,7 +568,7 @@ async function openSendToBuyerModal(bizId, bizName){
   const [{ data: buyers, error }, { data: bizMatches }] = await Promise.all([
     window.supabaseClient.from('leads')
       .select('id, full_name, first_name, last_name, email, phone, agreement_status')
-      .eq('type', 'buyer').order('full_name'),
+      .eq('type', 'buyer').eq('is_archived', false).order('full_name'),
     window.supabaseClient.from('matches').select('buyer_id, status').eq('business_id', bizId),
   ]);
   if (error){ toast('שגיאה בטעינת רשימת קונים: ' + error.message); return; }
