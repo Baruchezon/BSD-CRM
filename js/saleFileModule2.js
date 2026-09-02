@@ -622,8 +622,8 @@ async function openSendToBuyerModal(bizId, bizName){
       <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:14px;">
         <button type="button" class="btn btn-ghost" onclick="document.getElementById('sfSendOverlay').remove()">ביטול</button>
         <button type="button" class="btn btn-ghost" onclick="sfTogglePreview('${esc((bizName || 'עסק').replace(/'/g,''))}')">👁️ תצוגה מקדימה</button>
-        <button type="button" class="btn btn-primary" id="sfSendEmailBtn" onclick="sfSendEmailDirect('${bizId}')">📧 שלח במייל</button>
-        <button type="button" class="btn btn-primary" id="sfSendWaBtn" onclick="sfOpenWhatsAppForBuyer('${bizId}')">📱 פתח WhatsApp</button>
+        <button type="button" class="btn btn-primary" id="sfSendEmailBtn" style="display:none;" onclick="sfSendEmailDirect('${bizId}')">📧 שלח במייל</button>
+        <button type="button" class="btn btn-primary" id="sfSendWaBtn" style="display:none;" onclick="sfOpenWhatsAppForBuyer('${bizId}')">📱 פתח WhatsApp</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -648,17 +648,25 @@ function sfOnBuyerChange(){
   const detailsEl = document.getElementById('sfSendBuyerDetails');
   const checkboxes = Array.from(document.querySelectorAll('.sfSendFileChk'));
   const dlButtons = Array.from(document.querySelectorAll('.sfDlBtn'));
+  const emailBtn = document.getElementById('sfSendEmailBtn');
+  const waBtn = document.getElementById('sfSendWaBtn');
   const buyer = buyerId && SF_SEND_BUYERS_CACHE ? SF_SEND_BUYERS_CACHE[buyerId] : null;
   if (!buyer){
     note.textContent = '';
     if (detailsEl) detailsEl.textContent = '';
     checkboxes.forEach(c => { c.disabled = false; c.closest('label').style.opacity = '1'; });
     dlButtons.forEach(b => { b.disabled = false; b.style.opacity = '1'; });
+    if (emailBtn) emailBtn.style.display = 'none';
+    if (waBtn) waBtn.style.display = 'none';
     return;
   }
   if (detailsEl){
     detailsEl.textContent = `📞 ${buyer.phone || 'אין טלפון'} · 📧 ${buyer.email || 'אין אימייל'}`;
   }
+  // מיד אחרי בחירת קונה - שני הכפתורים גלויים זה ליד זה; כל אחד מושבת
+  // בנפרד רק אם באמת חסר לקונה הפרט הרלוונטי (לא שקוף/מוסתר, disabled+אפור).
+  if (emailBtn){ emailBtn.style.display = 'inline-flex'; emailBtn.disabled = !buyer.email; emailBtn.style.opacity = buyer.email ? '1' : '.5'; }
+  if (waBtn){ const hasPhone = !!sfWaPhoneDigits(buyer.phone); waBtn.style.display = 'inline-flex'; waBtn.disabled = !hasPhone; waBtn.style.opacity = hasPhone ? '1' : '.5'; }
   const status = buyer.agreement_status || 'אין הסכם';
   const signed = status === 'יש הסכם חתום';
   if (signed){
