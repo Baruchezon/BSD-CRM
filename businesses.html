@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609022205';
+    var PAGE_BUILD = '202609021230';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -245,7 +245,7 @@
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608251215"></script>
 <script src="js/pdfPipeline.js?v=202608291000"></script>
-<script src="js/saleFileModule2.js?v=202609022205"></script>
+<script src="js/saleFileModule2.js?v=202608300521"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
 <script src="js/dedupeCheckModule.js?v=202608311200"></script>
@@ -2823,7 +2823,7 @@ async function loadBizFiles(bizId){
     </div>`;
   }).join('')
     + `<div style="margin-top:10px;">
-         <button type="button" class="btn btn-ghost" id="bizSendToBuyerBtn" disabled title="סמן קובץ אחד לפחות למעלה כדי להפעיל" onclick="openSendToBuyer('${bizId}')">📤 שלח לקונה</button>
+         <button type="button" class="btn btn-ghost" id="bizSendEmailBtn" disabled title="סמן קובץ אחד לפחות למעלה כדי להפעיל" onclick="openSendFilesToBuyer('${bizId}')">📧 שלח לקונה במייל</button>
        </div>`;
 }
 
@@ -2889,24 +2889,11 @@ async function downloadIntakeForm(bizId, bizName){
   window.open(data.signedUrl, '_blank');
 }
 
-function updateBizSendBtn(bizId){
-  const n = document.querySelectorAll('.bizfSendCheck:checked').length;
-  const btn = document.getElementById('bizSendToBuyerBtn');
-  if (btn){
-    btn.disabled = n === 0;
-    btn.textContent = n ? `📤 שלח ${n} קבצים לקונה` : '📤 שלח לקונה';
-    btn.title = n === 0 ? 'סמן קובץ אחד לפחות למעלה כדי להפעיל' : '';
-  }
-}
-
 // ============================================================================
-// שליחת קבצים לקונה - מייל או WhatsApp מאותו מסך אחד (02.09.2026, גרסה מאוחדת)
-// לפי הנחייתו המפורשת: מתחת לרשימת הקבצים, אחרי בחירת קונה - שני כפתורים
-// (מייל / WhatsApp), בלי שום תצוגה מקדימה שנכפית באמצע. "תצוגה מקדימה" קיימת
-// רק כאופציה נוספת שאפשר ללחוץ עליה בנפרד, לא כשלב חובה בדרך לשליחה.
-// שליחת המייל ממשיכה להשתמש ב-Edge Function הקיים send-match-summary.
-// פתיחת WhatsApp לא שולחת כלום אוטומטית - היא רק פותחת שיחה עם טקסט מוכן
-// הניתן לעריכה; לחיצת ה-Send בפועל תמיד ביד המשתמש בתוך WhatsApp עצמו.
+// שליחת קובץ/קבצים מצורפים לקונה במייל (17.08.2026)
+// משתמש ב-Edge Function הקיים send-match-summary (SMTP דרך Gmail, לא קשור
+// לספק ה-email שהערוץ "מצגות אנונימיות" למעלה מציין כמושבת - זה ערוץ נפרד
+// שכבר פעיל ועובד בפועל ב-match-detail.html).
 // ============================================================================
 function blobToBase64(blob){
   return new Promise((resolve, reject)=>{
@@ -2917,16 +2904,13 @@ function blobToBase64(blob){
   });
 }
 
-let SEND_UNI_BIZ_ID = null;
-let SEND_UNI_BUYER = null;
-// אינדקסי הקבצים שנבחרו נשמרים כאן ברגע שפותחים את החלון, ולא נבדקים מחדש
-// מתוך ה-DOM ברגע השליחה - כדי שרענון רשימת הקבצים ברקע לא יאפס בשקט את
-// הבחירה המקורית (זוהתה בפועל ב-17.08.2026, ראו הסבר מפורט בהיסטוריה).
-let SEND_UNI_SELECTED_IDX = [];
-
-function sendUniStatus(msg, isError){
-  const el = document.getElementById('sendUniStatus');
-  if (el){ el.textContent = msg; el.style.color = isError ? '#b00020' : '#0e1b34'; }
+function updateBizSendBtn(bizId){
+  const n = document.querySelectorAll('.bizfSendCheck:checked').length;
+  const btn = document.getElementById('bizSendEmailBtn');
+  if (!btn) return;
+  btn.disabled = n === 0;
+  btn.textContent = n ? `📧 שלח ${n} קבצים לקונה במייל` : '📧 שלח לקונה במייל';
+  btn.title = n === 0 ? 'סמן קובץ אחד לפחות למעלה כדי להפעיל' : '';
 }
 
 // עוטף כל await ברשת/Supabase בטיימאאוט מפורש - כדי שאם קריאה כלשהי "נתקעת"
@@ -2939,15 +2923,34 @@ function withTimeout(promise, ms, label){
   ]);
 }
 
-async function openSendToBuyer(bizId){
+// כותב גם לתוך המודל עצמו (לא רק toast חיצוני) - כדי שההודעה תמיד תיראה
+// בדיוק במקום שבו המשתמש כבר מסתכל, גם אם למשל מקלדת נייד מכסה את
+// תחתית המסך ומסתירה toast שצף בתחתית הדף.
+function sendFilesStatus(msg, isError){
+  const el = document.getElementById('sendFilesStatus');
+  if (el){ el.textContent = msg; el.style.color = isError ? '#b00020' : '#0e1b34'; }
+}
+
+let SEND_FILES_CURRENT_BUYER = null;
+let SEND_FILES_BIZ_ID = null;
+// אינדקסי הקבצים שנבחרו נשמרים כאן ברגע שפותחים את החלון, ולא נבדקים
+// מחדש מתוך ה-DOM ברגע השליחה. הסיבה: רשימת הקבצים בכרטיס העסק מתעדכנת
+// מדי פעם ברקע (למשל אחרי שינוי כלשהו בעסק), וזה מאפס את כל תיבות
+// הסימון - כך שגם אם המשתמש בחר קובץ ופתח את החלון בהצלחה, בלחיצה על
+// "שלח" הקוד היה בודק מחדש אילו תיבות מסומנות כרגע ומוצא שאף אחת לא
+// מסומנת יותר - "לא נבחרו קבצים לשליחה", למרות שהקובץ כן נבחר במקור.
+// זוהתה בפועל ב-17.08.2026 22:00 הודות לשורת הסטטוס בתוך המודל.
+let SEND_FILES_SELECTED_IDX = [];
+
+async function openSendFilesToBuyer(bizId){
   // בכוונה עובדים לפי אינדקס (data-idx) ולא לפי שם קובץ שיושב ב-value של
   // ה-checkbox - שם קובץ עברי שעובר קידוד ל-HTML attribute ובחזרה עלול
   // להישבר אם יש בו גרש/גרשיים, וגורם לכשל שקט (הקובץ "נעלם" בלי הודעה).
   const selectedIdx = Array.from(document.querySelectorAll('.bizfSendCheck:checked')).map(el => el.getAttribute('data-idx'));
   if (!selectedIdx.length){ toast('יש לבחור לפחות קובץ אחד לשליחה'); return; }
-  SEND_UNI_BIZ_ID = bizId;
-  SEND_UNI_BUYER = null;
-  SEND_UNI_SELECTED_IDX = selectedIdx; // מוקפא כאן - לא נקרא שוב מה-DOM אחר כך
+  SEND_FILES_BIZ_ID = bizId;
+  SEND_FILES_CURRENT_BUYER = null;
+  SEND_FILES_SELECTED_IDX = selectedIdx; // מוקפא כאן - לא נקרא שוב מה-DOM אחר כך
 
   const filesInfo = selectedIdx.map(idx => (BIZ_FILES_CACHE[bizId] || [])[idx]).filter(Boolean);
   if (filesInfo.length !== selectedIdx.length){
@@ -2958,44 +2961,40 @@ async function openSendToBuyer(bizId){
 
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
-    <h3>שליחת קבצים לקונה</h3>
+    <h3>שליחת קבצים לקונה במייל</h3>
 
     <div class="field full" style="margin-bottom:14px;">
       <label>קבצים לשליחה</label>
       <div style="background:#f7f5ef;border-radius:8px;padding:8px 12px;font-size:.85rem;display:block;min-height:38px;line-height:1.6;box-sizing:border-box;">
-        ${filesInfo.map((f, i) => `<div>📄 ${esc(f.displayName)} <button type="button" class="btn btn-ghost" style="padding:0 8px;font-size:.7rem;" onclick="downloadBizFile('${bizId}', ${selectedIdx[i]})">📂 פתח / הורד</button></div>`).join('') || '<span style="color:#999;">לא נבחרו קבצים</span>'}
+        ${filesInfo.map(f => `<div>📄 ${esc(f.displayName)}</div>`).join('') || '<span style="color:#999;">לא נבחרו קבצים</span>'}
       </div>
     </div>
 
     <div class="field full" style="margin-bottom:10px;overflow:visible;">
       <label>בחר קונה</label>
-      <div id="sendUniBuyerBox" style="overflow:visible;">טוען קונים...</div>
+      <div id="sendFilesBuyerBox" style="overflow:visible;">טוען קונים...</div>
     </div>
-    <div id="sendUniBuyerInfo"></div>
+    <div id="sendFilesBuyerInfo"></div>
 
     <div class="field full" style="margin-bottom:10px;">
-      <label>נושא (למייל בלבד)</label>
-      <input type="text" id="sendUniSubject" value="${esc('קבצים מ-BSD Business Brokers Israel' + (biz ? ' - ' + biz.internal_name : ''))}">
+      <label>נושא</label>
+      <input type="text" id="sendFilesSubject" value="${esc('קבצים מ-BSD Business Brokers Israel' + (biz ? ' - ' + biz.internal_name : ''))}">
     </div>
     <div class="field full" style="margin-bottom:10px;">
-      <label>תוכן ההודעה (משותף למייל ול-WhatsApp, ניתן לעריכה)</label>
-      <textarea id="sendUniBody" rows="4" style="width:100%;">שלום,\n\nמצורפים הקבצים הבאים${biz ? ' בנוגע ל' + biz.internal_name : ''}.\n\nבברכה,\n${(CURRENT_PROFILE && CURRENT_PROFILE.full_name) || 'BSD Business Brokers Israel'}</textarea>
+      <label>תוכן ההודעה</label>
+      <textarea id="sendFilesBody" rows="4" style="width:100%;">שלום,\n\nמצורפים הקבצים הבאים${biz ? ' בנוגע ל' + biz.internal_name : ''}.\n\nבברכה,\n${(CURRENT_PROFILE && CURRENT_PROFILE.full_name) || 'BSD Business Brokers Israel'}</textarea>
     </div>
 
-    <div id="sendUniPreviewBox" style="display:none;background:#f0ede4;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.82rem;white-space:pre-wrap;line-height:1.6;"></div>
-
-    <div id="sendUniStatus" style="min-height:20px;margin-bottom:8px;font-size:.85rem;font-weight:600;"></div>
-    <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
+    <div id="sendFilesStatus" style="min-height:20px;margin-bottom:8px;font-size:.85rem;font-weight:600;"></div>
+    <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-      <button type="button" class="btn btn-ghost" onclick="toggleSendUniPreview()">👁️ תצוגה מקדימה</button>
-      <button type="button" class="btn btn-primary" id="sendUniEmailBtn" style="display:none;" onclick="confirmSendFilesToBuyer()">📧 שלח במייל</button>
-      <button type="button" class="btn btn-primary" id="sendUniWaBtn" style="display:none;" onclick="openWhatsAppChatForBuyer()">📱 פתח WhatsApp</button>
+      <button type="button" class="btn btn-primary" id="sendFilesBtn" style="opacity:.5;" onclick="confirmSendFilesToBuyer()">📤 שלח</button>
     </div>
   `;
   document.getElementById('overlay').classList.add('open');
   document.getElementById('overlay').scrollTop = 0;
 
-  const box = document.getElementById('sendUniBuyerBox');
+  const box = document.getElementById('sendFilesBuyerBox');
   let buyers = [];
   try {
     let buyerQuery = window.supabaseClient
@@ -3011,97 +3010,70 @@ async function openSendToBuyer(bizId){
     if (error) throw new Error(error.message);
     buyers = data || [];
   } catch(e){
-    console.error('[openSendToBuyer] failed to load buyers', e);
+    console.error('[openSendFilesToBuyer] failed to load buyers', e);
     box.innerHTML = `<span style="color:#b3402c;">שגיאה בטעינת רשימת הקונים: ${esc(e.message || String(e))} - אי אפשר לבחור קונה כרגע. סגור וחזור על הפעולה.</span>`;
     toast('שגיאה בטעינת רשימת הקונים: ' + (e.message || e));
     return;
   }
   if (!buyers.length){
-    box.innerHTML = `<span style="color:#8a5a00;">לא נמצאו קונים ברשימה (leads מסוג buyer) - אי אפשר לשלוח עד שיתווסף קונה עם אימייל/טלפון.</span>`;
+    box.innerHTML = `<span style="color:#8a5a00;">לא נמצאו קונים ברשימה (leads מסוג buyer) - אי אפשר לשלוח עד שיתווסף קונה עם אימייל.</span>`;
     return;
   }
 
-  box.innerHTML = window.searchSelectHTML({ boxId: 'sendUniBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
-  window.initSearchSelect('sendUniBuyerSelect', buyers, {
+  box.innerHTML = window.searchSelectHTML({ boxId: 'sendFilesBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
+  window.initSearchSelect('sendFilesBuyerSelect', buyers, {
     getId: b => b.id,
     getLabel: b => b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || b.email || 'קונה ללא שם',
     onChange: (buyerId) => {
-      SEND_UNI_BUYER = buyers.find(b => b.id === buyerId) || null;
-      renderSendUniBuyerInfo();
+      SEND_FILES_CURRENT_BUYER = buyers.find(b => b.id === buyerId) || null;
+      renderSendFilesBuyerInfo();
     }
   });
 }
 
-function renderSendUniBuyerInfo(){
-  const infoBox = document.getElementById('sendUniBuyerInfo');
-  const emailBtn = document.getElementById('sendUniEmailBtn');
-  const waBtn = document.getElementById('sendUniWaBtn');
-  const buyer = SEND_UNI_BUYER;
-  if (!buyer){ infoBox.innerHTML = ''; emailBtn.style.display = 'none'; waBtn.style.display = 'none'; return; }
+function renderSendFilesBuyerInfo(){
+  const infoBox = document.getElementById('sendFilesBuyerInfo');
+  const sendBtn = document.getElementById('sendFilesBtn');
+  const buyer = SEND_FILES_CURRENT_BUYER;
+  if (!buyer){ infoBox.innerHTML = ''; sendBtn.style.opacity = '.5'; return; }
 
   const buyerLabel = buyer.full_name || [buyer.first_name,buyer.last_name].filter(Boolean).join(' ') || '';
   const missingEmail = !buyer.email;
-  const waDigits = waPhoneDigits(buyer.phone);
-  const missingPhone = !waDigits;
   const noAgreement = !buyer.agreement_status || buyer.agreement_status === 'אין הסכם';
 
   infoBox.innerHTML = `
     <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.85rem;">
       <div><b>${esc(buyerLabel)}</b></div>
-      <div>📧 ${esc(buyer.email || 'אין אימייל')} &nbsp; 📱 ${buyer.phone ? esc(fmtPhone(buyer.phone)) : 'אין טלפון'}</div>
+      <div>📧 ${esc(buyer.email || 'אין אימייל')}</div>
     </div>
-    ${missingEmail ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:8px 12px;font-size:.8rem;margin-bottom:6px;">⚠️ אין כתובת אימייל שמורה לקונה זה - כפתור המייל מושבת עד שתוסיף אימייל בכרטיס הקונה.</div>` : ''}
-    ${missingPhone ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:8px 12px;font-size:.8rem;margin-bottom:6px;">⚠️ אין מספר טלפון תקין שמור לקונה זה - כפתור ה-WhatsApp מושבת עד שתוסיף טלפון בכרטיס הקונה.</div>` : ''}
-    ${(!missingEmail || !missingPhone) && noAgreement
-      ? `<div style="background:#fff8e6;color:#8a5a00;border-radius:8px;padding:8px 12px;font-size:.8rem;">⚠️ לקונה הזה אין עדיין הסכם התקשרות חתום. ודא שהקבצים שנבחרו מתאימים לשליחה במצב הזה לפני שתשלח.</div>`
-      : ''}
+    ${missingEmail
+      ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:10px 12px;font-size:.85rem;">⚠️ לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אימייל בכרטיס הקונה תחילה.</div>`
+      : (noAgreement
+          ? `<div style="background:#fff8e6;color:#8a5a00;border-radius:8px;padding:10px 12px;font-size:.85rem;">⚠️ לקונה הזה אין עדיין הסכם התקשרות חתום. ודא שהקבצים שנבחרו מתאימים לשליחה במצב הזה לפני שתשלח.</div>`
+          : '')}
   `;
-  // מיד אחרי בחירת קונה - שני הכפתורים גלויים זה ליד זה; כל אחד מושבת
-  // בנפרד רק אם באמת חסר לקונה הפרט הרלוונטי (לא שקוף/מוסתר, disabled+אפור).
-  emailBtn.style.display = 'inline-flex';
-  waBtn.style.display = 'inline-flex';
-  emailBtn.disabled = missingEmail;
-  emailBtn.style.opacity = missingEmail ? '.5' : '1';
-  waBtn.disabled = missingPhone;
-  waBtn.style.opacity = missingPhone ? '.5' : '1';
-}
-
-// כפתור "תצוגה מקדימה" - אופציה נוספת שאפשר ללחוץ עליה, לא שלב חובה בדרך
-// לשליחה. מציג/מסתיר תיבה בתוך אותו מסך, בלי לעבור למסך נפרד.
-function toggleSendUniPreview(){
-  const box = document.getElementById('sendUniPreviewBox');
-  if (!box) return;
-  if (box.style.display === 'none' || !box.style.display){
-    const buyer = SEND_UNI_BUYER;
-    const buyerLabel = buyer ? (buyer.full_name || [buyer.first_name,buyer.last_name].filter(Boolean).join(' ') || 'קונה ללא שם') : '(לא נבחר קונה)';
-    const subject = document.getElementById('sendUniSubject').value.trim();
-    const body = document.getElementById('sendUniBody').value;
-    box.textContent = `אל: ${buyerLabel}${buyer && buyer.email ? ' - ' + buyer.email : ''}${buyer && buyer.phone ? ' - ' + fmtPhone(buyer.phone) : ''}\n\nנושא (למייל): ${subject}\n\nתוכן ההודעה:\n${body}`;
-    box.style.display = 'block';
-  } else {
-    box.style.display = 'none';
-  }
+  sendBtn.style.opacity = missingEmail ? '.5' : '1';
 }
 
 async function confirmSendFilesToBuyer(){
   if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
 
-  const bizId = SEND_UNI_BIZ_ID;
-  const buyer = SEND_UNI_BUYER;
-  sendUniStatus('מתחיל...', false);
-  if (!buyer){ const m='יש לבחור קונה מהרשימה לפני השליחה (לחיצה על שם הקונה בתפריט הנפתח)'; toast(m); sendUniStatus(m, true); console.warn('[confirmSendFilesToBuyer] no buyer selected'); return; }
-  if (!buyer.email){ const m='לקונה הנבחר אין כתובת אימייל שמורה - יש להוסיף אימייל בכרטיס הקונה תחילה'; toast(m); sendUniStatus(m, true); return; }
+  const bizId = SEND_FILES_BIZ_ID;
+  const buyer = SEND_FILES_CURRENT_BUYER;
+  sendFilesStatus('מתחיל...', false);
+  if (!buyer){ const m='יש לבחור קונה מהרשימה לפני השליחה (לחיצה על שם הקונה בתפריט הנפתח)'; toast(m); sendFilesStatus(m, true); console.warn('[confirmSendFilesToBuyer] no buyer selected'); return; }
+  if (!buyer.email){ const m='לקונה הנבחר אין כתובת אימייל שמורה - יש להוסיף אימייל בכרטיס הקונה תחילה'; toast(m); sendFilesStatus(m, true); return; }
 
-  const selectedIdx = SEND_UNI_SELECTED_IDX;
-  if (!selectedIdx.length){ const m='לא נבחרו קבצים לשליחה'; toast(m); sendUniStatus(m, true); return; }
+  const selectedIdx = SEND_FILES_SELECTED_IDX;
+  if (!selectedIdx.length){ const m='לא נבחרו קבצים לשליחה'; toast(m); sendFilesStatus(m, true); return; }
   const filesInfo = selectedIdx.map(idx => (BIZ_FILES_CACHE[bizId] || [])[idx]).filter(Boolean);
-  if (filesInfo.length !== selectedIdx.length){ const m='שגיאה: חלק מהקבצים שסומנו לא נמצאו יותר - סגור וטען מחדש'; toast(m); sendUniStatus(m, true); return; }
-  if (!CURRENT_PROFILE || !CURRENT_PROFILE.email){ const m='שגיאה: פרופיל המשתמש הנוכחי לא נטען כראוי - רענן את הדף'; toast(m); sendUniStatus(m, true); console.error('[confirmSendFilesToBuyer] CURRENT_PROFILE missing/invalid', CURRENT_PROFILE); return; }
+  if (filesInfo.length !== selectedIdx.length){ const m='שגיאה: חלק מהקבצים שסומנו לא נמצאו יותר - סגור וטען מחדש'; toast(m); sendFilesStatus(m, true); return; }
+  if (!CURRENT_PROFILE || !CURRENT_PROFILE.email){ const m='שגיאה: פרופיל המשתמש הנוכחי לא נטען כראוי - רענן את הדף'; toast(m); sendFilesStatus(m, true); console.error('[confirmSendFilesToBuyer] CURRENT_PROFILE missing/invalid', CURRENT_PROFILE); return; }
 
-  const subject = document.getElementById('sendUniSubject').value.trim() || 'קבצים מ-BSD Business Brokers Israel';
-  const bodyText = document.getElementById('sendUniBody').value;
+  const subject = document.getElementById('sendFilesSubject').value.trim() || 'קבצים מ-BSD Business Brokers Israel';
+  const bodyText = document.getElementById('sendFilesBody').value;
 
-  const sendBtn = document.getElementById('sendUniEmailBtn');
+  const sendBtn = document.getElementById('sendFilesBtn');
   if (sendBtn){ sendBtn.disabled = true; sendBtn.textContent = 'שולח...'; }
 
   try {
@@ -3120,7 +3092,7 @@ async function confirmSendFilesToBuyer(){
     for (const f of filesInfo){
       const knownLarge = typeof f.sizeBytes === 'number' && f.sizeBytes > LARGE_FILE_THRESHOLD;
       if (knownLarge){
-        sendUniStatus(`יוצר קישור הורדה עבור "${f.displayName}" (קובץ גדול)...`, false);
+        sendFilesStatus(`יוצר קישור הורדה עבור "${f.displayName}" (קובץ גדול)...`, false);
         console.log('[confirmSendFilesToBuyer] creating signed URL for large file', f.storagePath, f.sizeBytes);
         const { data: signed, error: linkErr } = await withTimeout(
           window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(f.storagePath, 60 * 60 * 24 * 7), 20000, `יצירת קישור עבור "${f.displayName}"`
@@ -3130,7 +3102,7 @@ async function confirmSendFilesToBuyer(){
         largeFileLinks.push({ name: f.displayName, url: signed.signedUrl });
         continue;
       }
-      sendUniStatus(`מוריד את "${f.displayName}"...`, false);
+      sendFilesStatus(`מוריד את "${f.displayName}"...`, false);
       console.log('[confirmSendFilesToBuyer] downloading', f.storagePath);
       const { data: blob, error: dlErr } = await withTimeout(
         window.supabaseClient.storage.from(BIZ_FILES_BUCKET).download(f.storagePath), 30000, `הורדת "${f.displayName}"`
@@ -3140,7 +3112,7 @@ async function confirmSendFilesToBuyer(){
       if (blob.size > LARGE_FILE_THRESHOLD){
         // גודל לא היה ידוע מראש (קובץ ישן בלי sizeBytes) אבל התברר כגדול
         // בפועל אחרי ההורדה - אותו טיפול: קישור במקום צרופה, לא שגיאה.
-        sendUniStatus(`יוצר קישור הורדה עבור "${f.displayName}" (התברר כקובץ גדול)...`, false);
+        sendFilesStatus(`יוצר קישור הורדה עבור "${f.displayName}" (התברר כקובץ גדול)...`, false);
         const { data: signed, error: linkErr } = await withTimeout(
           window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(f.storagePath, 60 * 60 * 24 * 7), 20000, `יצירת קישור עבור "${f.displayName}"`
         );
@@ -3162,7 +3134,7 @@ async function confirmSendFilesToBuyer(){
         largeFileLinks.map(l => `${l.name}: ${l.url}`).join('\n');
     }
 
-    sendUniStatus('שולח את המייל...', false);
+    sendFilesStatus('שולח את המייל...', false);
     console.log('[confirmSendFilesToBuyer] invoking send-match-summary', { to: buyer.email, subject, attachmentCount: attachments.length, largeFileLinkCount: largeFileLinks.length });
     const { data, error } = await withTimeout(
       window.supabaseClient.functions.invoke('send-match-summary', {
@@ -3181,7 +3153,7 @@ async function confirmSendFilesToBuyer(){
 
     bsdLogActivity('send_files_email', 'businesses', bizId);
     const okMsg = `${filesInfo.length} קבצים נשלחו בהצלחה ל-${buyer.email}`;
-    sendUniStatus('✅ ' + okMsg, false);
+    sendFilesStatus('✅ ' + okMsg, false);
     toast(okMsg);
     document.querySelectorAll('.bizfSendCheck:checked').forEach(el => el.checked = false);
     updateBizSendBtn(bizId);
@@ -3189,36 +3161,11 @@ async function confirmSendFilesToBuyer(){
   } catch(e){
     console.error('[confirmSendFilesToBuyer] exception', e);
     const errMsg = 'שגיאה בשליחת המייל: ' + (e.message || e);
-    sendUniStatus('❌ ' + errMsg, true);
+    sendFilesStatus('❌ ' + errMsg, true);
     toast(errMsg);
-    if (sendBtn){ sendBtn.disabled = false; sendBtn.textContent = '📧 שלח במייל'; }
+    if (sendBtn){ sendBtn.disabled = false; sendBtn.textContent = '📤 שלח'; }
   }
 }
-
-// פותח חלון WhatsApp אחד בלבד (דרך wa.me) עם טקסט מוכן הניתן לעריכה. לא
-// שולח שום דבר אוטומטית - ה-Send בפועל תמיד ביד המשתמש בתוך WhatsApp.
-// חשוב: פותחים חלון אחד בלבד ולא חלון נוסף לכל קובץ נבחר - ניסיון קודם
-// פתח חלון + חלון לכל קובץ בבת אחת, וברוב הדפדפנים בנייד (Chrome אנדרואיד,
-// Safari ב-iOS) זה גרם לחסימת *כל* החלונות כולל זה של WhatsApp עצמו (מותר
-// רק פופ-אפ אחד ל"תנועת משתמש" אחת) - בפועל "לוחצים ולא קורה כלום". לכן
-// הורדת הקבצים לצירוף ידני היא רק דרך כפתור "📂 פתח / הורד" הנפרד ליד כל
-// קובץ ברשימה למעלה - כל לחיצה כזו היא תנועת משתמש נפרדת ולעולם לא נחסמת.
-async function openWhatsAppChatForBuyer(){
-  const buyer = SEND_UNI_BUYER;
-  if (!buyer){ const m='יש לבחור קונה מהרשימה לפני הפתיחה (לחיצה על שם הקונה בתפריט הנפתח)'; toast(m); sendUniStatus(m, true); return; }
-  const waDigits = waPhoneDigits(buyer.phone);
-  if (!waDigits){ const m='לקונה הנבחר אין מספר טלפון תקין שמור - יש להוסיף טלפון בכרטיס הקונה תחילה'; toast(m); sendUniStatus(m, true); return; }
-
-  const bizId = SEND_UNI_BIZ_ID;
-  const bodyText = document.getElementById('sendUniBody').value;
-  const waUrl = `https://wa.me/${waDigits}?text=${encodeURIComponent(bodyText)}`;
-  window.open(waUrl, '_blank');
-
-  bsdLogActivity('open_whatsapp_send_files', 'businesses', bizId);
-  sendUniStatus('✅ נפתחה שיחת WhatsApp עם הודעה מוכנה. השתמש בכפתור "📂 פתח / הורד" ליד כל קובץ למעלה כדי לצרף אותו ידנית לשיחה.', false);
-  toast('נפתחה שיחת WhatsApp - הורד קבצים למעלה כדי לצרף');
-}
-
 
 function closeNotesPanel(){
   const ov = document.getElementById('notesOverlay');
