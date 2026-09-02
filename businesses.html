@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609022156';
+    var PAGE_BUILD = '202609022205';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -245,7 +245,7 @@
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608251215"></script>
 <script src="js/pdfPipeline.js?v=202608291000"></script>
-<script src="js/saleFileModule2.js?v=202609022156"></script>
+<script src="js/saleFileModule2.js?v=202609022205"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
 <script src="js/dedupeCheckModule.js?v=202608311200"></script>
@@ -2988,8 +2988,8 @@ async function openSendToBuyer(bizId){
     <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
       <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
       <button type="button" class="btn btn-ghost" onclick="toggleSendUniPreview()">👁️ תצוגה מקדימה</button>
-      <button type="button" class="btn btn-primary" id="sendUniEmailBtn" style="opacity:.5;" onclick="confirmSendFilesToBuyer()">📧 שלח במייל</button>
-      <button type="button" class="btn btn-primary" id="sendUniWaBtn" style="opacity:.5;" onclick="openWhatsAppChatForBuyer()">📱 פתח WhatsApp</button>
+      <button type="button" class="btn btn-primary" id="sendUniEmailBtn" style="display:none;" onclick="confirmSendFilesToBuyer()">📧 שלח במייל</button>
+      <button type="button" class="btn btn-primary" id="sendUniWaBtn" style="display:none;" onclick="openWhatsAppChatForBuyer()">📱 פתח WhatsApp</button>
     </div>
   `;
   document.getElementById('overlay').classList.add('open');
@@ -3037,7 +3037,7 @@ function renderSendUniBuyerInfo(){
   const emailBtn = document.getElementById('sendUniEmailBtn');
   const waBtn = document.getElementById('sendUniWaBtn');
   const buyer = SEND_UNI_BUYER;
-  if (!buyer){ infoBox.innerHTML = ''; emailBtn.style.opacity = '.5'; waBtn.style.opacity = '.5'; return; }
+  if (!buyer){ infoBox.innerHTML = ''; emailBtn.style.display = 'none'; waBtn.style.display = 'none'; return; }
 
   const buyerLabel = buyer.full_name || [buyer.first_name,buyer.last_name].filter(Boolean).join(' ') || '';
   const missingEmail = !buyer.email;
@@ -3056,7 +3056,13 @@ function renderSendUniBuyerInfo(){
       ? `<div style="background:#fff8e6;color:#8a5a00;border-radius:8px;padding:8px 12px;font-size:.8rem;">⚠️ לקונה הזה אין עדיין הסכם התקשרות חתום. ודא שהקבצים שנבחרו מתאימים לשליחה במצב הזה לפני שתשלח.</div>`
       : ''}
   `;
+  // מיד אחרי בחירת קונה - שני הכפתורים גלויים זה ליד זה; כל אחד מושבת
+  // בנפרד רק אם באמת חסר לקונה הפרט הרלוונטי (לא שקוף/מוסתר, disabled+אפור).
+  emailBtn.style.display = 'inline-flex';
+  waBtn.style.display = 'inline-flex';
+  emailBtn.disabled = missingEmail;
   emailBtn.style.opacity = missingEmail ? '.5' : '1';
+  waBtn.disabled = missingPhone;
   waBtn.style.opacity = missingPhone ? '.5' : '1';
 }
 
