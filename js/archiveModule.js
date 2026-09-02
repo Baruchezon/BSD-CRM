@@ -17,7 +17,7 @@ function _archModalEsc(s){ return (s||'').toString().replace(/[&<>"']/g, c => ({
 function openArchiveReasonModal(title, onConfirm){
   const modal = document.getElementById('modalRoot') || (function(){ const d = document.createElement('div'); d.id='modalRoot'; document.body.appendChild(d); return d; })();
   modal.innerHTML = `
-    <div class="overlay"><div class="modal">
+    <div class="overlay" style="z-index:200;"><div class="modal">
       <div class="modal-head"><h3>📁 ${_archModalEsc(title)}</h3><button type="button" class="modal-close" onclick="document.getElementById('modalRoot').innerHTML='';">✕</button></div>
       <div class="modal-body">
         <div class="field">
