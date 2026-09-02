@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609010736';
+    var PAGE_BUILD = '202609022034';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -357,9 +357,28 @@ async function loadTasks(){
   // Deep-link support: tasks.html?open=<id> (used by the notification alert screen's
   // "open full task details" button) jumps straight into that task's edit modal.
   const openId = new URLSearchParams(location.search).get('open');
-  if (openId && ALL_TASKS.some(t => t.id === openId)){
+  if (openId) await openDeepLinkedTask(openId);
+}
+
+// Split out from loadTasks() (30.08.2026): if the deep-linked task isn't in the
+// already-loaded ALL_TASKS list (e.g. a timing edge case, or it belongs to a
+// different assignee an admin hasn't filtered to), this used to silently do
+// nothing - the exact "clicking the notification sometimes doesn't open the
+// task" symptom, with no error shown at all. Now it falls back to fetching
+// that one task directly by id, and only shows a clear message if it's
+// genuinely not found or not accessible - never a silent no-op.
+async function openDeepLinkedTask(openId){
+  if (ALL_TASKS.some(t => t.id === openId)){
     openTaskForm(openId);
+    return;
   }
+  const { data: task, error } = await window.supabaseClient.from('tasks').select('*').eq('id', openId).maybeSingle();
+  if (error || !task){
+    toast('לא ניתן היה לפתוח את המשימה (ייתכן שנמחקה או שאין הרשאה לצפות בה).');
+    return;
+  }
+  ALL_TASKS.push(task);
+  openTaskForm(openId);
 }
 
 // select('*') never errors for missing columns (it just silently omits them) — so the
@@ -649,7 +668,9 @@ async function completeTask(id){
 }
 
 async function reopenTask(id){
-  let { error } = await window.supabaseClient.from('tasks').update({ status: 'פתוחה', completed_at: null }).eq('id', id);
+  // read_at cleared too (30.08.2026): if the task had been read/dismissed before it was
+  // completed, leaving read_at set would silently block all future reminders after reopening.
+  let { error } = await window.supabaseClient.from('tasks').update({ status: 'פתוחה', completed_at: null, read_at: null }).eq('id', id);
   if (error && /column|schema cache/i.test(error.message || '')){
     ({ error } = await window.supabaseClient.from('tasks').update({ status: 'פתוחה' }).eq('id', id));
   }

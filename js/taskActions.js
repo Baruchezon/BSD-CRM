@@ -13,6 +13,10 @@
 //    overdue task jumps to tomorrow from now, not to (old due_date + 1).
 //  - last_notified_at/notify_count reset so tomorrow's reminder cycle starts
 //    fresh instead of the engine thinking "already notified" from before.
+//  - read_at reset too (30.08.2026): read_at is the new field "קראתי, הפסק
+//    התראה" sets to silence a reminder; if it stayed set across a postpone,
+//    tomorrow's reminder would silently never fire even though
+//    notify_count/last_notified_at were reset - this keeps the two in sync.
 //  - status is left untouched (still 'פתוחה') - postponing is not a status,
 //    per his explicit instruction not to introduce a "נדחה" status.
 
@@ -28,7 +32,8 @@ async function postponeTaskToTomorrow(supabaseClient, taskId){
   const { error } = await supabaseClient.from('tasks').update({
     due_date: newDueDate,
     last_notified_at: null,
-    notify_count: 0
+    notify_count: 0,
+    read_at: null
   }).eq('id', taskId);
   return { error, newDueDate };
 }

@@ -127,6 +127,10 @@ Deno.serve(async () => {
   }
 
   // ---- 2) Date+time tasks: due today or overdue from a past date, due_time has passed, still open, repeat until max ----
+  // read_at is set the instant the user hits "קראתי, הפסק התראה" on the alert card (or opens
+  // the task in tasks.html) - once set, the repeat cycle stops immediately, without touching
+  // status/due_date/notify_count. This is the ONLY new condition added here (30.08.2026); the
+  // task itself is never modified and stays fully visible in the task list as before.
   const { data: nudnikTasks } = await supabase
     .from('tasks')
     .select('id, title, assigned_to, due_date, due_time, status, last_notified_at, notify_count')
@@ -134,7 +138,8 @@ Deno.serve(async () => {
     .not('due_time', 'is', null)
     .eq('status', 'פתוחה')
     .lte('due_time', nowTime)
-    .lt('notify_count', NUDNIK_MAX_REPEATS);
+    .lt('notify_count', NUDNIK_MAX_REPEATS)
+    .is('read_at', null);
 
   for (const t of nudnikTasks ?? []) {
     if (!t.assigned_to) continue;
