@@ -11,7 +11,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609032000';
+    var PAGE_BUILD = '202609032300';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -147,7 +147,7 @@
 </div>
 
 <div class="wrap">
-  <div class="breadcrumb"><a href="matches-workspace.html">מרכז ההתאמות</a> ‹ תיק התאמה</div>
+  <div class="back-bar" style="margin-bottom:10px;"><a href="matches-workspace.html" style="display:inline-flex;align-items:center;gap:6px;color:var(--navy);text-decoration:none;font-size:.85rem;font-weight:700;border:1px solid #d8d3c4;border-radius:8px;padding:7px 14px;background:#fff;">← חזרה למרכז ההתאמות</a></div>
 
   <div class="hero" id="heroBox">טוען...</div>
 
