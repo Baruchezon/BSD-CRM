@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609032100';
+    var PAGE_BUILD = '202609032200';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -475,7 +475,6 @@ function openBrokerForm(id){
             <option value="נשלח הסכם לחתימה" ${b?.agreement_status==='נשלח הסכם לחתימה'?'selected':''}>הסכם נשלח לחתימה</option>
             <option value="יש הסכם חתום" ${b?.agreement_status==='יש הסכם חתום'?'selected':''}>יש הסכם חתום</option>
           </select>
-          ${(b && editable && b.agreement_status !== 'יש הסכם חתום') ? `<button type="button" class="btn btn-ghost" style="margin-top:6px;font-size:.78rem;padding:5px 12px;" onclick="sendAgreementForBroker('${b.id}')">📄 שלח הסכם</button>` : ''}
         </div>
         ${b ? `<div class="field full">${brokerAgreementBanner(b)}
           ${editable ? `<button type="button" class="btn btn-ghost" style="margin-top:8px;" onclick="sendAgreementForBroker('${b.id}')">📄 הפקת/שליחת הסכם התקשרות למתווך</button>` : ''}
@@ -591,30 +590,6 @@ async function restoreBroker(id){
   await loadBrokers();
   await loadArchivedBrokers();
   renderTable();
-}
-
-// 03.09.2026 (מודול מתווכים, סבב 3 - הסכם): שימוש באותה תשתית הסכמים חיצונית
-// בדיוק כמו sendAgreementForLead ב-leads.html (bsd-contracts) - לא נבנה מנגנון
-// הסכמים מקביל. type='buyer' בכוונה - הסכם הסודיות של מתווך זהה במהותו לזה
-// של קונה (NDA לפני חשיפת פרטי עסק), ואין תבנית ייעודית נפרדת למתווכים.
-async function sendAgreementForBroker(id){
-  const b = ALL_BROKERS.find(x=>x.id===id);
-  if (!b){ toast('רשומה לא נמצאה'); return; }
-  const personName = b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || '';
-  const params = new URLSearchParams({ type: 'buyer', name: personName, phone: b.phone || '', biz: b.looking_for || '' });
-  window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
-
-  if (b.agreement_status !== 'יש הסכם חתום'){
-    const { error } = await window.supabaseClient.from('brokers')
-      .update({ agreement_status: 'נשלח הסכם לחתימה' }).eq('id', id);
-    if (!error){
-      b.agreement_status = 'נשלח הסכם לחתימה';
-      await logBrokerAudit(id, 'agreement_sent', null, { agreement_status: 'נשלח הסכם לחתימה' }, null);
-      renderTable();
-      closeModal();
-      toast('נפתח מסך הכנת ההסכם; המתווך סומן כ"הסכם נשלח לחתימה"');
-    }
-  }
 }
 
 document.getElementById('fSearch').addEventListener('input', renderTable);
