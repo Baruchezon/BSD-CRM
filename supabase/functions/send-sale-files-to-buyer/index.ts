@@ -307,7 +307,45 @@ Deno.serve(async (req: Request) => {
     }, actorId, business_id);
 
     log('sent_ok', { buyer_email: buyer.email });
-    return jsonResponse(200, { ok: true });
+
+    // 03.09.2026: תיעוד אוטומטי במרכז ההתאמות - לפי הנחיה מפורשת. מתבצע
+    // אך ורק כאן, אחרי שהמייל נשלח בהצלחה בפועל דרך Resend (לא לפני).
+    // בכוונה בתוך הפונקציה הקשיחה הזו (שרת, service role) ולא בצד הלקוח -
+    // כך שהתיעוד קורה גם אם מישהו קורא ל-API הזה ישירות ומדלג על ה-UI,
+    // ולא ניתן לזייף buyer_id/business_id מהלקוח (סעיף 2 בהנחיה: לפי
+    // IDs אמיתיים, לא לפי שמות). כשל בבלוק הזה לעולם לא הופך שליחת מייל
+    // מוצלחת לכישלון כלפי המשתמש - התיעוד הוא תוספת, לא תנאי.
+    let matchAction: 'created' | 'updated' | 'failed' = 'failed';
+    try {
+      const fileNamesText = (files || []).map((f) => f.file_name).join(', ');
+      const actionText = `נשלחו לקונה ${buyerName} קבצים: ${fileNamesText} (מייל)`;
+      const nowIso = new Date().toISOString();
+      const { data: existingMatch, error: matchLookupErr } = await supabase
+        .from('matches').select('id').eq('business_id', business_id).eq('buyer_id', buyer_id).maybeSingle();
+      if (matchLookupErr) throw matchLookupErr;
+      if (existingMatch) {
+        const { error: updErr } = await supabase.from('matches')
+          .update({ last_action: actionText, last_action_at: nowIso })
+          .eq('id', existingMatch.id);
+        if (updErr) throw updErr;
+        matchAction = 'updated';
+        log('match_updated', { match_id: existingMatch.id });
+      } else {
+        const { data: newMatch, error: insErr } = await supabase.from('matches')
+          .insert({
+            business_id, buyer_id, status: 'חומרים מלאים נשלחו',
+            match_source: 'אוטומטי - נשלחו קבצים במייל',
+            last_action: actionText, last_action_at: nowIso, created_by: actorId,
+          }).select('id').single();
+        if (insErr) throw insErr;
+        matchAction = 'created';
+        log('match_created', { match_id: newMatch?.id });
+      }
+    } catch (me) {
+      log('match_documentation_failed', { error: me instanceof Error ? me.message : String(me) });
+    }
+
+    return jsonResponse(200, { ok: true, match_action: matchAction });
   } catch (e) {
     log('unhandled_exception', { error: e instanceof Error ? e.message : String(e) });
     await logAttempt({ status: 'failed', reason: 'exception', error: e instanceof Error ? e.message : String(e) }, actorId, businessIdForLog);

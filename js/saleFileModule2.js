@@ -763,7 +763,15 @@ async function sfConfirmSend(bizId, buyerId, fileIds){
       throw new Error(detail);
     }
 
-    toast('החומרים נשלחו בהצלחה');
+    // 03.09.2026: תיעוד ההתאמה עצמו קורה בשרת (בתוך send-sale-files-to-buyer,
+    // רק אחרי הצלחה אמיתית מ-Resend) - כאן רק מציגים למשתמש את אחת משתי
+    // ההודעות המדויקות שנדרשו, לפי match_action שהפונקציה מחזירה.
+    const matchMsg = sendResult?.match_action === 'created'
+      ? 'השליחה בוצעה ונוצרה התאמה חדשה.'
+      : sendResult?.match_action === 'updated'
+        ? 'השליחה בוצעה והפעילות נוספה להתאמה הקיימת.'
+        : 'החומרים נשלחו בהצלחה';
+    toast(matchMsg);
     document.getElementById('sfSendOverlay').remove();
   } catch(e){
     console.error('[sfConfirmSend] שגיאה:', e);
@@ -799,6 +807,50 @@ function sfNormalizePhoneForWa(phone){
     return (d.length === 9 || d.length === 10) ? { valid:true, reason:null, e164:'972' + d.slice(1) } : { valid:false, reason:'invalid', e164:null };
   }
   return { valid:false, reason:'invalid', e164:null };
+}
+
+// 03.09.2026: תיעוד אוטומטי במרכז ההתאמות - לפי הנחיה מפורשת. פונקציה
+// עצמאית חדשה, לא נוגעת בשום קוד קיים - נקראת רק אחרי ששליחה (מייל או
+// WhatsApp) כבר הצליחה בפועל. בודקת buyer_id+business_id (לא שמות) כדי
+// למנוע כפילות, לפי אותו דפוס שכבר קיים בקוד (למשל confirmAddBuyerToMatch
+// ב-businesses.html). אם קיימת התאמה - מעדכנת רק last_action/last_action_at
+// (לא נוגעת בסטטוס/הערות/פגישות קיימים). אם לא - יוצרת התאמה חדשה עם
+// סטטוס קיים ומתאים ("חומרים מלאים נשלחו"). כשל כאן לעולם לא מוצג
+// כשגיאת שליחה - השליחה עצמה כבר הושלמה בהצלחה לפני הקריאה לפונקציה הזו.
+async function sfDocumentMatchAfterSend(bizId, buyerId, fileIds, channelLabel){
+  try {
+    const buyer = SF_SEND_BUYERS_CACHE ? SF_SEND_BUYERS_CACHE[buyerId] : null;
+    const buyerName = buyer ? (buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || 'קונה') : 'קונה';
+    const allFiles = sfAllActiveFiles();
+    const fileNames = fileIds.map(id => {
+      const f = allFiles.find(x => x.id === id);
+      return f ? f.file_name : null;
+    }).filter(Boolean).join(', ');
+    const actionText = `נשלחו לקונה ${buyerName} קבצים: ${fileNames} (${channelLabel})`;
+    const nowIso = new Date().toISOString();
+
+    const { data: existing, error: findErr } = await window.supabaseClient
+      .from('matches').select('id').eq('business_id', bizId).eq('buyer_id', buyerId).maybeSingle();
+    if (findErr) throw findErr;
+
+    if (existing){
+      const { error: updErr } = await window.supabaseClient.from('matches')
+        .update({ last_action: actionText, last_action_at: nowIso }).eq('id', existing.id);
+      if (updErr) throw updErr;
+      return { action: 'updated' };
+    }
+    const { error: insErr } = await window.supabaseClient.from('matches').insert({
+      business_id: bizId, buyer_id: buyerId, status: 'חומרים מלאים נשלחו',
+      match_source: `אוטומטי - נשלחו קבצים ב${channelLabel}`,
+      last_action: actionText, last_action_at: nowIso,
+      created_by: (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE ? CURRENT_PROFILE.id : null),
+    });
+    if (insErr) throw insErr;
+    return { action: 'created' };
+  } catch (e) {
+    console.error('[sfDocumentMatchAfterSend] שגיאה (לא חוסמת - השליחה כבר בוצעה בהצלחה):', e);
+    return { action: 'failed' };
+  }
 }
 
 async function sfConfirmSendWhatsApp(bizId, buyerId, fileIds){
@@ -855,6 +907,13 @@ async function sfConfirmSendWhatsApp(bizId, buyerId, fileIds){
     if (win && !win.closed) { win.location.href = waUrl; } else { window.open(waUrl, '_blank'); }
 
     if (statusEl) statusEl.innerHTML = '<span style="color:#1f7a45;">✅ נפתחה שיחת WhatsApp עם הודעה מוכנה, כולל קישורי הורדה מאובטחים לקבצים שנבחרו. הלחיצה על Send בפועל היא בידיך בתוך WhatsApp.</span>';
+
+    // 03.09.2026: תיעוד אוטומטי במרכז ההתאמות - תוספת בלבד, אחרי ששורת
+    // ההצלחה למעלה כבר נקבעה. לא נוגע בשום דבר קודם בפונקציה הזו.
+    sfDocumentMatchAfterSend(bizId, buyerId, fileIds, 'WhatsApp').then((matchResult) => {
+      if (matchResult.action === 'created') toast('השליחה בוצעה ונוצרה התאמה חדשה.');
+      else if (matchResult.action === 'updated') toast('השליחה בוצעה והפעילות נוספה להתאמה הקיימת.');
+    });
   } catch(e){
     console.error('[sfConfirmSendWhatsApp] שגיאה:', e);
     const msg = (e && e.message) ? e.message : String(e);
