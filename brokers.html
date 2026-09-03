@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609031900';
+    var PAGE_BUILD = '202609032100';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -71,6 +71,8 @@
   /* Badge - "מתווך / סוכן": בולט ועקבי, זהה לכל מקום אחר שבו יופיע המתווך במערכת */
   .broker-badge{display:inline-flex;align-items:center;gap:4px;background:#7a3fd1;color:#fff;font-weight:800;font-size:.7rem;padding:3px 10px;border-radius:12px;letter-spacing:.2px;white-space:nowrap;}
   .agr-badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;white-space:nowrap;}
+  .agr-note{background:#f7f8fb;border:1px solid #e2e5ec;border-radius:8px;padding:9px 12px;font-size:.82rem;color:#33415c;}
+  .agr-note a{color:#1B2A4A;font-weight:700;text-decoration:underline;cursor:pointer;}
   .agr-none{background:#f1f1f1;color:#777;}
   .agr-sent{background:#fdeccb;color:#8a5a10;}
   .agr-signed{background:#dff0e4;color:#245c40;}
@@ -259,6 +261,88 @@ function statusBadgeHtml(status){
   return status === 'חסום' ? `<span class="status-blocked">🚫 חסום</span>` : `<span class="status-active">✅ פעיל</span>`;
 }
 
+/* ─────────── הסכם התקשרות עם מתווך (משתמש באותו מנגנון הסכמים קיים כמו לידים/עסקים) ─────────── */
+let DEFAULT_REFERRAL_PCT = 20, DEFAULT_FULL_PCT = 50;
+async function loadAgreementDefaults(){
+  const { data, error } = await window.supabaseClient.from('settings').select('extra').eq('id', 1).single();
+  if (!error && data?.extra){
+    if (data.extra.broker_referral_pct_default != null) DEFAULT_REFERRAL_PCT = data.extra.broker_referral_pct_default;
+    if (data.extra.broker_full_handling_pct_default != null) DEFAULT_FULL_PCT = data.extra.broker_full_handling_pct_default;
+  }
+}
+
+async function _agreementSignedUrl(tableName, recordId, download){
+  const path = `agreements/${tableName}/${recordId}.pdf`;
+  const opts = download ? { download: true } : {};
+  const { data, error } = await window.supabaseClient.storage
+    .from(window.BSD_CONFIG.STORAGE_BUCKET).createSignedUrl(path, 300, opts);
+  if (error || !data){ toast('שגיאה בפתיחת ההסכם: ' + (error?.message || '')); return null; }
+  return data.signedUrl;
+}
+async function viewAgreementPdf(tableName, recordId){
+  const win = window.open('', '_blank');
+  const url = await _agreementSignedUrl(tableName, recordId, false);
+  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
+}
+async function downloadAgreementPdf(tableName, recordId){
+  const win = window.open('', '_blank');
+  const url = await _agreementSignedUrl(tableName, recordId, true);
+  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
+}
+
+function brokerAgreementBanner(b){
+  if (!b) return '';
+  const s = b.agreement_status || 'אין הסכם';
+  const icon = s === 'יש הסכם חתום' ? '✅' : (s === 'נשלח הסכם לחתימה' ? '📤' : '⭕');
+  const numPart = (s === 'יש הסכם חתום' && b.agreement_number) ? ` &nbsp;·&nbsp; מס' הסכם: ${esc(b.agreement_number)}` : '';
+  const pctPart = (b.referral_pct != null || b.full_handling_pct != null)
+    ? ` &nbsp;·&nbsp; הפניה ${b.referral_pct ?? DEFAULT_REFERRAL_PCT}% / טיפול מלא ${b.full_handling_pct ?? DEFAULT_FULL_PCT}%` : '';
+  let html = `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(s)}${numPart}${pctPart}</div>`;
+  if (b.agreement_pdf_path){
+    html += `<div class="agr-note" style="margin-top:6px;">
+       📄 הסכם התקשרות חתום ${b.agreement_pdf_uploaded_at ? `&nbsp;·&nbsp; הועלה ${fmtDate(b.agreement_pdf_uploaded_at)}` : ''}
+       &nbsp;·&nbsp;
+       <a href="javascript:void(0)" onclick="viewAgreementPdf('brokers','${b.id}')">צפייה</a>
+       &nbsp;·&nbsp;
+       <a href="javascript:void(0)" onclick="downloadAgreementPdf('brokers','${b.id}')">הורדה</a>
+     </div>`;
+  } else if (s === 'יש הסכם חתום'){
+    html += `<div class="agr-note" style="margin-top:6px;color:#8a6d1f;">⚠️ מסומן כחתום, אך קובץ ה-PDF החתום עדיין לא נשמר במערכת</div>`;
+  }
+  return html;
+}
+
+async function sendAgreementForBroker(id){
+  const b = ALL_BROKERS.find(x => x.id === id) || ARCHIVED_BROKERS.find(x => x.id === id);
+  if (!b){ toast('מתווך לא נמצא'); return; }
+  await loadAgreementDefaults();
+  const refInput = prompt('אחוז עמלת הפניה למתווך זה (%):', b.referral_pct ?? DEFAULT_REFERRAL_PCT);
+  if (refInput === null) return;
+  const fullInput = prompt('אחוז עמלת טיפול מלא למתווך זה (%):', b.full_handling_pct ?? DEFAULT_FULL_PCT);
+  if (fullInput === null) return;
+  const refPct = parseFloat(refInput), fullPct = parseFloat(fullInput);
+  if (isNaN(refPct) || isNaN(fullPct)){ toast('אחוזים לא תקינים'); return; }
+
+  const updatePayload = { referral_pct: refPct, full_handling_pct: fullPct };
+  if (b.agreement_status !== 'יש הסכם חתום') updatePayload.agreement_status = 'נשלח הסכם לחתימה';
+  const { error } = await window.supabaseClient.from('brokers').update(updatePayload).eq('id', id);
+  if (error){ toast('שגיאה בשמירת האחוזים: ' + error.message); return; }
+  Object.assign(b, updatePayload);
+  await logBrokerAudit(id, 'agreement_prepared', null, updatePayload, `הופק הסכם התקשרות: הפניה ${refPct}% / טיפול מלא ${fullPct}%`);
+  renderTable();
+
+  const params = new URLSearchParams({
+    type: 'broker',
+    brokerId: id,
+    name: b.full_name || `${b.first_name} ${b.last_name}`,
+    phone: b.phone || '',
+    referralPct: String(refPct),
+    fullHandlingPct: String(fullPct)
+  });
+  window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
+  toast('נפתח ממשק הכנת ההסכם - יש להשלים ולשלוח משם');
+}
+
 async function logBrokerAudit(brokerId, actionType, oldValue, newValue, details){
   try{
     await window.supabaseClient.from('broker_audit_log').insert({
@@ -391,6 +475,9 @@ function openBrokerForm(id){
             <option value="יש הסכם חתום" ${b?.agreement_status==='יש הסכם חתום'?'selected':''}>יש הסכם חתום</option>
           </select>
         </div>
+        ${b ? `<div class="field full">${brokerAgreementBanner(b)}
+          ${editable ? `<button type="button" class="btn btn-ghost" style="margin-top:8px;" onclick="sendAgreementForBroker('${b.id}')">📄 הפקת/שליחת הסכם התקשרות למתווך</button>` : ''}
+        </div>` : `<div class="field full" style="color:#888;font-size:.8rem;">ניתן להפיק ולשלוח הסכם התקשרות רק לאחר שמירת המתווך בפעם הראשונה</div>`}
         <div class="field"><label>סטטוס מתווך</label>
           <select id="broker_status" ${['admin','manager'].includes(CURRENT_PROFILE?.role) ? '' : 'disabled'}>
             <option value="פעיל" ${(!b?.status || b.status==='פעיל')?'selected':''}>פעיל</option>
