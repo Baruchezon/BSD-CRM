@@ -113,32 +113,50 @@
 
   /* עמוד מלא לכרטיס העסק בלבד (businesses.html) - מופעל רק ע"י bsdTabifyBizForm.
      שני קלאסים ייעודיים (biz-fullpage / biz-fullpage-modal) כדי לא להשפיע על
-     שאר השימושים ב-#overlay/#modalBox (עריכת ליד, התאמה וכו') שנשארים בדיוק כפי שהיו. */
-  .overlay.biz-fullpage{align-items:stretch;justify-content:stretch;padding:0;}
-  .modal.biz-fullpage-modal{max-width:100%;width:100%;min-height:100vh;border-radius:0;padding:0;display:flex;flex-direction:column;box-shadow:none;}
+     שאר השימושים ב-#overlay/#modalBox (עריכת ליד, התאמה וכו') שנשארים בדיוק כפי שהיו.
+     כל הכללים כאן מוגבלים ל-.biz-fullpage-modal/.biz-tabbar/.biz-tabpanes/.biz-sticky-top
+     בלבד, ואינם נוגעים בכללי ה-CSS הכלליים (.field,.btn,.section-h וכו') ששאר
+     המסכים במערכת (עריכת ליד/התאמה) ממשיכים להשתמש בהם ללא שינוי. */
+  .overlay.biz-fullpage{align-items:stretch;justify-content:stretch;padding:0;overflow:hidden;}
+  /* height (לא min-height) + flex column קבוע פותר את "קפיצת סרגל הלשוניות" -
+     כל שלוש הרצועות (כותרת/לשוניות/כפתורי שמירה) נשארות במקום קבוע, ורק אזור
+     התוכן (.biz-tabpanes) גדל וגולל בפנים - הוא היחיד שמשתנה בין לשוניות. */
+  .modal.biz-fullpage-modal{max-width:100%;width:100%;height:100vh;border-radius:0;padding:0;display:flex;flex-direction:column;box-shadow:none;}
   .modal.biz-fullpage-modal>h3{display:none;} /* השם/מספר העסק עוברים לכותרת העליונה הקבועה (biz-sticky-top) */
-  .biz-sticky-top{background:#fff;padding:18px 24px 0;border-bottom:1px solid #eee;}
-  .biz-sticky-top h3{margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;}
-  .biz-tabbar{position:sticky;top:0;z-index:6;display:flex;gap:2px;overflow-x:auto;background:#faf9f6;border-bottom:1px solid #e5e0d3;padding:0 20px;}
-  .biz-tabbar button{border:none;background:transparent;padding:12px 14px;font-size:.8rem;font-weight:700;color:#666;cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;text-transform:none;letter-spacing:normal;}
-  .biz-tabbar button.active{color:var(--navy);border-bottom-color:var(--gold);}
-  .biz-tabpanes{flex:1;padding:20px 24px 40px;overflow-y:auto;}
-  .biz-tabpanes .biz-tabpane{display:none;}
-  .biz-tabpanes .biz-tabpane.active{display:block;}
-  .modal.biz-fullpage-modal .modal-actions{position:sticky;bottom:0;background:#fff;box-shadow:0 -4px 16px rgba(0,0,0,.12);padding:12px 24px;margin-top:0;z-index:6;}
-  /* צבעים פונקציוניים עדינים על סטטוס ההסכם בכותרת הקבועה (03.09.2026) -
-     רק צבע/מסגרת, לא נוגע בטקסט או בלוגיקה של agreementBanner עצמה. */
-  .biz-sticky-top{border-right:4px solid transparent;}
+  .biz-sticky-top{flex:none;background:#fff;padding:18px 24px 0;border-bottom:1px solid #eee;border-right:4px solid transparent;}
+  .biz-sticky-top h3{margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;font-size:1.5rem;}
+  .biz-sticky-top .agr-note{font-size:1rem;}
   .biz-sticky-top.bsd-status-green{border-right-color:#1e7b34;}
   .biz-sticky-top.bsd-status-orange{border-right-color:#c89b2c;}
   .biz-sticky-top.bsd-status-red{border-right-color:#b3402c;}
   .biz-sticky-top .agr-note.bsd-status-green{color:#1e7b34;font-weight:700;}
   .biz-sticky-top .agr-note.bsd-status-orange{color:#8a5a00;font-weight:700;}
   .biz-sticky-top .agr-note.bsd-status-red{color:#b3402c;font-weight:700;}
+  /* סרגל הלשוניות: flex:none קבוע (לא sticky) - זו בדיוק הסיבה שהוא כבר לא "קופץ"
+     כשעוברים לשונית עם תוכן בגובה שונה. עיצוב "כרטיסיות" מעט תלת-ממדי: צל עדין,
+     גבול, פינות מעוגלות, אפקט hover/active - בלי לגעת ב-onclick של אף כפתור. */
+  .biz-tabbar{flex:none;display:flex;gap:8px;overflow-x:auto;overflow-y:hidden;background:#f3f1e9;border-bottom:1px solid #e5e0d3;padding:10px 20px;}
+  .biz-tabbar button{border:1px solid #d8d3c4;background:#fff;border-radius:10px;padding:12px 20px;font-size:1rem;font-weight:700;color:#5a5648;cursor:pointer;white-space:nowrap;text-transform:none;letter-spacing:normal;box-shadow:0 1px 3px rgba(14,27,52,.12);transition:transform .08s ease,box-shadow .12s ease,background .12s ease;}
+  .biz-tabbar button:hover{background:#faf9f6;box-shadow:0 2px 6px rgba(14,27,52,.16);}
+  .biz-tabbar button:active{transform:translateY(1px);box-shadow:0 1px 2px rgba(14,27,52,.14);}
+  .biz-tabbar button.active{background:var(--navy);border-color:var(--navy);color:#fff;box-shadow:0 4px 10px rgba(14,27,52,.35);transform:translateY(-1px);}
+  .biz-tabpanes{flex:1 1 auto;min-height:0;padding:22px 24px 40px;overflow-y:auto;font-size:1rem;}
+  .biz-tabpanes .biz-tabpane{display:none;}
+  .biz-tabpanes .biz-tabpane.active{display:block;}
+  /* היררכיה ברורה של טקסט בתוך התוכן: כותרות אזור > תוויות שדה > ערך שדה */
+  .biz-tabpanes .section-h{font-size:1.05rem;}
+  .biz-tabpanes .field label{font-size:.95rem;}
+  .biz-tabpanes .field input,
+  .biz-tabpanes .field select,
+  .biz-tabpanes .field textarea{font-size:1.05rem;padding:11px 13px;}
+  .biz-tabpanes .btn{font-size:.95rem;padding:11px 20px;}
+  .modal.biz-fullpage-modal .modal-actions{flex:none;background:#fff;box-shadow:0 -4px 16px rgba(0,0,0,.12);padding:14px 24px;margin-top:0;}
+  .modal.biz-fullpage-modal .modal-actions .btn{font-size:1.05rem;padding:12px 24px;}
   @media (max-width:640px){
-    .biz-tabbar{padding:0 8px;}
-    .biz-tabbar button{padding:10px 9px;font-size:.72rem;}
-    .biz-tabpanes{padding:14px 14px 90px;}
+    .biz-sticky-top h3{font-size:1.2rem;}
+    .biz-tabbar{padding:8px 10px;gap:6px;}
+    .biz-tabbar button{padding:10px 14px;font-size:.9rem;}
+    .biz-tabpanes{padding:16px 14px 90px;}
   }
 </style>
 </head>
@@ -858,7 +876,7 @@ function bsdTabifyBizForm(){
       {id:'notes',     label:'הערות והיסטוריה',           match:t=>/^הערות$/.test(t)},
       {id:'matches',   label:'קונים והתאמות',             match:t=>/קונים פוטנציאליים והתאמות/.test(t)},
       {id:'meetings',  label:'פגישות',                   match:t=>/טופס פגישה ראשונה|הקלטות ותמלולים/.test(t)},
-      {id:'summaries', label:'תקצירים ומסמכי BSD',        match:t=>/כרטיס אנונימי|תקציר עסקי פנימי מלא/.test(t)},
+      {id:'summaries', label:'תקצירים אנונימיים והפצה',   match:t=>/כרטיס אנונימי|תקציר עסקי פנימי מלא/.test(t)},
       {id:'files',     label:'מסמכים וקבצים',             match:t=>/תיק מכירה|קבצים מצורפים/.test(t)},
       {id:'access',    label:'הרשאות והפצה',              match:t=>/הפצה והרשאות/.test(t)},
     ];
