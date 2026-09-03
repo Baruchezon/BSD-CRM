@@ -329,36 +329,21 @@ async function sendAgreementForBroker(id){
   const b = ALL_BROKERS.find(x => x.id === id) || ARCHIVED_BROKERS.find(x => x.id === id);
   if (!b){ toast('מתווך לא נמצא'); return; }
   await loadAgreementDefaults();
+  // ללא שאלות כאן - סוג ההתקשרות והאחוז נקבעים במקום אחד בלבד, בממשק הכנת ההסכם עצמו
+  // (bsd-admin-prep.html), שכותב אותם בחזרה לכרטיס המתווך ברגע יצירת הקישור
   const existingType = b.commission_type || (b.full_handling_pct != null && b.referral_pct == null ? 'טיפול מלא' : 'הפניה');
-  const typeInput = prompt('סוג ההתקשרות עם המתווך - הקלד "הפניה" או "טיפול מלא":', existingType);
-  if (typeInput === null) return;
-  const commissionType = typeInput.trim() === 'טיפול מלא' ? 'טיפול מלא' : 'הפניה';
-  const defaultPct = commissionType === 'טיפול מלא' ? DEFAULT_FULL_PCT : DEFAULT_REFERRAL_PCT;
-  const existingPct = commissionType === 'טיפול מלא' ? b.full_handling_pct : b.referral_pct;
-  const pctInput = prompt(`אחוז עמלת ${commissionType} למתווך זה (%):`, existingPct ?? defaultPct);
-  if (pctInput === null) return;
-  const pct = parseFloat(pctInput);
-  if (isNaN(pct)){ toast('אחוז לא תקין'); return; }
-
-  const updatePayload = { commission_type: commissionType, referral_pct: null, full_handling_pct: null };
-  if (commissionType === 'טיפול מלא') updatePayload.full_handling_pct = pct; else updatePayload.referral_pct = pct;
-  if (b.agreement_status !== 'יש הסכם חתום') updatePayload.agreement_status = 'נשלח הסכם לחתימה';
-  const { error } = await window.supabaseClient.from('brokers').update(updatePayload).eq('id', id);
-  if (error){ toast('שגיאה בשמירת ההגדרות: ' + error.message); return; }
-  Object.assign(b, updatePayload);
-  await logBrokerAudit(id, 'agreement_prepared', null, updatePayload, `הופק הסכם התקשרות: ${commissionType} ${pct}%`);
-  renderTable();
+  const existingPct = existingType === 'טיפול מלא' ? (b.full_handling_pct ?? DEFAULT_FULL_PCT) : (b.referral_pct ?? DEFAULT_REFERRAL_PCT);
 
   const params = new URLSearchParams({
     type: 'broker',
     brokerId: id,
     name: b.full_name || `${b.first_name} ${b.last_name}`,
     phone: b.phone || '',
-    commissionType: commissionType,
-    pct: String(pct)
+    commissionType: existingType,
+    pct: String(existingPct)
   });
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
-  toast('נפתח ממשק הכנת ההסכם - יש להשלים ולשלוח משם');
+  toast('נפתח ממשק הכנת ההסכם - קבע שם את סוג ההתקשרות והאחוז ולחץ "יצירת קישור"');
 }
 
 async function logBrokerAudit(brokerId, actionType, oldValue, newValue, details){
