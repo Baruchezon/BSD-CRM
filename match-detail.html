@@ -11,7 +11,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202608282045';
+    var PAGE_BUILD = '202609032000';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -243,9 +243,18 @@ async function loadEverything(){
   if (error || !match){ document.getElementById('heroBox').innerHTML = '<div style="color:#a02c1d;">התאמה לא נמצאה, או שאין לך הרשאה לצפות בה.</div>'; return; }
   MATCH = match;
 
+  // 03.09.2026 (מודול מתווכים, שלב 4): כשההתאמה מסוג broker, אין buyer_id
+  // בכלל (ראו matches_counterparty_check מ-שלב 1) - שולפים מ-brokers
+  // במקום מ-leads. שם המשתנה BUYER נשאר כפי שהיה (המבנה - full_name/
+  // phone/email/agreement_status - זהה בשני הטבלאות, ולכן כל שאר הקוד
+  // בקובץ הזה שכבר קורא מ-BUYER ממשיך לעבוד נכון, בדיוק לפי ההנחיה
+  // "להשתמש באותו מנגנון של קונה ככל שניתן"). מסלול הקונה למטה לא השתנה.
+  const isBroker = match.counterparty_type === 'broker';
   const [{data:biz}, {data:buyer}, {data:users}] = await Promise.all([
     window.supabaseClient.from('businesses').select('*').eq('id', match.business_id).single(),
-    window.supabaseClient.from('leads').select('*').eq('id', match.buyer_id).single(),
+    isBroker
+      ? window.supabaseClient.from('brokers').select('*').eq('id', match.broker_id).single()
+      : window.supabaseClient.from('leads').select('*').eq('id', match.buyer_id).single(),
     window.supabaseClient.rpc('get_active_users_basic')
   ]);
   BIZ = biz; BUYER = buyer; ALL_USERS = users || [];
@@ -253,6 +262,13 @@ async function loadEverything(){
   renderHero();
   renderQuickActions();
   await Promise.all([loadTasks(), loadNotes(), loadTimeline(), loadMeetings(), loadLastActions()]);
+}
+
+// 03.09.2026 (מודול מתווכים, שלב 4): האם הצד השני בהתאמה הזו הוא מתווך.
+// נבדק פעם אחת, בכל מקום שצריך סימון/ניסוח שונה בין קונה למתווך.
+function isCounterpartyBroker(){ return MATCH && MATCH.counterparty_type === 'broker'; }
+function counterpartyBadgeHtml(){
+  return isCounterpartyBroker() ? `<span style="display:inline-flex;align-items:center;gap:4px;background:#7a3fd1;color:#fff;font-weight:800;font-size:.7rem;padding:3px 10px;border-radius:12px;">🔵 מתווך / סוכן</span>` : '';
 }
 
 // ============================================================================
@@ -319,7 +335,7 @@ function openMeetingModal(id, presetType, aiData, presetLocation){
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>${aiData ? '✅ אישור סיכום' : (m ? 'עריכת' : 'תיעוד')} פגישה</h3>
-    <div style="background:#f7f5ee;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-weight:700;color:var(--navy);">🏢 ${esc(BIZ?.internal_name||'—')} &nbsp;⇄&nbsp; 🧍 ${esc(BUYER?.full_name||'—')}</div>
+    <div style="background:#f7f5ee;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-weight:700;color:var(--navy);">🏢 ${esc(BIZ?.internal_name||'—')} &nbsp;⇄&nbsp; ${isCounterpartyBroker() ? '🔵' : '🧍'} ${esc(BUYER?.full_name||'—')} ${counterpartyBadgeHtml()}</div>
     <div class="field"><label>סוג</label><select id="mType">${MEETING_TYPES.map(t=>`<option value="${t}" ${(m?.meeting_type||presetType)===t?'selected':''}>${t}</option>`).join('')}</select></div>
     <div style="display:flex;gap:10px;">
       <div class="field" style="flex:1;"><label>תאריך</label><input type="date" id="mDate" value="${m?.meeting_date || now.toISOString().slice(0,10)}"></div>
@@ -470,7 +486,7 @@ function openAiApprovalModal(aiData, meetingType, recLocation){
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>✅ אישור סיכום שנוצר מהקלטה</h3>
-    <div style="background:#f7f5ee;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-weight:700;color:var(--navy);">🏢 ${esc(BIZ?.internal_name||'—')} &nbsp;⇄&nbsp; 🧍 ${esc(BUYER?.full_name||'—')}</div>
+    <div style="background:#f7f5ee;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-weight:700;color:var(--navy);">🏢 ${esc(BIZ?.internal_name||'—')} &nbsp;⇄&nbsp; ${isCounterpartyBroker() ? '🔵' : '🧍'} ${esc(BUYER?.full_name||'—')} ${counterpartyBadgeHtml()}</div>
 
     <div style="display:flex;gap:10px;">
       <div class="field" style="flex:1;"><label>סוג</label><select id="aiType">${MEETING_TYPES.map(t=>`<option value="${t}" ${t===meetingType?'selected':''}>${t}</option>`).join('')}</select></div>
@@ -638,7 +654,7 @@ function buildMeetingPrintTemplate(m, forceLevel){
   document.getElementById('pt_title').textContent = `${m.meeting_type||'סיכום'} — ${dl>=2 ? (BIZ?.internal_name||'') : 'עסק (אנונימי)'}`;
   document.getElementById('pt_meta').textContent = `${fmtDate(m.meeting_date)} ${m.start_time?('· '+m.start_time.slice(0,5)):''}${m.location?(' · '+m.location):''} · תיעד: ${fillerLabel()}`;
   let body = '';
-  body += rowHtml('קונה', BUYER?.full_name);
+  body += rowHtml(isCounterpartyBroker() ? 'מתווך / סוכן' : 'קונה', BUYER?.full_name);
   if (dl >= 2) body += rowHtml('עסק', BIZ?.internal_name);
   if (dl >= 3) body += rowHtml('בעל העסק', BIZ?.owner_name);
   body += rowHtml('עיקרי הדברים', m.summary_text);
@@ -840,7 +856,7 @@ function openWhatsappModal(meetingId){
     ${!signed ? `<div class="disclosure-warning" style="display:block;background:#fbe1de;border-color:#e39185;color:#7a1f10;font-weight:700;">🚫 לקונה הזה <u>אין הסכם חתום</u>! מותר לשלוח אליו (או למספר אחר) אך ורק מידע אנונימי — ללא שם עסק, כתובת או פרטי בעלים. שליחה לבעל העסק עצמו אינה מוגבלת.</div>` : ''}
     <div class="field"><label>למי לשלוח</label>
       <select id="waTarget" onchange="onWaTargetChange()">
-        <option value="buyer">קונה (${esc(BUYER?.full_name||'—')})</option>
+        <option value="buyer">${isCounterpartyBroker() ? 'מתווך / סוכן' : 'קונה'} (${esc(BUYER?.full_name||'—')})</option>
         <option value="biz">בעל העסק (${esc(BIZ?.owner_name||'—')})</option>
         <option value="other">מספר אחר</option>
       </select>
@@ -901,7 +917,7 @@ function openEmailModal(meetingId){
     <div class="field"><label>למי לשלוח</label>
       <select id="emTarget" onchange="onEmailGateChange()">
         <option value="self">אליי (${esc(CURRENT_PROFILE.email)})</option>
-        <option value="buyer" ${BUYER?.email?'':'disabled'}>קונה ${BUYER?.email?('('+esc(BUYER.email)+')'):'(אין כתובת מייל)'}</option>
+        <option value="buyer" ${BUYER?.email?'':'disabled'}>${isCounterpartyBroker() ? 'מתווך / סוכן' : 'קונה'} ${BUYER?.email?('('+esc(BUYER.email)+')'):'(אין כתובת מייל)'}</option>
         <option value="biz" ${BIZ?.owner_email?'':'disabled'}>בעל העסק ${BIZ?.owner_email?('('+esc(BIZ.owner_email)+')'):'(אין כתובת מייל)'}</option>
         <option value="other">כתובת אחרת</option>
       </select>
@@ -1008,7 +1024,7 @@ function renderHero(){
     <div class="hero-top">
       <div>
         <div class="hero-title">🏢 <a href="businesses.html?open=${MATCH.business_id}" style="color:inherit;text-decoration:underline;" class="biz-name">${esc(BIZ?.internal_name||'—')}</a>${BIZ?.business_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BIZ.business_number)})</span>`:''}</div>
-        <div class="hero-title buyer-name" style="margin-top:2px;">🧍 <a href="leads.html?open=${MATCH.buyer_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>${BUYER?.client_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BUYER.client_number)})</span>`:''}</div>
+        <div class="hero-title buyer-name" style="margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${isCounterpartyBroker() ? `🔵 <a href="brokers.html?open=${MATCH.broker_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>` : `🧍 <a href="leads.html?open=${MATCH.buyer_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>`}${BUYER?.client_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BUYER.client_number)})</span>`:''}${counterpartyBadgeHtml()}</div>
         <div class="hero-sub">
           נוצרה ע"י ${esc(userName(MATCH.created_by))} בתאריך ${fmtDate(MATCH.created_at)}
           · מטפל כרגע: <b>${esc(userName(MATCH.current_handler))}</b>
