@@ -122,8 +122,24 @@
      כל שלוש הרצועות (כותרת/לשוניות/כפתורי שמירה) נשארות במקום קבוע, ורק אזור
      התוכן (.biz-tabpanes) גדל וגולל בפנים - הוא היחיד שמשתנה בין לשוניות. */
   .modal.biz-fullpage-modal{max-width:100%;width:100%;height:100vh;border-radius:0;padding:0;display:flex;flex-direction:column;box-shadow:none;}
+  /* באג אמיתי שאותר ואומת בדפדפן (03.09.2026, נמדד בפועל עם שינוי גובה
+     ומיקום מדויקים, לא רק ניחוש): הסרגל "קפץ" במעבר בין לשוניות כי שני
+     דברים קרו ביחד:
+     (1) <form id="bizForm"> הוא "ילד" ישיר של המודאל (עצמו flex column),
+         אבל מעולם לא הוגדר כ-flex בעצמו - כך שהכללים flex:none/flex:1 1 auto
+         על הסרגל/התוכן שבתוכו לא השפיעו בפועל. תוקן למטה (form>flex column).
+     (2) תגלית קריטית: יש כלל CSS גנרי וקיים-מראש בקובץ המשותף css/style.css
+         (משמש גם מסכים אחרים כמו match-detail.html): ".modal > div:not(...)"
+         עם 4 חריגי :not() - שמעניק במקרה specificity גבוה יותר מהכלל
+         הממוקד ".biz-sticky-top", ולכן "מנצח" ומעניק ל-sticky-top בטעות
+         flex:1 1 0% (גדילה/כיווץ) במקום flex:none - זה גרם ל-sticky-top
+         "להתחרות" עם הטופס על השטח הפנוי ולשנות גובה בפועל בין לשוניות
+         (נמדד: 35px מול 182px - בדיוק ההפרש שהוזז ה"קפיצה"). לא נוגעים
+         בקובץ המשותף (עלול להשפיע על מסכים אחרים) - פותרים ממוקד עם
+         !important רק על .biz-sticky-top, קלאס שקיים אך ורק בכרטיס העסק. */
+  .modal.biz-fullpage-modal>form{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden;}
   .modal.biz-fullpage-modal>h3{display:none;} /* השם/מספר העסק עוברים לכותרת העליונה הקבועה (biz-sticky-top) */
-  .biz-sticky-top{flex:none;background:#fff;padding:18px 24px 0;border-bottom:1px solid #eee;border-right:4px solid transparent;}
+  .biz-sticky-top{flex:0 0 auto !important;overflow-y:visible !important;padding-bottom:0 !important;background:#fff;padding:18px 24px 0;border-bottom:1px solid #eee;border-right:4px solid transparent;}
   .biz-sticky-top h3{margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;font-size:1.5rem;}
   .biz-sticky-top .agr-note{font-size:1rem;}
   .biz-sticky-top.bsd-status-green{border-right-color:#1e7b34;}
@@ -140,10 +156,14 @@
      משתנים ב-hover/active כדי שהגובה לעולם לא יזוז אפילו בפיקסל אחד).
      טקסט ארוך נחתך ב-ellipsis בתוך רוחב מקסימלי קבוע, לא בורח ולא שובר שורה. */
   .biz-tabbar{flex:none;display:flex;align-items:stretch;gap:8px;overflow-x:auto;overflow-y:hidden;background:#f3f1e9;border-bottom:1px solid #e5e0d3;padding:10px 20px;min-height:64px;box-sizing:border-box;}
-  .biz-tabbar button{box-sizing:border-box;flex:0 0 auto;display:flex;align-items:center;justify-content:center;text-align:center;height:44px;min-width:0;max-width:230px;border:1px solid #d8d3c4;background:#f7f1e0;border-radius:10px;padding:0 18px;font-size:.95rem;line-height:1.15;font-weight:700;color:#6b5a2e;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:none;letter-spacing:normal;box-shadow:0 1px 3px rgba(14,27,52,.12);transition:box-shadow .12s ease,background .12s ease,color .12s ease;}
-  .biz-tabbar button:hover{background:#fbf6e9;box-shadow:0 2px 6px rgba(14,27,52,.18);}
-  .biz-tabbar button:active{box-shadow:0 1px 2px rgba(14,27,52,.14) inset;}
-  .biz-tabbar button.active{background:var(--navy);border-color:var(--navy);color:#fff;box-shadow:0 4px 10px rgba(14,27,52,.35);}
+  /* עדכון עיצוב לפי בקשתו (03.09.2026): רקע כחול אחיד לכל כפתורי הלשוניות
+     + טקסט מודגש ובולט. הלשונית הפעילה נשארת בצבע נייבי כהה יותר (var(--navy))
+     כדי שעדיין אפשר להבחין בבירור איזו לשונית פתוחה - בלי זה כל הכפתורים
+     היו נראים זהים ולא היה אפשר לדעת איפה נמצאים. */
+  .biz-tabbar button{box-sizing:border-box;flex:0 0 auto;display:flex;align-items:center;justify-content:center;text-align:center;height:44px;min-width:0;max-width:230px;border:1px solid #1d4d80;background:#2f6fb0;border-radius:10px;padding:0 18px;font-size:.95rem;line-height:1.15;font-weight:800;color:#fff;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:none;letter-spacing:normal;box-shadow:0 1px 3px rgba(14,27,52,.25);transition:box-shadow .12s ease,background .12s ease,color .12s ease;}
+  .biz-tabbar button:hover{background:#3a7dc4;box-shadow:0 2px 6px rgba(14,27,52,.3);}
+  .biz-tabbar button:active{box-shadow:0 1px 2px rgba(14,27,52,.2) inset;}
+  .biz-tabbar button.active{background:var(--navy);border-color:var(--navy);color:#fff;box-shadow:0 4px 10px rgba(14,27,52,.4);}
   .biz-tabpanes{flex:1 1 auto;min-height:0;padding:22px 24px 40px;overflow-y:auto;font-size:1rem;}
   .biz-tabpanes .biz-tabpane{display:none;}
   .biz-tabpanes .biz-tabpane.active{display:block;}
