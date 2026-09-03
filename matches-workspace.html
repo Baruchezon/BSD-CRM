@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609021145';
+    var PAGE_BUILD = '202609032000';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -163,7 +163,7 @@
 
 <script>
 let CURRENT_PROFILE = null;
-let ALL_LEADS = [], ALL_BUSINESSES = {}, ALL_MATCHES = [], ALL_PROFILES = {}, ALL_TASKS = [], ALL_ACTIVITY = [];
+let ALL_LEADS = [], ALL_BROKERS = [], ALL_BUSINESSES = {}, ALL_MATCHES = [], ALL_PROFILES = {}, ALL_TASKS = [], ALL_ACTIVITY = [];
 let searchTerm = "", activeQuickView = "", currentView = "business";
 const OPEN_NODES = new Set();
 
@@ -184,17 +184,34 @@ function daysSince(iso){ if(!iso) return null; return Math.floor((Date.now()-new
 function toast(msg){ const el=document.createElement('div'); el.className='toast'; el.textContent=msg; document.getElementById('toastRoot').appendChild(el); setTimeout(()=>el.remove(),3000); }
 function userName(id){ if(!id) return null; const p = ALL_PROFILES[id]; return p ? (p.full_name||p.role) : null; }
 function leadById(id){ return ALL_LEADS.find(l=>l.id===id); }
+function brokerById(id){ return ALL_BROKERS.find(b=>b.id===id); }
+// 03.09.2026 (מודול מתווכים, שלב 4): מחזיר את הצד השני בהתאמה (קונה או
+// מתווך, לפי counterparty_type) בצורה אחידה - כדי שלא יהיה צריך לבדוק
+// buyer_id מול broker_id בכל מקום בקובץ בנפרד.
+function counterpartyOf(m){
+  if (m.counterparty_type === 'broker') return { rec: brokerById(m.broker_id), isBroker: true };
+  return { rec: leadById(m.buyer_id), isBroker: false };
+}
+function counterpartyLabelHtml(m){
+  const { rec, isBroker } = counterpartyOf(m);
+  const name = esc(rec?.full_name || '—');
+  const code = isBroker ? '' : (rec?.client_number ? ` <span style="color:#999;">(${esc(rec.client_number)})</span>` : '');
+  const badge = isBroker ? ` <span style="display:inline-flex;align-items:center;gap:3px;background:#7a3fd1;color:#fff;font-weight:800;font-size:.65rem;padding:2px 8px;border-radius:10px;">🔵 מתווך</span>` : '';
+  return name + code + badge;
+}
 
 async function loadEverything(){
   const sb = window.supabaseClient;
-  const [{data: leads}, {data: businesses}, {data: matches}, {data: profiles}, {data: tasks}] = await Promise.all([
+  const [{data: leads}, {data: brokers}, {data: businesses}, {data: matches}, {data: profiles}, {data: tasks}] = await Promise.all([
     sb.from('leads').select('id,full_name,phone,phone2,client_number,agreement_status,created_by,handled_by,type,is_archived').eq('type','buyer'),
+    sb.from('brokers').select('id,full_name,phone,email,city,looking_for,agreement_status,status,created_by,handled_by,is_archived'),
     sb.from('businesses').select('id,internal_name,business_number,field,agreement_status,created_by,handled_by,is_archived'),
     sb.from('matches').select('*'),
     sb.from('profiles').select('id,full_name,role'),
     sb.from('tasks').select('id,match_id,business_id,buyer_id,title,status,due_date,assigned_to')
   ]);
   ALL_LEADS = leads || [];
+  ALL_BROKERS = brokers || [];
   (businesses||[]).forEach(b=> ALL_BUSINESSES[b.id]=b);
   ALL_MATCHES = matches || [];
   (profiles||[]).forEach(p=> ALL_PROFILES[p.id]=p);
@@ -246,11 +263,11 @@ function buildQuickViews(){
 
 function matchSearchHay(m){
   const b = ALL_BUSINESSES[m.business_id];
-  const l = leadById(m.buyer_id);
+  const { rec: cp } = counterpartyOf(m);
   const handler = userName(m.current_handler) || "";
   const acts = ALL_ACTIVITY.filter(a=>a.match_id===m.id).map(a=>(a.description||'')+' '+(a.note||'')).join(' ');
   const openTasks = ALL_TASKS.filter(t=>t.match_id===m.id).map(t=>t.title).join(' ');
-  return [b?.internal_name, b?.business_number, l?.full_name, l?.client_number, l?.phone, l?.phone2, handler, m.status, m.notes, acts, openTasks]
+  return [b?.internal_name, b?.business_number, cp?.full_name, cp?.client_number, cp?.phone, cp?.phone2, handler, m.status, m.notes, acts, openTasks]
     .filter(Boolean).join(" ").toLowerCase();
 }
 
@@ -343,8 +360,7 @@ function renderByBusiness(){
       </div>
       <div class="tree-body">
         ${s.matches.sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).map(m=>{
-          const l = leadById(m.buyer_id);
-          return branchRowHtml(m, esc(l?.full_name||'—') + (l?.client_number?` <span style="color:#999;">(${esc(l.client_number)})</span>`:''));
+          return branchRowHtml(m, counterpartyLabelHtml(m));
         }).join('')}
       </div>
     </div>`;
@@ -364,31 +380,37 @@ function renderByBusiness(){
 function renderByBuyer(){
   const wrap = document.getElementById('mainContent');
   const rows = filteredMatches();
-  const buyerIds = [...new Set(rows.map(m=>m.buyer_id))];
-  if (!buyerIds.length){ wrap.innerHTML = `<div class="empty-state">לא נמצאו התאמות תואמות לסינון.</div>`; return; }
+  // 03.09.2026 (מודול מתווכים, שלב 4): מפתח קיבוץ מורכב (סוג+מזהה) במקום
+  // buyer_id בלבד - אחרת כל התאמות המתווכים (buyer_id ריק אצלן) היו
+  // מתקבצות יחד תחת "—" אחד משותף וטועה. כל צד (קונה/מתווך) מקבל את
+  // הענף שלו, עם התג הבולט המתאים.
+  const groupKeys = [...new Set(rows.map(m=> (m.counterparty_type==='broker'?'broker:':'buyer:') + (m.counterparty_type==='broker'?m.broker_id:m.buyer_id)))];
+  if (!groupKeys.length){ wrap.innerHTML = `<div class="empty-state">לא נמצאו התאמות תואמות לסינון.</div>`; return; }
 
-  const buyerStats = buyerIds.map(lid=>{
-    const l = leadById(lid);
-    const buyerMatches = rows.filter(m=>m.buyer_id===lid);
-    const lastActivity = buyerMatches.reduce((max,m)=> new Date(m.updated_at) > new Date(max) ? m.updated_at : max, buyerMatches[0].updated_at);
+  const groupStats = groupKeys.map(key=>{
+    const [type, id] = [key.startsWith('broker:') ? 'broker' : 'buyer', key.slice(key.indexOf(':')+1)];
+    const rec = type==='broker' ? brokerById(id) : leadById(id);
+    const groupMatches = type==='broker' ? rows.filter(m=>m.counterparty_type==='broker' && m.broker_id===id) : rows.filter(m=>m.counterparty_type!=='broker' && m.buyer_id===id);
+    const lastActivity = groupMatches.reduce((max,m)=> new Date(m.updated_at) > new Date(max) ? m.updated_at : max, groupMatches[0].updated_at);
     return {
-      lid, l, matches: buyerMatches,
-      active: buyerMatches.filter(m=>!CLOSED_STATUSES.includes(m.status) && m.status!=='עסקה הושלמה').length,
-      meetings: buyerMatches.filter(m=>m.status==='נקבעה פגישה').length,
-      openTasks: buyerMatches.reduce((s,m)=>s+matchOpenTaskCount(m.id),0),
+      key, id, rec, isBroker: type==='broker', matches: groupMatches,
+      active: groupMatches.filter(m=>!CLOSED_STATUSES.includes(m.status) && m.status!=='עסקה הושלמה').length,
+      meetings: groupMatches.filter(m=>m.status==='נקבעה פגישה').length,
+      openTasks: groupMatches.reduce((s,m)=>s+matchOpenTaskCount(m.id),0),
       lastActivity
     };
   });
-  buyerStats.sort((a,b)=> new Date(b.lastActivity) - new Date(a.lastActivity));
+  groupStats.sort((a,b)=> new Date(b.lastActivity) - new Date(a.lastActivity));
 
-  wrap.innerHTML = buyerStats.map(s=>{
-    const isOpen = OPEN_NODES.has('buyer:'+s.lid);
-    return `<div class="tree-node ${isOpen?'open':''}" data-node="buyer:${s.lid}">
-      <div class="tree-head" data-toggle="buyer:${s.lid}">
+  wrap.innerHTML = groupStats.map(s=>{
+    const isOpen = OPEN_NODES.has(s.key);
+    const badge = s.isBroker ? `<span style="display:inline-flex;align-items:center;gap:3px;background:#7a3fd1;color:#fff;font-weight:800;font-size:.65rem;padding:2px 8px;border-radius:10px;margin-inline-start:6px;">🔵 מתווך</span>` : '';
+    return `<div class="tree-node ${isOpen?'open':''}" data-node="${s.key}">
+      <div class="tree-head" data-toggle="${s.key}">
         <div>
-          <div class="th-title"><span class="toggle-icon">▶</span> 🧍 ${esc(s.l?.full_name||'—')} ${s.l?.client_number?`<span class="chip chip-gray">${esc(s.l.client_number)}</span>`:''}</div>
+          <div class="th-title"><span class="toggle-icon">▶</span> ${s.isBroker?'🔵':'🧍'} ${esc(s.rec?.full_name||'—')} ${(!s.isBroker && s.rec?.client_number)?`<span class="chip chip-gray">${esc(s.rec.client_number)}</span>`:''}${badge}</div>
           <div class="th-stats">
-            <span>מטפל: ${esc(userName(s.l?.handled_by)||'—')}</span>
+            <span>מטפל: ${esc(userName(s.rec?.handled_by)||'—')}</span>
             <span>${s.matches.length} עסקים</span>
             <span class="chip chip-green">${s.active} פעילות</span>
             ${s.meetings?`<span class="chip chip-purple">${s.meetings} פגישות</span>`:''}
@@ -397,8 +419,9 @@ function renderByBuyer(){
           </div>
         </div>
         <div class="th-actions">
-          <button class="mini-btn" data-addbiz="${s.lid}">➕ הוסף עסק</button>
-          <button class="mini-btn" data-buyerreport="${s.lid}">📊 דוח לקונה</button>
+          ${s.isBroker ? `<a class="mini-btn" href="brokers.html?open=${s.id}">🔵 כרטיס המתווך</a>` : `
+          <button class="mini-btn" data-addbiz="${s.id}">➕ הוסף עסק</button>
+          <button class="mini-btn" data-buyerreport="${s.id}">📊 דוח לקונה</button>`}
         </div>
       </div>
       <div class="tree-body">
