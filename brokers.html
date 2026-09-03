@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609032300';
+    var PAGE_BUILD = '202609032330';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -442,8 +442,13 @@ function renderTable(){
     const canEdit = canEditBroker(b);
     const canDelete = canDeleteBroker() && !b.is_archived;
     const canSendAgr = canEdit && agrStatus !== 'יש הסכם חתום';
+    // 03.09.2026 (משוב): תגיות קומפקטיות ליד השם - בדיוק כמו ה"extras" אצל
+    // קונים (ratingBadge/matchCountBadge ב-leads.html) - כדי שאפשר יהיה
+    // לראות במבט אחד, בלי לפתוח את הכרטיס: כמה עסקים/מסמכים כבר הועברו
+    // וסטטוס ההסכם. זה מודול שלנו - אפשר להוסיף כאן יותר ממה שיש לקונים.
+    const glanceBadges = `<span style="display:inline-flex;align-items:center;gap:3px;background:#eef1f6;color:var(--navy);font-weight:700;font-size:.68rem;padding:2px 8px;border-radius:10px;white-space:nowrap;">📄 ${docCount} עסקים/מסמכים</span>` + agreementBadgeHtml(b.agreement_status);
     return `<tr class="${rowCls}" style="cursor:pointer;" onclick="openBrokerForm('${b.id}')">
-      <td>
+      <td data-label="שם">
         <div style="display:flex;align-items:flex-start;gap:8px;">
           <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
             <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
@@ -453,16 +458,19 @@ function renderTable(){
               ${canDelete ? `<a href="javascript:void(0)" onclick="archiveBroker('${b.id}')" style="color:#ffb4b4;">🗑️ מחק</a>` : ''}
             </div>
           </div>
-          <div><div class="primary-name">${esc(name)}</div>${brokerBadge()}</div>
+          <div>
+            <div class="primary-name">${esc(name)}</div>${brokerBadge()}
+            <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;" onclick="event.stopPropagation()">${glanceBadges}</div>
+          </div>
         </div>
       </td>
-      <td>${esc(b.phone||'—')}</td>
-      <td>${esc(b.email||'—')}</td>
-      <td>${esc(b.city||'—')}</td>
-      <td class="looking-cell">${esc(b.looking_for||'—')}</td>
-      <td>${agreementBadgeHtml(b.agreement_status)}</td>
-      <td>${statusBadgeHtml(b.status)}</td>
-      <td style="text-align:center;font-weight:700;">${docCount}</td>
+      <td data-label="טלפון">${esc(b.phone||'—')}</td>
+      <td data-label="אימייל">${esc(b.email||'—')}</td>
+      <td data-label="עיר">${esc(b.city||'—')}</td>
+      <td class="looking-cell" data-label="מה מחפש">${esc(b.looking_for||'—')}</td>
+      <td data-label="סטטוס הסכם">${agreementBadgeHtml(b.agreement_status)}</td>
+      <td data-label="סטטוס">${statusBadgeHtml(b.status)}</td>
+      <td data-label="עסקים שהועברו" style="text-align:center;font-weight:700;">${docCount}</td>
     </tr>`;
   }).join('');
 }
