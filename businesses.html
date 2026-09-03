@@ -135,11 +135,15 @@
   /* סרגל הלשוניות: flex:none קבוע (לא sticky) - זו בדיוק הסיבה שהוא כבר לא "קופץ"
      כשעוברים לשונית עם תוכן בגובה שונה. עיצוב "כרטיסיות" מעט תלת-ממדי: צל עדין,
      גבול, פינות מעוגלות, אפקט hover/active - בלי לגעת ב-onclick של אף כפתור. */
-  .biz-tabbar{flex:none;display:flex;gap:8px;overflow-x:auto;overflow-y:hidden;background:#f3f1e9;border-bottom:1px solid #e5e0d3;padding:10px 20px;}
-  .biz-tabbar button{border:1px solid #d8d3c4;background:#fff;border-radius:10px;padding:12px 20px;font-size:1rem;font-weight:700;color:#5a5648;cursor:pointer;white-space:nowrap;text-transform:none;letter-spacing:normal;box-shadow:0 1px 3px rgba(14,27,52,.12);transition:transform .08s ease,box-shadow .12s ease,background .12s ease;}
-  .biz-tabbar button:hover{background:#faf9f6;box-shadow:0 2px 6px rgba(14,27,52,.16);}
-  .biz-tabbar button:active{transform:translateY(1px);box-shadow:0 1px 2px rgba(14,27,52,.14);}
-  .biz-tabbar button.active{background:var(--navy);border-color:var(--navy);color:#fff;box-shadow:0 4px 10px rgba(14,27,52,.35);transform:translateY(-1px);}
+  /* סרגל הלשוניות: מבנה נוקשה ויציב לחלוטין - אותו גובה בדיוק לכל כפתור,
+     ללא תלות באורך הטקסט, ללא transform שמזיז את הכפתור (רק צבע/צל
+     משתנים ב-hover/active כדי שהגובה לעולם לא יזוז אפילו בפיקסל אחד).
+     טקסט ארוך נחתך ב-ellipsis בתוך רוחב מקסימלי קבוע, לא בורח ולא שובר שורה. */
+  .biz-tabbar{flex:none;display:flex;align-items:stretch;gap:8px;overflow-x:auto;overflow-y:hidden;background:#f3f1e9;border-bottom:1px solid #e5e0d3;padding:10px 20px;min-height:64px;box-sizing:border-box;}
+  .biz-tabbar button{box-sizing:border-box;flex:0 0 auto;display:flex;align-items:center;justify-content:center;text-align:center;height:44px;min-width:0;max-width:230px;border:1px solid #d8d3c4;background:#f7f1e0;border-radius:10px;padding:0 18px;font-size:.95rem;line-height:1.15;font-weight:700;color:#6b5a2e;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:none;letter-spacing:normal;box-shadow:0 1px 3px rgba(14,27,52,.12);transition:box-shadow .12s ease,background .12s ease,color .12s ease;}
+  .biz-tabbar button:hover{background:#fbf6e9;box-shadow:0 2px 6px rgba(14,27,52,.18);}
+  .biz-tabbar button:active{box-shadow:0 1px 2px rgba(14,27,52,.14) inset;}
+  .biz-tabbar button.active{background:var(--navy);border-color:var(--navy);color:#fff;box-shadow:0 4px 10px rgba(14,27,52,.35);}
   .biz-tabpanes{flex:1 1 auto;min-height:0;padding:22px 24px 40px;overflow-y:auto;font-size:1rem;}
   .biz-tabpanes .biz-tabpane{display:none;}
   .biz-tabpanes .biz-tabpane.active{display:block;}
@@ -154,8 +158,8 @@
   .modal.biz-fullpage-modal .modal-actions .btn{font-size:1.05rem;padding:12px 24px;}
   @media (max-width:640px){
     .biz-sticky-top h3{font-size:1.2rem;}
-    .biz-tabbar{padding:8px 10px;gap:6px;}
-    .biz-tabbar button{padding:10px 14px;font-size:.9rem;}
+    .biz-tabbar{padding:8px 10px;gap:6px;min-height:56px;}
+    .biz-tabbar button{height:40px;padding:0 14px;font-size:.85rem;max-width:170px;}
     .biz-tabpanes{padding:16px 14px 90px;}
   }
 </style>
@@ -970,6 +974,7 @@ function bsdTabifyBizForm(){
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.textContent = pane.el.dataset.label;
+      btn.title = pane.el.dataset.label; // תווית מלאה ב-tooltip אם הטקסט נחתך (ellipsis) בכפתורים צרים
       btn.dataset.tab = id;
       if (i === 0){ btn.classList.add('active'); pane.el.classList.add('active'); }
       btn.addEventListener('click', () => {
