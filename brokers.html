@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609032330';
+    var PAGE_BUILD = '202609032430';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -206,6 +206,8 @@ let ARCHIVED_BROKERS = [];
 let ALL_USERS = [];
 let CURRENT_PROFILE = null;
 let DOC_COUNT_BY_BROKER = {};   // broker_id -> מספר שליחות בפועל (broker_document_log)
+let MATCH_COUNT_BY_BROKER = {}; // broker_id -> מספר התאמות (עסקים שהוא צד בהם)
+let REFERRED_BIZ_COUNT_BY_BROKER = {}; // broker_id -> מספר עסקים שהוא הביא/הפנה ל-BSD
 let VIEW_MODE = 'active';
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -382,7 +384,7 @@ async function loadBrokers(){
     .from('brokers').select('*').eq('is_archived', false).order('updated_at', { ascending:false });
   if (error){ toast('שגיאה בטעינת מתווכים: ' + error.message); return; }
   ALL_BROKERS = data || [];
-  await loadDocCounts();
+  await Promise.all([loadDocCounts(), loadMatchCounts(), loadReferredBizCounts()]);
   renderTable();
 }
 async function loadArchivedBrokers(){
@@ -397,6 +399,25 @@ async function loadDocCounts(){
   const ids = ALL_BROKERS.map(b=>b.id);
   const { data } = await window.supabaseClient.from('broker_document_log').select('broker_id').in('broker_id', ids);
   (data||[]).forEach(r => { DOC_COUNT_BY_BROKER[r.broker_id] = (DOC_COUNT_BY_BROKER[r.broker_id]||0)+1; });
+}
+// 03.09.2026 (משוב): מספר התאמות (עסקים) שהמתווך מחובר אליהם - בדיוק כמו
+// matchCountBadge אצל קונים ב-leads.html - כדי לראות במבט אחד ברשימה.
+async function loadMatchCounts(){
+  MATCH_COUNT_BY_BROKER = {};
+  if (!ALL_BROKERS.length) return;
+  const ids = ALL_BROKERS.map(b=>b.id);
+  const { data } = await window.supabaseClient.from('matches').select('broker_id').eq('counterparty_type','broker').in('broker_id', ids);
+  (data||[]).forEach(r => { MATCH_COUNT_BY_BROKER[r.broker_id] = (MATCH_COUNT_BY_BROKER[r.broker_id]||0)+1; });
+}
+// 03.09.2026 (משוב): מספר עסקים שהמתווך *הביא/הפנה* ל-BSD (שדה חדש
+// businesses.referred_by_broker_id) - נפרד לגמרי ממספר ההתאמות/מסמכים
+// שקיבל כנמען. מתווך יכול גם להביא עסק וגם לקבל עסקים כקונה פוטנציאלי.
+async function loadReferredBizCounts(){
+  REFERRED_BIZ_COUNT_BY_BROKER = {};
+  if (!ALL_BROKERS.length) return;
+  const ids = ALL_BROKERS.map(b=>b.id);
+  const { data } = await window.supabaseClient.from('businesses').select('referred_by_broker_id').in('referred_by_broker_id', ids).eq('is_archived', false);
+  (data||[]).forEach(r => { REFERRED_BIZ_COUNT_BY_BROKER[r.referred_by_broker_id] = (REFERRED_BIZ_COUNT_BY_BROKER[r.referred_by_broker_id]||0)+1; });
 }
 
 function renderTable(){
@@ -437,7 +458,12 @@ function renderTable(){
     // קונים (ratingBadge/matchCountBadge ב-leads.html) - כדי שאפשר יהיה
     // לראות במבט אחד, בלי לפתוח את הכרטיס: כמה עסקים/מסמכים כבר הועברו
     // וסטטוס ההסכם. זה מודול שלנו - אפשר להוסיף כאן יותר ממה שיש לקונים.
-    const glanceBadges = `<span style="display:inline-flex;align-items:center;gap:3px;background:#eef1f6;color:var(--navy);font-weight:700;font-size:.68rem;padding:2px 8px;border-radius:10px;white-space:nowrap;">📄 ${docCount} עסקים/מסמכים</span>` + agreementBadgeHtml(b.agreement_status);
+    const matchCount = MATCH_COUNT_BY_BROKER[b.id]||0;
+    const referredCount = REFERRED_BIZ_COUNT_BY_BROKER[b.id]||0;
+    const glanceBadges = `<span style="display:inline-flex;align-items:center;gap:3px;background:#eef1f6;color:var(--navy);font-weight:700;font-size:.68rem;padding:2px 8px;border-radius:10px;white-space:nowrap;">🔗 ${matchCount} התאמות</span>` +
+      `<span style="display:inline-flex;align-items:center;gap:3px;background:#eef1f6;color:var(--navy);font-weight:700;font-size:.68rem;padding:2px 8px;border-radius:10px;white-space:nowrap;">📄 ${docCount} מסמכים</span>` +
+      (referredCount ? `<span style="display:inline-flex;align-items:center;gap:3px;background:#fdf3d8;color:#8a651e;font-weight:700;font-size:.68rem;padding:2px 8px;border-radius:10px;white-space:nowrap;">🏢 הביא ${referredCount} עסקים</span>` : '') +
+      agreementBadgeHtml(b.agreement_status);
     return `<tr class="${rowCls}" style="cursor:pointer;" onclick="openBrokerForm('${b.id}')">
       <td data-label="שם">
         <div style="display:flex;align-items:flex-start;gap:8px;">
@@ -512,6 +538,7 @@ function openBrokerForm(id){
             <option value="חסום" ${b?.status==='חסום'?'selected':''}>חסום</option>
           </select>
         </div>
+        ${b ? `<div class="field full"><label>🏢 עסקים שהמתווך הביא/הפנה ל-BSD</label><div id="brokerReferredBizBox" style="border:1px solid #e5e1d5;border-radius:8px;max-height:180px;overflow-y:auto;">טוען...</div></div>` : ''}
         ${b ? `<div class="field full"><label>עסקים ומסמכים שהועברו</label><div id="brokerDocLogBox" style="border:1px solid #e5e1d5;border-radius:8px;max-height:220px;overflow-y:auto;">טוען...</div></div>` : ''}
       </div>
       <div class="modal-actions">
@@ -522,7 +549,7 @@ function openBrokerForm(id){
       </div>
     </form>`;
   document.getElementById('overlay').classList.add('open');
-  if (b) loadBrokerDocLog(b.id);
+  if (b){ loadBrokerDocLog(b.id); loadBrokerReferredBiz(b.id); }
 }
 function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
 
@@ -544,6 +571,25 @@ async function loadBrokerDocLog(brokerId){
       <div style="text-align:left;white-space:nowrap;">${channelLabel}<br><span style="color:#888;">${fmtDateTime(r.sent_at)}</span><br><span style="color:#888;">ע"י ${esc(userName(r.sent_by))}</span></div>
     </div>`;
   }).join('');
+}
+
+// 03.09.2026 (משוב): עסקים שהמתווך *הביא/הפנה* ל-BSD - קשר הפוך למה
+// שברוקר-דוקיומנט-לוג מתעד (שם: עסקים שהועברו *אל* המתווך כנמען פוטנציאלי).
+// כאן: עסקים חדשים שנפתחו במערכת ומסומנים כ"הגיעו ממתווך זה".
+async function loadBrokerReferredBiz(brokerId){
+  const box = document.getElementById('brokerReferredBizBox');
+  if (!box) return;
+  const { data, error } = await window.supabaseClient
+    .from('businesses')
+    .select('id, internal_name, business_number, status, created_at')
+    .eq('referred_by_broker_id', brokerId).eq('is_archived', false)
+    .order('created_at', { ascending:false });
+  if (error){ box.innerHTML = `<div style="padding:10px;color:#a33;font-size:.8rem;">שגיאה בטעינת עסקים: ${esc(error.message)}</div>`; return; }
+  if (!data || !data.length){ box.innerHTML = `<div style="padding:14px;color:#999;font-size:.8rem;text-align:center;">מתווך זה עדיין לא הביא עסקים ל-BSD</div>`; return; }
+  box.innerHTML = data.map(r => `<div class="doc-log-row">
+    <div><a href="businesses.html?open=${r.id}" style="color:var(--navy);font-weight:700;text-decoration:underline;">${esc(r.internal_name||'—')}</a>${r.business_number ? ' <span style="color:#888;">('+esc(r.business_number)+')</span>' : ''}</div>
+    <div style="text-align:left;white-space:nowrap;color:#888;">${esc(r.status||'—')} · ${fmtDate(r.created_at)}</div>
+  </div>`).join('');
 }
 
 async function saveBroker(id){

@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609031930';
+    var PAGE_BUILD = '202609032430';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -352,6 +352,8 @@ function bizNumberBadge(b){
   return `<span style="display:inline-block;background:#0e1b34;color:#e8cf8a;font-weight:700;font-size:.72rem;padding:2px 9px;border-radius:12px;letter-spacing:.3px;white-space:nowrap;">${esc(b.business_number)}</span>`;
 }
 let ALL_SELLERS = [];
+let ALL_BROKERS_FOR_REFERRAL = []; // 03.09.2026 (מודול מתווכים) - מתווכים עם הסכם שנשלח/חתום לבחירת "הגיע ממתווך"
+let BROKER_NAME_BY_ID = {}; // 03.09.2026 - מפה לא מסוננת, לתצוגת שם המתווך המפנה גם אם ארכיוני/חסום כיום
 let ALL_USERS = [];
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -427,6 +429,18 @@ async function loadLookups(){
   ALL_SELLERS = sellers || [];
   const { data: users } = await window.supabaseClient.rpc('get_active_users_basic');
   ALL_USERS = users || [];
+  // 03.09.2026 (מודול מתווכים - משוב): רשימת מתווכים לבחירת "הגיע ממתווך" -
+  // לפי דרישה מפורשת, רק מתווכים עם לפחות הסכם שנשלח (לא "אין הסכם") ניתנים
+  // לבחירה. לא נוגע ב-ALL_SELLERS/ALL_USERS הקיימים.
+  const { data: brokers } = await window.supabaseClient.from('brokers')
+    .select('id, full_name, first_name, last_name, agreement_status, status')
+    .eq('is_archived', false).neq('agreement_status', 'אין הסכם').neq('status', 'חסום');
+  ALL_BROKERS_FOR_REFERRAL = brokers || [];
+  // תצוגה ("הגיע ממתווך X") צריכה לעבוד גם אם המתווך המפנה כבר ארכיוני/חסום
+  // מאז שהעסק נוצר - לכן מפה נפרדת ולא מסוננת, לתצוגה בלבד.
+  const { data: allBrokers } = await window.supabaseClient.from('brokers').select('id, full_name, first_name, last_name');
+  BROKER_NAME_BY_ID = {};
+  (allBrokers || []).forEach(b => { BROKER_NAME_BY_ID[b.id] = b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || 'מתווך'; });
 }
 
 let CURRENT_PROFILE = null;
@@ -716,7 +730,7 @@ function renderTable(){
       const bizNumDigits = (b.business_number||'').match(/(\d{3,4})$/)?.[1] || '';
       const hay = [b.internal_name, b.owner_name, b.owner_phone, b.city, b.field, b.category, b.subcategory, b.status, String(b.asking_price||''),
         b.short_description, b.sale_reason, b.region, b.address, b.source, b.notes, b.id_number, b.entity_type, b.removal_reason, b.sold_to,
-        b.business_number, b.business_number ? b.business_number.replace(/^BSD-B-/,'') : '', bizNumDigits].join(' ').toLowerCase();
+        b.business_number, b.business_number ? b.business_number.replace(/^BSD-B-/,'') : '', bizNumDigits, BROKER_NAME_BY_ID[b.referred_by_broker_id]||''].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -766,7 +780,7 @@ function renderTable(){
             </div>
             ${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}
             ${(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin' && b.internal_code)?`<div class="sub-name" style="font-size:.68rem;color:#bbb;" title="מזהה טכני (מנהל בלבד)">${esc(b.internal_code)}</div>`:''}
-            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${distributionBadge(b)}${publicListingBadge(b)}</div>
+            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${distributionBadge(b)}${publicListingBadge(b)}${b.referred_by_broker_id ? `<span style="display:inline-flex;align-items:center;gap:3px;background:#7a3fd1;color:#fff;font-weight:800;font-size:.7rem;padding:3px 10px;border-radius:12px;white-space:nowrap;">🔵 הגיע ממתווך ${esc(BROKER_NAME_BY_ID[b.referred_by_broker_id]||'')}</span>` : ''}</div>
           </div>
         </div>
       </td>
@@ -1103,6 +1117,18 @@ function openBizForm(id){
         </div>
         ${biz?.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 עסק זה נמצא בארכיון${biz.archive_reason ? ' — סיבה: '+esc(biz.archive_reason) : ''}${canRestoreBiz(biz) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${biz.id}')">↩️ שחזר מהארכיון</button>` : ''}</div>` : (biz && canManageBiz(biz) ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveBiz('${biz.id}')">📁 העבר לארכיון</button></div>` : '')}
         ${fieldRow('internal_name','שם העסק (פנימי)', biz?.internal_name)}
+        <div class="field full" style="background:#f7f0ff;border:1px solid #e0cdfa;border-radius:8px;padding:10px 12px;">
+          <label style="font-weight:700;color:#5a2f9e;">🔵 הגיע ממתווך / סוכן (אופציונלי)</label>
+          <select id="referred_by_broker_id">
+            <option value="">— לא הגיע ממתווך —</option>
+            ${ALL_BROKERS_FOR_REFERRAL.map(b => {
+              const bname = b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || 'מתווך';
+              const selected = biz?.referred_by_broker_id === b.id ? 'selected' : '';
+              return `<option value="${b.id}" ${selected}>${esc(bname)}</option>`;
+            }).join('')}
+          </select>
+          <div style="font-size:.72rem;color:#8a8578;margin-top:3px;">מוצגים רק מתווכים עם לפחות הסכם שנשלח לחתימה</div>
+        </div>
         <div class="field">
           <label>שם אנונימי להצגה</label>
           <div style="display:flex;gap:6px;">
@@ -3947,6 +3973,8 @@ async function saveBiz(e){
     // בטקסטאריה לעולם לא תלך לאיבוד. בכוונה לא נוגעים כאן ב-*_generated_at/
     // *_generated_by - אלה מתעדכנים רק כשה-AI בפועל יצר/אישר טקסט חדש.
     internal_business_summary: g('internal_business_summary'),
+    // 03.09.2026 (מודול מתווכים - משוב): שדה חדש בלבד, לא נוגע בשום שדה אחר כאן
+    referred_by_broker_id: g('referred_by_broker_id') || null,
   };
 
   // סימון אמין של שימוש AI על תיאור/הערות (סעיף 3) - נכתב ל-DB רק כאן,
