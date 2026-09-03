@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<script>
+(function(){
+  try{
+    var PAGE_BUILD = '202609032100';
+    window.PAGE_BUILD = PAGE_BUILD;
+    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - דוח פעילות מתווכים / סוכנים</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=202608251215">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:1400px;margin:0 auto;}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+  .toolbar h2{margin:0;color:var(--navy);font-size:1.3rem;}
+  .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px;}
+  .kpi{background:#fff;border-radius:12px;padding:14px 10px;text-align:center;box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 4px 12px rgba(14,27,52,.08);}
+  .kpi .num{font-size:1.4rem;font-weight:800;color:var(--navy);}
+  .kpi .lbl{font-size:.68rem;color:#888;margin-top:2px;}
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .filters input, .filters select{padding:9px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .filters input[type=text]{min-width:180px;}
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 8px 20px rgba(14,27,52,.10), 0 2px 6px rgba(14,27,52,.06);}
+  thead th{background:var(--navy);color:#fff;padding:10px 12px;font-size:.76rem;text-align:right;white-space:nowrap;}
+  tbody td{padding:9px 12px;border-bottom:1px solid #f0ede4;font-size:.8rem;}
+  tbody tr:hover{background:#faf8f2;}
+  .empty-row td{text-align:center;color:#999;padding:30px;}
+  .badge{padding:3px 9px;border-radius:12px;font-size:.7rem;font-weight:700;white-space:nowrap;}
+  .agr-none{background:#f1f1f1;color:#777;}
+  .agr-sent{background:#fdeccb;color:#8a5a10;}
+  .agr-signed{background:#dff0e4;color:#245c40;}
+  .status-active{background:#dff0e4;color:#245c40;}
+  .status-blocked{background:#fdeceb;color:#8a2c1f;}
+  .no-access{max-width:520px;margin:80px auto;text-align:center;background:#fff;border-radius:14px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,.15);}
+  .tabs{display:flex;gap:8px;margin-bottom:16px;border-bottom:2px solid #eee6d4;}
+  .tab-btn{padding:10px 20px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:.88rem;font-weight:700;color:#8a8578;border-bottom:3px solid transparent;margin-bottom:-2px;}
+  .tab-btn.active{color:var(--navy);border-bottom-color:var(--gold);}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span id="bsdVerLabel" style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה</span><script>(function(){var e=document.getElementById('bsdVerLabel');var b=window.PAGE_BUILD;if(e&&b&&b.length>=12){e.textContent='גרסה '+b.slice(6,8)+'.'+b.slice(4,6)+'.'+b.slice(0,4)+' '+b.slice(8,10)+':'+b.slice(10,12);}})();</script></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+  <div class="nav">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="brokers.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">🧑‍💼 מתווכים / סוכנים</a>
+    <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+  </div>
+</div>
+
+<div class="wrap" id="mainWrap" style="display:none;">
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <div class="toolbar">
+    <h2>📊 דוח פעילות מתווכים / סוכנים</h2>
+    <button class="btn btn-ghost" onclick="exportCsv()">📥 ייצוא ל-CSV</button>
+  </div>
+
+  <div class="tabs">
+    <button type="button" class="tab-btn active" id="tabDocsBtn" onclick="switchTab('docs')">📄 מסמכים שנשלחו</button>
+    <button type="button" class="tab-btn" id="tabBrokersBtn" onclick="switchTab('brokers')">🧑‍💼 מתווכים (פעילים/לא פעילים)</button>
+    <button type="button" class="tab-btn" id="tabAuditBtn" onclick="switchTab('audit')">🕓 Audit Log</button>
+  </div>
+
+  <div id="docsTab">
+    <div class="filters">
+      <input type="text" id="fBrokerName" placeholder="שם מתווך / טלפון / אימייל">
+      <input type="text" id="fBizName" placeholder="שם עסק / מספר עסק">
+      <select id="fUser"><option value="">כל המשתמשים שביצעו</option></select>
+      <input type="date" id="fDateFrom" title="מתאריך">
+      <input type="date" id="fDateTo" title="עד תאריך">
+      <select id="fChannel"><option value="">כל הערוצים</option><option value="email">📧 מייל</option><option value="whatsapp">📱 WhatsApp</option></select>
+      <select id="fAgreement">
+        <option value="">כל סטטוסי ההסכם</option>
+        <option value="אין הסכם">אין הסכם</option>
+        <option value="נשלח הסכם לחתימה">נשלח הסכם לחתימה</option>
+        <option value="יש הסכם חתום">יש הסכם חתום</option>
+      </select>
+      <select id="fBrokerStatus"><option value="">כל סטטוסי המתווך</option><option value="פעיל">פעיל</option><option value="חסום">חסום</option></select>
+      <button class="btn btn-ghost" onclick="applyFilters()">🔍 סנן</button>
+      <button class="btn btn-ghost" onclick="clearFilters()">נקה סינון</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>תאריך ושעה</th><th>מתווך</th><th>טלפון</th><th>אימייל</th><th>עסק</th><th>מסמך</th>
+          <th>ערוץ</th><th>נשלח ע"י</th><th>סטטוס הסכם (נוכחי)</th><th>סטטוס מתווך</th><th>סטטוס התאמה</th>
+        </tr>
+      </thead>
+      <tbody id="tblBody"><tr class="empty-row"><td colspan="11">טוען...</td></tr></tbody>
+    </table>
+  </div>
+
+  <div id="brokersTab" style="display:none;">
+    <div class="filters">
+      <input type="date" id="fInactiveDays" placeholder="לא פעיל X ימים" style="max-width:160px;">
+      <button class="btn btn-ghost" onclick="renderBrokersTab()">🔍 החל</button>
+    </div>
+    <table>
+      <thead><tr><th>מתווך</th><th>טלפון</th><th>אימייל</th><th>סטטוס מתווך</th><th>סטטוס הסכם</th><th>מסמכים שנשלחו</th><th>פעילות אחרונה</th></tr></thead>
+      <tbody id="brokersBody"><tr class="empty-row"><td colspan="7">טוען...</td></tr></tbody>
+    </table>
+  </div>
+
+  <div id="auditTab" style="display:none;">
+    <div class="filters">
+      <input type="text" id="fAuditBroker" placeholder="שם מתווך">
+      <select id="fAuditAction">
+        <option value="">כל סוגי הפעולה</option>
+        <option value="created">יצירה</option>
+        <option value="edited">עריכה</option>
+        <option value="archived">העברה לארכיון</option>
+        <option value="restored">שחזור מארכיון</option>
+        <option value="agreement_sent">שליחת הסכם</option>
+      </select>
+      <button class="btn btn-ghost" onclick="renderAuditTab()">🔍 סנן</button>
+    </div>
+    <table>
+      <thead><tr><th>תאריך ושעה</th><th>מתווך</th><th>פעולה</th><th>בוצע ע"י</th><th>פרטים</th></tr></thead>
+      <tbody id="auditBody"><tr class="empty-row"><td colspan="5">טוען...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="no-access" id="noAccess" style="display:none;">
+  <h2>אין הרשאה</h2>
+  <p>דף זה זמין למנהלי המערכת בלבד.</p>
+  <a href="app.html" class="btn btn-primary" style="text-decoration:none;display:inline-block;margin-top:10px;">חזרה ללוח הבקרה</a>
+</div>
+
+<div id="toastBox"></div>
+
+<script src="js/config.js?v=202608111530"></script>
+<script src="js/supabaseClient.js?v=202608111530"></script>
+<script src="js/auth.js?v=202608251215"></script>
+<script>
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
+function toast(msg){
+  const box = document.getElementById('toastBox');
+  const el = document.createElement('div');
+  el.textContent = msg;
+  el.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#0e1b34;color:#fff;padding:10px 16px;border-radius:8px;font-size:.85rem;z-index:9999;box-shadow:0 8px 20px rgba(0,0,0,.3);';
+  box.appendChild(el);
+  setTimeout(()=>el.remove(), 3500);
+}
+
+let ALL_ROWS = [], FILTERED_ROWS = [];
+let BROKERS_MAP = {}, BIZ_MAP = {}, USERS_MAP = {}, MATCH_MAP = {};
+let ALL_AUDIT = [];
+
+function agreementBadgeHtml(status){
+  const s = status || 'אין הסכם';
+  const cls = s === 'יש הסכם חתום' ? 'agr-signed' : s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none';
+  return `<span class="badge ${cls}">${esc(s)}</span>`;
+}
+function brokerStatusBadgeHtml(status){
+  return status === 'חסום' ? `<span class="badge status-blocked">חסום</span>` : `<span class="badge status-active">פעיל</span>`;
+}
+
+async function loadReport(){
+  const [{ data: docs, error }, { data: brokers }, { data: businesses }, { data: users }, { data: matches }, { data: audit }] = await Promise.all([
+    window.supabaseClient.from('broker_document_log').select('*').order('sent_at', { ascending: false }),
+    window.supabaseClient.from('brokers').select('id, full_name, first_name, last_name, phone, email, agreement_status, status, is_archived'),
+    window.supabaseClient.from('businesses').select('id, internal_name, business_number'),
+    window.supabaseClient.rpc('get_active_users_basic'),
+    window.supabaseClient.from('matches').select('id, status, broker_id'),
+    window.supabaseClient.from('broker_audit_log').select('*').order('created_at', { ascending: false }),
+  ]);
+  if (error){
+    document.getElementById('tblBody').innerHTML = `<tr class="empty-row"><td colspan="11" style="color:#b3402c;">שגיאה: ${esc(error.message)}</td></tr>`;
+    return;
+  }
+  ALL_ROWS = docs || [];
+  (brokers||[]).forEach(b => BROKERS_MAP[b.id] = b);
+  (businesses||[]).forEach(b => BIZ_MAP[b.id] = b);
+  (users||[]).forEach(u => USERS_MAP[u.id] = u);
+  (matches||[]).forEach(m => { if (m.broker_id) MATCH_MAP[m.broker_id] = m; });
+  ALL_AUDIT = audit || [];
+
+  populateFilterOptions();
+  FILTERED_ROWS = ALL_ROWS;
+  renderKpis(ALL_ROWS);
+  renderTable(ALL_ROWS);
+  renderBrokersTab();
+  renderAuditTab();
+}
+
+function populateFilterOptions(){
+  const userSel = document.getElementById('fUser');
+  Object.values(USERS_MAP).forEach(u => {
+    const o = document.createElement('option'); o.value = u.id; o.textContent = u.full_name || u.email;
+    userSel.appendChild(o);
+  });
+}
+
+function renderKpis(rows){
+  const total = rows.length;
+  const uniqueBrokers = new Set(rows.map(r=>r.broker_id)).size;
+  const uniqueBiz = new Set(rows.map(r=>r.business_id)).size;
+  const activeBrokers = Object.values(BROKERS_MAP).filter(b=>!b.is_archived && b.status!=='חסום').length;
+  const blockedBrokers = Object.values(BROKERS_MAP).filter(b=>b.status==='חסום').length;
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi"><div class="num">${total}</div><div class="lbl">סה"כ מסמכים שנשלחו</div></div>
+    <div class="kpi"><div class="num">${uniqueBrokers}</div><div class="lbl">מתווכים עם פעילות</div></div>
+    <div class="kpi"><div class="num">${uniqueBiz}</div><div class="lbl">עסקים שונים</div></div>
+    <div class="kpi"><div class="num">${activeBrokers}</div><div class="lbl">מתווכים פעילים</div></div>
+    <div class="kpi"><div class="num">${blockedBrokers}</div><div class="lbl">מתווכים חסומים</div></div>
+  `;
+}
+
+function renderTable(rows){
+  const body = document.getElementById('tblBody');
+  if (!rows.length){ body.innerHTML = `<tr class="empty-row"><td colspan="11">לא נמצאו רשומות תואמות</td></tr>`; return; }
+  body.innerHTML = rows.map(r => {
+    const broker = BROKERS_MAP[r.broker_id];
+    const biz = BIZ_MAP[r.business_id];
+    const sender = USERS_MAP[r.sent_by];
+    const match = MATCH_MAP[r.broker_id];
+    const bizNum = biz?.business_number || r.business_number || '';
+    return `<tr>
+      <td>${fmtDateTime(r.sent_at)}</td>
+      <td>${esc(broker?.full_name || '—')}</td>
+      <td>${esc(broker?.phone || '—')}</td>
+      <td>${esc(broker?.email || '—')}</td>
+      <td>${esc(biz ? biz.internal_name + (bizNum?' ('+bizNum+')':'') : '—')}</td>
+      <td>${esc(r.file_name || r.document_type || '—')}</td>
+      <td>${r.channel === 'whatsapp' ? '📱 WhatsApp' : '📧 מייל'}</td>
+      <td>${esc(sender ? (sender.full_name || sender.email) : '—')}</td>
+      <td>${agreementBadgeHtml(broker?.agreement_status)}</td>
+      <td>${broker ? brokerStatusBadgeHtml(broker.status) : '—'}</td>
+      <td>${esc(match?.status || '—')}</td>
+    </tr>`;
+  }).join('');
+}
+
+function applyFilters(){
+  const name = (document.getElementById('fBrokerName').value||'').trim().toLowerCase();
+  const biz = (document.getElementById('fBizName').value||'').trim().toLowerCase();
+  const user = document.getElementById('fUser').value;
+  const dateFrom = document.getElementById('fDateFrom').value;
+  const dateTo = document.getElementById('fDateTo').value;
+  const channel = document.getElementById('fChannel').value;
+  const agreement = document.getElementById('fAgreement').value;
+  const brokerStatus = document.getElementById('fBrokerStatus').value;
+
+  FILTERED_ROWS = ALL_ROWS.filter(r => {
+    const broker = BROKERS_MAP[r.broker_id];
+    const bizRec = BIZ_MAP[r.business_id];
+    if (user && r.sent_by !== user) return false;
+    if (channel && r.channel !== channel) return false;
+    if (agreement && (broker?.agreement_status||'אין הסכם') !== agreement) return false;
+    if (brokerStatus && broker?.status !== brokerStatus) return false;
+    if (dateFrom && r.sent_at < dateFrom) return false;
+    if (dateTo && r.sent_at > dateTo + 'T23:59:59') return false;
+    if (name){
+      const hay = [broker?.full_name, broker?.phone, broker?.email].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(name)) return false;
+    }
+    if (biz){
+      const hay = [bizRec?.internal_name, bizRec?.business_number, r.business_number].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(biz)) return false;
+    }
+    return true;
+  });
+  renderKpis(FILTERED_ROWS);
+  renderTable(FILTERED_ROWS);
+}
+
+function clearFilters(){
+  ['fBrokerName','fBizName','fUser','fDateFrom','fDateTo','fChannel','fAgreement','fBrokerStatus'].forEach(id => document.getElementById(id).value = '');
+  FILTERED_ROWS = ALL_ROWS;
+  renderKpis(ALL_ROWS);
+  renderTable(ALL_ROWS);
+}
+
+// דוח מתווכים פעילים/לא פעילים (סעיף 2 בהנחיה - "דוח של מתווכים פעילים
+// ולא פעילים" ו"דוח של מתווכים שלא קיבלו פעילות בתקופה מסוימת")
+function renderBrokersTab(){
+  const daysFilter = parseInt(document.getElementById('fInactiveDays').value, 10);
+  const body = document.getElementById('brokersBody');
+  const brokers = Object.values(BROKERS_MAP).filter(b=>!b.is_archived);
+  if (!brokers.length){ body.innerHTML = `<tr class="empty-row"><td colspan="7">אין מתווכים פעילים במערכת</td></tr>`; return; }
+  const rows = brokers.map(b => {
+    const docs = ALL_ROWS.filter(r=>r.broker_id===b.id);
+    const lastActivity = docs.length ? docs.reduce((max,d)=> new Date(d.sent_at) > new Date(max) ? d.sent_at : max, docs[0].sent_at) : null;
+    return { b, count: docs.length, lastActivity };
+  }).filter(row => {
+    if (!daysFilter) return true;
+    if (!row.lastActivity) return true; // מעולם לא קיבל פעילות - תמיד "לא פעיל X ימים"
+    const days = Math.floor((Date.now() - new Date(row.lastActivity).getTime()) / 86400000);
+    return days >= daysFilter;
+  });
+  rows.sort((a,b)=> (b.lastActivity?new Date(b.lastActivity):0) - (a.lastActivity?new Date(a.lastActivity):0));
+  body.innerHTML = rows.map(row => `<tr>
+    <td>${esc(row.b.full_name||'—')}</td>
+    <td>${esc(row.b.phone||'—')}</td>
+    <td>${esc(row.b.email||'—')}</td>
+    <td>${brokerStatusBadgeHtml(row.b.status)}</td>
+    <td>${agreementBadgeHtml(row.b.agreement_status)}</td>
+    <td style="text-align:center;font-weight:700;">${row.count}</td>
+    <td>${row.lastActivity ? fmtDateTime(row.lastActivity) : 'מעולם לא'}</td>
+  </tr>`).join('') || `<tr class="empty-row"><td colspan="7">אין מתווכים תואמים לסינון</td></tr>`;
+}
+
+function renderAuditTab(){
+  const nameFilter = (document.getElementById('fAuditBroker').value||'').trim().toLowerCase();
+  const actionFilter = document.getElementById('fAuditAction').value;
+  const body = document.getElementById('auditBody');
+  let rows = ALL_AUDIT;
+  if (actionFilter) rows = rows.filter(a=>a.action_type===actionFilter);
+  if (nameFilter) rows = rows.filter(a=>{
+    const broker = BROKERS_MAP[a.broker_id];
+    return (broker?.full_name||'').toLowerCase().includes(nameFilter);
+  });
+  if (!rows.length){ body.innerHTML = `<tr class="empty-row"><td colspan="5">אין רשומות Audit Log תואמות</td></tr>`; return; }
+  const ACTION_LABELS = { created:'יצירה', edited:'עריכה', archived:'העברה לארכיון', restored:'שחזור מארכיון', agreement_sent:'שליחת הסכם' };
+  body.innerHTML = rows.map(a => {
+    const broker = BROKERS_MAP[a.broker_id];
+    const actor = USERS_MAP[a.actor_id];
+    return `<tr>
+      <td>${fmtDateTime(a.created_at)}</td>
+      <td>${esc(broker?.full_name || '—')}</td>
+      <td>${esc(ACTION_LABELS[a.action_type] || a.action_type)}</td>
+      <td>${esc(actor ? (actor.full_name || actor.email) : '—')}</td>
+      <td style="max-width:340px;overflow-wrap:break-word;font-size:.72rem;color:#888;">${esc(a.details || '')}</td>
+    </tr>`;
+  }).join('');
+}
+
+function switchTab(tab){
+  document.getElementById('docsTab').style.display = tab==='docs' ? '' : 'none';
+  document.getElementById('brokersTab').style.display = tab==='brokers' ? '' : 'none';
+  document.getElementById('auditTab').style.display = tab==='audit' ? '' : 'none';
+  document.getElementById('tabDocsBtn').className = 'tab-btn' + (tab==='docs' ? ' active' : '');
+  document.getElementById('tabBrokersBtn').className = 'tab-btn' + (tab==='brokers' ? ' active' : '');
+  document.getElementById('tabAuditBtn').className = 'tab-btn' + (tab==='audit' ? ' active' : '');
+}
+
+// ייצוא CSV פשוט וללא סיכון - לפי הנחיה מפורשת לא לבנות מנגנון ייצוא חדש
+// ומורכב; CSV הוא הרף המינימלי שהתבקש ואינו תלוי בספרייה חיצונית.
+function exportCsv(){
+  const rows = FILTERED_ROWS;
+  if (!rows.length){ toast('אין נתונים לייצוא'); return; }
+  const headers = ['תאריך ושעה','מתווך','טלפון','אימייל','עסק','מספר עסק','מסמך','ערוץ','נשלח ע"י','סטטוס הסכם','סטטוס מתווך','סטטוס התאמה'];
+  const csvRows = [headers.join(',')];
+  rows.forEach(r => {
+    const broker = BROKERS_MAP[r.broker_id];
+    const biz = BIZ_MAP[r.business_id];
+    const sender = USERS_MAP[r.sent_by];
+    const match = MATCH_MAP[r.broker_id];
+    const cells = [
+      fmtDateTime(r.sent_at), broker?.full_name||'', broker?.phone||'', broker?.email||'',
+      biz?.internal_name||'', biz?.business_number||r.business_number||'', r.file_name||r.document_type||'',
+      r.channel==='whatsapp'?'WhatsApp':'מייל', sender?(sender.full_name||sender.email):'',
+      broker?.agreement_status||'', broker?.status||'', match?.status||''
+    ];
+    csvRows.push(cells.map(c => `"${String(c).replace(/"/g,'""')}"`).join(','));
+  });
+  const csvContent = '\uFEFF' + csvRows.join('\r\n'); // BOM לתמיכה בעברית באקסל
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `דוח-מתווכים-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+(async function init(){
+  const profile = await requireAuth();
+  if (!profile) return;
+  if (!['admin','manager'].includes(profile.role)){
+    document.getElementById('noAccess').style.display = 'block';
+    return;
+  }
+  document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+  document.getElementById('mainWrap').style.display = 'block';
+  await loadReport();
+})();
+</script>
+</body>
+</html>
