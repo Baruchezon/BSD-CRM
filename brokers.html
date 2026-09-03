@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609031900';
+    var PAGE_BUILD = '202609032100';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -134,6 +134,7 @@
         <button type="button" class="btn btn-primary" id="viewActiveBtn" onclick="setViewMode('active')">📋 פעילים</button>
         <button type="button" class="btn btn-ghost" id="viewArchiveBtn" onclick="setViewMode('archive')">📁 ארכיון</button>
         <button type="button" class="btn btn-broker" id="newBrokerBtn" onclick="openBrokerForm(null)">+ מתווך חדש</button>
+        <a href="broker-reports.html" id="brokerReportsLink" class="btn btn-ghost" style="display:none;text-decoration:none;">📊 דוח פעילות</a>
       </div>
     </div>
 
@@ -390,6 +391,7 @@ function openBrokerForm(id){
             <option value="נשלח הסכם לחתימה" ${b?.agreement_status==='נשלח הסכם לחתימה'?'selected':''}>הסכם נשלח לחתימה</option>
             <option value="יש הסכם חתום" ${b?.agreement_status==='יש הסכם חתום'?'selected':''}>יש הסכם חתום</option>
           </select>
+          ${(b && editable && b.agreement_status !== 'יש הסכם חתום') ? `<button type="button" class="btn btn-ghost" style="margin-top:6px;font-size:.78rem;padding:5px 12px;" onclick="sendAgreementForBroker('${b.id}')">📄 שלח הסכם</button>` : ''}
         </div>
         <div class="field"><label>סטטוס מתווך</label>
           <select id="broker_status" ${['admin','manager'].includes(CURRENT_PROFILE?.role) ? '' : 'disabled'}>
@@ -504,6 +506,30 @@ async function restoreBroker(id){
   renderTable();
 }
 
+// 03.09.2026 (מודול מתווכים, סבב 3 - הסכם): שימוש באותה תשתית הסכמים חיצונית
+// בדיוק כמו sendAgreementForLead ב-leads.html (bsd-contracts) - לא נבנה מנגנון
+// הסכמים מקביל. type='buyer' בכוונה - הסכם הסודיות של מתווך זהה במהותו לזה
+// של קונה (NDA לפני חשיפת פרטי עסק), ואין תבנית ייעודית נפרדת למתווכים.
+async function sendAgreementForBroker(id){
+  const b = ALL_BROKERS.find(x=>x.id===id);
+  if (!b){ toast('רשומה לא נמצאה'); return; }
+  const personName = b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || '';
+  const params = new URLSearchParams({ type: 'buyer', name: personName, phone: b.phone || '', biz: b.looking_for || '' });
+  window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
+
+  if (b.agreement_status !== 'יש הסכם חתום'){
+    const { error } = await window.supabaseClient.from('brokers')
+      .update({ agreement_status: 'נשלח הסכם לחתימה' }).eq('id', id);
+    if (!error){
+      b.agreement_status = 'נשלח הסכם לחתימה';
+      await logBrokerAudit(id, 'agreement_sent', null, { agreement_status: 'נשלח הסכם לחתימה' }, null);
+      renderTable();
+      closeModal();
+      toast('נפתח מסך הכנת ההסכם; המתווך סומן כ"הסכם נשלח לחתימה"');
+    }
+  }
+}
+
 document.getElementById('fSearch').addEventListener('input', renderTable);
 document.getElementById('fStatus').addEventListener('change', renderTable);
 document.getElementById('fAgreement').addEventListener('change', renderTable);
@@ -523,6 +549,7 @@ document.getElementById('overlay').addEventListener('click', (e) => { if (e.targ
   }
   document.getElementById('brokersModuleBox').style.display = 'block';
   if (!canEditBroker(null)) document.getElementById('newBrokerBtn').style.display = 'none';
+  if (['admin','manager'].includes(CURRENT_PROFILE?.role)) document.getElementById('brokerReportsLink').style.display = 'inline-block';
 
   const { data: users } = await window.supabaseClient.from('profiles').select('id, full_name, first_name, last_name, email');
   ALL_USERS = users || [];
