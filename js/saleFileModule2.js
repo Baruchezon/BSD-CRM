@@ -733,6 +733,24 @@ function sfWithClientTimeout(promise, ms, label){
   });
 }
 
+// 03.09.2026: אבחון זמני - תקלת "שלח מייל לקונה" לא מגיעה בכלל לשרת (אומת
+// בלוגים), הכפתור רק מתכהה לרגע וחוזר - סימן לשגיאת JS שקורית מיידית,
+// אולי אפילו לפני שהפונקציה sfConfirmSend עצמה מתחילה לרוץ (למשל שגיאת
+// תחביר בתוך ה-onclick המוטמע). זה תופס כל שגיאה כזו ומציג אותה בהתראת
+// דפדפן רגילה - לא כלי פיתוח - כדי לאתר את השורש בלי לבקש ל-Inspect.
+// יש להסיר את זה אחרי שהאבחון יסתיים.
+if (!window.__sfDiagInstalled){
+  window.__sfDiagInstalled = true;
+  window.addEventListener('error', function(ev){
+    try { alert('אבחון BSD - שגיאת JS:\n' + (ev && ev.message ? ev.message : String(ev)) + (ev && ev.filename ? ('\n(' + ev.filename + ':' + ev.lineno + ')') : '')); } catch(_e){}
+  });
+  window.addEventListener('unhandledrejection', function(ev){
+    var reason = ev && ev.reason;
+    var text = (reason && reason.message) ? reason.message : String(reason);
+    try { alert('אבחון BSD - שגיאה לא מטופלת:\n' + text); } catch(_e){}
+  });
+}
+
 async function sfConfirmSend(bizId, buyerId, fileIds){
   const btn = document.getElementById('sfSendBtn');
   const statusEl = document.getElementById('sfSendStatus');
