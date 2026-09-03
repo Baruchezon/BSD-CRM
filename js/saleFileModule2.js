@@ -711,7 +711,7 @@ function sfShowSendPreview(bizId, bizName){
       <div id="sfSendStatus" style="font-size:.8rem;min-height:18px;margin-top:6px;"></div>
     <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
       <button type="button" class="btn btn-ghost" onclick="document.getElementById('sfSendOverlay').remove()">ביטול</button>
-      <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend('${bizId}', '${buyerId}', ${JSON.stringify(fileIds)})">📤 שלח מייל לקונה</button>
+      <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend('${bizId}', '${buyerId}', ${esc(JSON.stringify(fileIds))})">📤 שלח מייל לקונה</button>
     </div>`;
   } catch(e){
     console.error('sfShowSendPreview error:', e);
@@ -730,24 +730,6 @@ function sfWithClientTimeout(promise, ms, label){
     const timer = setTimeout(() => reject(new Error(`הבקשה נתקעה ולא קיבלה תשובה תוך ${Math.round(ms/1000)} שניות (${label}). בדוק את החיבור לאינטרנט ונסה שוב.`)), ms);
     promise.then((v) => { clearTimeout(timer); resolve(v); },
                  (e) => { clearTimeout(timer); reject(e); });
-  });
-}
-
-// 03.09.2026: אבחון זמני - תקלת "שלח מייל לקונה" לא מגיעה בכלל לשרת (אומת
-// בלוגים), הכפתור רק מתכהה לרגע וחוזר - סימן לשגיאת JS שקורית מיידית,
-// אולי אפילו לפני שהפונקציה sfConfirmSend עצמה מתחילה לרוץ (למשל שגיאת
-// תחביר בתוך ה-onclick המוטמע). זה תופס כל שגיאה כזו ומציג אותה בהתראת
-// דפדפן רגילה - לא כלי פיתוח - כדי לאתר את השורש בלי לבקש ל-Inspect.
-// יש להסיר את זה אחרי שהאבחון יסתיים.
-if (!window.__sfDiagInstalled){
-  window.__sfDiagInstalled = true;
-  window.addEventListener('error', function(ev){
-    try { alert('אבחון BSD - שגיאת JS:\n' + (ev && ev.message ? ev.message : String(ev)) + (ev && ev.filename ? ('\n(' + ev.filename + ':' + ev.lineno + ')') : '')); } catch(_e){}
-  });
-  window.addEventListener('unhandledrejection', function(ev){
-    var reason = ev && ev.reason;
-    var text = (reason && reason.message) ? reason.message : String(reason);
-    try { alert('אבחון BSD - שגיאה לא מטופלת:\n' + text); } catch(_e){}
   });
 }
 
