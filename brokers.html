@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609032200';
+    var PAGE_BUILD = '202609032330';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -61,6 +61,17 @@
   thead th{background:var(--navy);color:#fff;padding:12px 14px;font-size:.8rem;text-align:right;white-space:nowrap;}
   tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
   tbody tr:hover{background:#faf8f2;}
+  tbody tr.row-signed{background:#16a34a !important;border-right:10px solid #0b5e29;}
+  tbody tr.row-signed td{color:#fff !important;font-weight:700;}
+  tbody tr.row-signed:hover{background:#128a3e !important;}
+  tbody tr.row-sent{background:#fdeaea !important;border-right:10px solid #e08a80;}
+  tbody tr.row-sent td{color:#8a2c1f !important;font-weight:600;}
+  tbody tr.row-sent:hover{background:#fbdada !important;}
+  .row-menu-btn{border:1.5px solid #d8d3c4;background:#f7f5ee;color:#333;cursor:pointer;font-size:1.1rem;font-weight:700;padding:2px 8px;border-radius:8px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+  .row-menu-btn:hover{background:#eee8d8;}
+  .row-actions-menu{display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;}
+  .row-actions-menu a{display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);}
+  .row-actions-menu a:first-child{border-top:none;}
   .proportional-table{table-layout:fixed;min-width:1050px;}
   .proportional-table th, .proportional-table td{overflow-wrap:break-word;}
   @media (max-width: 700px){ .proportional-table{table-layout:auto;min-width:0;} }
@@ -432,15 +443,40 @@ function renderTable(){
   body.innerHTML = filtered.map(b => {
     const name = b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || '(ללא שם)';
     const docCount = DOC_COUNT_BY_BROKER[b.id]||0;
-    return `<tr style="cursor:pointer;" onclick="openBrokerForm('${b.id}')">
-      <td><div class="primary-name">${esc(name)}</div>${brokerBadge()}</td>
-      <td>${esc(b.phone||'—')}</td>
-      <td>${esc(b.email||'—')}</td>
-      <td>${esc(b.city||'—')}</td>
-      <td class="looking-cell">${esc(b.looking_for||'—')}</td>
-      <td>${agreementBadgeHtml(b.agreement_status)}</td>
-      <td>${statusBadgeHtml(b.status)}</td>
-      <td style="text-align:center;font-weight:700;">${docCount}</td>
+    const agrStatus = b.agreement_status || 'אין הסכם';
+    const rowCls = agrStatus === 'יש הסכם חתום' ? 'row-signed' : (agrStatus === 'נשלח הסכם לחתימה' ? 'row-sent' : '');
+    const canEdit = canEditBroker(b);
+    const canDelete = canDeleteBroker() && !b.is_archived;
+    const canSendAgr = canEdit && agrStatus !== 'יש הסכם חתום';
+    // 03.09.2026 (משוב): תגיות קומפקטיות ליד השם - בדיוק כמו ה"extras" אצל
+    // קונים (ratingBadge/matchCountBadge ב-leads.html) - כדי שאפשר יהיה
+    // לראות במבט אחד, בלי לפתוח את הכרטיס: כמה עסקים/מסמכים כבר הועברו
+    // וסטטוס ההסכם. זה מודול שלנו - אפשר להוסיף כאן יותר ממה שיש לקונים.
+    const glanceBadges = `<span style="display:inline-flex;align-items:center;gap:3px;background:#eef1f6;color:var(--navy);font-weight:700;font-size:.68rem;padding:2px 8px;border-radius:10px;white-space:nowrap;">📄 ${docCount} עסקים/מסמכים</span>` + agreementBadgeHtml(b.agreement_status);
+    return `<tr class="${rowCls}" style="cursor:pointer;" onclick="openBrokerForm('${b.id}')">
+      <td data-label="שם">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
+            <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
+            <div class="row-actions-menu bsd-forms-menu">
+              <a href="javascript:void(0)" onclick="openBrokerForm('${b.id}')">${canEdit ? '✏️ ערוך' : '👁️ צפייה'}</a>
+              ${canSendAgr ? `<a href="javascript:void(0)" onclick="sendAgreementForBroker('${b.id}')">📄 שלח הסכם</a>` : ''}
+              ${canDelete ? `<a href="javascript:void(0)" onclick="archiveBroker('${b.id}')" style="color:#ffb4b4;">🗑️ מחק</a>` : ''}
+            </div>
+          </div>
+          <div>
+            <div class="primary-name">${esc(name)}</div>${brokerBadge()}
+            <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;" onclick="event.stopPropagation()">${glanceBadges}</div>
+          </div>
+        </div>
+      </td>
+      <td data-label="טלפון">${esc(b.phone||'—')}</td>
+      <td data-label="אימייל">${esc(b.email||'—')}</td>
+      <td data-label="עיר">${esc(b.city||'—')}</td>
+      <td class="looking-cell" data-label="מה מחפש">${esc(b.looking_for||'—')}</td>
+      <td data-label="סטטוס הסכם">${agreementBadgeHtml(b.agreement_status)}</td>
+      <td data-label="סטטוס">${statusBadgeHtml(b.status)}</td>
+      <td data-label="עסקים שהועברו" style="text-align:center;font-weight:700;">${docCount}</td>
     </tr>`;
   }).join('');
 }
