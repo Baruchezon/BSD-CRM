@@ -711,6 +711,7 @@ function sfShowSendPreview(bizId, bizName){
       <div id="sfSendStatus" style="font-size:.8rem;min-height:18px;margin-top:6px;"></div>
     <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
       <button type="button" class="btn btn-ghost" onclick="document.getElementById('sfSendOverlay').remove()">ביטול</button>
+      <button type="button" class="btn btn-secondary" id="sfSendWaBtn" onclick="sfConfirmSendWhatsApp('${bizId}', '${buyerId}', ${esc(JSON.stringify(fileIds))})">📱 שלח בWhatsApp</button>
       <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend('${bizId}', '${buyerId}', ${esc(JSON.stringify(fileIds))})">📤 שלח מייל לקונה</button>
     </div>`;
   } catch(e){
@@ -772,6 +773,95 @@ async function sfConfirmSend(bizId, buyerId, fileIds){
   } finally {
     // finally ולא רק בתוך ה-catch: מבטיח שהכפתור תמיד חוזר למצב רגיל,
     // גם אם ייפול חריג לא צפוי שלא נתפס במפורש למעלה.
+    if (btn) bsdSetButtonLoading(btn, false);
+  }
+}
+
+// 03.09.2026: ערוץ שליחה נוסף - WhatsApp - לצד המייל הקיים, לפי הנחיה
+// מפורשת. פונקציה עצמאית לגמרי, לא נוגעת ב-sfConfirmSend/send-sale-files-to-buyer
+// (מנגנון המייל שעובד) בשום צורה - אותו קונה/קבצים/טקסט שכבר נבחרו במסך,
+// רק ערוץ פתיחה שונה.
+//
+// נורמליזציית טלפון מקומית (לא תלויה בטעינת js/waSendModule.js בדף
+// המארח, כדי שהפונקציה לעולם לא תיפול עם ReferenceError בדף שלא טוען
+// את זה) - אותה לוגיקה בדיוק כמו waNormalizePhone הקיים (0->972,
+// תמיכה במספר שכבר מתחיל ב-972).
+function sfNormalizePhoneForWa(phone){
+  if (typeof waNormalizePhone === 'function') return waNormalizePhone(phone);
+  if (!phone || !String(phone).trim()) return { valid:false, reason:'missing', e164:null };
+  const d = String(phone).replace(/\D/g,'');
+  if (!d) return { valid:false, reason:'missing', e164:null };
+  if (d.startsWith('972')){
+    const rest = d.slice(3);
+    return rest.length === 9 ? { valid:true, reason:null, e164:d } : { valid:false, reason:'invalid', e164:null };
+  }
+  if (d.startsWith('0')){
+    return (d.length === 9 || d.length === 10) ? { valid:true, reason:null, e164:'972' + d.slice(1) } : { valid:false, reason:'invalid', e164:null };
+  }
+  return { valid:false, reason:'invalid', e164:null };
+}
+
+async function sfConfirmSendWhatsApp(bizId, buyerId, fileIds){
+  const btn = document.getElementById('sfSendWaBtn');
+  const statusEl = document.getElementById('sfSendStatus');
+  const buyer = SF_SEND_BUYERS_CACHE ? SF_SEND_BUYERS_CACHE[buyerId] : null;
+  if (!buyer){
+    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">שגיאה: פרטי הקונה לא נטענו - סגור ופתח את המסך מחדש</span>`;
+    return;
+  }
+
+  // בדיקת טלפון תקין - לפני הכל, לפני פתיחת שום חלון ולפני כל קריאת רשת
+  const phoneCheck = sfNormalizePhoneForWa(buyer.phone);
+  if (!phoneCheck.valid){
+    const msg = phoneCheck.reason === 'missing'
+      ? 'לקונה הזה אין מספר טלפון שמור - יש להוסיף אחד בכרטיס הקונה קודם'
+      : 'מספר הטלפון של הקונה אינו תקין ל-WhatsApp - יש לתקן אותו בכרטיס הקונה';
+    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
+    else toast(msg);
+    return;
+  }
+
+  // חלון ריק נפתח סינכרונית, בתוך אותו קליק - לפני כל await - כדי לא
+  // להיחסם ע"י חוסם פופ-אפים בנייד (אותו באג שכבר נתקל בו ותוקן בעבר
+  // באותה מסך בדיוק: חלון WhatsApp אחד ויחיד, נפתח מיד עם הלחיצה).
+  const win = window.open('', '_blank');
+
+  if (btn) bsdSetButtonLoading(btn, true, 'מכין...');
+  try {
+    const subjectEl = document.getElementById('sfPreviewSubject');
+    const bodyEl = document.getElementById('sfPreviewBody');
+    const introText = (bodyEl ? bodyEl.value : '') || (subjectEl ? subjectEl.value : '') || 'שלום,';
+
+    console.log('[sfConfirmSendWhatsApp] קורא ל-get-sale-files-signed-links', { bizId, buyerId, fileIds });
+    const { data: linkResult, error: linkErr } = await sfWithClientTimeout(
+      window.supabaseClient.functions.invoke('get-sale-files-signed-links', {
+        body: { business_id: bizId, buyer_id: buyerId, file_ids: fileIds }
+      }),
+      25000, 'הכנת קישורים ל-WhatsApp'
+    );
+    console.log('[sfConfirmSendWhatsApp] תשובה התקבלה', { linkResult, linkErr });
+    if (linkErr || linkResult?.error){
+      let detail = linkResult?.error || linkErr?.message || 'שגיאה לא ידועה';
+      if (linkErr && linkErr.context && typeof linkErr.context.json === 'function'){
+        try { const b = await linkErr.context.json(); if (b?.error) detail = b.error; } catch(e2){}
+      }
+      throw new Error(detail);
+    }
+    const links = Array.isArray(linkResult?.links) ? linkResult.links : [];
+    if (!links.length) throw new Error('לא נמצאו קבצים זמינים לשליחה');
+
+    const messageText = introText + '\n\n' + links.map(l => `${l.name}:\n${l.url}`).join('\n\n');
+    const waUrl = `https://wa.me/${phoneCheck.e164}?text=${encodeURIComponent(messageText)}`;
+    if (win && !win.closed) { win.location.href = waUrl; } else { window.open(waUrl, '_blank'); }
+
+    if (statusEl) statusEl.innerHTML = '<span style="color:#1f7a45;">✅ נפתחה שיחת WhatsApp עם הודעה מוכנה, כולל קישורי הורדה מאובטחים לקבצים שנבחרו. הלחיצה על Send בפועל היא בידיך בתוך WhatsApp.</span>';
+  } catch(e){
+    console.error('[sfConfirmSendWhatsApp] שגיאה:', e);
+    const msg = (e && e.message) ? e.message : String(e);
+    if (win && !win.closed){ try { win.close(); } catch(_e){} }
+    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
+    else toast('שגיאה: ' + msg);
+  } finally {
     if (btn) bsdSetButtonLoading(btn, false);
   }
 }
