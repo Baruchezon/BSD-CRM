@@ -124,29 +124,52 @@ Deno.serve(async (req: Request) => {
     log('auth_ok', { actorId });
 
     const body = await req.json();
-    const { business_id, buyer_id, file_ids, subject, intro_text, intro_html } = body || {};
+    const { business_id, buyer_id, broker_id, recipient_type, file_ids, subject, intro_text, intro_html } = body || {};
+    const recipientType: 'buyer' | 'broker' = recipient_type === 'broker' ? 'broker' : 'buyer';
+    const recipientId = recipientType === 'broker' ? broker_id : buyer_id;
     businessIdForLog = business_id || '';
-    log('body_parsed', { business_id, buyer_id, file_ids_count: Array.isArray(file_ids) ? file_ids.length : null });
+    log('body_parsed', { business_id, recipient_type: recipientType, recipient_id: recipientId, file_ids_count: Array.isArray(file_ids) ? file_ids.length : null });
 
-    if (!business_id || !buyer_id || !Array.isArray(file_ids) || !file_ids.length) {
-      return jsonResponse(400, { error: 'חסרים שדות חובה: business_id, buyer_id, file_ids (רשימה לא ריקה)' });
+    if (!business_id || !recipientId || !Array.isArray(file_ids) || !file_ids.length) {
+      return jsonResponse(400, { error: 'חסרים שדות חובה: business_id, buyer_id/broker_id, file_ids (רשימה לא ריקה)' });
     }
 
-    // 2. שליפת פרטי הקונה מה-DB (לא מהלקוח) - כולל agreement_status האמיתי כרגע
-    const { data: buyer, error: buyerErr } = await supabase
-      .from('leads')
-      .select('id, full_name, first_name, last_name, email, phone, agreement_status')
-      .eq('id', buyer_id)
-      .eq('type', 'buyer')
-      .maybeSingle();
-    if (buyerErr) { log('buyer_lookup_error', { message: buyerErr.message }); return jsonResponse(500, { error: 'שגיאה בשליפת פרטי הקונה: ' + buyerErr.message }); }
-    if (!buyer) { log('buyer_not_found'); return jsonResponse(404, { error: 'קונה לא נמצא' }); }
+    // 2. שליפת פרטי הנמען מה-DB (לא מהלקוח) - כולל agreement_status האמיתי כרגע.
+    //    03.09.2026: נוסף מסלול מתווך/סוכן, לגמרי בנפרד מהמסלול הקיים לקונה -
+    //    שולף מטבלת brokers במקום leads, ומוסיף בדיקת חסימה (status='חסום')
+    //    שאין לה מקבילה אצל קונים. מסלול הקונה למטה נשאר בדיוק כפי שהיה.
+    let buyer: { id: string; full_name?: string; first_name?: string; last_name?: string; email?: string; phone?: string; agreement_status?: string } | null = null;
+    if (recipientType === 'broker') {
+      const { data: broker, error: brokerErr } = await supabase
+        .from('brokers')
+        .select('id, full_name, first_name, last_name, email, phone, agreement_status, status')
+        .eq('id', recipientId)
+        .maybeSingle();
+      if (brokerErr) { log('broker_lookup_error', { message: brokerErr.message }); return jsonResponse(500, { error: 'שגיאה בשליפת פרטי המתווך: ' + brokerErr.message }); }
+      if (!broker) { log('broker_not_found'); return jsonResponse(404, { error: 'מתווך לא נמצא' }); }
+      if (broker.status === 'חסום') {
+        log('broker_blocked', { broker_id: broker.id });
+        await logAttempt({ broker_id: broker.id, reason: 'broker_blocked', status: 'blocked' }, actorId, business_id);
+        return jsonResponse(403, { error: 'מתווך זה חסום - לא ניתן לשלוח אליו חומרים חדשים' });
+      }
+      buyer = broker;
+    } else {
+      const { data: leadBuyer, error: buyerErr } = await supabase
+        .from('leads')
+        .select('id, full_name, first_name, last_name, email, phone, agreement_status')
+        .eq('id', recipientId)
+        .eq('type', 'buyer')
+        .maybeSingle();
+      if (buyerErr) { log('buyer_lookup_error', { message: buyerErr.message }); return jsonResponse(500, { error: 'שגיאה בשליפת פרטי הקונה: ' + buyerErr.message }); }
+      if (!leadBuyer) { log('buyer_not_found'); return jsonResponse(404, { error: 'קונה לא נמצא' }); }
+      buyer = leadBuyer;
+    }
     log('buyer_ok', { has_email: !!buyer.email, agreement_status: buyer.agreement_status || null });
     if (!buyer.email) {
-      await logAttempt({ buyer_id, reason: 'buyer_missing_email', status: 'failed' }, actorId, business_id);
-      return jsonResponse(400, { error: 'לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם' });
+      await logAttempt({ buyer_id: recipientId, reason: 'buyer_missing_email', status: 'failed' }, actorId, business_id);
+      return jsonResponse(400, { error: recipientType === 'broker' ? 'למתווך הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס המתווך קודם' : 'לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם' });
     }
-    const buyerName = buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || 'קונה';
+    const buyerName = buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || (recipientType === 'broker' ? 'מתווך' : 'קונה');
     const signed = buyer.agreement_status === 'יש הסכם חתום';
 
     // 3. שליפת הקבצים מה-DB לפי business_id+id בלבד - מתעלמים לגמרי משם קובץ/
@@ -163,7 +186,7 @@ Deno.serve(async (req: Request) => {
     const foundIds = new Set((files || []).map((f) => f.id));
     const missing = file_ids.filter((id: string) => !foundIds.has(id));
     if (missing.length) {
-      await logAttempt({ buyer_id, file_ids, missing_file_ids: missing, status: 'failed', reason: 'file_not_found_or_inactive' }, actorId, business_id);
+      await logAttempt({ recipient_id: recipientId, recipient_type: recipientType, file_ids, missing_file_ids: missing, status: 'failed', reason: 'file_not_found_or_inactive' }, actorId, business_id);
       return jsonResponse(400, { error: 'קובץ אחד או יותר לא נמצא בתיק המכירה של העסק הזה (ייתכן שנמחק) - רענן ונסה שוב' });
     }
 
@@ -173,14 +196,14 @@ Deno.serve(async (req: Request) => {
     const disallowed = (files || []).filter((f) => !signed && f.confidentiality_level === 2);
     if (disallowed.length) {
       await logAttempt({
-        buyer_id, buyer_email: buyer.email, file_ids,
+        recipient_id: recipientId, recipient_type: recipientType, buyer_email: buyer.email, file_ids,
         disallowed_files: disallowed.map((f) => ({ id: f.id, name: f.file_name })),
         agreement_status_at_send: buyer.agreement_status || 'אין הסכם',
         status: 'blocked',
       }, actorId, business_id);
       const names = disallowed.map((f) => f.file_name).join(', ');
       return jsonResponse(403, {
-        error: `לא ניתן לשלוח את הקבצים הבאים: ${names}. לקונה אין הסכם סודיות חתום.`,
+        error: `לא ניתן לשלוח את הקבצים הבאים: ${names}. ${recipientType === 'broker' ? 'למתווך' : 'לקונה'} אין הסכם סודיות חתום.`,
         disallowed_file_ids: disallowed.map((f) => f.id),
       });
     }
@@ -197,12 +220,12 @@ Deno.serve(async (req: Request) => {
         ));
       } catch (te) {
         log('signed_url_timeout', { file: f.file_name, error: te instanceof Error ? te.message : String(te) });
-        await logAttempt({ buyer_id, file_ids, status: 'failed', reason: 'signed_url_timeout', failed_file: f.file_name }, actorId, business_id);
+        await logAttempt({ recipient_id: recipientId, recipient_type: recipientType, file_ids, status: 'failed', reason: 'signed_url_timeout', failed_file: f.file_name }, actorId, business_id);
         return jsonResponse(504, { error: `יצירת קישור הורדה נתקעה עבור "${f.file_name}" (זמן קצוב) - נסה שוב` });
       }
       if (linkErr || !signedUrlData?.signedUrl) {
         log('signed_url_failed', { file: f.file_name, error: linkErr?.message });
-        await logAttempt({ buyer_id, file_ids, status: 'failed', reason: 'signed_url_failed', failed_file: f.file_name }, actorId, business_id);
+        await logAttempt({ recipient_id: recipientId, recipient_type: recipientType, file_ids, status: 'failed', reason: 'signed_url_failed', failed_file: f.file_name }, actorId, business_id);
         return jsonResponse(500, { error: `יצירת קישור הורדה נכשלה עבור "${f.file_name}": ${linkErr?.message || 'שגיאה לא ידועה'}` });
       }
       linkItems.push({ name: f.file_name, url: signedUrlData.signedUrl });
@@ -289,7 +312,7 @@ Deno.serve(async (req: Request) => {
     if (!resp.ok) {
       const detail = (respBody && (respBody.message || respBody.error)) || `HTTP ${resp.status}`;
       await logAttempt({
-        buyer_id, buyer_email: buyer.email, file_ids, file_names: (files || []).map((f) => f.file_name),
+        recipient_id: recipientId, recipient_type: recipientType, buyer_email: buyer.email, file_ids, file_names: (files || []).map((f) => f.file_name),
         agreement_status_at_send: buyer.agreement_status || 'אין הסכם', performed_by: actorLabel,
         status: 'failed', reason: 'resend_api_error', error: detail,
       }, actorId, business_id);
@@ -298,7 +321,7 @@ Deno.serve(async (req: Request) => {
 
     // 7. תיעוד הצלחה - כולל בדיוק מה שסעיף 6 בהנחיה דורש
     await logAttempt({
-      buyer_id, buyer_email: buyer.email,
+      recipient_id: recipientId, recipient_type: recipientType, buyer_email: buyer.email,
       file_ids, file_names: (files || []).map((f) => f.file_name),
       file_confidentiality: (files || []).map((f) => ({ id: f.id, name: f.file_name, confidentiality_level: f.confidentiality_level })),
       agreement_status_at_send: buyer.agreement_status || 'אין הסכם',
@@ -315,14 +338,25 @@ Deno.serve(async (req: Request) => {
     // ולא ניתן לזייף buyer_id/business_id מהלקוח (סעיף 2 בהנחיה: לפי
     // IDs אמיתיים, לא לפי שמות). כשל בבלוק הזה לעולם לא הופך שליחת מייל
     // מוצלחת לכישלון כלפי המשתמש - התיעוד הוא תוספת, לא תנאי.
+    //
+    // 03.09.2026 (מודול מתווכים, שלב 3): מסלול קונה למטה נשאר בדיוק
+    // כפי שהיה - התנאי recipientType==='broker' מוסיף ענף מקביל בלבד,
+    // שכותב ל-broker_id/counterparty_type='broker' ב-matches (לא buyer_id),
+    // ומתעד גם בטבלת broker_document_log (אין מקבילה כזו לקונים - זו
+    // דרישה ייעודית למתווכים, "מעקב עסקים ומסמכים שהועברו").
     let matchAction: 'created' | 'updated' | 'failed' = 'failed';
     try {
       const fileNamesText = (files || []).map((f) => f.file_name).join(', ');
-      const actionText = `נשלחו לקונה ${buyerName} קבצים: ${fileNamesText} (מייל)`;
+      const actionText = `נשלחו ל${recipientType === 'broker' ? 'מתווך' : 'קונה'} ${buyerName} קבצים: ${fileNamesText} (מייל)`;
       const nowIso = new Date().toISOString();
-      const { data: existingMatch, error: matchLookupErr } = await supabase
-        .from('matches').select('id').eq('business_id', business_id).eq('buyer_id', buyer_id).maybeSingle();
+
+      const matchQuery = recipientType === 'broker'
+        ? supabase.from('matches').select('id').eq('business_id', business_id).eq('broker_id', recipientId).maybeSingle()
+        : supabase.from('matches').select('id').eq('business_id', business_id).eq('buyer_id', recipientId).maybeSingle();
+      const { data: existingMatch, error: matchLookupErr } = await matchQuery;
       if (matchLookupErr) throw matchLookupErr;
+
+      let matchId: string | undefined = existingMatch?.id;
       if (existingMatch) {
         const { error: updErr } = await supabase.from('matches')
           .update({ last_action: actionText, last_action_at: nowIso })
@@ -331,15 +365,27 @@ Deno.serve(async (req: Request) => {
         matchAction = 'updated';
         log('match_updated', { match_id: existingMatch.id });
       } else {
+        const insertPayload: Record<string, unknown> = recipientType === 'broker'
+          ? { business_id, broker_id: recipientId, counterparty_type: 'broker', status: 'חומרים מלאים נשלחו',
+              match_source: 'אוטומטי - נשלחו קבצים במייל', last_action: actionText, last_action_at: nowIso, created_by: actorId }
+          : { business_id, buyer_id: recipientId, status: 'חומרים מלאים נשלחו',
+              match_source: 'אוטומטי - נשלחו קבצים במייל', last_action: actionText, last_action_at: nowIso, created_by: actorId };
         const { data: newMatch, error: insErr } = await supabase.from('matches')
-          .insert({
-            business_id, buyer_id, status: 'חומרים מלאים נשלחו',
-            match_source: 'אוטומטי - נשלחו קבצים במייל',
-            last_action: actionText, last_action_at: nowIso, created_by: actorId,
-          }).select('id').single();
+          .insert(insertPayload).select('id').single();
         if (insErr) throw insErr;
         matchAction = 'created';
+        matchId = newMatch?.id;
         log('match_created', { match_id: newMatch?.id });
+      }
+
+      if (recipientType === 'broker') {
+        const docLogRows = (files || []).map((f) => ({
+          broker_id: recipientId, business_id, match_id: matchId || null,
+          file_id: f.id, file_name: f.file_name, document_type: f.document_type || f.category || null,
+          channel: 'email', sent_by: actorId,
+        }));
+        const { error: docLogErr } = await supabase.from('broker_document_log').insert(docLogRows);
+        if (docLogErr) log('broker_document_log_failed', { error: docLogErr.message });
       }
     } catch (me) {
       log('match_documentation_failed', { error: me instanceof Error ? me.message : String(me) });
