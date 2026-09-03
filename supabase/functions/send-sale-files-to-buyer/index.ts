@@ -66,6 +66,25 @@ function esc(s: string): string {
   ));
 }
 
+// 03.09.2026: תוקן באג פוטנציאלי - עד כה שום קריאה חיצונית (auth, storage,
+// Resend) לא הייתה מוגבלת בזמן, כך שאם אחת מהן נתקעת (רשת איטית/ספק לא
+// מגיב) הפונקציה כולה נתקעת ללא סוף והלקוח נשאר על "שולח..." בלי תשובה
+// לעולם. כל קריאה חיצונית עוברת עכשיו דרך withTimeout כדי שתמיד תוחזר
+// תשובה סופית ללקוח (הצלחה או שגיאת timeout מפורשת).
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timeout: ${label} לא הגיב תוך ${ms / 1000} שניות`)), ms);
+    promise.then((v) => { clearTimeout(timer); resolve(v); },
+                 (e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
+function log(step: string, details?: Record<string, unknown>) {
+  // 03.09.2026: לוגים מסודרים לכל שלב קריטי, לצפייה ב-Supabase Edge Function
+  // Logs - כדי לאתר בדיוק איפה תקוע ניסיון שליחה עתידי, בלי לנחש.
+  console.log(`[send-sale-files-to-buyer] ${step}`, details ? JSON.stringify(details) : '');
+}
+
 async function logAttempt(details: Record<string, unknown>, actorId: string | null, businessId: string) {
   try {
     await supabase.from('audit_log').insert({
@@ -90,18 +109,24 @@ Deno.serve(async (req: Request) => {
   let businessIdForLog = '';
 
   try {
+    log('start');
     // 1. אימות משתמש מחובר (זהה לתבנית ב-send-match-summary הקיים)
     const authHeader = req.headers.get('Authorization') || '';
     const jwt = authHeader.replace('Bearer ', '');
-    const { data: userData, error: userErr } = await supabase.auth.getUser(jwt);
+    const { data: userData, error: userErr } = await withTimeout(
+      supabase.auth.getUser(jwt), 10000, 'אימות משתמש (auth.getUser)'
+    );
     if (userErr || !userData?.user) {
+      log('auth_failed', { error: userErr?.message });
       return jsonResponse(401, { error: 'לא מחובר' });
     }
     actorId = userData.user.id;
+    log('auth_ok', { actorId });
 
     const body = await req.json();
     const { business_id, buyer_id, file_ids, subject, intro_text, intro_html } = body || {};
     businessIdForLog = business_id || '';
+    log('body_parsed', { business_id, buyer_id, file_ids_count: Array.isArray(file_ids) ? file_ids.length : null });
 
     if (!business_id || !buyer_id || !Array.isArray(file_ids) || !file_ids.length) {
       return jsonResponse(400, { error: 'חסרים שדות חובה: business_id, buyer_id, file_ids (רשימה לא ריקה)' });
@@ -114,8 +139,9 @@ Deno.serve(async (req: Request) => {
       .eq('id', buyer_id)
       .eq('type', 'buyer')
       .maybeSingle();
-    if (buyerErr) return jsonResponse(500, { error: 'שגיאה בשליפת פרטי הקונה: ' + buyerErr.message });
-    if (!buyer) return jsonResponse(404, { error: 'קונה לא נמצא' });
+    if (buyerErr) { log('buyer_lookup_error', { message: buyerErr.message }); return jsonResponse(500, { error: 'שגיאה בשליפת פרטי הקונה: ' + buyerErr.message }); }
+    if (!buyer) { log('buyer_not_found'); return jsonResponse(404, { error: 'קונה לא נמצא' }); }
+    log('buyer_ok', { has_email: !!buyer.email, agreement_status: buyer.agreement_status || null });
     if (!buyer.email) {
       await logAttempt({ buyer_id, reason: 'buyer_missing_email', status: 'failed' }, actorId, business_id);
       return jsonResponse(400, { error: 'לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם' });
@@ -131,7 +157,8 @@ Deno.serve(async (req: Request) => {
       .eq('business_id', business_id)
       .eq('status', 'active')
       .in('id', file_ids);
-    if (filesErr) return jsonResponse(500, { error: 'שגיאה בשליפת הקבצים: ' + filesErr.message });
+    if (filesErr) { log('files_lookup_error', { message: filesErr.message }); return jsonResponse(500, { error: 'שגיאה בשליפת הקבצים: ' + filesErr.message }); }
+    log('files_ok', { found_count: (files || []).length, requested_count: file_ids.length });
 
     const foundIds = new Set((files || []).map((f) => f.id));
     const missing = file_ids.filter((id: string) => !foundIds.has(id));
@@ -159,19 +186,31 @@ Deno.serve(async (req: Request) => {
     }
 
     // 5. יצירת קישורי הורדה מאובטחים - נוצרים כאן, בשרת, ולעולם לא מתקבלים מהלקוח
+    log('signed_urls_start', { count: (files || []).length });
     const linkItems: { name: string; url: string }[] = [];
     for (const f of files || []) {
-      const { data: signedUrlData, error: linkErr } = await supabase.storage
-        .from(SALE_FILE_BUCKET)
-        .createSignedUrl(f.storage_path, SIGNED_URL_SECONDS);
+      let signedUrlData, linkErr;
+      try {
+        ({ data: signedUrlData, error: linkErr } = await withTimeout(
+          supabase.storage.from(SALE_FILE_BUCKET).createSignedUrl(f.storage_path, SIGNED_URL_SECONDS),
+          10000, `יצירת קישור עבור ${f.file_name}`
+        ));
+      } catch (te) {
+        log('signed_url_timeout', { file: f.file_name, error: te instanceof Error ? te.message : String(te) });
+        await logAttempt({ buyer_id, file_ids, status: 'failed', reason: 'signed_url_timeout', failed_file: f.file_name }, actorId, business_id);
+        return jsonResponse(504, { error: `יצירת קישור הורדה נתקעה עבור "${f.file_name}" (זמן קצוב) - נסה שוב` });
+      }
       if (linkErr || !signedUrlData?.signedUrl) {
+        log('signed_url_failed', { file: f.file_name, error: linkErr?.message });
         await logAttempt({ buyer_id, file_ids, status: 'failed', reason: 'signed_url_failed', failed_file: f.file_name }, actorId, business_id);
         return jsonResponse(500, { error: `יצירת קישור הורדה נכשלה עבור "${f.file_name}": ${linkErr?.message || 'שגיאה לא ידועה'}` });
       }
       linkItems.push({ name: f.file_name, url: signedUrlData.signedUrl });
     }
+    log('signed_urls_ok', { count: linkItems.length });
 
     if (!RESEND_API_KEY) {
+      log('resend_not_configured');
       await logAttempt({ buyer_id, file_ids, status: 'failed', reason: 'resend_not_configured' }, actorId, business_id);
       return jsonResponse(500, { error: 'RESEND_API_KEY לא מוגדר ב-Secrets של הפונקציה' });
     }
@@ -207,18 +246,44 @@ Deno.serve(async (req: Request) => {
 
     const replyTo = (body && body.reply_to) ? String(body.reply_to) : undefined;
 
-    const resp = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: `BSD Business Brokers Israel <${RESEND_FROM_EMAIL}>`,
-        to: [buyer.email],
-        subject: finalSubject,
-        text: bodyText,
-        html: htmlBody,
-        ...(replyTo ? { reply_to: replyTo } : {}),
-      }),
-    });
+    log('resend_call_start', { to: buyer.email, from: RESEND_FROM_EMAIL });
+    let resp: Response;
+    try {
+      // 03.09.2026: זה ה-await החיצוני הכי חשוד לתקיעה ללא סוף (קריאת רשת
+      // יחידה, בלי טיפול קודם ב-timeout) - AbortController מבטיח שגם אם
+      // Resend לא עונה בכלל, הלקוח יקבל תשובה סופית תוך 15 שניות ולא יישאר
+      // על "שולח..." לנצח.
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), 15000);
+      resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          from: `BSD Business Brokers Israel <${RESEND_FROM_EMAIL}>`,
+          to: [buyer.email],
+          subject: finalSubject,
+          text: bodyText,
+          html: htmlBody,
+          ...(replyTo ? { reply_to: replyTo } : {}),
+        }),
+      });
+      clearTimeout(abortTimer);
+    } catch (fe) {
+      const isAbort = fe instanceof Error && fe.name === 'AbortError';
+      log('resend_call_exception', { aborted: isAbort, error: fe instanceof Error ? fe.message : String(fe) });
+      await logAttempt({
+        buyer_id, buyer_email: buyer.email, file_ids, status: 'failed',
+        reason: isAbort ? 'resend_timeout' : 'resend_network_error',
+        error: fe instanceof Error ? fe.message : String(fe),
+      }, actorId, business_id);
+      return jsonResponse(isAbort ? 504 : 502, {
+        error: isAbort
+          ? 'שירות המייל (Resend) לא הגיב תוך 15 שניות - נסה שוב'
+          : `שגיאת רשת בקריאה לשירות המייל: ${fe instanceof Error ? fe.message : String(fe)}`,
+      });
+    }
+    log('resend_call_done', { status: resp.status });
     const respBody = await resp.json().catch(() => ({}));
 
     if (!resp.ok) {
@@ -241,8 +306,10 @@ Deno.serve(async (req: Request) => {
       status: 'sent',
     }, actorId, business_id);
 
+    log('sent_ok', { buyer_email: buyer.email });
     return jsonResponse(200, { ok: true });
   } catch (e) {
+    log('unhandled_exception', { error: e instanceof Error ? e.message : String(e) });
     await logAttempt({ status: 'failed', reason: 'exception', error: e instanceof Error ? e.message : String(e) }, actorId, businessIdForLog);
     return jsonResponse(500, { error: e instanceof Error ? e.message : String(e) });
   }
