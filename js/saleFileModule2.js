@@ -719,6 +719,20 @@ function sfShowSendPreview(bizId, bizName){
   }
 }
 
+// 03.09.2026: תוקן באג אמיתי שדווח - לחיצה על "שלח מייל לקונה" הייתה יכולה
+// להישאר תקועה לצמיתות על "שולח..." בלי שום הודעה, כי ה-await על
+// functions.invoke() לא היה מוגבל בזמן: אם הבקשה ברשת נתקעת (ולא רק נכשלת),
+// ה-Promise פשוט לא נפתר ולעולם לא מגיע ל-catch. sfWithClientTimeout מבטיח
+// שגם אם invoke() עצמו נתקע, הפונקציה כאן תמיד תסתיים תוך 25 שניות עם
+// הודעת שגיאה אמיתית - הכפתור לעולם לא יישאר תקוע.
+function sfWithClientTimeout(promise, ms, label){
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`הבקשה נתקעה ולא קיבלה תשובה תוך ${Math.round(ms/1000)} שניות (${label}). בדוק את החיבור לאינטרנט ונסה שוב.`)), ms);
+    promise.then((v) => { clearTimeout(timer); resolve(v); },
+                 (e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
 async function sfConfirmSend(bizId, buyerId, fileIds){
   const btn = document.getElementById('sfSendBtn');
   const statusEl = document.getElementById('sfSendStatus');
@@ -729,12 +743,17 @@ async function sfConfirmSend(bizId, buyerId, fileIds){
     if (!subject) throw new Error('נושא המייל לא יכול להיות ריק');
 
     if (statusEl) statusEl.textContent = 'שולח מייל...';
+    console.log('[sfConfirmSend] קורא ל-send-sale-files-to-buyer', { bizId, buyerId, fileIds });
     // כל הבדיקה האמיתית (סטטוס הסכם, רמת סודיות כל קובץ, שליפת האימייל,
     // בניית קישורי ההורדה) מתבצעת בתוך send-sale-files-to-buyer בשרת -
     // לא כאן. הלקוח שולח רק מזהים וטקסט חופשי לעריכה.
-    const { data: sendResult, error: sendErr } = await window.supabaseClient.functions.invoke('send-sale-files-to-buyer', {
-      body: { business_id: bizId, buyer_id: buyerId, file_ids: fileIds, subject, intro_text: introText, reply_to: CURRENT_PROFILE.email }
-    });
+    const { data: sendResult, error: sendErr } = await sfWithClientTimeout(
+      window.supabaseClient.functions.invoke('send-sale-files-to-buyer', {
+        body: { business_id: bizId, buyer_id: buyerId, file_ids: fileIds, subject, intro_text: introText, reply_to: CURRENT_PROFILE.email }
+      }),
+      25000, 'שליחת מייל לקונה'
+    );
+    console.log('[sfConfirmSend] תשובה התקבלה', { sendResult, sendErr });
     if (sendErr || sendResult?.error){
       let detail = sendResult?.error || sendErr?.message || 'שגיאה לא ידועה';
       if (sendErr && sendErr.context && typeof sendErr.context.json === 'function'){
@@ -746,10 +765,13 @@ async function sfConfirmSend(bizId, buyerId, fileIds){
     toast('החומרים נשלחו בהצלחה');
     document.getElementById('sfSendOverlay').remove();
   } catch(e){
-    console.error('sfConfirmSend error:', e);
+    console.error('[sfConfirmSend] שגיאה:', e);
     const msg = (e && e.message) ? e.message : String(e);
     if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
     else toast('שגיאה: ' + msg);
+  } finally {
+    // finally ולא רק בתוך ה-catch: מבטיח שהכפתור תמיד חוזר למצב רגיל,
+    // גם אם ייפול חריג לא צפוי שלא נתפס במפורש למעלה.
     if (btn) bsdSetButtonLoading(btn, false);
   }
 }
