@@ -112,6 +112,8 @@ function sfCanManageFile(file){
 let SF_CURRENT_BIZ = null;
 let SF_FILES_BY_CATEGORY = {};
 let SF_SEND_BUYERS_CACHE = null;
+let SF_SEND_BROKERS_CACHE = null;   // 03.09.2026 (מודול מתווכים) - מקביל ל-SF_SEND_BUYERS_CACHE, לא מחליף אותו
+let SF_SEND_RECIPIENT_TYPE = 'buyer';   // 'buyer' | 'broker' - איזה select גלוי כרגע במודאל השליחה
 
 async function loadSaleFileModule(bizId){
   SF_CURRENT_BIZ = bizId;
@@ -144,7 +146,7 @@ function renderSaleFileCards(bizId){
   if (!box) return;
   box.innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
-      <button type="button" class="btn btn-primary" style="font-size:.78rem;padding:6px 14px;" onclick="sfOpenSendModalForCurrentBiz('${bizId}')">📤 שלח לקונה</button>
+      <button type="button" class="btn btn-primary" style="font-size:.78rem;padding:6px 14px;" onclick="sfOpenSendModalForCurrentBiz('${bizId}')">📤 שלח לקונה / מתווך</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;">
       ${SALE_FILE_CATEGORIES.map(cat => {
@@ -264,7 +266,7 @@ function openSaleFileCategory(bizId, categoryKey){
         📱 העלאת קבצים זמינה כרגע מהמחשב בלבד
       </div>` : '')}
       <div style="margin-top:12px;border-top:1px solid #e5e1d5;padding-top:10px;text-align:end;">
-        <button type="button" class="btn btn-primary" style="font-size:.78rem;padding:6px 14px;" onclick="sfOpenSendModalForCurrentBiz('${bizId}')">📤 שלח לקונה</button>
+        <button type="button" class="btn btn-primary" style="font-size:.78rem;padding:6px 14px;" onclick="sfOpenSendModalForCurrentBiz('${bizId}')">📤 שלח לקונה / מתווך</button>
       </div>
     </div>
   `;
@@ -565,17 +567,33 @@ async function openSendToBuyerModal(bizId, bizName){
   const files = sfAllActiveFiles();
   if (!files.length){ toast('אין עדיין קבצים בתיק המכירה לשליחה'); return; }
 
-  const [{ data: buyers, error }, { data: bizMatches }] = await Promise.all([
+  // 03.09.2026 (מודול מתווכים, שלב 3): נטען גם רשימת מתווכים לצד רשימת
+  // הקונים הקיימת - לפי הנחיה מפורשת (סעיף 6 בפרומפט הראשון + סעיף 6
+  // בפרומפט השני): "בשליחת מסמך... צריך להיות אפשר לבחור: קונה או מתווך".
+  // מתווכים חסומים (status='חסום') לא מוצגים כלל ברשימת הבחירה - לא ניתן
+  // לבחור אותם כנמען חדש (דרישה מפורשת בסבב 3, סעיף 6).
+  const [{ data: buyers, error }, { data: bizMatches }, { data: brokers, error: brokersErr }] = await Promise.all([
     window.supabaseClient.from('leads')
       .select('id, full_name, first_name, last_name, email, phone, agreement_status')
       .eq('type', 'buyer').eq('is_archived', false).order('full_name'),
-    window.supabaseClient.from('matches').select('buyer_id, status').eq('business_id', bizId),
+    window.supabaseClient.from('matches').select('buyer_id, broker_id, counterparty_type, status').eq('business_id', bizId),
+    window.supabaseClient.from('brokers')
+      .select('id, full_name, first_name, last_name, email, phone, agreement_status, status')
+      .eq('is_archived', false).neq('status', 'חסום').order('full_name'),
   ]);
   if (error){ toast('שגיאה בטעינת רשימת קונים: ' + error.message); return; }
+  if (brokersErr){ console.error('[openSendToBuyerModal] שגיאה בטעינת מתווכים (לא חוסם את מסלול הקונה):', brokersErr); }
   const matchStatusByBuyer = {};
-  (bizMatches || []).forEach(m => { matchStatusByBuyer[m.buyer_id] = m.status; });
+  const matchStatusByBroker = {};
+  (bizMatches || []).forEach(m => {
+    if (m.counterparty_type === 'broker' && m.broker_id) matchStatusByBroker[m.broker_id] = m.status;
+    else if (m.buyer_id) matchStatusByBuyer[m.buyer_id] = m.status;
+  });
   SF_SEND_BUYERS_CACHE = {};
   (buyers || []).forEach(b => { SF_SEND_BUYERS_CACHE[b.id] = b; });
+  SF_SEND_BROKERS_CACHE = {};
+  (brokers || []).forEach(b => { SF_SEND_BROKERS_CACHE[b.id] = b; });
+  SF_SEND_RECIPIENT_TYPE = 'buyer';
 
   const overlay = document.createElement('div');
   overlay.id = 'sfSendOverlay';
@@ -586,11 +604,25 @@ async function openSendToBuyerModal(bizId, bizName){
     const extra = [match ? `התאמה: ${match}` : null, b.email ? null : 'אין אימייל'].filter(Boolean).join(' · ');
     return `<option value="${b.id}">${esc(name)}${extra ? ' — ⚠️ ' + esc(extra) : ''}</option>`;
   }).join('');
+  const brokerOptions = (brokers || []).map(b => {
+    const name = b.full_name || [b.first_name, b.last_name].filter(Boolean).join(' ') || '(ללא שם)';
+    const match = matchStatusByBroker[b.id];
+    const extra = [match ? `התאמה: ${match}` : null, b.email ? null : 'אין אימייל'].filter(Boolean).join(' · ');
+    return `<option value="${b.id}">${esc(name)} (מתווך)${extra ? ' — ⚠️ ' + esc(extra) : ''}</option>`;
+  }).join('');
   overlay.innerHTML = `
     <div id="sfSendModalBody" style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:inherit;">
-      <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">📤 שליחת חומרים לקונה</h3>
-      <div class="field"><label>קונה</label>
+      <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">📤 שליחת חומרים</h3>
+      <div style="display:flex;gap:8px;margin-bottom:14px;" id="sfRecipientTypeToggle">
+        <button type="button" id="sfTypeBuyerBtn" onclick="sfSwitchRecipientType('buyer')" style="flex:1;padding:9px;border-radius:8px;border:1px solid #2b6fc9;background:#2b6fc9;color:#fff;cursor:pointer;font-family:inherit;font-weight:700;">🧍 קונה</button>
+        <button type="button" id="sfTypeBrokerBtn" onclick="sfSwitchRecipientType('broker')" style="flex:1;padding:9px;border-radius:8px;border:1px solid #7a3fd1;background:#fff;color:#7a3fd1;cursor:pointer;font-family:inherit;font-weight:700;">🔵 מתווך / סוכן</button>
+      </div>
+      <div class="field" id="sfSendBuyerField"><label>קונה</label>
         <select id="sfSendBuyer" onchange="sfOnBuyerChange()"><option value="">— בחר קונה —</option>${buyerOptions}</select>
+      </div>
+      <div class="field" id="sfSendBrokerField" style="display:none;"><label>מתווך / סוכן</label>
+        <select id="sfSendBroker" onchange="sfOnBrokerChange()"><option value="">— בחר מתווך —</option>${brokerOptions}</select>
+        ${!brokerOptions ? '<div style="font-size:.75rem;color:#8a93ab;margin-top:4px;">אין מתווכים פעילים במערכת. אפשר להוסיף במסך מתווכים / סוכנים.</div>' : ''}
       </div>
       <div id="sfSendBuyerDetails" style="font-size:.8rem;margin:6px 0;color:#5a6172;"></div>
       <div id="sfSendAgreementNote" style="font-size:.8rem;margin:8px 0;font-weight:700;"></div>
@@ -615,6 +647,31 @@ async function openSendToBuyerModal(bizId, bizName){
   sfOnBuyerChange();
 }
 
+// 03.09.2026 (מודול מתווכים, שלב 3): החלפת סוג הנמען בתוך אותו מודאל -
+// לא פותח מודאל חדש, רק מחליף איזה select גלוי ואיזה onChange חל, לפי
+// הדרישה שהבחירה בין קונה למתווך תהיה ברורה ובולטת (סעיף 9 בסבב 2:
+// "לא להציג רשימה שבה כולם נראים אותו הדבר").
+function sfSwitchRecipientType(type){
+  SF_SEND_RECIPIENT_TYPE = type;
+  const buyerBtn = document.getElementById('sfTypeBuyerBtn');
+  const brokerBtn = document.getElementById('sfTypeBrokerBtn');
+  const buyerField = document.getElementById('sfSendBuyerField');
+  const brokerField = document.getElementById('sfSendBrokerField');
+  if (type === 'broker'){
+    buyerBtn.style.background = '#fff'; buyerBtn.style.color = '#2b6fc9';
+    brokerBtn.style.background = '#7a3fd1'; brokerBtn.style.color = '#fff';
+    buyerField.style.display = 'none'; brokerField.style.display = '';
+    document.getElementById('sfSendBuyer').value = '';
+    sfOnBrokerChange();
+  } else {
+    brokerBtn.style.background = '#fff'; brokerBtn.style.color = '#7a3fd1';
+    buyerBtn.style.background = '#2b6fc9'; buyerBtn.style.color = '#fff';
+    brokerField.style.display = 'none'; buyerField.style.display = '';
+    document.getElementById('sfSendBroker').value = '';
+    sfOnBuyerChange();
+  }
+}
+
 // לחיצה על label של קובץ חסוי המנוטרל (checkbox disabled) לא עושה כלום
 // מבחינת הדפדפן - כך שהמשתמש רואה "שום דבר לא קרה" בלי הסבר. זה מציג את
 // ההודעה המפורשת שנדרשה בהנחיה ("לא ניתן לשלוח קובץ זה...") בכל לחיצה כזו.
@@ -622,7 +679,8 @@ function sfOnFileLabelClick(ev, labelEl){
   const chk = labelEl.querySelector('.sfSendFileChk');
   if (chk && chk.disabled){
     ev.preventDefault();
-    toast(`לא ניתן לשלוח קובץ זה. לקונה אין הסכם סודיות חתום. (${chk.dataset.name})`);
+    const who = SF_SEND_RECIPIENT_TYPE === 'broker' ? 'למתווך' : 'לקונה';
+    toast(`לא ניתן לשלוח קובץ זה. ${who} אין הסכם סודיות חתום. (${chk.dataset.name})`);
   }
 }
 
@@ -659,6 +717,43 @@ function sfOnBuyerChange(){
   }
 }
 
+// 03.09.2026 (מודול מתווכים, שלב 3): מקבילה מדויקת ל-sfOnBuyerChange, לא
+// נוגעת בה. אותה בדיוק לוגיקת חסימת קבצים חסויים לפי agreement_status -
+// לפי הנחיה מפורשת ש"ישתמש באותו מנגנון אבטחה והרשאות של קונה ככל שניתן".
+// ה-badge "🔵 מתווך" מוצג תמיד ליד השם שנבחר, לפי דרישת הסימון הבולט.
+function sfOnBrokerChange(){
+  const sel = document.getElementById('sfSendBroker');
+  const brokerId = sel.value;
+  const note = document.getElementById('sfSendAgreementNote');
+  const detailsEl = document.getElementById('sfSendBuyerDetails');
+  const checkboxes = Array.from(document.querySelectorAll('.sfSendFileChk'));
+  const broker = brokerId && SF_SEND_BROKERS_CACHE ? SF_SEND_BROKERS_CACHE[brokerId] : null;
+  if (!broker){
+    note.textContent = '';
+    if (detailsEl) detailsEl.textContent = '';
+    checkboxes.forEach(c => { c.disabled = false; c.closest('label').style.opacity = '1'; });
+    return;
+  }
+  if (detailsEl){
+    detailsEl.innerHTML = `<span style="background:#7a3fd1;color:#fff;font-weight:800;font-size:.68rem;padding:2px 8px;border-radius:10px;">🔵 מתווך / סוכן</span> · 📞 ${esc(broker.phone || 'אין טלפון')} · 📧 ${esc(broker.email || 'אין אימייל')}`;
+  }
+  const status = broker.agreement_status || 'אין הסכם';
+  const signed = status === 'יש הסכם חתום';
+  if (signed){
+    note.innerHTML = '<span style="color:#1f7a45;">✅ הסכם סודיות חתום, ניתן לשלוח חומר מלא</span>';
+    checkboxes.forEach(c => { c.disabled = false; c.closest('label').style.opacity = '1'; });
+  } else {
+    const statusLabel = status === 'נשלח הסכם לחתימה' ? 'הסכם נשלח לחתימה (טרם נחתם)' : 'אין הסכם';
+    note.innerHTML = `<span style="color:#b3402c;">🚫 ${esc(statusLabel)} — ניתן לשלוח חומר אנונימי בלבד</span>`;
+    checkboxes.forEach(c => {
+      const confidential = c.dataset.conf === '2';
+      c.disabled = confidential;
+      if (confidential) c.checked = false;
+      c.closest('label').style.opacity = confidential ? '.45' : '1';
+    });
+  }
+}
+
 // שלב תצוגה מקדימה (סעיף 5 בהנחיה) - נושא ותוכן ניתנים לעריכה, לפני שנשלח
 // בפועל. השליחה בפועל (sfConfirmSend) קוראת רק ל-Edge Function הקשיחה;
 // שום קישור/קובץ לא נבחר או נבנה כאן - רק טקסט חופשי לעריכה.
@@ -669,33 +764,45 @@ function sfShowSendPreview(bizId, bizName){
     if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
   };
   try {
-    const buyerSel = document.getElementById('sfSendBuyer');
-    const buyerId = buyerSel.value;
-    if (!buyerId){ fail('יש לבחור קונה'); return; }
-    const buyer = SF_SEND_BUYERS_CACHE[buyerId];
-    if (!buyer?.email){ fail('לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם'); return; }
+    const recipientType = SF_SEND_RECIPIENT_TYPE === 'broker' ? 'broker' : 'buyer';
+    let recipientId, recipient, recipientLabel;
+    if (recipientType === 'broker'){
+      const brokerSel = document.getElementById('sfSendBroker');
+      recipientId = brokerSel.value;
+      if (!recipientId){ fail('יש לבחור מתווך'); return; }
+      recipient = SF_SEND_BROKERS_CACHE[recipientId];
+      if (!recipient?.email){ fail('למתווך הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס המתווך קודם'); return; }
+      recipientLabel = '🔵 מתווך / סוכן';
+    } else {
+      const buyerSel = document.getElementById('sfSendBuyer');
+      recipientId = buyerSel.value;
+      if (!recipientId){ fail('יש לבחור קונה'); return; }
+      recipient = SF_SEND_BUYERS_CACHE[recipientId];
+      if (!recipient?.email){ fail('לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם'); return; }
+    }
 
     const selected = Array.from(document.querySelectorAll('.sfSendFileChk:checked'));
     if (!selected.length){ fail('יש לבחור לפחות קובץ אחד מהרשימה למעלה (סמן ✔️ ליד הקובץ)'); return; }
-    const signed = buyer.agreement_status === 'יש הסכם חתום';
+    const signed = recipient.agreement_status === 'יש הסכם חתום';
     const blockedNow = selected.filter(c => !signed && c.dataset.conf === '2');
     if (blockedNow.length){
       // רשת ביטחון בממשק בלבד - השרת יחסום את זה בכל מקרה גם אם זה נעקף
-      fail(`לא ניתן לשלוח את הקבצים הבאים: ${blockedNow.map(c=>c.dataset.name).join(', ')}. לקונה אין הסכם סודיות חתום.`);
+      const who = recipientType === 'broker' ? 'למתווך' : 'לקונה';
+      fail(`לא ניתן לשלוח את הקבצים הבאים: ${blockedNow.map(c=>c.dataset.name).join(', ')}. ${who} אין הסכם סודיות חתום.`);
       return;
     }
     if (statusEl) statusEl.textContent = '';
 
-    const buyerName = buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || 'קונה';
+    const recipientName = recipient.full_name || [recipient.first_name, recipient.last_name].filter(Boolean).join(' ') || (recipientType === 'broker' ? 'מתווך' : 'קונה');
     const fileIds = selected.map(c => c.value);
     const defaultSubject = `חומרי מכירה${signed ? ' - ' + bizName : ' (אנונימי)'}`;
-    const defaultBody = `שלום ${buyerName},\n\nמצורפים קישורים להורדת החומרים בנוגע ל${bizName} (בתוקף לשבוע):`;
+    const defaultBody = `שלום ${recipientName},\n\nמצורפים קישורים להורדת החומרים בנוגע ל${bizName} (בתוקף לשבוע):`;
 
     const body = document.getElementById('sfSendModalBody');
     body.innerHTML = `
       <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">📄 תצוגה מקדימה לפני שליחה</h3>
       <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.85rem;">
-        <div><b>${esc(buyerName)}</b> · ${esc(buyer.email)}</div>
+        <div><b>${esc(recipientName)}</b> ${recipientType==='broker' ? `<span style="background:#7a3fd1;color:#fff;font-weight:800;font-size:.68rem;padding:2px 8px;border-radius:10px;">${recipientLabel}</span>` : ''} · ${esc(recipient.email)}</div>
         <div style="color:#5a6172;">${esc(bizName)}</div>
       </div>
       <div style="font-weight:700;font-size:.85rem;color:var(--navy);margin-bottom:6px;">קבצים מצורפים:</div>
@@ -711,8 +818,8 @@ function sfShowSendPreview(bizId, bizName){
       <div id="sfSendStatus" style="font-size:.8rem;min-height:18px;margin-top:6px;"></div>
     <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
       <button type="button" class="btn btn-ghost" onclick="document.getElementById('sfSendOverlay').remove()">ביטול</button>
-      <button type="button" class="btn btn-secondary" id="sfSendWaBtn" onclick="sfConfirmSendWhatsApp('${bizId}', '${buyerId}', ${esc(JSON.stringify(fileIds))})">📱 שלח בWhatsApp</button>
-      <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend('${bizId}', '${buyerId}', ${esc(JSON.stringify(fileIds))})">📤 שלח מייל לקונה</button>
+      <button type="button" class="btn btn-secondary" id="sfSendWaBtn" onclick="sfConfirmSendWhatsApp('${bizId}', '${recipientId}', ${esc(JSON.stringify(fileIds))}, '${recipientType}')">📱 שלח בWhatsApp</button>
+      <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend('${bizId}', '${recipientId}', ${esc(JSON.stringify(fileIds))}, '${recipientType}')">📤 שלח מייל ל${recipientType==='broker' ? 'מתווך' : 'קונה'}</button>
     </div>`;
   } catch(e){
     console.error('sfShowSendPreview error:', e);
@@ -734,7 +841,8 @@ function sfWithClientTimeout(promise, ms, label){
   });
 }
 
-async function sfConfirmSend(bizId, buyerId, fileIds){
+async function sfConfirmSend(bizId, recipientId, fileIds, recipientType){
+  recipientType = recipientType === 'broker' ? 'broker' : 'buyer';
   const btn = document.getElementById('sfSendBtn');
   const statusEl = document.getElementById('sfSendStatus');
   if (btn) bsdSetButtonLoading(btn, true, 'שולח...');
@@ -744,15 +852,18 @@ async function sfConfirmSend(bizId, buyerId, fileIds){
     if (!subject) throw new Error('נושא המייל לא יכול להיות ריק');
 
     if (statusEl) statusEl.textContent = 'שולח מייל...';
-    console.log('[sfConfirmSend] קורא ל-send-sale-files-to-buyer', { bizId, buyerId, fileIds });
+    console.log('[sfConfirmSend] קורא ל-send-sale-files-to-buyer', { bizId, recipientId, recipientType, fileIds });
     // כל הבדיקה האמיתית (סטטוס הסכם, רמת סודיות כל קובץ, שליפת האימייל,
     // בניית קישורי ההורדה) מתבצעת בתוך send-sale-files-to-buyer בשרת -
     // לא כאן. הלקוח שולח רק מזהים וטקסט חופשי לעריכה.
+    // 03.09.2026 (מודול מתווכים, שלב 3): recipient_type/broker_id נוספו
+    // כפרמטרים אופציונליים - כשrecipientType='buyer' (ברירת המחדל, המצב
+    // היחיד שהיה קיים קודם) הבקשה זהה לחלוטין למה שנשלח קודם.
+    const invokeBody = { business_id: bizId, file_ids: fileIds, subject, intro_text: introText, reply_to: CURRENT_PROFILE.email, recipient_type: recipientType };
+    if (recipientType === 'broker') invokeBody.broker_id = recipientId; else invokeBody.buyer_id = recipientId;
     const { data: sendResult, error: sendErr } = await sfWithClientTimeout(
-      window.supabaseClient.functions.invoke('send-sale-files-to-buyer', {
-        body: { business_id: bizId, buyer_id: buyerId, file_ids: fileIds, subject, intro_text: introText, reply_to: CURRENT_PROFILE.email }
-      }),
-      25000, 'שליחת מייל לקונה'
+      window.supabaseClient.functions.invoke('send-sale-files-to-buyer', { body: invokeBody }),
+      25000, recipientType === 'broker' ? 'שליחת מייל למתווך' : 'שליחת מייל לקונה'
     );
     console.log('[sfConfirmSend] תשובה התקבלה', { sendResult, sendErr });
     if (sendErr || sendResult?.error){
@@ -765,12 +876,13 @@ async function sfConfirmSend(bizId, buyerId, fileIds){
 
     // 03.09.2026: תיעוד ההתאמה עצמו קורה בשרת (בתוך send-sale-files-to-buyer,
     // רק אחרי הצלחה אמיתית מ-Resend) - כאן רק מציגים למשתמש את אחת משתי
-    // ההודעות המדויקות שנדרשו, לפי match_action שהפונקציה מחזירה.
-    const matchMsg = sendResult?.match_action === 'created'
-      ? 'השליחה בוצעה ונוצרה התאמה חדשה.'
-      : sendResult?.match_action === 'updated'
-        ? 'השליחה בוצעה והפעילות נוספה להתאמה הקיימת.'
-        : 'החומרים נשלחו בהצלחה';
+    // ההודעות המדויקות שנדרשו, לפי match_action שהפונקציה מחזירה. נוסח
+    // הקונה נשאר בדיוק כפי שהיה (לא שינוי טקסט קיים); למתווך נוסף נוסח
+    // מדויק כפי שנדרש במפורש בהנחיה ("ההתאמה החדשה נוצרה ותועדה" / "השליחה
+    // נוספה להתאמה קיימת").
+    const matchMsg = recipientType === 'broker'
+      ? (sendResult?.match_action === 'created' ? 'ההתאמה החדשה נוצרה ותועדה.' : sendResult?.match_action === 'updated' ? 'השליחה נוספה להתאמה קיימת.' : 'החומרים נשלחו בהצלחה')
+      : (sendResult?.match_action === 'created' ? 'השליחה בוצעה ונוצרה התאמה חדשה.' : sendResult?.match_action === 'updated' ? 'השליחה בוצעה והפעילות נוספה להתאמה הקיימת.' : 'החומרים נשלחו בהצלחה');
     toast(matchMsg);
     document.getElementById('sfSendOverlay').remove();
   } catch(e){
@@ -817,20 +929,71 @@ function sfNormalizePhoneForWa(phone){
 // (לא נוגעת בסטטוס/הערות/פגישות קיימים). אם לא - יוצרת התאמה חדשה עם
 // סטטוס קיים ומתאים ("חומרים מלאים נשלחו"). כשל כאן לעולם לא מוצג
 // כשגיאת שליחה - השליחה עצמה כבר הושלמה בהצלחה לפני הקריאה לפונקציה הזו.
-async function sfDocumentMatchAfterSend(bizId, buyerId, fileIds, channelLabel){
+async function sfDocumentMatchAfterSend(bizId, recipientId, fileIds, channelLabel, recipientType){
+  recipientType = recipientType === 'broker' ? 'broker' : 'buyer';
   try {
-    const buyer = SF_SEND_BUYERS_CACHE ? SF_SEND_BUYERS_CACHE[buyerId] : null;
-    const buyerName = buyer ? (buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || 'קונה') : 'קונה';
     const allFiles = sfAllActiveFiles();
     const fileNames = fileIds.map(id => {
       const f = allFiles.find(x => x.id === id);
       return f ? f.file_name : null;
     }).filter(Boolean).join(', ');
+
+    if (recipientType === 'broker'){
+      // 03.09.2026 (מודול מתווכים, שלב 3): ענף מקביל לגמרי לענף הקונה
+      // למטה - לא נוגע בו. כותב ל-broker_id/counterparty_type='broker'
+      // (לא buyer_id), ומתעד גם ב-broker_document_log (מעקב עסקים
+      // ומסמכים שהועברו - סעיף 5 בהנחיה הראשונה, אין מקבילה כזו לקונים).
+      const broker = SF_SEND_BROKERS_CACHE ? SF_SEND_BROKERS_CACHE[recipientId] : null;
+      const brokerName = broker ? (broker.full_name || [broker.first_name, broker.last_name].filter(Boolean).join(' ') || 'מתווך') : 'מתווך';
+      const actionText = `נשלחו למתווך ${brokerName} קבצים: ${fileNames} (${channelLabel})`;
+      const nowIso = new Date().toISOString();
+
+      const { data: existing, error: findErr } = await window.supabaseClient
+        .from('matches').select('id').eq('business_id', bizId).eq('broker_id', recipientId).maybeSingle();
+      if (findErr) throw findErr;
+
+      let matchId, action;
+      if (existing){
+        const { error: updErr } = await window.supabaseClient.from('matches')
+          .update({ last_action: actionText, last_action_at: nowIso }).eq('id', existing.id);
+        if (updErr) throw updErr;
+        matchId = existing.id; action = 'updated';
+      } else {
+        const { data: newMatch, error: insErr } = await window.supabaseClient.from('matches').insert({
+          business_id: bizId, broker_id: recipientId, counterparty_type: 'broker', status: 'חומרים מלאים נשלחו',
+          match_source: `אוטומטי - נשלחו קבצים ב${channelLabel}`,
+          last_action: actionText, last_action_at: nowIso,
+          created_by: (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE ? CURRENT_PROFILE.id : null),
+        }).select('id').single();
+        if (insErr) throw insErr;
+        matchId = newMatch?.id; action = 'created';
+      }
+
+      try {
+        const channelKey = channelLabel === 'WhatsApp' ? 'whatsapp' : 'email';
+        const docLogRows = fileIds.map(id => {
+          const f = allFiles.find(x => x.id === id);
+          return {
+            broker_id: recipientId, business_id: bizId, match_id: matchId || null,
+            file_id: id, file_name: f ? f.file_name : null, document_type: f ? (f.document_type || f.category || null) : null,
+            channel: channelKey, sent_by: (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE ? CURRENT_PROFILE.id : null),
+          };
+        });
+        await window.supabaseClient.from('broker_document_log').insert(docLogRows);
+      } catch (logErr) {
+        console.error('[sfDocumentMatchAfterSend] כשל בכתיבה ל-broker_document_log (לא חוסם - ההתאמה כבר תועדה):', logErr);
+      }
+
+      return { action };
+    }
+
+    const buyer = SF_SEND_BUYERS_CACHE ? SF_SEND_BUYERS_CACHE[recipientId] : null;
+    const buyerName = buyer ? (buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || 'קונה') : 'קונה';
     const actionText = `נשלחו לקונה ${buyerName} קבצים: ${fileNames} (${channelLabel})`;
     const nowIso = new Date().toISOString();
 
     const { data: existing, error: findErr } = await window.supabaseClient
-      .from('matches').select('id').eq('business_id', bizId).eq('buyer_id', buyerId).maybeSingle();
+      .from('matches').select('id').eq('business_id', bizId).eq('buyer_id', recipientId).maybeSingle();
     if (findErr) throw findErr;
 
     if (existing){
@@ -840,7 +1003,7 @@ async function sfDocumentMatchAfterSend(bizId, buyerId, fileIds, channelLabel){
       return { action: 'updated' };
     }
     const { error: insErr } = await window.supabaseClient.from('matches').insert({
-      business_id: bizId, buyer_id: buyerId, status: 'חומרים מלאים נשלחו',
+      business_id: bizId, buyer_id: recipientId, status: 'חומרים מלאים נשלחו',
       match_source: `אוטומטי - נשלחו קבצים ב${channelLabel}`,
       last_action: actionText, last_action_at: nowIso,
       created_by: (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE ? CURRENT_PROFILE.id : null),
@@ -853,28 +1016,38 @@ async function sfDocumentMatchAfterSend(bizId, buyerId, fileIds, channelLabel){
   }
 }
 
-async function sfConfirmSendWhatsApp(bizId, buyerId, fileIds){
+async function sfConfirmSendWhatsApp(bizId, recipientId, fileIds, recipientType){
+  recipientType = recipientType === 'broker' ? 'broker' : 'buyer';
   const btn = document.getElementById('sfSendWaBtn');
   const statusEl = document.getElementById('sfSendStatus');
-  const buyer = SF_SEND_BUYERS_CACHE ? SF_SEND_BUYERS_CACHE[buyerId] : null;
-  if (!buyer){
-    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">שגיאה: פרטי הקונה לא נטענו - סגור ופתח את המסך מחדש</span>`;
+  const recipient = recipientType === 'broker'
+    ? (SF_SEND_BROKERS_CACHE ? SF_SEND_BROKERS_CACHE[recipientId] : null)
+    : (SF_SEND_BUYERS_CACHE ? SF_SEND_BUYERS_CACHE[recipientId] : null);
+  if (!recipient){
+    const who = recipientType === 'broker' ? 'המתווך' : 'הקונה';
+    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">שגיאה: פרטי ${who} לא נטענו - סגור ופתח את המסך מחדש</span>`;
+    return;
+  }
+  if (recipientType === 'broker' && recipient.status === 'חסום'){
+    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">🚫 מתווך זה חסום - לא ניתן לשלוח אליו חומרים חדשים</span>`;
     return;
   }
 
   // בדיקת טלפון תקין - לפני הכל, לפני פתיחת שום חלון ולפני כל קריאת רשת
-  const phoneCheck = sfNormalizePhoneForWa(buyer.phone);
+  const phoneCheck = sfNormalizePhoneForWa(recipient.phone);
   if (!phoneCheck.valid){
+    const who = recipientType === 'broker' ? 'למתווך' : 'לקונה';
+    const cardName = recipientType === 'broker' ? 'המתווך' : 'הקונה';
     const msg = phoneCheck.reason === 'missing'
-      ? 'לקונה הזה אין מספר טלפון שמור - יש להוסיף אחד בכרטיס הקונה קודם'
-      : 'מספר הטלפון של הקונה אינו תקין ל-WhatsApp - יש לתקן אותו בכרטיס הקונה';
+      ? `${who} הזה אין מספר טלפון שמור - יש להוסיף אחד בכרטיס ${cardName} קודם`
+      : `מספר הטלפון של ${cardName} אינו תקין ל-WhatsApp - יש לתקן אותו בכרטיס ${cardName}`;
     if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
     else toast(msg);
     return;
   }
 
   // חלון ריק נפתח סינכרונית, בתוך אותו קליק - לפני כל await - כדי לא
-  // להיחסם ע"י חוסם פופ-אפים בנייד (אותו באג שכבר נתקל בו ותוקן בעבר
+  // להיחסם ע"י חוסם פופ-אבים בנייד (אותו באג שכבר נתקל בו ותוקן בעבר
   // באותה מסך בדיוק: חלון WhatsApp אחד ויחיד, נפתח מיד עם הלחיצה).
   const win = window.open('', '_blank');
 
@@ -884,11 +1057,11 @@ async function sfConfirmSendWhatsApp(bizId, buyerId, fileIds){
     const bodyEl = document.getElementById('sfPreviewBody');
     const introText = (bodyEl ? bodyEl.value : '') || (subjectEl ? subjectEl.value : '') || 'שלום,';
 
-    console.log('[sfConfirmSendWhatsApp] קורא ל-get-sale-files-signed-links', { bizId, buyerId, fileIds });
+    console.log('[sfConfirmSendWhatsApp] קורא ל-get-sale-files-signed-links', { bizId, recipientId, recipientType, fileIds });
+    const linkBody = { business_id: bizId, file_ids: fileIds, recipient_type: recipientType };
+    if (recipientType === 'broker') linkBody.broker_id = recipientId; else linkBody.buyer_id = recipientId;
     const { data: linkResult, error: linkErr } = await sfWithClientTimeout(
-      window.supabaseClient.functions.invoke('get-sale-files-signed-links', {
-        body: { business_id: bizId, buyer_id: buyerId, file_ids: fileIds }
-      }),
+      window.supabaseClient.functions.invoke('get-sale-files-signed-links', { body: linkBody }),
       25000, 'הכנת קישורים ל-WhatsApp'
     );
     console.log('[sfConfirmSendWhatsApp] תשובה התקבלה', { linkResult, linkErr });
@@ -909,10 +1082,17 @@ async function sfConfirmSendWhatsApp(bizId, buyerId, fileIds){
     if (statusEl) statusEl.innerHTML = '<span style="color:#1f7a45;">✅ נפתחה שיחת WhatsApp עם הודעה מוכנה, כולל קישורי הורדה מאובטחים לקבצים שנבחרו. הלחיצה על Send בפועל היא בידיך בתוך WhatsApp.</span>';
 
     // 03.09.2026: תיעוד אוטומטי במרכז ההתאמות - תוספת בלבד, אחרי ששורת
-    // ההצלחה למעלה כבר נקבעה. לא נוגע בשום דבר קודם בפונקציה הזו.
-    sfDocumentMatchAfterSend(bizId, buyerId, fileIds, 'WhatsApp').then((matchResult) => {
-      if (matchResult.action === 'created') toast('השליחה בוצעה ונוצרה התאמה חדשה.');
-      else if (matchResult.action === 'updated') toast('השליחה בוצעה והפעילות נוספה להתאמה הקיימת.');
+    // ההצלחה למעלה כבר נקבעה. לא נוגע בשום דבר קודם בפונקציה הזו. נוסח
+    // ההודעה למתווך תואם בדיוק את מה שנדרש במפורש בהנחיה; נוסח הקונה
+    // נשאר בדיוק כפי שהיה.
+    sfDocumentMatchAfterSend(bizId, recipientId, fileIds, 'WhatsApp', recipientType).then((matchResult) => {
+      if (recipientType === 'broker'){
+        if (matchResult.action === 'created') toast('ההתאמה החדשה נוצרה ותועדה.');
+        else if (matchResult.action === 'updated') toast('השליחה נוספה להתאמה קיימת.');
+      } else {
+        if (matchResult.action === 'created') toast('השליחה בוצעה ונוצרה התאמה חדשה.');
+        else if (matchResult.action === 'updated') toast('השליחה בוצעה והפעילות נוספה להתאמה הקיימת.');
+      }
     });
   } catch(e){
     console.error('[sfConfirmSendWhatsApp] שגיאה:', e);

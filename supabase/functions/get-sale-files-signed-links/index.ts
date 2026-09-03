@@ -88,22 +88,45 @@ Deno.serve(async (req: Request) => {
     actorId = userData.user.id;
 
     const body = await req.json();
-    const { business_id, buyer_id, file_ids } = body || {};
+    const { business_id, buyer_id, broker_id, recipient_type, file_ids } = body || {};
+    const recipientType: 'buyer' | 'broker' = recipient_type === 'broker' ? 'broker' : 'buyer';
+    const recipientId = recipientType === 'broker' ? broker_id : buyer_id;
     businessIdForLog = business_id || '';
 
-    if (!business_id || !buyer_id || !Array.isArray(file_ids) || !file_ids.length) {
-      return jsonResponse(400, { error: 'חסרים שדות חובה: business_id, buyer_id, file_ids (רשימה לא ריקה)' });
+    if (!business_id || !recipientId || !Array.isArray(file_ids) || !file_ids.length) {
+      return jsonResponse(400, { error: 'חסרים שדות חובה: business_id, buyer_id/broker_id, file_ids (רשימה לא ריקה)' });
     }
 
-    // שליפת פרטי הקונה מה-DB בלבד (לא מהלקוח) - כולל agreement_status האמיתי
-    const { data: buyer, error: buyerErr } = await supabase
-      .from('leads')
-      .select('id, full_name, first_name, last_name, phone, agreement_status')
-      .eq('id', buyer_id)
-      .eq('type', 'buyer')
-      .maybeSingle();
-    if (buyerErr) { log('buyer_lookup_error', { message: buyerErr.message }); return jsonResponse(500, { error: 'שגיאה בשליפת פרטי הקונה: ' + buyerErr.message }); }
-    if (!buyer) { log('buyer_not_found'); return jsonResponse(404, { error: 'קונה לא נמצא' }); }
+    // שליפת פרטי הנמען מה-DB בלבד (לא מהלקוח) - כולל agreement_status האמיתי.
+    // 03.09.2026: נוסף מסלול מתווך/סוכן (brokers) בנפרד לגמרי ממסלול הקונה
+    // הקיים (leads) - כולל בדיקת חסימה (status='חסום') שאין לה מקבילה
+    // אצל קונים. מסלול הקונה למטה נשאר בדיוק כפי שהיה.
+    let buyer: { id: string; full_name?: string; first_name?: string; last_name?: string; phone?: string; agreement_status?: string } | null = null;
+    if (recipientType === 'broker') {
+      const { data: broker, error: brokerErr } = await supabase
+        .from('brokers')
+        .select('id, full_name, first_name, last_name, phone, agreement_status, status')
+        .eq('id', recipientId)
+        .maybeSingle();
+      if (brokerErr) { log('broker_lookup_error', { message: brokerErr.message }); return jsonResponse(500, { error: 'שגיאה בשליפת פרטי המתווך: ' + brokerErr.message }); }
+      if (!broker) { log('broker_not_found'); return jsonResponse(404, { error: 'מתווך לא נמצא' }); }
+      if (broker.status === 'חסום') {
+        log('broker_blocked', { broker_id: broker.id });
+        await logAttempt({ broker_id: broker.id, reason: 'broker_blocked', status: 'blocked' }, actorId, business_id);
+        return jsonResponse(403, { error: 'מתווך זה חסום - לא ניתן לשלוח אליו חומרים חדשים' });
+      }
+      buyer = broker;
+    } else {
+      const { data: leadBuyer, error: buyerErr } = await supabase
+        .from('leads')
+        .select('id, full_name, first_name, last_name, phone, agreement_status')
+        .eq('id', recipientId)
+        .eq('type', 'buyer')
+        .maybeSingle();
+      if (buyerErr) { log('buyer_lookup_error', { message: buyerErr.message }); return jsonResponse(500, { error: 'שגיאה בשליפת פרטי הקונה: ' + buyerErr.message }); }
+      if (!leadBuyer) { log('buyer_not_found'); return jsonResponse(404, { error: 'קונה לא נמצא' }); }
+      buyer = leadBuyer;
+    }
     const signed = buyer.agreement_status === 'יש הסכם חתום';
 
     // שליפת הקבצים מה-DB בלבד - מתעלמים משם/רמת סודיות שהלקוח שלח
@@ -118,7 +141,7 @@ Deno.serve(async (req: Request) => {
     const foundIds = new Set((files || []).map((f) => f.id));
     const missing = file_ids.filter((id: string) => !foundIds.has(id));
     if (missing.length) {
-      await logAttempt({ buyer_id, file_ids, missing_file_ids: missing, status: 'failed', reason: 'file_not_found_or_inactive' }, actorId, business_id);
+      await logAttempt({ recipient_id: recipientId, recipient_type: recipientType, file_ids, missing_file_ids: missing, status: 'failed', reason: 'file_not_found_or_inactive' }, actorId, business_id);
       return jsonResponse(400, { error: 'קובץ אחד או יותר לא נמצא בתיק המכירה של העסק הזה (ייתכן שנמחק) - רענן ונסה שוב' });
     }
 
@@ -126,14 +149,14 @@ Deno.serve(async (req: Request) => {
     const disallowed = (files || []).filter((f) => !signed && f.confidentiality_level === 2);
     if (disallowed.length) {
       await logAttempt({
-        buyer_id, file_ids,
+        recipient_id: recipientId, recipient_type: recipientType, file_ids,
         disallowed_files: disallowed.map((f) => ({ id: f.id, name: f.file_name })),
         agreement_status_at_send: buyer.agreement_status || 'אין הסכם',
         status: 'blocked',
       }, actorId, business_id);
       const names = disallowed.map((f) => f.file_name).join(', ');
       return jsonResponse(403, {
-        error: `לא ניתן לשלוח את הקבצים הבאים: ${names}. לקונה אין הסכם סודיות חתום.`,
+        error: `לא ניתן לשלוח את הקבצים הבאים: ${names}. ${recipientType === 'broker' ? 'למתווך' : 'לקונה'} אין הסכם סודיות חתום.`,
         disallowed_file_ids: disallowed.map((f) => f.id),
       });
     }
@@ -149,19 +172,19 @@ Deno.serve(async (req: Request) => {
         ));
       } catch (te) {
         log('signed_url_timeout', { file: f.file_name, error: te instanceof Error ? te.message : String(te) });
-        await logAttempt({ buyer_id, file_ids, status: 'failed', reason: 'signed_url_timeout', failed_file: f.file_name }, actorId, business_id);
+        await logAttempt({ recipient_id: recipientId, recipient_type: recipientType, file_ids, status: 'failed', reason: 'signed_url_timeout', failed_file: f.file_name }, actorId, business_id);
         return jsonResponse(504, { error: `יצירת קישור הורדה נתקעה עבור "${f.file_name}" (זמן קצוב) - נסה שוב` });
       }
       if (linkErr || !signedUrlData?.signedUrl) {
         log('signed_url_failed', { file: f.file_name, error: linkErr?.message });
-        await logAttempt({ buyer_id, file_ids, status: 'failed', reason: 'signed_url_failed', failed_file: f.file_name }, actorId, business_id);
+        await logAttempt({ recipient_id: recipientId, recipient_type: recipientType, file_ids, status: 'failed', reason: 'signed_url_failed', failed_file: f.file_name }, actorId, business_id);
         return jsonResponse(500, { error: `יצירת קישור הורדה נכשלה עבור "${f.file_name}": ${linkErr?.message || 'שגיאה לא ידועה'}` });
       }
       linkItems.push({ name: f.file_name, url: signedUrlData.signedUrl });
     }
 
     await logAttempt({
-      buyer_id, file_ids, file_names: (files || []).map((f) => f.file_name),
+      recipient_id: recipientId, recipient_type: recipientType, file_ids, file_names: (files || []).map((f) => f.file_name),
       agreement_status_at_send: buyer.agreement_status || 'אין הסכם',
       performed_by: actorId, status: 'links_generated',
     }, actorId, business_id);
