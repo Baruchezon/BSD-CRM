@@ -296,8 +296,9 @@ function brokerAgreementBanner(b){
   const s = b.agreement_status || 'אין הסכם';
   const icon = s === 'יש הסכם חתום' ? '✅' : (s === 'נשלח הסכם לחתימה' ? '📤' : '⭕');
   const numPart = (s === 'יש הסכם חתום' && b.agreement_number) ? ` &nbsp;·&nbsp; מס' הסכם: ${esc(b.agreement_number)}` : '';
-  const pctPart = (b.referral_pct != null || b.full_handling_pct != null)
-    ? ` &nbsp;·&nbsp; הפניה ${b.referral_pct ?? DEFAULT_REFERRAL_PCT}% / טיפול מלא ${b.full_handling_pct ?? DEFAULT_FULL_PCT}%` : '';
+  const commType = b.commission_type || (b.full_handling_pct != null ? 'טיפול מלא' : (b.referral_pct != null ? 'הפניה' : null));
+  const commPct = commType === 'טיפול מלא' ? b.full_handling_pct : b.referral_pct;
+  const pctPart = commType ? ` &nbsp;·&nbsp; ${esc(commType)} ${commPct}%` : '';
   let html = `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(s)}${numPart}${pctPart}</div>`;
   if (b.agreement_pdf_path){
     html += `<div class="agr-note" style="margin-top:6px;">
@@ -317,19 +318,24 @@ async function sendAgreementForBroker(id){
   const b = ALL_BROKERS.find(x => x.id === id) || ARCHIVED_BROKERS.find(x => x.id === id);
   if (!b){ toast('מתווך לא נמצא'); return; }
   await loadAgreementDefaults();
-  const refInput = prompt('אחוז עמלת הפניה למתווך זה (%):', b.referral_pct ?? DEFAULT_REFERRAL_PCT);
-  if (refInput === null) return;
-  const fullInput = prompt('אחוז עמלת טיפול מלא למתווך זה (%):', b.full_handling_pct ?? DEFAULT_FULL_PCT);
-  if (fullInput === null) return;
-  const refPct = parseFloat(refInput), fullPct = parseFloat(fullInput);
-  if (isNaN(refPct) || isNaN(fullPct)){ toast('אחוזים לא תקינים'); return; }
+  const existingType = b.commission_type || (b.full_handling_pct != null && b.referral_pct == null ? 'טיפול מלא' : 'הפניה');
+  const typeInput = prompt('סוג ההתקשרות עם המתווך - הקלד "הפניה" או "טיפול מלא":', existingType);
+  if (typeInput === null) return;
+  const commissionType = typeInput.trim() === 'טיפול מלא' ? 'טיפול מלא' : 'הפניה';
+  const defaultPct = commissionType === 'טיפול מלא' ? DEFAULT_FULL_PCT : DEFAULT_REFERRAL_PCT;
+  const existingPct = commissionType === 'טיפול מלא' ? b.full_handling_pct : b.referral_pct;
+  const pctInput = prompt(`אחוז עמלת ${commissionType} למתווך זה (%):`, existingPct ?? defaultPct);
+  if (pctInput === null) return;
+  const pct = parseFloat(pctInput);
+  if (isNaN(pct)){ toast('אחוז לא תקין'); return; }
 
-  const updatePayload = { referral_pct: refPct, full_handling_pct: fullPct };
+  const updatePayload = { commission_type: commissionType, referral_pct: null, full_handling_pct: null };
+  if (commissionType === 'טיפול מלא') updatePayload.full_handling_pct = pct; else updatePayload.referral_pct = pct;
   if (b.agreement_status !== 'יש הסכם חתום') updatePayload.agreement_status = 'נשלח הסכם לחתימה';
   const { error } = await window.supabaseClient.from('brokers').update(updatePayload).eq('id', id);
-  if (error){ toast('שגיאה בשמירת האחוזים: ' + error.message); return; }
+  if (error){ toast('שגיאה בשמירת ההגדרות: ' + error.message); return; }
   Object.assign(b, updatePayload);
-  await logBrokerAudit(id, 'agreement_prepared', null, updatePayload, `הופק הסכם התקשרות: הפניה ${refPct}% / טיפול מלא ${fullPct}%`);
+  await logBrokerAudit(id, 'agreement_prepared', null, updatePayload, `הופק הסכם התקשרות: ${commissionType} ${pct}%`);
   renderTable();
 
   const params = new URLSearchParams({
@@ -337,8 +343,8 @@ async function sendAgreementForBroker(id){
     brokerId: id,
     name: b.full_name || `${b.first_name} ${b.last_name}`,
     phone: b.phone || '',
-    referralPct: String(refPct),
-    fullHandlingPct: String(fullPct)
+    commissionType: commissionType,
+    pct: String(pct)
   });
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
   toast('נפתח ממשק הכנת ההסכם - יש להשלים ולשלוח משם');
