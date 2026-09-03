@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609032000';
+    var PAGE_BUILD = '202609032230';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -447,38 +447,82 @@ function renderByBuyer(){
 
 async function openAddBuyerModal(bizId){
   const biz = ALL_BUSINESSES[bizId];
+  window.WS_SELECTED_TYPE = 'buyer';
+  window.WS_SELECTED_BUYER = null;
+  window.WS_SELECTED_BROKER = null;
   document.getElementById('modalRoot').innerHTML = `
     <div class="overlay"><div class="modal">
-      <div class="modal-head"><h3>➕ הוסף קונה — ${esc(biz?.internal_name||'')}</h3><button class="modal-close" data-close>✕</button></div>
+      <div class="modal-head"><h3>➕ הוסף קונה / מתווך — ${esc(biz?.internal_name||'')}</h3><button class="modal-close" data-close>✕</button></div>
       <div class="modal-body">
-        <div class="field"><label>בחר קונה</label><div id="addBuyerBox">טוען...</div></div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <button type="button" id="wsTypeBuyerBtn" onclick="wsSwitchAddType('buyer')" style="flex:1;padding:9px;border-radius:8px;border:1px solid #2b6fc9;background:#2b6fc9;color:#fff;cursor:pointer;font-family:inherit;font-weight:700;">🧍 קונה</button>
+          <button type="button" id="wsTypeBrokerBtn" onclick="wsSwitchAddType('broker')" style="flex:1;padding:9px;border-radius:8px;border:1px solid #7a3fd1;background:#fff;color:#7a3fd1;cursor:pointer;font-family:inherit;font-weight:700;">🔵 מתווך / סוכן</button>
+        </div>
+        <div class="field"><label id="wsAddLabel">בחר קונה</label><div id="addBuyerBox">טוען...</div></div>
         <div id="addBuyerStatus" style="min-height:20px;font-size:13px;font-weight:600;"></div>
       </div>
       <div class="modal-foot"><button class="btn-ghost" data-close>ביטול</button><button class="btn-primary" id="addBuyerBtn" onclick="confirmAddBuyer('${bizId}')">➕ צור התאמה</button></div>
     </div></div>`;
   document.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', ()=> document.getElementById('modalRoot').innerHTML=""));
+  wsRenderAddSelect();
+}
+// 03.09.2026 (מודול מתווכים): מחליף בין רשימת קונים לרשימת מתווכים בתוך
+// אותו מודאל - לא פותח מודאל נפרד. מתווכים חסומים אינם מוצגים לבחירה.
+function wsSwitchAddType(type){
+  window.WS_SELECTED_TYPE = type;
+  window.WS_SELECTED_BUYER = null;
+  window.WS_SELECTED_BROKER = null;
+  const buyerBtn = document.getElementById('wsTypeBuyerBtn');
+  const brokerBtn = document.getElementById('wsTypeBrokerBtn');
+  if (type === 'broker'){
+    buyerBtn.style.background = '#fff'; buyerBtn.style.color = '#2b6fc9';
+    brokerBtn.style.background = '#7a3fd1'; brokerBtn.style.color = '#fff';
+    document.getElementById('wsAddLabel').textContent = 'בחר מתווך / סוכן';
+  } else {
+    brokerBtn.style.background = '#fff'; brokerBtn.style.color = '#7a3fd1';
+    buyerBtn.style.background = '#2b6fc9'; buyerBtn.style.color = '#fff';
+    document.getElementById('wsAddLabel').textContent = 'בחר קונה';
+  }
+  wsRenderAddSelect();
+}
+function wsRenderAddSelect(){
   const box = document.getElementById('addBuyerBox');
-  box.innerHTML = window.searchSelectHTML({ boxId: 'addBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
-  window.initSearchSelect('addBuyerSelect', ALL_LEADS.filter(l=>!l.is_archived), {
-    getId: b => b.id,
-    getLabel: b => (b.full_name||'קונה ללא שם') + (b.client_number?' ('+b.client_number+')':''),
-    onChange: (id)=>{ window.WS_SELECTED_BUYER = ALL_LEADS.find(l=>l.id===id) || null; }
-  });
+  if (window.WS_SELECTED_TYPE === 'broker'){
+    box.innerHTML = window.searchSelectHTML({ boxId: 'addBuyerSelect', placeholder: 'הקלד שם מתווך לחיפוש...' });
+    window.initSearchSelect('addBuyerSelect', ALL_BROKERS.filter(b=>!b.is_archived && b.status!=='חסום'), {
+      getId: b => b.id,
+      getLabel: b => (b.full_name||'מתווך ללא שם') + ' (מתווך)',
+      onChange: (id)=>{ window.WS_SELECTED_BROKER = ALL_BROKERS.find(b=>b.id===id) || null; }
+    });
+  } else {
+    box.innerHTML = window.searchSelectHTML({ boxId: 'addBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
+    window.initSearchSelect('addBuyerSelect', ALL_LEADS.filter(l=>!l.is_archived), {
+      getId: b => b.id,
+      getLabel: b => (b.full_name||'קונה ללא שם') + (b.client_number?' ('+b.client_number+')':''),
+      onChange: (id)=>{ window.WS_SELECTED_BUYER = ALL_LEADS.find(l=>l.id===id) || null; }
+    });
+  }
 }
 async function confirmAddBuyer(bizId){
-  const buyer = window.WS_SELECTED_BUYER;
+  const isBroker = window.WS_SELECTED_TYPE === 'broker';
+  const rec = isBroker ? window.WS_SELECTED_BROKER : window.WS_SELECTED_BUYER;
   const statusBox = document.getElementById('addBuyerStatus');
-  if (!buyer){ statusBox.style.color='#b3402c'; statusBox.textContent='יש לבחור קונה'; return; }
+  if (!rec){ statusBox.style.color='#b3402c'; statusBox.textContent = isBroker ? 'יש לבחור מתווך' : 'יש לבחור קונה'; return; }
   try {
-    const { data: existing } = await window.supabaseClient.from('matches').select('id,status').eq('business_id', bizId).eq('buyer_id', buyer.id).maybeSingle();
+    const existQuery = isBroker
+      ? window.supabaseClient.from('matches').select('id,status').eq('business_id', bizId).eq('broker_id', rec.id).maybeSingle()
+      : window.supabaseClient.from('matches').select('id,status').eq('business_id', bizId).eq('buyer_id', rec.id).maybeSingle();
+    const { data: existing } = await existQuery;
     if (existing){
       statusBox.style.color = '#8a5a00';
       statusBox.innerHTML = `כבר קיימת התאמה (סטטוס: ${esc(existing.status)}). <a href="match-detail.html?id=${existing.id}" style="color:#1d4e89;font-weight:700;">פתח אותה</a>`;
       return;
     }
+    const insertPayload = isBroker
+      ? { business_id: bizId, broker_id: rec.id, counterparty_type: 'broker', status: 'התאמה חדשה', match_source: 'ידני - מרכז ההתאמות', created_by: CURRENT_PROFILE.id }
+      : { business_id: bizId, buyer_id: rec.id, status: 'התאמה חדשה', match_source: 'ידני - מרכז ההתאמות', created_by: CURRENT_PROFILE.id };
     const { data: newMatch, error } = await window.supabaseClient.from('matches')
-      .insert({ business_id: bizId, buyer_id: buyer.id, status: 'התאמה חדשה', match_source: 'ידני - מרכז ההתאמות', created_by: CURRENT_PROFILE.id })
-      .select('id').single();
+      .insert(insertPayload).select('id').single();
     if (error) throw new Error(error.message);
     document.getElementById('modalRoot').innerHTML = '';
     toast('ההתאמה נוצרה בהצלחה');
@@ -491,31 +535,75 @@ async function confirmAddBuyer(bizId){
 // הקיים (openAddBuyerModal כאן ו-confirmAddBizToMatch ב-leads.html), אותה
 // טבלת matches, אותו סטטוס ברירת מחדל, אותה התנהגות פתיחה לאחר שמירה.
 function updateNewMatchUI(){
-  const buyer = window.NM_SELECTED_BUYER, biz = window.NM_SELECTED_BIZ;
+  const isBroker = window.NM_SELECTED_TYPE === 'broker';
+  const rec = isBroker ? window.NM_SELECTED_BROKER : window.NM_SELECTED_BUYER;
+  const biz = window.NM_SELECTED_BIZ;
   const preview = document.getElementById('nmPreview');
   const btn = document.getElementById('nmSaveBtn');
   document.getElementById('nmStatus').textContent = '';
-  if (!buyer || !biz){
+  if (!rec || !biz){
     preview.style.display = 'none';
     if (btn) btn.disabled = true;
     return;
   }
   preview.style.display = 'block';
   preview.innerHTML = `
-    <div>🧍 קונה: <b>${esc(buyer.full_name||'—')}</b>${buyer.client_number?' ('+esc(buyer.client_number)+')':''}</div>
-    <div>📄 מצב הסכם קונה: <b>${esc(buyer.agreement_status||'אין הסכם')}</b></div>
+    <div>${isBroker?'🔵 מתווך / סוכן':'🧍 קונה'}: <b>${esc(rec.full_name||'—')}</b>${(!isBroker && rec.client_number)?' ('+esc(rec.client_number)+')':''}</div>
+    <div>📄 מצב הסכם: <b>${esc(rec.agreement_status||'אין הסכם')}</b></div>
     <div>🏢 עסק: <b>${esc(biz.internal_name||'—')}</b></div>
     <div>מספר עסק: <b>${esc(biz.business_number||'טרם הוקצה')}</b></div>`;
   if (btn) btn.disabled = false;
 }
-function openNewMatchModal(){
+function nmSwitchType(type){
+  window.NM_SELECTED_TYPE = type;
   window.NM_SELECTED_BUYER = null;
+  window.NM_SELECTED_BROKER = null;
+  const buyerBtn = document.getElementById('nmTypeBuyerBtn');
+  const brokerBtn = document.getElementById('nmTypeBrokerBtn');
+  if (type === 'broker'){
+    buyerBtn.style.background = '#fff'; buyerBtn.style.color = '#2b6fc9';
+    brokerBtn.style.background = '#7a3fd1'; brokerBtn.style.color = '#fff';
+    document.getElementById('nmCounterpartyLabel').textContent = 'בחר מתווך / סוכן';
+  } else {
+    brokerBtn.style.background = '#fff'; brokerBtn.style.color = '#7a3fd1';
+    buyerBtn.style.background = '#2b6fc9'; buyerBtn.style.color = '#fff';
+    document.getElementById('nmCounterpartyLabel').textContent = 'בחר קונה';
+  }
+  nmRenderCounterpartySelect();
+  updateNewMatchUI();
+}
+function nmRenderCounterpartySelect(){
+  const box = document.getElementById('nmBuyerBox');
+  if (window.NM_SELECTED_TYPE === 'broker'){
+    box.innerHTML = window.searchSelectHTML({ boxId: 'nmBuyerSelect', placeholder: 'הקלד שם מתווך לחיפוש...' });
+    window.initSearchSelect('nmBuyerSelect', ALL_BROKERS.filter(b=>!b.is_archived && b.status!=='חסום'), {
+      getId: b => b.id,
+      getLabel: b => (b.full_name||'מתווך ללא שם') + ' (מתווך)',
+      onChange: (id)=>{ window.NM_SELECTED_BROKER = ALL_BROKERS.find(b=>b.id===id) || null; updateNewMatchUI(); }
+    });
+  } else {
+    box.innerHTML = window.searchSelectHTML({ boxId: 'nmBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
+    window.initSearchSelect('nmBuyerSelect', ALL_LEADS.filter(l=>!l.is_archived), {
+      getId: b => b.id,
+      getLabel: b => (b.full_name||'קונה ללא שם') + (b.client_number?' ('+b.client_number+')':''),
+      onChange: (id)=>{ window.NM_SELECTED_BUYER = ALL_LEADS.find(l=>l.id===id) || null; updateNewMatchUI(); }
+    });
+  }
+}
+function openNewMatchModal(){
+  window.NM_SELECTED_TYPE = 'buyer';
+  window.NM_SELECTED_BUYER = null;
+  window.NM_SELECTED_BROKER = null;
   window.NM_SELECTED_BIZ = null;
   document.getElementById('modalRoot').innerHTML = `
     <div class="overlay"><div class="modal">
       <div class="modal-head"><h3>➕ התאמה חדשה</h3><button class="modal-close" data-close>✕</button></div>
       <div class="modal-body">
-        <div class="field"><label>בחר קונה</label><div id="nmBuyerBox"></div></div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <button type="button" id="nmTypeBuyerBtn" onclick="nmSwitchType('buyer')" style="flex:1;padding:9px;border-radius:8px;border:1px solid #2b6fc9;background:#2b6fc9;color:#fff;cursor:pointer;font-family:inherit;font-weight:700;">🧍 קונה</button>
+          <button type="button" id="nmTypeBrokerBtn" onclick="nmSwitchType('broker')" style="flex:1;padding:9px;border-radius:8px;border:1px solid #7a3fd1;background:#fff;color:#7a3fd1;cursor:pointer;font-family:inherit;font-weight:700;">🔵 מתווך / סוכן</button>
+        </div>
+        <div class="field"><label id="nmCounterpartyLabel">בחר קונה</label><div id="nmBuyerBox"></div></div>
         <div class="field"><label>בחר עסק</label><div id="nmBizBox"></div></div>
         <div class="nm-preview" id="nmPreview" style="display:none;"></div>
         <div id="nmStatus" style="min-height:20px;font-size:13px;font-weight:600;"></div>
@@ -523,12 +611,7 @@ function openNewMatchModal(){
       <div class="modal-foot"><button class="btn-ghost" data-close>ביטול</button><button class="btn-primary" id="nmSaveBtn" disabled onclick="confirmNewMatch()">➕ צור התאמה</button></div>
     </div></div>`;
   document.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', ()=> document.getElementById('modalRoot').innerHTML=""));
-  document.getElementById('nmBuyerBox').innerHTML = window.searchSelectHTML({ boxId: 'nmBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
-  window.initSearchSelect('nmBuyerSelect', ALL_LEADS.filter(l=>!l.is_archived), {
-    getId: b => b.id,
-    getLabel: b => (b.full_name||'קונה ללא שם') + (b.client_number?' ('+b.client_number+')':''),
-    onChange: (id)=>{ window.NM_SELECTED_BUYER = ALL_LEADS.find(l=>l.id===id) || null; updateNewMatchUI(); }
-  });
+  nmRenderCounterpartySelect();
   document.getElementById('nmBizBox').innerHTML = window.searchSelectHTML({ boxId: 'nmBizSelect', placeholder: 'הקלד שם עסק או מספר עסק לחיפוש...' });
   const bizList = Object.values(ALL_BUSINESSES).filter(b=>!b.is_archived);
   window.initSearchSelect('nmBizSelect', bizList, {
@@ -538,24 +621,30 @@ function openNewMatchModal(){
   });
 }
 async function confirmNewMatch(){
-  const buyer = window.NM_SELECTED_BUYER, biz = window.NM_SELECTED_BIZ;
+  const isBroker = window.NM_SELECTED_TYPE === 'broker';
+  const rec = isBroker ? window.NM_SELECTED_BROKER : window.NM_SELECTED_BUYER;
+  const biz = window.NM_SELECTED_BIZ;
   const statusBox = document.getElementById('nmStatus');
-  if (!buyer || !biz){ statusBox.style.color='#b3402c'; statusBox.textContent='יש לבחור גם קונה וגם עסק'; return; }
+  if (!rec || !biz){ statusBox.style.color='#b3402c'; statusBox.textContent = isBroker ? 'יש לבחור גם מתווך וגם עסק' : 'יש לבחור גם קונה וגם עסק'; return; }
   const btn = document.getElementById('nmSaveBtn');
   if (btn){ btn.disabled = true; btn.textContent = 'בודק...'; }
   try {
-    const { data: existing, error: existErr } = await window.supabaseClient
-      .from('matches').select('id,status').eq('business_id', biz.id).eq('buyer_id', buyer.id).maybeSingle();
+    const existQuery = isBroker
+      ? window.supabaseClient.from('matches').select('id,status').eq('business_id', biz.id).eq('broker_id', rec.id).maybeSingle()
+      : window.supabaseClient.from('matches').select('id,status').eq('business_id', biz.id).eq('buyer_id', rec.id).maybeSingle();
+    const { data: existing, error: existErr } = await existQuery;
     if (existErr) throw new Error(existErr.message);
     if (existing){
       statusBox.style.color = '#8a5a00';
-      statusBox.innerHTML = `כבר קיימת התאמה בין הקונה לעסק הזה (סטטוס: ${esc(existing.status||'—')}). <a href="javascript:void(0)" onclick="location.href='match-detail.html?id=${existing.id}'" style="color:#1d4e89;font-weight:700;">פתח את ההתאמה הקיימת</a>`;
+      statusBox.innerHTML = `כבר קיימת התאמה בין ${isBroker?'המתווך':'הקונה'} לעסק הזה (סטטוס: ${esc(existing.status||'—')}). <a href="javascript:void(0)" onclick="location.href='match-detail.html?id=${existing.id}'" style="color:#1d4e89;font-weight:700;">פתח את ההתאמה הקיימת</a>`;
       if (btn){ btn.disabled = false; btn.textContent = '➕ צור התאמה'; }
       return;
     }
+    const insertPayload = isBroker
+      ? { business_id: biz.id, broker_id: rec.id, counterparty_type: 'broker', status: 'התאמה חדשה', match_source: 'ידני - מרכז ההתאמות', created_by: CURRENT_PROFILE.id }
+      : { business_id: biz.id, buyer_id: rec.id, status: 'התאמה חדשה', match_source: 'ידני - מרכז ההתאמות', created_by: CURRENT_PROFILE.id };
     const { data: newMatch, error: insErr } = await window.supabaseClient
-      .from('matches').insert({ business_id: biz.id, buyer_id: buyer.id, status: 'התאמה חדשה', match_source: 'ידני - מרכז ההתאמות', created_by: CURRENT_PROFILE.id })
-      .select('*').single();
+      .from('matches').insert(insertPayload).select('*').single();
     if (insErr) throw new Error(insErr.message);
     ALL_MATCHES.push(newMatch);
     document.getElementById('modalRoot').innerHTML = '';
