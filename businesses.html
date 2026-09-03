@@ -110,6 +110,36 @@
     .section-h{margin:6px 0 -2px;}
     .modal-actions{position:fixed;bottom:0;right:0;left:0;background:#fff;padding:12px 16px;box-shadow:0 -4px 16px rgba(0,0,0,.12);margin-top:0;z-index:5;}
   }
+
+  /* עמוד מלא לכרטיס העסק בלבד (businesses.html) - מופעל רק ע"י bsdTabifyBizForm.
+     שני קלאסים ייעודיים (biz-fullpage / biz-fullpage-modal) כדי לא להשפיע על
+     שאר השימושים ב-#overlay/#modalBox (עריכת ליד, התאמה וכו') שנשארים בדיוק כפי שהיו. */
+  .overlay.biz-fullpage{align-items:stretch;justify-content:stretch;padding:0;}
+  .modal.biz-fullpage-modal{max-width:100%;width:100%;min-height:100vh;border-radius:0;padding:0;display:flex;flex-direction:column;box-shadow:none;}
+  .modal.biz-fullpage-modal>h3{display:none;} /* השם/מספר העסק עוברים לכותרת העליונה הקבועה (biz-sticky-top) */
+  .biz-sticky-top{background:#fff;padding:18px 24px 0;border-bottom:1px solid #eee;}
+  .biz-sticky-top h3{margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;}
+  .biz-tabbar{position:sticky;top:0;z-index:6;display:flex;gap:2px;overflow-x:auto;background:#faf9f6;border-bottom:1px solid #e5e0d3;padding:0 20px;}
+  .biz-tabbar button{border:none;background:transparent;padding:12px 14px;font-size:.8rem;font-weight:700;color:#666;cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;text-transform:none;letter-spacing:normal;}
+  .biz-tabbar button.active{color:var(--navy);border-bottom-color:var(--gold);}
+  .biz-tabpanes{flex:1;padding:20px 24px 40px;overflow-y:auto;}
+  .biz-tabpanes .biz-tabpane{display:none;}
+  .biz-tabpanes .biz-tabpane.active{display:block;}
+  .modal.biz-fullpage-modal .modal-actions{position:sticky;bottom:0;background:#fff;box-shadow:0 -4px 16px rgba(0,0,0,.12);padding:12px 24px;margin-top:0;z-index:6;}
+  /* צבעים פונקציוניים עדינים על סטטוס ההסכם בכותרת הקבועה (03.09.2026) -
+     רק צבע/מסגרת, לא נוגע בטקסט או בלוגיקה של agreementBanner עצמה. */
+  .biz-sticky-top{border-right:4px solid transparent;}
+  .biz-sticky-top.bsd-status-green{border-right-color:#1e7b34;}
+  .biz-sticky-top.bsd-status-orange{border-right-color:#c89b2c;}
+  .biz-sticky-top.bsd-status-red{border-right-color:#b3402c;}
+  .biz-sticky-top .agr-note.bsd-status-green{color:#1e7b34;font-weight:700;}
+  .biz-sticky-top .agr-note.bsd-status-orange{color:#8a5a00;font-weight:700;}
+  .biz-sticky-top .agr-note.bsd-status-red{color:#b3402c;font-weight:700;}
+  @media (max-width:640px){
+    .biz-tabbar{padding:0 8px;}
+    .biz-tabbar button{padding:10px 9px;font-size:.72rem;}
+    .biz-tabpanes{padding:14px 14px 90px;}
+  }
 </style>
 </head>
 <body>
@@ -323,6 +353,8 @@ function cancelBizForm(){
 
 function closeModal(){
   document.getElementById('overlay').classList.remove('open');
+  document.getElementById('overlay').classList.remove('biz-fullpage'); // ניקוי מצב "עמוד מלא" של כרטיס העסק (bsdTabifyBizForm),
+  document.getElementById('modalBox').classList.remove('biz-fullpage-modal'); // כדי ששאר המודאלים (ליד/התאמה וכו') ייפתחו כרגיל בפעם הבאה
   document.getElementById('modalBox').innerHTML = '';
 }
 
@@ -778,6 +810,173 @@ function toggleListingFields(){
   }
 }
 
+// שדרוג תצוגה בלבד לכרטיס העסק (03.09.2026): הופך את הטופס הארוך שנבנה
+// למעלה ע"י openBizForm לעמוד מלא עם כותרת קבועה + לשוניות. לא נוגעת בשום
+// שדה/כפתור/אייקון/handler - רק מזיזה node-ים קיימים (עם ה-id וה-onclick
+// המקוריים שלהם) למקום אחר במסך. מופעלת רק בתוך businesses.html על כרטיס
+// העסק בלבד - שאר השימושים ב-#overlay/#modalBox (עריכת ליד, התאמה וכו')
+// לא עוברים דרך הפונקציה הזו ונשארים בדיוק כפי שהיו.
+function bsdTabifyBizForm(){
+  try{
+    const modal = document.getElementById('modalBox');
+    const overlay = document.getElementById('overlay');
+    const form = modal ? modal.querySelector('#bizForm') : null;
+    if (!modal || !overlay || !form) return; // מבנה לא צפוי - לא נוגעים בכלום, הטופס הרגיל ממשיך לעבוד
+
+    // 1) כותרת עליונה קבועה: מזיזים לתוכה רק את מה שכבר קיים היום לפני
+    //    הטופס (כותרת h3, באנר סטטוס הסכם, באנר שגיאה, באנר כפילות) -
+    //    בלי ליצור תוכן חדש ובלי לגעת בלוגיקה שמייצרת אותם.
+    const stickyTop = document.createElement('div');
+    stickyTop.className = 'biz-sticky-top';
+    while (modal.firstChild && modal.firstChild !== form){
+      stickyTop.appendChild(modal.firstChild);
+    }
+    modal.insertBefore(stickyTop, form);
+
+    // צביעה פונקציונלית עדינה (לפי בקשתו 03.09.2026): רק מוסיפה class לצביעה,
+    // לא משנה טקסט/לוגיקה. ירוק=חתום, כתום=נשלח וממתין, אדום=אין הסכם/מסמך חסר.
+    const agrNotes = stickyTop.querySelectorAll('.agr-note');
+    if (agrNotes.length){
+      const statusText = agrNotes[0].textContent || '';
+      let cls = null;
+      // שימו לב: agreementShortLabel() מקצר "נשלח הסכם לחתימה" ל"נשלח לחתימה"
+      // בתצוגה בפועל - ההתאמה כאן חייבת להיות מול הטקסט המקוצר שבאמת מוצג.
+      if (statusText.includes('יש הסכם חתום')) cls = 'green';
+      else if (statusText.includes('נשלח לחתימה')) cls = 'orange';
+      else if (statusText.includes('אין הסכם')) cls = 'red';
+      if (cls){ agrNotes[0].classList.add('bsd-status-' + cls); stickyTop.classList.add('bsd-status-' + cls); }
+      agrNotes.forEach(n => {
+        if (n.textContent.indexOf('אך קובץ ה-PDF החתום עדיין לא נשמר') !== -1) n.classList.add('bsd-status-red');
+      });
+    }
+
+    const TAB_DEFS = [
+      {id:'details',   label:'פרטי עסק',                match:t=>/^זיהוי$|^תיאור$|^סיווג ומיקום$/.test(t)},
+      {id:'owner',     label:'בעלים ויצירת קשר',          match:t=>/^פרטי בעל העסק$|WhatsApp/.test(t)},
+      {id:'finance',   label:'נתונים עסקיים ופיננסיים',   match:t=>/^נתונים כספיים$/.test(t)},
+      {id:'mgmt',      label:'ניהול, סטטוס והסכם',        match:t=>/^ניהול ומעקב$|^מצב מדף$/.test(t)},
+      {id:'notes',     label:'הערות והיסטוריה',           match:t=>/^הערות$/.test(t)},
+      {id:'matches',   label:'קונים והתאמות',             match:t=>/קונים פוטנציאליים והתאמות/.test(t)},
+      {id:'meetings',  label:'פגישות',                   match:t=>/טופס פגישה ראשונה|הקלטות ותמלולים/.test(t)},
+      {id:'summaries', label:'תקצירים ומסמכי BSD',        match:t=>/כרטיס אנונימי|תקציר עסקי פנימי מלא/.test(t)},
+      {id:'files',     label:'מסמכים וקבצים',             match:t=>/תיק מכירה|קבצים מצורפים/.test(t)},
+      {id:'access',    label:'הרשאות והפצה',              match:t=>/הפצה והרשאות/.test(t)},
+    ];
+    const FALLBACK_ID = 'other', FALLBACK_LABEL = 'נוסף';
+
+    // חלק מכותרות הסעיפים (section-h) מכילות גם כפתורים מקוננים (לדוגמה
+    // "הערות" עם כפתורי הקלטה/AI, "WhatsApp" עם כפתור שליחה) - לוקחים רק
+    // את השורה הראשונה הלא-ריקה כטקסט הכותרת עצמה, כדי שההתאמה ללשונית
+    // תהיה מדויקת ולא תושפע מטקסט הכפתורים שבפנים.
+    function segText(el){
+      if (!el) return '';
+      const raw = (el.textContent || '').trim();
+      const lines = raw.split('\n').map(s => s.trim()).filter(Boolean);
+      return lines[0] || '';
+    }
+    function collectSegments(elements){
+      // הערה חשובה: ברוב הכרטיס, כותרת section-h היא בת ישירה של אותו
+      // container (אח ל-field-ים שאחריה). אבל בבלוק "🔐 הפצה והרשאות"
+      // ה-section-h מקונן צעד אחד בפנים (בתוך div עוטף עם רקע צהוב) - בלי
+      // הבדיקה הזו הוא "נבלע" בטעות לתוך הסעיף הקודם (תיק מכירה). לכן
+      // בודקים גם section-h מקונן ולא רק כזה שהוא בן ישיר.
+      const segs = [];
+      let current = null;
+      elements.forEach(child => {
+        const ownHeader = (child.classList && child.classList.contains('section-h')) ? child : null;
+        const nestedHeader = !ownHeader && child.querySelector ? child.querySelector('.section-h') : null;
+        const header = ownHeader || nestedHeader;
+        if (header){
+          current = { header, nodes: [child] };
+          segs.push(current);
+        } else if (current){
+          current.nodes.push(child);
+        } else {
+          current = { header: null, nodes: [child] }; // תוכן ללא section-h שקודם לו - לא נאבד אותו
+          segs.push(current);
+        }
+      });
+      return segs;
+    }
+
+    const formGrid = form.querySelector(':scope > .form-grid');
+    const modalActions = form.querySelector(':scope > .modal-actions');
+    const otherChildren = Array.from(form.children).filter(c => c !== formGrid && c !== modalActions);
+    const gridSegments = formGrid ? collectSegments(Array.from(formGrid.children)) : [];
+    const blockSegments = collectSegments(otherChildren);
+
+    const panesById = {};
+    function getPaneTarget(tabId, label, isGrid){
+      if (!panesById[tabId]){
+        const el = document.createElement('div');
+        el.className = 'biz-tabpane';
+        el.dataset.tab = tabId;
+        el.dataset.label = label;
+        panesById[tabId] = { el, gridInner: null };
+      }
+      const p = panesById[tabId];
+      if (isGrid){
+        if (!p.gridInner){
+          p.gridInner = document.createElement('div');
+          p.gridInner.className = 'form-grid';
+          p.el.appendChild(p.gridInner);
+        }
+        return p.gridInner;
+      }
+      return p.el;
+    }
+    function assign(segments, isGrid){
+      segments.forEach(seg => {
+        const text = segText(seg.header);
+        const def = TAB_DEFS.find(td => td.match(text));
+        const tabId = def ? def.id : FALLBACK_ID;
+        const label = def ? def.label : FALLBACK_LABEL;
+        if (!def) console.warn('bsdTabifyBizForm: קטע לא מזוהה שויך ללשונית "נוסף":', text);
+        const target = getPaneTarget(tabId, label, isGrid);
+        seg.nodes.forEach(n => target.appendChild(n));
+      });
+    }
+    assign(gridSegments, true);
+    assign(blockSegments, false);
+
+    const order = TAB_DEFS.map(td => td.id).concat(Object.keys(panesById).filter(id => !TAB_DEFS.some(td => td.id === id)));
+    const activeIds = order.filter(id => panesById[id]);
+    if (activeIds.length === 0) return; // אין מה לחלק ללשוניות - נשאיר את הטופס הריק כפי שהוא
+
+    const tabbar = document.createElement('div');
+    tabbar.className = 'biz-tabbar';
+    const tabpanesWrap = document.createElement('div');
+    tabpanesWrap.className = 'biz-tabpanes';
+    activeIds.forEach((id, i) => {
+      const pane = panesById[id];
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = pane.el.dataset.label;
+      btn.dataset.tab = id;
+      if (i === 0){ btn.classList.add('active'); pane.el.classList.add('active'); }
+      btn.addEventListener('click', () => {
+        tabbar.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        tabpanesWrap.querySelectorAll('.biz-tabpane').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        pane.el.classList.add('active');
+        tabpanesWrap.scrollTop = 0;
+      });
+      tabbar.appendChild(btn);
+      tabpanesWrap.appendChild(pane.el);
+    });
+
+    const anchor = formGrid || modalActions || null;
+    form.insertBefore(tabbar, anchor);
+    form.insertBefore(tabpanesWrap, anchor);
+    if (formGrid) formGrid.remove(); // כבר ריק - כל תוכנו הועבר ללשוניות
+
+    modal.classList.add('biz-fullpage-modal');
+    overlay.classList.add('biz-fullpage');
+  } catch(err){
+    console.error('bsdTabifyBizForm נכשלה - הכרטיס ימשיך להיפתח בתצוגה הרגילה (החלון הצר), שום דבר לא נשבר:', err);
+  }
+}
+
 function openBizForm(id){
   const biz = id ? ALL_BIZ.find(b=>b.id===id) : null;
   AI_TEXT_ORIGINAL = {}; // איפוס בין פתיחות טופס שונות - כל עסק מתחיל "נקי" מבחינת שחזור AI
@@ -828,7 +1027,6 @@ function openBizForm(id){
           <div style="display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;">
             <textarea id="short_description" style="flex:1;min-width:220px;">${esc(biz?.short_description)}</textarea>
             <div style="display:flex;flex-direction:column;gap:6px;">
-              <button type="button" class="btn btn-ghost" style="white-space:nowrap;padding:0 12px;height:38px;" onclick="suggestShortDescription()">💡 הצע</button>
               <button type="button" class="btn btn-ghost" id="aiImprove_short_description" style="white-space:nowrap;padding:0 12px;height:38px;" onclick="improveFieldWithAI('short_description')">🤖 שיפור ניסוח באמצעות AI</button>
             </div>
           </div>
@@ -1065,6 +1263,9 @@ function openBizForm(id){
       </div>
     </form>
   `;
+  bsdTabifyBizForm(); // הופך את הכרטיס לעמוד מלא עם לשוניות - ראו הגדרת הפונקציה למעלה. מבוצע כאן, לפני חיווט
+                       // ה-listeners (submit/dup-check) ולפני loadBizFiles/loadBizMeetings וכו', כדי ש-getElementById
+                       // ימצא את כל השדות במיקומם הסופי - שום שדה/כפתור/handler לא משתנה, רק מיקומם ב-DOM.
   document.getElementById('overlay').classList.add('open');
   document.getElementById('overlay').scrollTop = 0;
   document.getElementById('bizForm').dataset.bizId = biz ? biz.id : '';
@@ -3341,27 +3542,6 @@ async function suggestAnonymousName(){
     if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
     toast('❌ ' + msg);
   }
-}
-
-function suggestShortDescription(){
-  const field = document.getElementById('field').value.trim();
-  const category = document.getElementById('category').value.trim();
-  const years = parseInt(document.getElementById('years_active').value) || 0;
-  const employees = parseInt(document.getElementById('employees_count').value) || 0;
-  const region = document.getElementById('region').value.trim();
-  const city = document.getElementById('city').value.trim();
-  const area = region || city;
-
-  let parts = [];
-  parts.push(field ? `עסק בתחום ${field}` : 'עסק');
-  if (category) parts.push(`בקטגוריית ${category}`);
-  if (years) parts.push(`הפעיל כ-${years} שנים`);
-  if (employees) parts.push(`ומעסיק כ-${employees} עובדים`);
-  if (area) parts.push(`הממוקם באזור ${area}`);
-
-  const suggestion = parts.join(', ') + '.';
-  document.getElementById('short_description').value = suggestion;
-  toast('הוצע תיאור על בסיס הנתונים בטופס - ניתן לערוך לפני השמירה');
 }
 
 // ============================================================================
