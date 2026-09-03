@@ -140,7 +140,12 @@
   .modal.biz-fullpage-modal>form{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden;}
   .modal.biz-fullpage-modal>h3{display:none;} /* השם/מספר העסק עוברים לכותרת העליונה הקבועה (biz-sticky-top) */
   .biz-sticky-top{flex:0 0 auto !important;overflow-y:visible !important;padding-bottom:0 !important;background:#fff;padding:18px 24px 0;border-bottom:1px solid #eee;border-right:4px solid transparent;}
-  .biz-sticky-top h3{margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;font-size:1.5rem;}
+  .biz-sticky-top h3{margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;font-size:1.5rem;display:flex;align-items:center;flex-wrap:wrap;gap:12px;}
+  /* שם העסק גדול יותר ליד הכותרת "עריכת עסק", ומספר העסק כתגית עם רקע
+     שחור בולט - שניהם בכותרת הקבועה כדי שיהיו גלויים תמיד, בכל לשונית
+     (לפי בקשתו 03.09.2026). */
+  .biz-name-big{font-size:1.7rem;font-weight:800;color:var(--navy);}
+  .biz-number-badge{background:#111;color:#fff;border-radius:8px;padding:4px 14px;font-size:1rem;font-weight:800;letter-spacing:.3px;}
   .biz-sticky-top .agr-note{font-size:1rem;}
   .biz-sticky-top.bsd-status-green{border-right-color:#1e7b34;}
   .biz-sticky-top.bsd-status-orange{border-right-color:#c89b2c;}
@@ -164,23 +169,40 @@
   .biz-tabbar button:hover{background:#3a7dc4;box-shadow:0 2px 6px rgba(14,27,52,.3);}
   .biz-tabbar button:active{box-shadow:0 1px 2px rgba(14,27,52,.2) inset;}
   .biz-tabbar button.active{background:var(--navy);border-color:var(--navy);color:#fff;box-shadow:0 4px 10px rgba(14,27,52,.4);}
-  .biz-tabpanes{flex:1 1 auto;min-height:0;padding:22px 24px 40px;overflow-y:auto;font-size:1rem;}
+  .biz-tabpanes{flex:1 1 auto;min-height:0;padding:22px 24px 40px;overflow-y:auto;font-size:1.05rem;}
   .biz-tabpanes .biz-tabpane{display:none;}
   .biz-tabpanes .biz-tabpane.active{display:block;}
-  /* היררכיה ברורה של טקסט בתוך התוכן: כותרות אזור > תוויות שדה > ערך שדה */
-  .biz-tabpanes .section-h{font-size:1.05rem;}
-  .biz-tabpanes .field label{font-size:.95rem;}
+  /* ריכוז נתונים קבוע ממש מתחת לסרגל הלשוניות (לפי בקשתו 03.09.2026) -
+     כמו ברשימת העסקים: הסכם/הפצה/פומבי/קונים מותאמים. תג של flex:none
+     בתוך form שכבר flex column - אין כאן את אותה דליפת CSS גנרית שהייתה
+     על .biz-sticky-top (זו לא ילד ישיר של .modal, אלא של form), אז אין
+     צורך ב-!important. גלוי בכל לשונית, לא נגלל עם התוכן. */
+  .biz-summary-strip{flex:none;display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:#f3f1e9;border-bottom:1px solid #e5e0d3;padding:10px 20px;box-sizing:border-box;}
+  .biz-summary-strip .biz-matches-badge{background:#eef1f6;color:var(--navy);border-radius:6px;padding:3px 10px;font-size:.85rem;font-weight:700;white-space:normal;}
+  .biz-summary-strip .biz-matches-badge.biz-matches-empty{background:#f1f0ec;color:#888;font-weight:400;}
+  /* חלוקה ברורה בין נושאים/קטגוריות (לפי בקשתו 03.09.2026): כל כותרת
+     section-h הופכת ל"שלט" קטגוריה בולט עם רקע/גבול/מרווח - במקום רק
+     שורת טקסט קטנה בזהב. לא נוגעים במבנה ה-DOM/הלוגיקה - שינוי CSS
+     בלבד, מוגבל ל-.biz-tabpanes כדי לא להשפיע על טפסי ליד/התאמה. */
+  .biz-tabpanes .section-h{font-size:1.2rem;font-weight:800;color:var(--navy);text-transform:none;letter-spacing:normal;background:#f7f5ef;border-right:5px solid var(--gold);border-radius:6px;padding:10px 14px;margin:22px 0 12px;box-shadow:0 1px 2px rgba(14,27,52,.08);}
+  .biz-tabpanes .biz-tabpane>.form-grid>.section-h:first-child,
+  .biz-tabpanes .biz-tabpane>.section-h:first-child{margin-top:0;}
+  .biz-tabpanes .field label{font-size:1.05rem;font-weight:700;color:#333;}
   .biz-tabpanes .field input,
   .biz-tabpanes .field select,
-  .biz-tabpanes .field textarea{font-size:1.05rem;padding:11px 13px;}
-  .biz-tabpanes .btn{font-size:.95rem;padding:11px 20px;}
+  .biz-tabpanes .field textarea{font-size:1.15rem;padding:12px 14px;font-weight:600;}
+  .biz-tabpanes .btn{font-size:1.05rem;font-weight:700;padding:11px 20px;}
   .modal.biz-fullpage-modal .modal-actions{flex:none;background:#fff;box-shadow:0 -4px 16px rgba(0,0,0,.12);padding:14px 24px;margin-top:0;}
   .modal.biz-fullpage-modal .modal-actions .btn{font-size:1.05rem;padding:12px 24px;}
   @media (max-width:640px){
     .biz-sticky-top h3{font-size:1.2rem;}
+    .biz-name-big{font-size:1.25rem;}
+    .biz-number-badge{font-size:.85rem;padding:3px 10px;}
+    .biz-summary-strip{padding:8px 12px;gap:8px;font-size:.8rem;}
     .biz-tabbar{padding:8px 10px;gap:6px;min-height:56px;}
     .biz-tabbar button{height:40px;padding:0 14px;font-size:.85rem;max-width:170px;}
     .biz-tabpanes{padding:16px 14px 90px;}
+    .biz-tabpanes .section-h{font-size:1.05rem;padding:8px 12px;margin:16px 0 10px;}
   }
 </style>
 </head>
@@ -861,7 +883,32 @@ function toggleListingFields(){
 // המקוריים שלהם) למקום אחר במסך. מופעלת רק בתוך businesses.html על כרטיס
 // העסק בלבד - שאר השימושים ב-#overlay/#modalBox (עריכת ליד, התאמה וכו')
 // לא עוברים דרך הפונקציה הזו ונשארים בדיוק כפי שהיו.
-function bsdTabifyBizForm(){
+// ריכוז שמות הקונים המותאמים (פעילים בלבד) לתוך תג "הותאם ל" בסרגל הנתונים
+// שממש מתחת ללשוניות (03.09.2026) - שאילתה נפרדת קטנה, לא מעכבת את פתיחת
+// הכרטיס עצמו (רצה ברקע אחרי שהטופס כבר פתוח ומוצג).
+async function bsdLoadBizSummaryBuyers(bizId){
+  const badge = document.getElementById('bizMatchesBadge_' + bizId);
+  if (!badge) return;
+  try{
+    const { data: matches, error } = await window.supabaseClient.from('matches').select('buyer_id,status').eq('business_id', bizId);
+    if (error) throw error;
+    const active = (matches || []).filter(m => !BIZ_MATCH_CLOSED_STATUSES.includes(m.status));
+    if (!active.length){
+      badge.textContent = '— אין קונים מותאמים';
+      badge.classList.add('biz-matches-empty');
+      return;
+    }
+    const buyerIds = [...new Set(active.map(m => m.buyer_id))];
+    const { data: buyers } = await window.supabaseClient.from('leads').select('id,full_name').in('id', buyerIds);
+    const names = (buyers || []).map(b => b.full_name).filter(Boolean);
+    badge.textContent = names.length ? `🤝 הותאם ל: ${names.join(', ')}` : `🤝 הותאם ל-${active.length} קונים`;
+  } catch(err){
+    badge.textContent = '— שגיאה בטעינת קונים מותאמים';
+    console.error('bsdLoadBizSummaryBuyers נכשלה:', err);
+  }
+}
+
+function bsdTabifyBizForm(biz){
   try{
     const modal = document.getElementById('modalBox');
     const overlay = document.getElementById('overlay');
@@ -1013,6 +1060,21 @@ function bsdTabifyBizForm(){
 
     const anchor = formGrid || modalActions || null;
     form.insertBefore(tabbar, anchor);
+    // ריכוז נתונים ממש מתחת לסרגל (לפי בקשתו 03.09.2026) - כמו ברשימת
+    // העסקים: הסכם/הפצה/פומבי/קונים מותאמים. קבוע (flex:none), נשאר
+    // גלוי בכל לשונית שבוחרים - לא נכנס לתוך אזור הגלילה. נבנה רק לעסק
+    // קיים (biz קיים) - לעסק חדש שעוד לא נשמר אין הסכם/הפצה/קונים בכלל.
+    if (biz){
+      const summaryStrip = document.createElement('div');
+      summaryStrip.className = 'biz-summary-strip';
+      summaryStrip.innerHTML = `
+        ${agreementBadge(biz.agreement_status)}
+        ${distributionBadge(biz)}
+        ${publicListingBadge(biz)}
+        <span class="biz-matches-badge" id="bizMatchesBadge_${biz.id}">⏳ טוען קונים מותאמים…</span>
+      `;
+      form.insertBefore(summaryStrip, anchor);
+    }
     form.insertBefore(tabpanesWrap, anchor);
     if (formGrid) formGrid.remove(); // כבר ריק - כל תוכנו הועבר ללשוניות
 
@@ -1030,7 +1092,7 @@ function openBizForm(id){
   AI_EDIT_REVERTED = {};
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
-    <h3>${biz ? 'עריכת עסק' : 'עסק חדש'}</h3>
+    <h3>${biz ? 'עריכת עסק' : 'עסק חדש'}${biz?.internal_name ? ` <span class="biz-name-big">${esc(biz.internal_name)}</span>` : ''}${biz?.business_number ? ` <span class="biz-number-badge">${esc(biz.business_number)}</span>` : ''}</h3>
     ${biz ? agreementBanner(biz.agreement_status, biz.agreement_number, 'businesses', biz.id, biz.agreement_pdf_path, biz.agreement_pdf_uploaded_at) : ''}
     <div id="bizFormError" style="display:none;background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.85rem;color:#8a2c1f;"></div>
     ${!biz ? '<div id="bizDupBanner" style="display:none;"></div>' : ''}
@@ -1309,7 +1371,7 @@ function openBizForm(id){
       </div>
     </form>
   `;
-  bsdTabifyBizForm(); // הופך את הכרטיס לעמוד מלא עם לשוניות - ראו הגדרת הפונקציה למעלה. מבוצע כאן, לפני חיווט
+  bsdTabifyBizForm(biz); // הופך את הכרטיס לעמוד מלא עם לשוניות - ראו הגדרת הפונקציה למעלה. מבוצע כאן, לפני חיווט
                        // ה-listeners (submit/dup-check) ולפני loadBizFiles/loadBizMeetings וכו', כדי ש-getElementById
                        // ימצא את כל השדות במיקומם הסופי - שום שדה/כפתור/handler לא משתנה, רק מיקומם ב-DOM.
   document.getElementById('overlay').classList.add('open');
@@ -1337,6 +1399,7 @@ function openBizForm(id){
   if (biz) loadBizMeetings(biz.id);
   if (biz) waRenderHistory('business', biz.id, 'bizWaHistoryBox');
   if (biz) loadBizMatchesModule(biz.id);
+  if (biz) bsdLoadBizSummaryBuyers(biz.id);
   if (biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz)) loadBizAccessGrants(biz.id);
   if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadAnonDistSummary(biz.id);
   if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadSaleFileModule(biz.id);
