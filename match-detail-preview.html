@@ -1096,7 +1096,7 @@ function renderHero(){
     <div class="hero-top">
       <div>
         <div class="hero-title">🏢 <a href="businesses.html?open=${MATCH.business_id}" style="color:inherit;text-decoration:underline;" class="biz-name">${esc(BIZ?.internal_name||'—')}</a>${BIZ?.business_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BIZ.business_number)})</span>`:''}</div>
-        <div class="hero-title buyer-name" style="margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${isCounterpartyBroker() ? `🔵 <a href="brokers.html?open=${MATCH.broker_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>` : `🧍 <a href="leads.html?open=${MATCH.buyer_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>`}${BUYER?.client_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BUYER.client_number)})</span>`:''}${counterpartyBadgeHtml()}</div>
+        <div class="hero-title buyer-name" style="margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${isCounterpartyBroker() ? `🔵 <a href="brokers.html?open=${MATCH.broker_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>` : `🧍 <a href="leads.html?open=${MATCH.buyer_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>`}${BUYER?.client_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BUYER.client_number)})</span>`:''}${counterpartyBadgeHtml()}<button class="qa-btn" style="background:#dff0e4;border-color:#a9d6b8;padding:5px 11px;font-size:.75rem;" onclick="openQuickCheckinModal()">💬 עדכון מהיר</button></div>
         <div class="hero-sub">
           נוצרה ע"י ${esc(userName(MATCH.created_by))} בתאריך ${fmtDate(MATCH.created_at)}
           · מטפל כרגע: <b>${esc(userName(MATCH.current_handler))}</b>
@@ -1183,7 +1183,6 @@ async function loadLastActions(){
 
 function renderQuickActions(){
   document.getElementById('quickActions').innerHTML = `
-    <button class="qa-btn" onclick="openQuickCheckinModal()" style="background:#dff0e4;border-color:#a9d6b8;">💬 עדכון מהיר לקונה</button>
     <button class="qa-btn" onclick="openNoteModal()">📝 הוסף הערה</button>
     <button class="qa-btn" onclick="openTaskModal()">✅ הוסף משימה</button>
     <button class="qa-btn" onclick="openStatusModal()">🔄 שנה סטטוס</button>
