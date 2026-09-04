@@ -43,6 +43,31 @@
   html,body{margin:0;padding:0;}
   body{font-family:'Heebo',Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
 
+  /* ===== Shared main navigation bar (same as businesses.html/leads.html/app.html) ===== */
+  .bsd-header{background:linear-gradient(90deg,var(--navy),var(--navy-light));border-bottom:3px solid var(--gold);color:#fff;padding:14px 28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+  .bsd-header .brand{font-weight:700;font-size:1.15rem;letter-spacing:.5px;}
+  .bsd-header .brand small{display:block;font-weight:400;font-size:.7rem;color:var(--gold-light);}
+  .nav-rows{min-width:0;flex:1 1 auto;}
+  .nav{display:flex;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;gap:6px;width:100%;min-width:0;scrollbar-width:thin;}
+  .nav > div{flex:0 0 auto;}
+  .nav-row-wrap{position:relative;min-width:0;flex:1 1 auto;}
+  .nav-scroll-btn{position:absolute;top:50%;transform:translateY(-50%);width:26px;height:26px;border-radius:50%;background:rgba(21,38,69,.95);color:#fff;border:1px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;line-height:1;cursor:pointer;z-index:65;padding:0;box-shadow:0 2px 8px rgba(0,0,0,.45);touch-action:manipulation;}
+  .nav-scroll-btn.nav-scroll-left{left:0;}
+  .nav-scroll-btn.nav-scroll-right{right:0;}
+  .nav-scroll-btn[hidden]{display:none;}
+  .nav > a,.nav > div > button{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:0 0 auto;position:relative;box-sizing:border-box;height:40px;padding:0 16px !important;font-size:.86rem !important;font-weight:700 !important;line-height:1;border-radius:9px !important;border:none !important;color:var(--navy) !important;background:#f2efe4 !important;text-decoration:none;white-space:nowrap;font-family:inherit;cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,.3),0 3px 8px rgba(0,0,0,.28),0 1px 0 rgba(255,255,255,.5) inset;transition:box-shadow .16s ease,filter .16s ease,background .16s ease;}
+  .nav > a:hover,.nav > div > button:hover{background:#fffdf7 !important;filter:brightness(1.02);box-shadow:0 3px 0 rgba(0,0,0,.3),0 8px 16px rgba(0,0,0,.32),0 1px 0 rgba(255,255,255,.6) inset;}
+  .nav > a:active,.nav > div > button:active{background:#e7e3d5 !important;filter:none;box-shadow:0 1px 0 rgba(0,0,0,.3),0 1px 3px rgba(0,0,0,.22);}
+  .nav > a[style*="rgba(255,255,255,.12)"],.nav > a.active{background:var(--gold) !important;color:var(--navy) !important;box-shadow:0 2px 0 rgba(0,0,0,.28),0 4px 10px rgba(0,0,0,.28) !important;}
+  .nav > a[style*="rgba(255,255,255,.12)"]:hover,.nav > a.active:hover{filter:brightness(1.08);box-shadow:0 2px 0 rgba(0,0,0,.28),0 4px 10px rgba(0,0,0,.28) !important;}
+  .nav-tasks{background:linear-gradient(135deg,var(--gold-light),var(--gold)) !important;color:var(--navy) !important;}
+  .nav-tasks:hover{filter:brightness(1.1);}
+  .nav-tasks.nav-tasks-current{background:linear-gradient(135deg,var(--gold),var(--gold-light)) !important;box-shadow:0 2px 8px rgba(0,0,0,.4) inset,0 1px 0 rgba(255,255,255,.5) !important;}
+  .nav > button.btn-ghost{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 16px !important;font-size:.86rem !important;font-weight:700 !important;border-radius:9px !important;color:var(--navy) !important;background:#f2efe4 !important;border:none !important;box-shadow:0 2px 0 rgba(0,0,0,.3),0 3px 8px rgba(0,0,0,.28),0 1px 0 rgba(255,255,255,.5) inset !important;}
+  .nav > button.btn-ghost:hover{background:#fffdf7 !important;box-shadow:0 3px 0 rgba(0,0,0,.3),0 8px 16px rgba(0,0,0,.32),0 1px 0 rgba(255,255,255,.6) inset !important;}
+  @keyframes bsdBtnPop{0%{transform:scale(1);}35%{transform:scale(.93);}65%{transform:scale(1.035);}100%{transform:scale(1);}}
+  .bsd-btn-pop{animation:bsdBtnPop .32s cubic-bezier(.34,1.56,.64,1);}
+
   .topbar{background:linear-gradient(135deg,var(--navy),var(--navy-light));color:#fff;padding:14px 20px;border-bottom:3px solid var(--gold);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;position:sticky;top:0;z-index:40;}
   .topbar h1{margin:0;font-size:17px;}
   .topbar .sub{margin:2px 0 0;font-size:11px;color:var(--gold-light);}
@@ -135,6 +160,55 @@
 </style>
 </head>
 <body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span id="bsdVerLabel" style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה</span><script>(function(){var e=document.getElementById('bsdVerLabel');var b=window.PAGE_BUILD;if(e&&b&&b.length>=12){e.textContent='גרסה '+b.slice(6,8)+'.'+b.slice(4,6)+'.'+b.slice(0,4)+' '+b.slice(8,10)+':'+b.slice(10,12);}})();</script></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+        <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
+  <div class="nav">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="leads-hub.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לידים</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+    <a href="brokers.html?from=matches" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">🧑‍💼 מתווכים / סוכנים</a>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">📋 טפסים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a id="navFormsAllLink" href="intake-forms.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">📁 כל הטפסים שהוגשו</a>
+    </div>
+  </div>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">⚙️ הגדרות ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="backup.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">💾 גיבוי נתונים</a>
+      <a href="javascript:void(0)" id="pushBellBtn" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔕 הפעל התראות</a>
+      <a href="help.html" target="_blank" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">❓ עזרה</a>
+      <a href="javascript:void(0)" onclick="openMyProfile()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👤 פרטים אישיים</a>
+      <a href="javascript:void(0)" onclick="openChangePassword()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔑 שנה סיסמה</a>
+    </div>
+  </div>
+  </div>
+  <div class="nav">
+    <a href="tasks.html" class="nav-tasks">✅ משימות</a>
+    <a href="messages.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;position:relative;">💬 הודעות<span id="navMsgBadge" style="display:none;position:absolute;top:2px;left:2px;background:#b3402c;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;font-weight:700;"></span></a>
+    <a href="matches-workspace.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">📁 מרכז ההתאמות</a>
+    <a href="commission-simulator.html" style="color:#c9a24b;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;border:1px solid rgba(201,162,75,.4);">🧮 סימולטור עמלות</a>
+    <div id="navToolsWrap" style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">🛠️ כלים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="recordings.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🎙️ הקלטות</a>
+      <a href="training-admin.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🎓 הכשרות ומתעניינים</a>
+      <a href="messages.html?admin_view=1" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ כל ההודעות במערכת</a>
+      <a href="stats.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 סטטיסטיקה</a>
+      <a href="users.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👥 משתמשים</a>
+      <a href="anon-distributions.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 דוח הפצת אנונימי</a>
+    </div>
+  </div>
+    <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+  </div>
+</div>
+  
+</div>
 
 <div class="topbar">
   <div>
