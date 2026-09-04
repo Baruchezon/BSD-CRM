@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609032300';
+    var PAGE_BUILD = '202609040341';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -107,6 +107,12 @@
   .btn-ghost{background:#f1eee2;color:var(--text);border:none;padding:9px 16px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
   .btn-primary{background:var(--navy);color:#fff;border:none;padding:10px 18px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
   .btn-primary[disabled]{opacity:.5;cursor:not-allowed;}
+  .agr-badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;white-space:nowrap;}
+  .agr-none{background:#f1f1f1;color:#777;}
+  .agr-sent{background:#fdeccb;color:#8a5a10;}
+  .agr-signed{background:#dff0e4;color:#245c40;}
+  .checkin-suggest{background:#eef4fb;border:1px solid #bcd6ee;color:#1c4e7a;border-radius:8px;padding:10px 12px;font-size:.85rem;margin:8px 0;cursor:pointer;}
+  .checkin-suggest:hover{background:#e0edf9;}
   .new-match-btn{background:var(--gold);color:var(--navy);border:none;padding:8px 16px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;}
   .new-match-btn:hover{background:var(--gold-light);}
   .nm-preview{background:#f6f5ef;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:12.5px;line-height:1.8;margin-bottom:10px;}
@@ -182,6 +188,79 @@ function fmtDate(iso){ if(!iso) return "—"; const d = new Date(iso); if(isNaN(
 function fmtDateTime(iso){ if(!iso) return "—"; const d = new Date(iso); if(isNaN(d)) return "—"; return d.toLocaleDateString('he-IL')+" "+d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}); }
 function daysSince(iso){ if(!iso) return null; return Math.floor((Date.now()-new Date(iso).getTime())/86400000); }
 function toast(msg){ const el=document.createElement('div'); el.className='toast'; el.textContent=msg; document.getElementById('toastRoot').appendChild(el); setTimeout(()=>el.remove(),3000); }
+
+// ---------- עדכון מהיר בוואטסאפ - זמין גם משורת הכותרת (קונה/מתווך) וגם מכל ענף/התאמה בודדת ----------
+// (03.09.2026 - אותו מנגנון בדיוק כמו match-detail.html: הודעה קצרה שהוא כותב/עורך בעצמו,
+// לא AI; מציג סטטוס הסכם; מוסיף המלצה על שליחת הסכם אם אין הסכם חתום; מתעד ל-audit_log את
+// הטקסט המלא שנשלח כדי שיהיה תיעוד אמיתי של מה שסוכם, לא רק "נשלחה הודעה")
+function agreementShortLabel(status){
+  const s = status || 'אין הסכם';
+  return s === 'נשלח הסכם לחתימה' ? 'נשלח לחתימה' : s;
+}
+function agreementBadge(status){
+  const s = status || 'אין הסכם';
+  const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
+  return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>`;
+}
+function openQuickCheckinModalForKey(key){
+  const isBroker = key.startsWith('broker:');
+  const id = key.slice(key.indexOf(':')+1);
+  const rec = isBroker ? brokerById(id) : leadById(id);
+  if (!rec){ toast('לא נמצא קונה/מתווך'); return; }
+  const groupMatches = isBroker
+    ? ALL_MATCHES.filter(m=>m.counterparty_type==='broker' && m.broker_id===id)
+    : ALL_MATCHES.filter(m=>m.counterparty_type!=='broker' && m.buyer_id===id);
+  const lastMatch = groupMatches.sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at))[0];
+  openQuickCheckinModalCore(rec, lastMatch ? lastMatch.id : null);
+}
+function openQuickCheckinModalForMatch(matchId){
+  const m = ALL_MATCHES.find(x=>x.id===matchId);
+  if (!m){ toast('התאמה לא נמצאה'); return; }
+  const isBroker = m.counterparty_type === 'broker';
+  const rec = isBroker ? brokerById(m.broker_id) : leadById(m.buyer_id);
+  if (!rec){ toast('לא נמצא קונה/מתווך'); return; }
+  openQuickCheckinModalCore(rec, matchId);
+}
+function openQuickCheckinModalCore(rec, matchId){
+  const status = rec.agreement_status;
+  const signed = status === 'יש הסכם חתום';
+  const defaultText = `היי ${rec.full_name||''}, רק רציתי לבדוק מולך - ראית את החומר ששלחנו? יש שאלות, או שאתה צריך עזרה מולי בקשר לזה?`;
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="overlay"><div class="modal">
+      <div class="modal-head"><h3>💬 עדכון מהיר ל${esc(rec.full_name||'')}</h3><button class="modal-close" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="field"><label>סטטוס הסכם נוכחי</label><div>${agreementBadge(status)}</div></div>
+        ${!signed ? `<div class="checkin-suggest" onclick="appendAgreementSuggestion()">➕ להוסיף להודעה: מומלץ לשלוח הסכם התקשרות ושמירת סודיות - לחץ להוספה</div>` : ''}
+        <div class="field"><label>מספר טלפון (ניתן לתקן)</label><input type="text" id="wsCiPhone" placeholder="05XXXXXXXX" value="${esc((rec.phone||'').replace(/\D/g,''))}"></div>
+        <div class="field"><label>תוכן ההודעה (אתה כותב, אפשר לערוך חופשי)</label><textarea id="wsCiText" rows="5">${esc(defaultText)}</textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn-ghost" data-close>ביטול</button><button class="btn-primary" onclick="sendQuickCheckinWs('${matchId||''}')">פתח ב-WhatsApp</button></div>
+    </div></div>`;
+  document.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', ()=> document.getElementById('modalRoot').innerHTML=""));
+}
+function appendAgreementSuggestion(){
+  const ta = document.getElementById('wsCiText');
+  const line = 'דרך אגב, כדי לכבד את הנהלים שלנו ולתת לך חומרים מדויקים יותר, מומלץ שנשלח לך הסכם התקשרות ושמירת סודיות - רוצה שאשלח?';
+  if (!ta.value.includes(line)) ta.value = ta.value.trim() + '\n\n' + line;
+}
+async function sendQuickCheckinWs(matchId){
+  let phone = document.getElementById('wsCiPhone').value.replace(/\D/g,'');
+  if (!phone){ toast('יש להזין מספר טלפון'); return; }
+  if (phone.startsWith('0')) phone = '972' + phone.slice(1);
+  const messageText = document.getElementById('wsCiText').value;
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(messageText)}`, '_blank');
+  if (matchId){
+    try{
+      await window.supabaseClient.from('audit_log').insert({
+        table_name: 'matches', record_id: matchId, action: 'send_whatsapp_checkin',
+        actor_id: CURRENT_PROFILE ? CURRENT_PROFILE.id : null,
+        details: { phone, message: messageText, sent_from: 'matches-workspace' }
+      });
+    } catch(e){ /* לא חוסם אם audit_log לא זמין */ }
+  }
+  document.getElementById('modalRoot').innerHTML = "";
+  toast('נפתח WhatsApp ותועד בהתאמה');
+}
 function userName(id){ if(!id) return null; const p = ALL_PROFILES[id]; return p ? (p.full_name||p.role) : null; }
 function leadById(id){ return ALL_LEADS.find(l=>l.id===id); }
 function brokerById(id){ return ALL_BROKERS.find(b=>b.id===id); }
@@ -300,6 +379,7 @@ function branchRowHtml(m, otherPartyLabel){
     </div>
     <div class="br-actions">
       <button class="mini-btn" data-open="${m.id}">📁 פתח תיק</button>
+      <button class="mini-btn" data-quicksend-match="${m.id}" style="background:#dff0e4;border-color:#a9d6b8;">💬 עדכון מהיר</button>
       <button class="mini-btn" data-task="${m.id}">➕ משימה</button>
       <button class="mini-btn" data-note="${m.id}">📝 הערה</button>
       <button class="mini-btn" data-call="${m.id}">☎️ תיעוד שיחה</button>
@@ -312,6 +392,7 @@ function wireBranchActions(container){
   container.querySelectorAll('[data-task]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickTaskModal(el.dataset.task); }));
   container.querySelectorAll('[data-note]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickNoteModal(el.dataset.note, 'נוספה הערה'); }));
   container.querySelectorAll('[data-call]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickNoteModal(el.dataset.call, 'התקיימה שיחת טלפון'); }));
+  container.querySelectorAll('[data-quicksend-match]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickCheckinModalForMatch(el.dataset.quicksendMatch); }));
 }
 
 function renderByBusiness(){
@@ -419,6 +500,7 @@ function renderByBuyer(){
           </div>
         </div>
         <div class="th-actions">
+          <button class="mini-btn" data-quicksend="${s.key}" style="background:#dff0e4;border-color:#a9d6b8;">💬 עדכון מהיר</button>
           ${s.isBroker ? `<a class="mini-btn" href="brokers.html?open=${s.id}">🔵 כרטיס המתווך</a>` : `
           <button class="mini-btn" data-addbiz="${s.id}">➕ הוסף עסק</button>
           <button class="mini-btn" data-buyerreport="${s.id}">📊 דוח לקונה</button>`}
@@ -442,6 +524,7 @@ function renderByBuyer(){
   }));
   wrap.querySelectorAll('[data-addbiz]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='leads.html?open='+el.dataset.addbiz; }));
   wrap.querySelectorAll('[data-buyerreport]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='leads.html?open='+el.dataset.buyerreport; }));
+  wrap.querySelectorAll('[data-quicksend]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickCheckinModalForKey(el.dataset.quicksend); }));
   wireBranchActions(wrap);
 }
 
