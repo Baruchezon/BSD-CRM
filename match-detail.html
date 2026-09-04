@@ -11,7 +11,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609032300';
+    var PAGE_BUILD = '202609040333';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -60,6 +60,12 @@
 
   .quick-actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 4px;}
   .qa-btn{background:#f7f5ee;border:1.5px solid #d8d3c4;border-radius:9px;padding:9px 14px;font-size:.82rem;font-weight:700;color:var(--navy);cursor:pointer;font-family:inherit;}
+  .agr-badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;white-space:nowrap;}
+  .agr-none{background:#f1f1f1;color:#777;}
+  .agr-sent{background:#fdeccb;color:#8a5a10;}
+  .agr-signed{background:#dff0e4;color:#245c40;}
+  .checkin-suggest{background:#eef4fb;border:1px solid #bcd6ee;color:#1c4e7a;border-radius:8px;padding:10px 12px;font-size:.85rem;margin:8px 0;cursor:pointer;}
+  .checkin-suggest:hover{background:#e0edf9;}
   .qa-btn:hover{background:#eee8d8;}
   .qa-btn.disabled{opacity:.45;cursor:not-allowed;}
 
@@ -904,6 +910,72 @@ function sendWhatsapp(meetingId){
   closeModal();
 }
 
+// ---------- סטטוס הסכם - תג צבעוני (03.09.2026, תואם לצבעים ב-businesses.html) ----------
+function agreementShortLabel(status){
+  const s = status || 'אין הסכם';
+  return s === 'נשלח הסכם לחתימה' ? 'נשלח לחתימה' : s;
+}
+function agreementBadge(status){
+  const s = status || 'אין הסכם';
+  const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
+  return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>`;
+}
+
+// ---------- קשר אחרון עם הקונה (03.09.2026) ----------
+const CONTACT_ACTIONS = ['send_whatsapp_checkin','send_whatsapp','send_email','add_meeting'];
+async function loadLastContact(){
+  const el = document.getElementById('lastContactVal');
+  if (!el) return;
+  const { data } = await window.supabaseClient.from('audit_log').select('occurred_at,action')
+    .eq('table_name','matches').eq('record_id', MATCH_ID)
+    .in('action', CONTACT_ACTIONS).order('occurred_at', { ascending:false }).limit(1);
+  const last = data && data[0];
+  if (!last){ el.innerHTML = '<span style="color:#c0392b;font-weight:700;">מעולם לא תועד קשר ⚠️</span>'; return; }
+  const days = Math.floor((Date.now() - new Date(last.occurred_at).getTime()) / 86400000);
+  const warn = days >= 5;
+  el.innerHTML = `<span style="${warn?'color:#c0392b;font-weight:700;':''}">${fmtDate(last.occurred_at)}${days>0?` (לפני ${days} ימים)`:' (היום)'}${warn?' ⚠️':''}</span>`;
+}
+
+// ---------- עדכון מהיר לקונה בוואטסאפ (03.09.2026) ----------
+// הודעה קצרה שהוא כותב בעצמו (לא AI), עם מודעות לסטטוס ההסכם ותיעוד מלא של מה שנשלח.
+function defaultCheckinText(){
+  const name = BUYER?.full_name || '';
+  return `היי ${name}, רק רציתי לבדוק מולך - ראית את החומר ששלחנו? יש שאלות, או שאתה צריך עזרה מולי בקשר לזה?`;
+}
+function openQuickCheckinModal(){
+  const status = BUYER?.agreement_status;
+  const signed = status === 'יש הסכם חתום';
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>💬 עדכון מהיר לקונה</h3>
+    <div class="field"><label>סטטוס הסכם נוכחי</label><div>${agreementBadge(status)}</div></div>
+    ${!signed ? `<div class="checkin-suggest" onclick="appendAgreementSuggestion()">➕ להוסיף להודעה: מומלץ לשלוח לו הסכם התקשרות ושמירת סודיות (לכבד את הנהלים שלנו ולתת לו חומרים מדויקים יותר) - לחץ להוספה</div>` : ''}
+    <div class="field"><label>מספר טלפון (ניתן לתקן)</label><input type="text" id="ciPhone" placeholder="05XXXXXXXX" value="${esc((BUYER?.phone||'').replace(/\\D/g,''))}"></div>
+    <div class="field"><label>תוכן ההודעה (אתה כותב, אפשר לערוך חופשי)</label><textarea id="ciText" style="min-height:120px;">${esc(defaultCheckinText())}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="sendQuickCheckin()">פתח ב-WhatsApp</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+function appendAgreementSuggestion(){
+  const ta = document.getElementById('ciText');
+  const line = 'דרך אגב, כדי לכבד את הנהלים שלנו ולתת לך חומרים מדויקים יותר, מומלץ שנשלח לך הסכם התקשרות ושמירת סודיות - רוצה שאשלח?';
+  if (!ta.value.includes(line)) ta.value = ta.value.trim() + '\\n\\n' + line;
+}
+function sendQuickCheckin(){
+  let phone = document.getElementById('ciPhone').value.replace(/\\D/g,'');
+  if (!phone){ toast('יש להזין מספר טלפון'); return; }
+  if (phone.startsWith('0')) phone = '972' + phone.slice(1);
+  const messageText = document.getElementById('ciText').value;
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(messageText)}`, '_blank');
+  logAudit('send_whatsapp_checkin', { phone, message: messageText, agreement_status_at_send: BUYER?.agreement_status || null });
+  closeModal();
+  loadLastContact();
+  loadLastActions();
+  toast('נרשם בתיעוד ההתאמה');
+}
+
 // ---------- מייל ----------
 function buyerAgreementSigned(){ return BUYER?.agreement_status === 'יש הסכם חתום'; }
 
@@ -1024,7 +1096,7 @@ function renderHero(){
     <div class="hero-top">
       <div>
         <div class="hero-title">🏢 <a href="businesses.html?open=${MATCH.business_id}" style="color:inherit;text-decoration:underline;" class="biz-name">${esc(BIZ?.internal_name||'—')}</a>${BIZ?.business_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BIZ.business_number)})</span>`:''}</div>
-        <div class="hero-title buyer-name" style="margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${isCounterpartyBroker() ? `🔵 <a href="brokers.html?open=${MATCH.broker_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>` : `🧍 <a href="leads.html?open=${MATCH.buyer_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>`}${BUYER?.client_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BUYER.client_number)})</span>`:''}${counterpartyBadgeHtml()}</div>
+        <div class="hero-title buyer-name" style="margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${isCounterpartyBroker() ? `🔵 <a href="brokers.html?open=${MATCH.broker_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>` : `🧍 <a href="leads.html?open=${MATCH.buyer_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>`}${BUYER?.client_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BUYER.client_number)})</span>`:''}${counterpartyBadgeHtml()}<button class="qa-btn" style="background:#dff0e4;border-color:#a9d6b8;padding:5px 11px;font-size:.75rem;" onclick="openQuickCheckinModal()">💬 עדכון מהיר</button></div>
         <div class="hero-sub">
           נוצרה ע"י ${esc(userName(MATCH.created_by))} בתאריך ${fmtDate(MATCH.created_at)}
           · מטפל כרגע: <b>${esc(userName(MATCH.current_handler))}</b>
@@ -1046,10 +1118,13 @@ function renderHero(){
         <div class="info-row"><span class="lbl">פעולה הבאה</span><span class="val" style="${!MATCH.next_action?'color:#c0392b;':''}">${esc(MATCH.next_action)||'אין פעולה הבאה מוגדרת ⚠️'}</span></div>
         <div class="info-row"><span class="lbl">תאריך פעולה הבאה</span><span class="val">${fmtDate(MATCH.next_action_at)}</span></div>
         <div class="info-row"><span class="lbl">אחראי לפעולה הבאה</span><span class="val">${esc(userName(MATCH.next_action_owner))}</span></div>
+        <div class="info-row"><span class="lbl">סטטוס הסכם קונה</span><span class="val">${agreementBadge(BUYER?.agreement_status)}</span></div>
+        <div class="info-row"><span class="lbl">קשר אחרון עם הקונה</span><span class="val" id="lastContactVal">טוען...</span></div>
       </div>
     </div>
   `;
   loadMatchNav();
+  loadLastContact();
 }
 
 // ו' - מעבר מהיר בין המסכים (הנחיית שדרוג המשך, 28.08.2026)
@@ -1096,6 +1171,7 @@ async function loadLastActions(){
     if (a.action === 'disclosure_change') text = `רמת חשיפה שונתה ל${a.details?.to}`;
     if (a.action === 'send_email') text = 'נשלח מייל';
     if (a.action === 'send_whatsapp') text = 'נשלחה הודעת וואטסאפ';
+    if (a.action === 'send_whatsapp_checkin') text = `נשלח עדכון מהיר לקונה: "${(a.details?.message||'').slice(0,60)}${(a.details?.message||'').length>60?'...':''}"`;
     events.push({ at: a.occurred_at, who: a.actor_id, text });
   });
   events.sort((a,b)=> new Date(b.at) - new Date(a.at));
@@ -1372,6 +1448,11 @@ async function loadTimeline(){
     if (a.action === 'add_note') text = 'נוספה הערה';
     if (a.action === 'add_task') text = `נוספה משימה: ${a.details?.title||''}`;
     if (a.action === 'set_next_action') text = `נקבעה פעולה הבאה: ${a.details?.next_action||''}`;
+    if (a.action === 'add_meeting' || a.action === 'edit_meeting') text = `${a.action==='add_meeting'?'תועדה':'עודכנה'} ${a.details?.type||'פגישה'}`;
+    if (a.action === 'disclosure_change') text = `רמת חשיפה שונתה ל${a.details?.to}`;
+    if (a.action === 'send_email') text = 'נשלח מייל';
+    if (a.action === 'send_whatsapp') text = 'נשלחה הודעת וואטסאפ';
+    if (a.action === 'send_whatsapp_checkin') text = `נשלח עדכון מהיר לקונה: "${(a.details?.message||'').slice(0,80)}${(a.details?.message||'').length>80?'...':''}"`;
     events.push({ at: a.occurred_at, who: a.actor_id, text });
   });
   events.sort((a,b)=> new Date(b.at) - new Date(a.at));
