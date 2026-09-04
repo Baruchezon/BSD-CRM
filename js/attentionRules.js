@@ -8,8 +8,16 @@
 
 const ATTENTION_STALE_NEGOTIATION_DAYS = 7;   // משא ומתן בלי עדכון X ימים
 const ATTENTION_STALE_WAITING_DAYS = 5;       // סטטוסי המתנה בלי עדכון X ימים
-const ATTENTION_CLOSED_STATUSES = ['נסגר בהצלחה', 'בהשהיה', 'לא רלוונטי'];
-const ATTENTION_WAITING_STATUSES = ['ממתין לתגובת קונה', 'ממתין להסכם או NDA', 'ממתין למידע מהעסק', 'ממתין לקונה'];
+// 03.09.2026 - תוקן בתצוגה מקדימה בלבד: המחרוזות המקוריות כאן ('נסגר בהצלחה','בהשהיה','לא רלוונטי',
+// 'ממתין לתגובת קונה','ממתין להסכם או NDA','ממתין למידע מהעסק','ממתין לקונה') לא קיימות בכלל
+// ברשימת MATCH_STATUSES האמיתית במערכת (match-detail.html) - כלומר הסינון הזה מעולם לא תפס אף
+// התאמה בפועל, וסטטוסים סופיים כמו "הקונה לא מעוניין" המשיכו להופיע ברשימות "דורש טיפול" לנצח.
+// תוקן מול הסטטוסים האמיתיים. שני סטטוסים לא ברורים ("ממתין למידע מהעסק"/"ממתין לקונה") אין להם
+// מקבילה חד-משמעית בסטטוסים האמיתיים - הושארו בחוץ בינתיים, ממתין לאישורו איזה סטטוס אמיתי מתכוון אליו.
+// 03.09.2026 - תוקן גם: staleNegotiation בדק 'משא ומתן' אבל הסטטוס האמיתי הוא 'במשא ומתן' -
+// כך שגם הכלל הזה מעולם לא תפס אף התאמה בפועל.
+const ATTENTION_CLOSED_STATUSES = ['הקונה לא מעוניין', 'נסגר ללא עסקה', 'עסקה הושלמה'];
+const ATTENTION_WAITING_STATUSES = ['ממתין לתגובה', 'ממתין לחתימת סודיות'];
 
 function daysBetween(iso){
   if (!iso) return null;
@@ -49,7 +57,7 @@ function computeAttentionItems(data){
   );
 
   const staleNegotiation = activeMatches.filter(m =>
-    m.status === 'משא ומתן' && daysBetween(m.updated_at) >= ATTENTION_STALE_NEGOTIATION_DAYS
+    m.status === 'במשא ומתן' && daysBetween(m.updated_at) >= ATTENTION_STALE_NEGOTIATION_DAYS
   );
 
   const staleWaiting = activeMatches.filter(m =>
