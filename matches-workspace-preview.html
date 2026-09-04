@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<script>
+(function(){
+  try{
+    var PAGE_BUILD = '202609040341';
+    window.PAGE_BUILD = PAGE_BUILD;
+    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      }).catch(function(){});
+  }catch(e){}
+})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מרכז ההתאמות | BSD CRM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/searchSelect.js?v=202608281900"></script>
+<style>
+  :root{
+    --navy:#0e1b34; --navy-light:#16264a; --gold:#c9a24b; --gold-light:#e8cf8a;
+    --bg:#f6f5ef; --card:#ffffff; --text:#1c2333; --muted:#6b7280; --line:#e3ddcf;
+    --c-green-bg:#e2f6ea; --c-green-fg:#166534; --c-red-bg:#fbe2df; --c-red-fg:#a32d21;
+    --c-orange-bg:#fdedcf; --c-orange-fg:#95590a; --c-blue-bg:#dfeafc; --c-blue-fg:#1d4e89;
+    --c-gray-bg:#e7e7ea; --c-gray-fg:#54575f; --c-purple-bg:#ede3fb; --c-purple-fg:#5b2e97;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{font-family:'Heebo',Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+  /* ===== Shared main navigation bar (same as businesses.html/leads.html/app.html) ===== */
+  .bsd-header{background:linear-gradient(90deg,var(--navy),var(--navy-light));border-bottom:3px solid var(--gold);color:#fff;padding:14px 28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+  .bsd-header .brand{font-weight:700;font-size:1.15rem;letter-spacing:.5px;}
+  .bsd-header .brand small{display:block;font-weight:400;font-size:.7rem;color:var(--gold-light);}
+  .nav-rows{min-width:0;flex:1 1 auto;}
+  .nav{display:flex;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;gap:6px;width:100%;min-width:0;scrollbar-width:thin;}
+  .nav > div{flex:0 0 auto;}
+  .nav-row-wrap{position:relative;min-width:0;flex:1 1 auto;}
+  .nav-scroll-btn{position:absolute;top:50%;transform:translateY(-50%);width:26px;height:26px;border-radius:50%;background:rgba(21,38,69,.95);color:#fff;border:1px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;line-height:1;cursor:pointer;z-index:65;padding:0;box-shadow:0 2px 8px rgba(0,0,0,.45);touch-action:manipulation;}
+  .nav-scroll-btn.nav-scroll-left{left:0;}
+  .nav-scroll-btn.nav-scroll-right{right:0;}
+  .nav-scroll-btn[hidden]{display:none;}
+  .nav > a,.nav > div > button{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:0 0 auto;position:relative;box-sizing:border-box;height:40px;padding:0 16px !important;font-size:.86rem !important;font-weight:700 !important;line-height:1;border-radius:9px !important;border:none !important;color:var(--navy) !important;background:#f2efe4 !important;text-decoration:none;white-space:nowrap;font-family:inherit;cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,.3),0 3px 8px rgba(0,0,0,.28),0 1px 0 rgba(255,255,255,.5) inset;transition:box-shadow .16s ease,filter .16s ease,background .16s ease;}
+  .nav > a:hover,.nav > div > button:hover{background:#fffdf7 !important;filter:brightness(1.02);box-shadow:0 3px 0 rgba(0,0,0,.3),0 8px 16px rgba(0,0,0,.32),0 1px 0 rgba(255,255,255,.6) inset;}
+  .nav > a:active,.nav > div > button:active{background:#e7e3d5 !important;filter:none;box-shadow:0 1px 0 rgba(0,0,0,.3),0 1px 3px rgba(0,0,0,.22);}
+  .nav > a[style*="rgba(255,255,255,.12)"],.nav > a.active{background:var(--gold) !important;color:var(--navy) !important;box-shadow:0 2px 0 rgba(0,0,0,.28),0 4px 10px rgba(0,0,0,.28) !important;}
+  .nav > a[style*="rgba(255,255,255,.12)"]:hover,.nav > a.active:hover{filter:brightness(1.08);box-shadow:0 2px 0 rgba(0,0,0,.28),0 4px 10px rgba(0,0,0,.28) !important;}
+  .nav-tasks{background:linear-gradient(135deg,var(--gold-light),var(--gold)) !important;color:var(--navy) !important;}
+  .nav-tasks:hover{filter:brightness(1.1);}
+  .nav-tasks.nav-tasks-current{background:linear-gradient(135deg,var(--gold),var(--gold-light)) !important;box-shadow:0 2px 8px rgba(0,0,0,.4) inset,0 1px 0 rgba(255,255,255,.5) !important;}
+  .nav > button.btn-ghost{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 16px !important;font-size:.86rem !important;font-weight:700 !important;border-radius:9px !important;color:var(--navy) !important;background:#f2efe4 !important;border:none !important;box-shadow:0 2px 0 rgba(0,0,0,.3),0 3px 8px rgba(0,0,0,.28),0 1px 0 rgba(255,255,255,.5) inset !important;}
+  .nav > button.btn-ghost:hover{background:#fffdf7 !important;box-shadow:0 3px 0 rgba(0,0,0,.3),0 8px 16px rgba(0,0,0,.32),0 1px 0 rgba(255,255,255,.6) inset !important;}
+  @keyframes bsdBtnPop{0%{transform:scale(1);}35%{transform:scale(.93);}65%{transform:scale(1.035);}100%{transform:scale(1);}}
+  .bsd-btn-pop{animation:bsdBtnPop .32s cubic-bezier(.34,1.56,.64,1);}
+
+  .topbar{background:linear-gradient(135deg,var(--navy),var(--navy-light));color:#fff;padding:14px 20px;border-bottom:3px solid var(--gold);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;position:sticky;top:0;z-index:40;}
+  .topbar h1{margin:0;font-size:17px;}
+  .topbar .sub{margin:2px 0 0;font-size:11px;color:var(--gold-light);}
+  .topbar-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .who{font-size:12px;color:var(--gold-light);}
+  .back-btn,.logout-btn{background:transparent;border:1px solid rgba(255,255,255,0.35);color:#fff;font-family:inherit;font-size:12px;padding:6px 12px;border-radius:8px;cursor:pointer;text-decoration:none;}
+  .back-btn:hover,.logout-btn:hover{background:rgba(255,255,255,0.1);}
+
+  .toolbar{max-width:1200px;margin:14px auto 0;padding:0 16px;display:flex;flex-direction:column;gap:10px;}
+  .view-toggle{display:flex;gap:6px;}
+  .view-toggle-btn{padding:8px 16px;border-radius:9px;border:1px solid var(--line);background:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;color:var(--muted);}
+  .view-toggle-btn.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .search-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .search-row input, .search-row select{padding:10px 14px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:13.5px;background:#fff;}
+  .search-row input#searchBox{flex:1;min-width:220px;}
+
+  .quickviews{display:flex;gap:7px;flex-wrap:wrap;}
+  .qv-chip{padding:7px 14px;border-radius:20px;border:1px solid var(--line);background:#fff;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--text);white-space:nowrap;}
+  .qv-chip .qv-count{background:var(--navy);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-inline-start:5px;}
+  .qv-chip.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .qv-chip.active .qv-count{background:var(--gold);color:var(--navy);}
+
+  .page{max-width:1200px;margin:14px auto 40px;padding:0 16px;}
+  .loading, .empty-state{text-align:center;color:var(--muted);padding:40px 20px;background:var(--card);border-radius:14px;border:1px dashed var(--line);font-size:14px;}
+
+  .chip{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:700;white-space:nowrap;display:inline-flex;align-items:center;gap:3px;}
+  .chip-green{background:var(--c-green-bg);color:var(--c-green-fg);}
+  .chip-red{background:var(--c-red-bg);color:var(--c-red-fg);}
+  .chip-orange{background:var(--c-orange-bg);color:var(--c-orange-fg);}
+  .chip-blue{background:var(--c-blue-bg);color:var(--c-blue-fg);}
+  .chip-gray{background:var(--c-gray-bg);color:var(--c-gray-fg);}
+  .chip-purple{background:var(--c-purple-bg);color:var(--c-purple-fg);}
+  .biz-number{background:var(--navy);color:#fff;font-weight:800;font-size:11px;padding:2px 8px;border-radius:6px;display:inline-block;}
+
+  .tree-node{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 1px 4px rgba(14,27,52,0.07);margin-bottom:12px;overflow:hidden;}
+  .tree-head{padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+  .tree-head:hover{background:#faf8f0;}
+  .tree-head .th-title{font-weight:800;color:var(--navy);font-size:14.5px;display:flex;align-items:center;gap:6px;}
+  .tree-head .th-stats{font-size:11px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+  .tree-head .th-actions{display:flex;gap:6px;flex-wrap:wrap;}
+  .toggle-icon{transition:transform .15s;display:inline-block;}
+  .tree-node.open .toggle-icon{transform:rotate(90deg);}
+  .tree-body{display:none;border-top:1px solid var(--line);padding:8px 10px;}
+  .tree-node.open .tree-body{display:block;}
+
+  .branch-row{border:1px solid var(--line);border-inline-start-width:5px;border-inline-start-style:solid;border-radius:9px;padding:9px 11px;margin-bottom:7px;background:#fff;}
+  .branch-row .br-top{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;cursor:pointer;}
+  .branch-row .br-name{font-weight:800;color:var(--navy);font-size:13px;}
+  .branch-row .br-facts{font-size:11px;color:var(--muted);margin-top:4px;}
+  .branch-row .br-actions{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;}
+
+  .mini-btn{background:#f1eee2;border:none;color:var(--text);padding:7px 11px;border-radius:7px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;min-height:32px;}
+  @media(max-width:600px){
+    .th-title{font-size:13.5px;}
+    .th-actions .mini-btn{flex:1;min-width:0;}
+    .br-actions{gap:6px;}
+    .br-actions .mini-btn{flex:1 1 calc(50% - 6px);text-align:center;}
+    .toolbar{padding:0 12px;}
+    .page{padding:0 12px;}
+  }
+  .mini-btn:hover{background:var(--gold-light);}
+  .btn-ghost{background:#f1eee2;color:var(--text);border:none;padding:9px 16px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+  .btn-primary{background:var(--navy);color:#fff;border:none;padding:10px 18px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+  .btn-primary[disabled]{opacity:.5;cursor:not-allowed;}
+  .agr-badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;white-space:nowrap;}
+  .agr-none{background:#f1f1f1;color:#777;}
+  .agr-sent{background:#fdeccb;color:#8a5a10;}
+  .agr-signed{background:#dff0e4;color:#245c40;}
+  .checkin-suggest{background:#eef4fb;border:1px solid #bcd6ee;color:#1c4e7a;border-radius:8px;padding:10px 12px;font-size:.85rem;margin:8px 0;cursor:pointer;}
+  .checkin-suggest:hover{background:#e0edf9;}
+  .new-match-btn{background:var(--gold);color:var(--navy);border:none;padding:8px 16px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;}
+  .new-match-btn:hover{background:var(--gold-light);}
+  .nm-preview{background:#f6f5ef;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:12.5px;line-height:1.8;margin-bottom:10px;}
+  .nm-preview b{color:var(--navy);}
+  .overdue-flag{color:var(--c-red-fg);font-weight:800;}
+
+  .overlay{position:fixed;inset:0;background:rgba(14,27,52,0.55);z-index:100;display:flex;align-items:flex-end;justify-content:center;}
+  @media(min-width:640px){.overlay{align-items:center;}}
+  .modal{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;max-height:88vh;overflow-y:auto;}
+  @media(min-width:640px){.modal{border-radius:16px;}}
+  .modal-head{padding:16px 18px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;}
+  .modal-head h3{margin:0;font-size:15px;color:var(--navy);}
+  .modal-close{background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;}
+  .modal-body{padding:16px 18px;}
+  .modal-foot{padding:12px 18px 18px;display:flex;gap:8px;justify-content:flex-end;}
+  .field{margin-bottom:10px;}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:700;}
+  .field input, .field select, .field textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;z-index:200;}
+  /* ===== שדרוג עיצובי - מרכז ההתאמות (Preview, 04.09.2026) - CSS בלבד, שום פונקציה/handler/API לא השתנו ===== */
+  .stat-strip{display:flex;gap:10px;flex-wrap:wrap;}
+  .stat-card{flex:1 1 150px;min-width:130px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;text-align:center;cursor:pointer;box-shadow:0 2px 6px rgba(14,27,52,.08);transition:box-shadow .15s,transform .15s;}
+  .stat-card:hover{box-shadow:0 4px 14px rgba(14,27,52,.16);transform:translateY(-1px);}
+  .stat-card.active{outline:2px solid var(--navy);}
+  .stat-card.stat-total{cursor:default;background:#f6f5ef;}
+  .stat-card.stat-total:hover{transform:none;box-shadow:0 2px 6px rgba(14,27,52,.08);}
+  .stat-card .stat-num{font-size:22px;font-weight:800;color:var(--navy);}
+  .stat-card .stat-label{font-size:12px;font-weight:700;color:var(--muted);margin-top:2px;}
+  .stat-card.stat-green .stat-num{color:#166534;} .stat-card.stat-red .stat-num{color:#a32d21;}
+  .stat-card.stat-orange .stat-num{color:#95590a;} .stat-card.stat-blue .stat-num{color:#1d4e89;}
+
+  .controls-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;}
+  .ctrl-btn{padding:9px 16px;border-radius:9px;border:1px solid var(--line);background:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;color:var(--text);}
+  .ctrl-btn:hover{background:#faf8f0;}
+  .sort-wrap{display:flex;align-items:center;gap:6px;margin-inline-start:auto;}
+  .ctrl-select{padding:8px 10px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;background:#fff;}
+  .filter-panel{margin-top:10px;background:#fbfaf5;border:1px dashed var(--line);border-radius:12px;padding:12px;}
+
+  .branch-row-new{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;background:#fff;box-shadow:0 1px 3px rgba(14,27,52,.05);}
+  .brn-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;cursor:pointer;margin-bottom:8px;}
+  .brn-name-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .brn-avatar{width:26px;height:26px;border-radius:50%;background:var(--navy);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:13px;flex:0 0 auto;}
+  .brn-name{font-weight:800;color:var(--navy);font-size:13.5px;}
+  .brn-facts{font-size:11px;color:var(--muted);width:100%;margin-top:2px;}
+
+  .step-path-wrap{margin:6px 0;}
+  .step-problem-flag{background:var(--c-red-bg);color:var(--c-red-fg);font-size:11.5px;font-weight:800;padding:5px 10px;border-radius:8px;margin-bottom:6px;display:inline-block;}
+  .step-path{display:flex;gap:8px;flex-wrap:wrap;overflow-x:auto;padding-bottom:2px;}
+  .step-box{position:relative;min-width:118px;height:80px;border-radius:12px;padding:8px 9px;display:flex;flex-direction:column;justify-content:center;gap:2px;cursor:pointer;font-size:11px;transition:transform .12s,box-shadow .12s;border-bottom:3px solid rgba(0,0,0,.18);box-shadow:0 2px 0 rgba(0,0,0,.12),0 3px 8px rgba(0,0,0,.10) inset,0 1px 0 rgba(255,255,255,.4) inset;}
+  .step-box:hover{transform:translateY(-2px);}
+  .step-box:active{transform:translateY(1px);box-shadow:0 1px 0 rgba(0,0,0,.12);}
+  .step-box .step-icon{font-size:15px;}
+  .step-box .step-name{font-weight:800;font-size:11.5px;}
+  .step-box .step-meta{font-size:10px;opacity:.85;}
+  .step-idle{background:linear-gradient(#f3f2ec,#e7e5db);color:#8a8a80;}
+  .step-purple{background:linear-gradient(#a06bdc,#7a3fd1);color:#fff;}
+  .step-blue{background:linear-gradient(#4a8fd6,#1d4e89);color:#fff;}
+  .step-gold{background:linear-gradient(#e8c26a,#c9a24b);color:#3a2c05;}
+  .step-gray{background:linear-gradient(#8b93a3,#5b6274);color:#fff;}
+  .step-green{background:linear-gradient(#3fae6e,#166534);color:#fff;}
+  .step-current{outline:3px solid #ffdd33;outline-offset:1px;}
+
+  #sideDetailPanel{position:fixed;top:140px;inset-inline-start:16px;width:300px;max-height:78vh;overflow-y:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(14,27,52,.25);display:none;z-index:55;}
+  #sideDetailPanel.open{display:block;}
+  .sdp-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);}
+  .sdp-head h3{margin:0;font-size:14px;color:var(--navy);}
+  .sdp-body{padding:12px 14px;}
+  .sdp-selected-chip{display:inline-block;background:var(--navy);color:#fff;font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;margin-bottom:10px;}
+  .sdp-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .sdp-avatar{font-size:22px;}
+  .sdp-name{font-weight:800;color:var(--navy);font-size:13.5px;}
+  .sdp-sub{font-size:11px;color:var(--muted);}
+  .sdp-field{margin-bottom:9px;}
+  .sdp-field label{display:block;font-size:10.5px;color:var(--muted);font-weight:700;margin-bottom:2px;}
+  .sdp-field .muted{color:var(--muted);}
+  .sdp-timeline{display:flex;flex-direction:column;gap:4px;}
+  .sdp-tl-item{font-size:11.5px;background:#f6f5ef;border-radius:7px;padding:5px 8px;}
+  .sdp-foot{padding:10px 14px 14px;}
+  body.panel-open .page, body.panel-open .toolbar{transition:margin-inline-start .2s;}
+  @media(min-width:900px){ body.panel-open .page, body.panel-open .toolbar{margin-inline-start:332px;} }
+</style>
+</head>
+<body>
+<div style="background:#b3402c;color:#fff;text-align:center;padding:9px;font-weight:800;font-size:13px;letter-spacing:.3px;">🔴 סביבת תצוגה מקדימה (Preview) — לא האתר החי. מחובר לנתונים אמיתיים, מיועד לבדיקה בלבד. אין להעביר לפרודקשן ללא אישור.</div>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span id="bsdVerLabel" style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה</span><script>(function(){var e=document.getElementById('bsdVerLabel');var b=window.PAGE_BUILD;if(e&&b&&b.length>=12){e.textContent='גרסה '+b.slice(6,8)+'.'+b.slice(4,6)+'.'+b.slice(0,4)+' '+b.slice(8,10)+':'+b.slice(10,12);}})();</script></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+        <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
+  <div class="nav">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="leads-hub.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לידים</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+    <a href="brokers.html?from=matches" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">🧑‍💼 מתווכים / סוכנים</a>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">📋 טפסים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a id="navFormsAllLink" href="intake-forms.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">📁 כל הטפסים שהוגשו</a>
+    </div>
+  </div>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">⚙️ הגדרות ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="backup.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">💾 גיבוי נתונים</a>
+      <a href="javascript:void(0)" id="pushBellBtn" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔕 הפעל התראות</a>
+      <a href="help.html" target="_blank" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">❓ עזרה</a>
+      <a href="javascript:void(0)" onclick="openMyProfile()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👤 פרטים אישיים</a>
+      <a href="javascript:void(0)" onclick="openChangePassword()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔑 שנה סיסמה</a>
+    </div>
+  </div>
+  </div>
+  <div class="nav">
+    <a href="tasks.html" class="nav-tasks">✅ משימות</a>
+    <a href="messages.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;position:relative;">💬 הודעות<span id="navMsgBadge" style="display:none;position:absolute;top:2px;left:2px;background:#b3402c;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;font-weight:700;"></span></a>
+    <a href="matches-workspace.html" style="background:rgba(255,255,255,.12);color:#fff;font-weight:700;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">📁 מרכז ההתאמות</a>
+    <a href="commission-simulator.html" style="color:#c9a24b;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;border:1px solid rgba(201,162,75,.4);">🧮 סימולטור עמלות</a>
+    <div id="navToolsWrap" style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">🛠️ כלים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="recordings.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🎙️ הקלטות</a>
+      <a href="training-admin.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🎓 הכשרות ומתעניינים</a>
+      <a href="messages.html?admin_view=1" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ כל ההודעות במערכת</a>
+      <a href="stats.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 סטטיסטיקה</a>
+      <a href="users.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👥 משתמשים</a>
+      <a href="anon-distributions.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 דוח הפצת אנונימי</a>
+    </div>
+  </div>
+    <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+  </div>
+</div>
+  
+</div>
+
+<div class="topbar">
+  <div>
+    <h1>📁 מרכז ההתאמות</h1>
+    <p class="sub">העסק הוא ראש העץ - מתחתיו כל הקונים הפוטנציאליים שלו</p>
+  </div>
+  <div class="topbar-right">
+    <button class="new-match-btn" onclick="openNewMatchModal()">➕ התאמה חדשה</button>
+    <span class="who" id="whoAmI"></span>
+    <a class="back-btn" href="app.html">🔙 ללוח הבקרה</a>
+    <button class="logout-btn" onclick="bsdLogout()">יציאה</button>
+  </div>
+</div>
+
+<div class="toolbar">
+  <div class="stat-strip" id="statStrip"></div>
+  <div class="controls-row">
+    <div class="view-toggle">
+      <button class="view-toggle-btn active" data-view="business">🏢 לפי עסקים</button>
+      <button class="view-toggle-btn" data-view="buyer">🧍 לפי קונים</button>
+    </div>
+    <button class="ctrl-btn" id="filterToggleBtn" type="button">🔍 סינון מתקדם</button>
+    <div class="sort-wrap">
+      <label style="font-size:12px;color:var(--muted);font-weight:700;">סדר לפי:</label>
+      <select id="sortModeSelect" class="ctrl-select">
+        <option value="recent">עדכון אחרון</option>
+        <option value="name">שם (א-ת)</option>
+        <option value="buyers">כמות קונים/עסקים</option>
+      </select>
+    </div>
+  </div>
+  <div class="filter-panel" id="filterPanel" style="display:none;">
+    <div class="search-row">
+      <input type="text" id="searchBox" placeholder="חיפוש: שם עסק, מספר, שם קונה, מספר, טלפון, מטפל, סטטוס, הערה, משימה...">
+    </div>
+    <div class="quickviews" id="quickviews"></div>
+  </div>
+</div>
+<div id="sideDetailPanel"></div>
+
+<div class="page" id="mainContent">
+  <div class="loading">טוען נתונים…</div>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+let CURRENT_PROFILE = null;
+let ALL_LEADS = [], ALL_BROKERS = [], ALL_BUSINESSES = {}, ALL_MATCHES = [], ALL_PROFILES = {}, ALL_TASKS = [], ALL_ACTIVITY = [];
+let searchTerm = "", activeQuickView = "", currentView = "business";
+const OPEN_NODES = new Set();
+
+const STATUS_COLOR = {
+  'התאמה חדשה':'blue', 'ממתין לחתימת סודיות':'orange', 'נחתמה סודיות':'green',
+  'מידע ראשוני נשלח':'blue', 'תקציר נשלח':'blue', 'חומרים מלאים נשלחו':'blue',
+  'ממתין לתגובה':'orange', 'הקונה מעוניין':'green', 'הקונה לא מעוניין':'red',
+  'נקבעה פגישה':'purple', 'התקיימה פגישה':'purple', 'בבדיקת נתונים':'orange',
+  'במשא ומתן':'purple', 'הוקפא':'gray', 'נסגר ללא עסקה':'red', 'עסקה הושלמה':'green',
+  'נדרש עדכון':'red'
+};
+const CLOSED_STATUSES = ['נסגר ללא עסקה','הקונה לא מעוניין','הוקפא'];
+
+// ===== תוספות עיצוב Preview (04.09.2026) - לוגיקת תצוגה בלבד, לא נוגעת בנתונים =====
+let statFilter = ''; // '', 'done', 'stuck', 'waiting', 'inprogress'
+let sortMode = 'recent'; // 'recent' | 'name' | 'buyers'
+const STUCK_STATUSES = ['הוקפא','נסגר ללא עסקה','נדרש עדכון','הקונה לא מעוניין'];
+const WAITING_STATUSES = ['ממתין לתגובה','ממתין לחתימת סודיות'];
+function matchStatBucket(m){
+  if (m.status === 'עסקה הושלמה') return 'done';
+  if (STUCK_STATUSES.includes(m.status)) return 'stuck';
+  if (WAITING_STATUSES.includes(m.status)) return 'waiting';
+  return 'inprogress';
+}
+function buildStatStrip(){
+  const wrap = document.getElementById('statStrip');
+  if (!wrap) return;
+  const counts = {done:0,stuck:0,waiting:0,inprogress:0};
+  ALL_MATCHES.forEach(m=> counts[matchStatBucket(m)]++ );
+  const cards = [
+    {key:'done', label:'הושלמו', icon:'✅', count:counts.done, cls:'stat-green'},
+    {key:'stuck', label:'תקועים', icon:'⏰', count:counts.stuck, cls:'stat-red'},
+    {key:'waiting', label:'ממתינים', icon:'⏳', count:counts.waiting, cls:'stat-orange'},
+    {key:'inprogress', label:'פעילות בתהליך', icon:'▶️', count:counts.inprogress, cls:'stat-blue'}
+  ];
+  wrap.innerHTML = cards.map(c=>`<div class="stat-card ${c.cls} ${statFilter===c.key?'active':''}" data-statfilter="${c.key}"><div class="stat-num">${c.count}</div><div class="stat-label">${c.icon} ${c.label}</div></div>`).join('')
+    + `<div class="stat-card stat-total"><div class="stat-num">${ALL_MATCHES.length}</div><div class="stat-label">📊 סיכום התאמות</div></div>`;
+  wrap.querySelectorAll('[data-statfilter]').forEach(el=>el.addEventListener('click', ()=>{
+    const k = el.dataset.statfilter;
+    statFilter = (statFilter===k) ? '' : k;
+    buildStatStrip(); render();
+  }));
+}
+function applySortMode(list, nameFn, countFn){
+  if (sortMode==='name') list.sort((a,b)=> (nameFn(a)||'').localeCompare(nameFn(b)||'','he'));
+  else if (sortMode==='buyers') list.sort((a,b)=> countFn(b)-countFn(a));
+  else list.sort((a,b)=> new Date(b.lastActivity) - new Date(a.lastActivity));
+}
+// מסלול השלבים הגרפי - בנוי אך ורק מתוך m.status הקיים (STATUS_STEP_INDEX למטה הוא מיפוי-תצוגה
+// שנקבע ע"י ברוך ב-04.09.2026, לא נתון קיים ב-DB). "למי הועבר"/"תאריך" מוצגים רק על השלב הנוכחי
+// (מנתוני current_handler / updated_at הקיימים) כי אין בפועל תיעוד היסטורי נפרד לכל שלב - לא הומצא נתון.
+const STEP_DEFS = [
+  {key:'new', label:'התאמה חדשה', icon:'➕', color:'purple'},
+  {key:'summary', label:'תקציר נשלח', icon:'📤', color:'blue'},
+  {key:'material', label:'חומר מלא', icon:'📁', color:'gold'},
+  {key:'meeting', label:'פגישה', icon:'🤝', color:'gray'},
+  {key:'lawyer', label:'הועבר לעו"ד', icon:'⚖️', color:'gray'}
+];
+const STATUS_STEP_INDEX = {
+  'התאמה חדשה':0, 'ממתין לחתימת סודיות':0, 'נחתמה סודיות':0, 'מידע ראשוני נשלח':0,
+  'תקציר נשלח':1,
+  'חומרים מלאים נשלחו':2, 'ממתין לתגובה':2, 'בבדיקת נתונים':2, 'הקונה מעוניין':2,
+  'נקבעה פגישה':3, 'התקיימה פגישה':3,
+  'במשא ומתן':4
+};
+const PROBLEM_STATUSES = ['הוקפא','נסגר ללא עסקה','נדרש עדכון','הקונה לא מעוניין'];
+function stepPathHtml(m){
+  const reached = STATUS_STEP_INDEX.hasOwnProperty(m.status) ? STATUS_STEP_INDEX[m.status] : -1;
+  const isProblem = PROBLEM_STATUSES.includes(m.status);
+  const isDone = m.status === 'עסקה הושלמה';
+  const handler = userName(m.current_handler);
+  let boxesHtml = STEP_DEFS.map((s, idx)=>{
+    const isCurrent = (!isDone && !isProblem && reached === idx);
+    const isPast = isDone || (reached > idx);
+    const cls = isPast ? `step-${s.color}` : (isCurrent ? `step-${s.color} step-current` : 'step-idle');
+    return `<div class="step-box ${cls}" data-stepclick="${m.id}" data-stepkey="${s.key}" data-stepname="${esc(s.label)}">
+      <span class="step-icon">${s.icon}</span>
+      <span class="step-name">${esc(s.label)}</span>
+      <span class="step-meta">למי הועבר: ${isCurrent && handler ? esc(handler) : '—'}</span>
+      <span class="step-meta">${isCurrent ? fmtDate(m.updated_at) : '—'}</span>
+    </div>`;
+  }).join('');
+  if (isDone){
+    boxesHtml += `<div class="step-box step-green" data-stepclick="${m.id}" data-stepkey="done" data-stepname="עסקה הושלמה">
+      <span class="step-icon">✅</span><span class="step-name">הושלם</span>
+      <span class="step-meta">למי הועבר: ${handler?esc(handler):'—'}</span>
+      <span class="step-meta">${fmtDate(m.updated_at)}</span></div>`;
+  }
+  const problemRibbon = isProblem ? `<div class="step-problem-flag">⚠️ סטטוס: ${esc(m.status)}</div>` : '';
+  return `<div class="step-path-wrap">${problemRibbon}<div class="step-path">${boxesHtml}</div></div>`;
+}
+function showSideDetailPanel(matchId, stepName){
+  const m = ALL_MATCHES.find(x=>x.id===matchId);
+  if (!m) return;
+  const {rec, isBroker} = counterpartyOf(m);
+  const biz = ALL_BUSINESSES[m.business_id];
+  const acts = ALL_ACTIVITY.filter(a=>a.match_id===matchId).slice(-6).reverse();
+  const tasks = ALL_TASKS.filter(t=>t.match_id===matchId && t.status!=='הושלמה');
+  const panel = document.getElementById('sideDetailPanel');
+  panel.innerHTML = `
+    <div class="sdp-head"><h3>פרטי שלב שנבחר</h3><button class="modal-close" id="sdpClose">✕</button></div>
+    <div class="sdp-body">
+      <div class="sdp-selected-chip">${esc(stepName)}</div>
+      <div class="sdp-row"><div class="sdp-avatar">${isBroker?'🔵':'🧍'}</div>
+        <div><div class="sdp-name">${esc(rec?.full_name||'—')}</div><div class="sdp-sub">${esc(biz?.internal_name||'—')}</div></div></div>
+      <div class="sdp-field"><label>למי הועבר</label><div>${esc(userName(m.current_handler)||'—')}</div></div>
+      <div class="sdp-field"><label>תאריך עדכון אחרון</label><div>${fmtDate(m.updated_at)}</div></div>
+      <div class="sdp-field"><label>סטטוס הסכם</label><div>${rec?agreementBadge(rec.agreement_status):'—'}</div></div>
+      <div class="sdp-field"><label>סטטוס התאמה</label><div><span class="chip chip-${STATUS_COLOR[m.status]||'gray'}">${esc(m.status||'—')}</span></div></div>
+      <div class="sdp-field"><label>הערות</label><div>${m.notes?esc(m.notes):'<span class="muted">אין הערות</span>'}</div></div>
+      <div class="sdp-field"><label>פעולה הבאה</label><div>${m.next_action?esc(m.next_action):'<span class="muted">לא הוגדרה</span>'}${m.next_action_at?' — '+fmtDate(m.next_action_at):''}</div></div>
+      <div class="sdp-field"><label>פעילות אחרונה בתיק</label>
+        <div class="sdp-timeline">${acts.length? acts.map(a=>`<div class="sdp-tl-item">${esc(a.description||a.note||'—')}</div>`).join('') : '<span class="muted">אין תיעוד</span>'}</div>
+      </div>
+      <div class="sdp-field"><label>משימות פתוחות</label>
+        <div>${tasks.length? tasks.map(t=>esc(t.title)+' ('+fmtDate(t.due_date)+')').join('<br>') : '<span class="muted">אין</span>'}</div>
+      </div>
+    </div>
+    <div class="sdp-foot"><button class="btn-primary" style="width:100%;" onclick="location.href='match-detail.html?id=${matchId}'">🔗 פתח במסך מלא</button></div>`;
+  document.getElementById('sdpClose').addEventListener('click', ()=>{ panel.classList.remove('open'); document.body.classList.remove('panel-open'); });
+  panel.classList.add('open');
+  document.body.classList.add('panel-open');
+}
+
+function esc(s){ return (s||"").toString().replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function fmtDate(iso){ if(!iso) return "—"; const d = new Date(iso); if(isNaN(d)) return "—"; return d.toLocaleDateString('he-IL'); }
+function fmtDateTime(iso){ if(!iso) return "—"; const d = new Date(iso); if(isNaN(d)) return "—"; return d.toLocaleDateString('he-IL')+" "+d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}); }
+function daysSince(iso){ if(!iso) return null; return Math.floor((Date.now()-new Date(iso).getTime())/86400000); }
+function toast(msg){ const el=document.createElement('div'); el.className='toast'; el.textContent=msg; document.getElementById('toastRoot').appendChild(el); setTimeout(()=>el.remove(),3000); }
+
+// ---------- עדכון מהיר בוואטסאפ - זמין גם משורת הכותרת (קונה/מתווך) וגם מכל ענף/התאמה בודדת ----------
+// (03.09.2026 - אותו מנגנון בדיוק כמו match-detail.html: הודעה קצרה שהוא כותב/עורך בעצמו,
+// לא AI; מציג סטטוס הסכם; מוסיף המלצה על שליחת הסכם אם אין הסכם חתום; מתעד ל-audit_log את
+// הטקסט המלא שנשלח כדי שיהיה תיעוד אמיתי של מה שסוכם, לא רק "נשלחה הודעה")
+function agreementShortLabel(status){
+  const s = status || 'אין הסכם';
+  return s === 'נשלח הסכם לחתימה' ? 'נשלח לחתימה' : s;
+}
+function agreementBadge(status){
+  const s = status || 'אין הסכם';
+  const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
+  return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>`;
+}
+function openQuickCheckinModalForKey(key){
+  const isBroker = key.startsWith('broker:');
+  const id = key.slice(key.indexOf(':')+1);
+  const rec = isBroker ? brokerById(id) : leadById(id);
+  if (!rec){ toast('לא נמצא קונה/מתווך'); return; }
+  const groupMatches = isBroker
+    ? ALL_MATCHES.filter(m=>m.counterparty_type==='broker' && m.broker_id===id)
+    : ALL_MATCHES.filter(m=>m.counterparty_type!=='broker' && m.buyer_id===id);
+  const lastMatch = groupMatches.sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at))[0];
+  openQuickCheckinModalCore(rec, lastMatch ? lastMatch.id : null);
+}
+function openQuickCheckinModalForMatch(matchId){
+  const m = ALL_MATCHES.find(x=>x.id===matchId);
+  if (!m){ toast('התאמה לא נמצאה'); return; }
+  const isBroker = m.counterparty_type === 'broker';
+  const rec = isBroker ? brokerById(m.broker_id) : leadById(m.buyer_id);
+  if (!rec){ toast('לא נמצא קונה/מתווך'); return; }
+  openQuickCheckinModalCore(rec, matchId);
+}
+function openQuickCheckinModalCore(rec, matchId){
+  const status = rec.agreement_status;
+  const signed = status === 'יש הסכם חתום';
+  const defaultText = `היי ${rec.full_name||''}, רק רציתי לבדוק מולך - ראית את החומר ששלחנו? יש שאלות, או שאתה צריך עזרה מולי בקשר לזה?`;
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="overlay"><div class="modal">
+      <div class="modal-head"><h3>💬 עדכון מהיר ל${esc(rec.full_name||'')}</h3><button class="modal-close" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="field"><label>סטטוס הסכם נוכחי</label><div>${agreementBadge(status)}</div></div>
+        ${!signed ? `<div class="checkin-suggest" onclick="appendAgreementSuggestion()">➕ להוסיף להודעה: מומלץ לשלוח הסכם התקשרות ושמירת סודיות - לחץ להוספה</div>` : ''}
+        <div class="field"><label>מספר טלפון (ניתן לתקן)</label><input type="text" id="wsCiPhone" placeholder="05XXXXXXXX" value="${esc((rec.phone||'').replace(/\D/g,''))}"></div>
+        <div class="field"><label>תוכן ההודעה (אתה כותב, אפשר לערוך חופשי)</label><textarea id="wsCiText" rows="5">${esc(defaultText)}</textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn-ghost" data-close>ביטול</button><button class="btn-primary" onclick="sendQuickCheckinWs('${matchId||''}')">פתח ב-WhatsApp</button></div>
+    </div></div>`;
+  document.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', ()=> document.getElementById('modalRoot').innerHTML=""));
+}
+function appendAgreementSuggestion(){
+  const ta = document.getElementById('wsCiText');
+  const line = 'דרך אגב, כדי לכבד את הנהלים שלנו ולתת לך חומרים מדויקים יותר, מומלץ שנשלח לך הסכם התקשרות ושמירת סודיות - רוצה שאשלח?';
+  if (!ta.value.includes(line)) ta.value = ta.value.trim() + '\n\n' + line;
+}
+async function sendQuickCheckinWs(matchId){
+  let phone = document.getElementById('wsCiPhone').value.replace(/\D/g,'');
+  if (!phone){ toast('יש להזין מספר טלפון'); return; }
+  if (phone.startsWith('0')) phone = '972' + phone.slice(1);
+  const messageText = document.getElementById('wsCiText').value;
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(messageText)}`, '_blank');
+  if (matchId){
+    try{
+      await window.supabaseClient.from('audit_log').insert({
+        table_name: 'matches', record_id: matchId, action: 'send_whatsapp_checkin',
+        actor_id: CURRENT_PROFILE ? CURRENT_PROFILE.id : null,
+        details: { phone, message: messageText, sent_from: 'matches-workspace' }
+      });
+    } catch(e){ /* לא חוסם אם audit_log לא זמין */ }
+  }
+  document.getElementById('modalRoot').innerHTML = "";
+  toast('נפתח WhatsApp ותועד בהתאמה');
+}
+function userName(id){ if(!id) return null; const p = ALL_PROFILES[id]; return p ? (p.full_name||p.role) : null; }
+function leadById(id){ return ALL_LEADS.find(l=>l.id===id); }
+function brokerById(id){ return ALL_BROKERS.find(b=>b.id===id); }
+// 03.09.2026 (מודול מתווכים, שלב 4): מחזיר את הצד השני בהתאמה (קונה או
+// מתווך, לפי counterparty_type) בצורה אחידה - כדי שלא יהיה צריך לבדוק
+// buyer_id מול broker_id בכל מקום בקובץ בנפרד.
+function counterpartyOf(m){
+  if (m.counterparty_type === 'broker') return { rec: brokerById(m.broker_id), isBroker: true };
+  return { rec: leadById(m.buyer_id), isBroker: false };
+}
+function counterpartyLabelHtml(m){
+  const { rec, isBroker } = counterpartyOf(m);
+  const name = esc(rec?.full_name || '—');
+  const code = isBroker ? '' : (rec?.client_number ? ` <span style="color:#999;">(${esc(rec.client_number)})</span>` : '');
+  const badge = isBroker ? ` <span style="display:inline-flex;align-items:center;gap:3px;background:#7a3fd1;color:#fff;font-weight:800;font-size:.65rem;padding:2px 8px;border-radius:10px;">🔵 מתווך</span>` : '';
+  return name + code + badge;
+}
+
+async function loadEverything(){
+  const sb = window.supabaseClient;
+  const [{data: leads}, {data: brokers}, {data: businesses}, {data: matches}, {data: profiles}, {data: tasks}] = await Promise.all([
+    sb.from('leads').select('id,full_name,phone,phone2,client_number,agreement_status,created_by,handled_by,type,is_archived').eq('type','buyer'),
+    sb.from('brokers').select('id,full_name,phone,email,city,looking_for,agreement_status,status,created_by,handled_by,is_archived'),
+    sb.from('businesses').select('id,internal_name,business_number,field,agreement_status,created_by,handled_by,is_archived'),
+    sb.from('matches').select('*'),
+    sb.from('profiles').select('id,full_name,role'),
+    sb.from('tasks').select('id,match_id,business_id,buyer_id,title,status,due_date,assigned_to')
+  ]);
+  ALL_LEADS = leads || [];
+  ALL_BROKERS = brokers || [];
+  (businesses||[]).forEach(b=> ALL_BUSINESSES[b.id]=b);
+  ALL_MATCHES = matches || [];
+  (profiles||[]).forEach(p=> ALL_PROFILES[p.id]=p);
+  ALL_TASKS = tasks || [];
+  const matchIds = ALL_MATCHES.map(m=>m.id);
+  if (matchIds.length){
+    const { data: activity } = await sb.from('match_activity_log').select('match_id,description,note').in('match_id', matchIds).is('deleted_at', null);
+    ALL_ACTIVITY = activity || [];
+  }
+  buildQuickViews();
+  buildStatStrip();
+  render();
+}
+
+function matchOpenTaskCount(matchId){
+  return ALL_TASKS.filter(t=>t.match_id===matchId && t.status!=='הושלמה').length;
+}
+function matchMatchesQuickView(m, key){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const openTasks = ALL_TASKS.filter(t=>t.match_id===m.id && t.status!=='הושלמה' && t.due_date);
+  switch(key){
+    case 'today': return openTasks.some(t=>{ const d=new Date(t.due_date); d.setHours(0,0,0,0); return d.getTime()===today.getTime(); }) || (m.next_action_at && new Date(m.next_action_at).toDateString()===new Date().toDateString());
+    case 'overdue': return openTasks.some(t=>{ const d=new Date(t.due_date); d.setHours(0,0,0,0); return d.getTime()<today.getTime(); }) || (m.next_action_at && new Date(m.next_action_at) < today);
+    case 'waiting': return m.status === 'ממתין לתגובה';
+    case 'meetings': return m.status === 'נקבעה פגישה';
+    case 'negotiation': return m.status === 'במשא ומתן';
+    case 'checking': return m.status === 'בבדיקת נתונים';
+    case 'not_interested': return m.status === 'הקונה לא מעוניין';
+    case 'done': return m.status === 'עסקה הושלמה';
+    case 'active': return !CLOSED_STATUSES.includes(m.status) && m.status !== 'עסקה הושלמה';
+    default: return true;
+  }
+}
+function buildQuickViews(){
+  const views = [
+    {key:'', label:'הכל'}, {key:'active', label:'✅ פעילות'}, {key:'waiting', label:'💬 ממתינות לתגובה'},
+    {key:'today', label:'📅 משימות להיום'}, {key:'overdue', label:'⏰ משימות באיחור'},
+    {key:'meetings', label:'🤝 פגישות שנקבעו'}, {key:'checking', label:'🔎 בבדיקת נתונים'},
+    {key:'negotiation', label:'📈 במשא ומתן'}, {key:'not_interested', label:'🚫 לא מעוניינים'}, {key:'done', label:'🏁 עסקאות שהושלמו'}
+  ];
+  const wrap = document.getElementById('quickviews');
+  wrap.innerHTML = views.map(v=>{
+    const count = v.key ? ALL_MATCHES.filter(m=>matchMatchesQuickView(m, v.key)).length : ALL_MATCHES.length;
+    return `<button class="qv-chip ${activeQuickView===v.key?'active':''}" data-qv="${v.key}">${v.label}<span class="qv-count">${count}</span></button>`;
+  }).join("");
+  wrap.querySelectorAll('[data-qv]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ activeQuickView = btn.dataset.qv; buildQuickViews(); render(); });
+  });
+}
+
+function matchSearchHay(m){
+  const b = ALL_BUSINESSES[m.business_id];
+  const { rec: cp } = counterpartyOf(m);
+  const handler = userName(m.current_handler) || "";
+  const acts = ALL_ACTIVITY.filter(a=>a.match_id===m.id).map(a=>(a.description||'')+' '+(a.note||'')).join(' ');
+  const openTasks = ALL_TASKS.filter(t=>t.match_id===m.id).map(t=>t.title).join(' ');
+  return [b?.internal_name, b?.business_number, cp?.full_name, cp?.client_number, cp?.phone, cp?.phone2, handler, m.status, m.notes, acts, openTasks]
+    .filter(Boolean).join(" ").toLowerCase();
+}
+
+function filteredMatches(){
+  const q = searchTerm.trim().toLowerCase();
+  return ALL_MATCHES.filter(m=>{
+    if (statFilter && matchStatBucket(m) !== statFilter) return false;
+    if (activeQuickView && !matchMatchesQuickView(m, activeQuickView)) return false;
+    if (q && !matchSearchHay(m).includes(q)) return false;
+    return true;
+  });
+}
+
+function render(){ currentView === 'business' ? renderByBusiness() : renderByBuyer(); }
+
+function branchRowHtml(m, otherPartyLabel){
+  const {rec} = counterpartyOf(m);
+  const agreement = rec ? agreementBadge(rec.agreement_status) : '';
+  const handler = userName(m.current_handler);
+  const overdue = m.next_action_at && new Date(m.next_action_at) < new Date();
+  const openTasks = matchOpenTaskCount(m.id);
+  return `<div class="branch-row-new" data-match="${m.id}">
+    <div class="brn-head" data-open="${m.id}">
+      <div class="brn-name-wrap">
+        <span class="brn-avatar">🧍</span>
+        <span class="brn-name">${otherPartyLabel}</span>
+        ${agreement}
+      </div>
+      <span class="chip chip-${STATUS_COLOR[m.status]||'gray'}">${esc(m.status||'—')}</span>
+    </div>
+    <div class="brn-facts">
+      מטפל: ${handler?esc(handler):'<span class="chip chip-red">ללא מטפל</span>'}
+      ${m.next_action_at?` · מעקב: <span class="${overdue?'overdue-flag':''}">${overdue?'⏰ ':''}${fmtDate(m.next_action_at)}</span>`:''}
+      ${openTasks?` · ${openTasks} משימות פתוחות`:''}
+    </div>
+    ${stepPathHtml(m)}
+    <div class="br-actions">
+      <button class="mini-btn" data-open="${m.id}">📁 פתח תיק</button>
+      <button class="mini-btn" data-quicksend-match="${m.id}" style="background:#dff0e4;border-color:#a9d6b8;">💬 עדכון מהיר</button>
+      <button class="mini-btn" data-task="${m.id}">➕ משימה</button>
+      <button class="mini-btn" data-note="${m.id}">📝 הערה</button>
+      <button class="mini-btn" data-call="${m.id}">☎️ תיעוד שיחה</button>
+    </div>
+  </div>`;
+}
+
+function wireBranchActions(container){
+  container.querySelectorAll('[data-open]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='match-detail.html?id='+el.dataset.open; }));
+  container.querySelectorAll('[data-task]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickTaskModal(el.dataset.task); }));
+  container.querySelectorAll('[data-note]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickNoteModal(el.dataset.note, 'נוספה הערה'); }));
+  container.querySelectorAll('[data-call]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickNoteModal(el.dataset.call, 'התקיימה שיחת טלפון'); }));
+  container.querySelectorAll('[data-quicksend-match]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickCheckinModalForMatch(el.dataset.quicksendMatch); }));
+  container.querySelectorAll('[data-stepclick]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); showSideDetailPanel(el.dataset.stepclick, el.dataset.stepname); }));
+}
+
+function renderByBusiness(){
+  const wrap = document.getElementById('mainContent');
+  const rows = filteredMatches();
+  const bizIds = [...new Set(rows.map(m=>m.business_id))];
+  if (!bizIds.length){ wrap.innerHTML = `<div class="empty-state">לא נמצאו התאמות תואמות לסינון.</div>`; return; }
+
+  const bizStats = bizIds.map(bid=>{
+    const b = ALL_BUSINESSES[bid];
+    const bizMatches = rows.filter(m=>m.business_id===bid);
+    const lastActivity = bizMatches.reduce((max,m)=> new Date(m.updated_at) > new Date(max) ? m.updated_at : max, bizMatches[0].updated_at);
+    return {
+      bid, b, matches: bizMatches,
+      active: bizMatches.filter(m=>!CLOSED_STATUSES.includes(m.status) && m.status!=='עסקה הושלמה').length,
+      interested: bizMatches.filter(m=>m.status==='הקונה מעוניין').length,
+      meetings: bizMatches.filter(m=>m.status==='נקבעה פגישה').length,
+      negotiation: bizMatches.filter(m=>m.status==='במשא ומתן').length,
+      openTasks: bizMatches.reduce((s,m)=>s+matchOpenTaskCount(m.id),0),
+      lastActivity
+    };
+  });
+  applySortMode(bizStats, s=>s.b?.internal_name, s=>s.matches.length);
+
+  wrap.innerHTML = bizStats.map(s=>{
+    const isOpen = OPEN_NODES.has('biz:'+s.bid);
+    return `<div class="tree-node ${isOpen?'open':''}" data-node="biz:${s.bid}">
+      <div class="tree-head" data-toggle="biz:${s.bid}">
+        <div>
+          <div class="th-title"><span class="toggle-icon">▶</span> 🏢 ${s.b?.business_number?`<span class="biz-number">#${esc(s.b.business_number.replace('BSD-B-',''))}</span>`:''} ${esc(s.b?.internal_name||'—')}</div>
+          <div class="th-stats">
+            <span>מטפל: ${esc(userName(s.b?.handled_by)||'—')}</span>
+            <span>${s.matches.length} קונים</span>
+            <span class="chip chip-green">${s.active} פעילות</span>
+            ${s.interested?`<span class="chip chip-blue">${s.interested} מעוניינים</span>`:''}
+            ${s.meetings?`<span class="chip chip-purple">${s.meetings} פגישות</span>`:''}
+            ${s.negotiation?`<span class="chip chip-orange">${s.negotiation} במו"מ</span>`:''}
+            ${s.openTasks?`<span class="chip chip-gray">${s.openTasks} משימות פתוחות</span>`:''}
+            <span>עודכן: ${fmtDate(s.lastActivity)}</span>
+          </div>
+        </div>
+        <div class="th-actions">
+          <button class="mini-btn" data-addbuyer="${s.bid}">➕ הוסף קונה</button>
+          <button class="mini-btn" data-bizreport="${s.bid}">📊 הפק דוח ללקוח</button>
+        </div>
+      </div>
+      <div class="tree-body">
+        ${s.matches.sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).map(m=>{
+          return branchRowHtml(m, counterpartyLabelHtml(m));
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  wrap.querySelectorAll('[data-toggle]').forEach(el=>el.addEventListener('click', (e)=>{
+    if (e.target.closest('[data-addbuyer],[data-bizreport]')) return;
+    const key = el.dataset.toggle;
+    OPEN_NODES.has(key) ? OPEN_NODES.delete(key) : OPEN_NODES.add(key);
+    render();
+  }));
+  wrap.querySelectorAll('[data-addbuyer]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openAddBuyerModal(el.dataset.addbuyer); }));
+  wrap.querySelectorAll('[data-bizreport]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='business-report-builder.html?business_id='+el.dataset.bizreport; }));
+  wireBranchActions(wrap);
+}
+
+function renderByBuyer(){
+  const wrap = document.getElementById('mainContent');
+  const rows = filteredMatches();
+  // 03.09.2026 (מודול מתווכים, שלב 4): מפתח קיבוץ מורכב (סוג+מזהה) במקום
+  // buyer_id בלבד - אחרת כל התאמות המתווכים (buyer_id ריק אצלן) היו
+  // מתקבצות יחד תחת "—" אחד משותף וטועה. כל צד (קונה/מתווך) מקבל את
+  // הענף שלו, עם התג הבולט המתאים.
+  const groupKeys = [...new Set(rows.map(m=> (m.counterparty_type==='broker'?'broker:':'buyer:') + (m.counterparty_type==='broker'?m.broker_id:m.buyer_id)))];
+  if (!groupKeys.length){ wrap.innerHTML = `<div class="empty-state">לא נמצאו התאמות תואמות לסינון.</div>`; return; }
+
+  const groupStats = groupKeys.map(key=>{
+    const [type, id] = [key.startsWith('broker:') ? 'broker' : 'buyer', key.slice(key.indexOf(':')+1)];
+    const rec = type==='broker' ? brokerById(id) : leadById(id);
+    const groupMatches = type==='broker' ? rows.filter(m=>m.counterparty_type==='broker' && m.broker_id===id) : rows.filter(m=>m.counterparty_type!=='broker' && m.buyer_id===id);
+    const lastActivity = groupMatches.reduce((max,m)=> new Date(m.updated_at) > new Date(max) ? m.updated_at : max, groupMatches[0].updated_at);
+    return {
+      key, id, rec, isBroker: type==='broker', matches: groupMatches,
+      active: groupMatches.filter(m=>!CLOSED_STATUSES.includes(m.status) && m.status!=='עסקה הושלמה').length,
+      meetings: groupMatches.filter(m=>m.status==='נקבעה פגישה').length,
+      openTasks: groupMatches.reduce((s,m)=>s+matchOpenTaskCount(m.id),0),
+      lastActivity
+    };
+  });
+  applySortMode(groupStats, s=>s.rec?.full_name, s=>s.matches.length);
+
+  wrap.innerHTML = groupStats.map(s=>{
+    const isOpen = OPEN_NODES.has(s.key);
+    const badge = s.isBroker ? `<span style="display:inline-flex;align-items:center;gap:3px;background:#7a3fd1;color:#fff;font-weight:800;font-size:.65rem;padding:2px 8px;border-radius:10px;margin-inline-start:6px;">🔵 מתווך</span>` : '';
+    return `<div class="tree-node ${isOpen?'open':''}" data-node="${s.key}">
+      <div class="tree-head" data-toggle="${s.key}">
+        <div>
+          <div class="th-title"><span class="toggle-icon">▶</span> ${s.isBroker?'🔵':'🧍'} ${esc(s.rec?.full_name||'—')} ${(!s.isBroker && s.rec?.client_number)?`<span class="chip chip-gray">${esc(s.rec.client_number)}</span>`:''}${badge}</div>
+          <div class="th-stats">
+            <span>מטפל: ${esc(userName(s.rec?.handled_by)||'—')}</span>
+            <span>${s.matches.length} עסקים</span>
+            <span class="chip chip-green">${s.active} פעילות</span>
+            ${s.meetings?`<span class="chip chip-purple">${s.meetings} פגישות</span>`:''}
+            ${s.openTasks?`<span class="chip chip-gray">${s.openTasks} משימות פתוחות</span>`:''}
+            <span>עודכן: ${fmtDate(s.lastActivity)}</span>
+          </div>
+        </div>
+        <div class="th-actions">
+          <button class="mini-btn" data-quicksend="${s.key}" style="background:#dff0e4;border-color:#a9d6b8;">💬 עדכון מהיר</button>
+          ${s.isBroker ? `<a class="mini-btn" href="brokers.html?open=${s.id}">🔵 כרטיס המתווך</a>` : `
+          <button class="mini-btn" data-addbiz="${s.id}">➕ הוסף עסק</button>
+          <button class="mini-btn" data-buyerreport="${s.id}">📊 דוח לקונה</button>`}
+        </div>
+      </div>
+      <div class="tree-body">
+        ${s.matches.sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).map(m=>{
+          const b = ALL_BUSINESSES[m.business_id];
+          const bizLabel = (b?.business_number?`<span class="biz-number">#${esc(b.business_number.replace('BSD-B-',''))}</span> `:'') + esc(b?.internal_name||'—');
+          return branchRowHtml(m, bizLabel);
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  wrap.querySelectorAll('[data-toggle]').forEach(el=>el.addEventListener('click', (e)=>{
+    if (e.target.closest('[data-addbiz],[data-buyerreport]')) return;
+    const key = el.dataset.toggle;
+    OPEN_NODES.has(key) ? OPEN_NODES.delete(key) : OPEN_NODES.add(key);
+    render();
+  }));
+  wrap.querySelectorAll('[data-addbiz]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='leads.html?open='+el.dataset.addbiz; }));
+  wrap.querySelectorAll('[data-buyerreport]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='leads.html?open='+el.dataset.buyerreport; }));
+  wrap.querySelectorAll('[data-quicksend]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickCheckinModalForKey(el.dataset.quicksend); }));
+  wireBranchActions(wrap);
+}
+
+async function openAddBuyerModal(bizId){
+  const biz = ALL_BUSINESSES[bizId];
+  window.WS_SELECTED_TYPE = 'buyer';
+  window.WS_SELECTED_BUYER = null;
+  window.WS_SELECTED_BROKER = null;
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="overlay"><div class="modal">
+      <div class="modal-head"><h3>➕ הוסף קונה / מתווך — ${esc(biz?.internal_name||'')}</h3><button class="modal-close" data-close>✕</button></div>
+      <div class="modal-body">
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <button type="button" id="wsTypeBuyerBtn" onclick="wsSwitchAddType('buyer')" style="flex:1;padding:9px;border-radius:8px;border:1px solid #2b6fc9;background:#2b6fc9;color:#fff;cursor:pointer;font-family:inherit;font-weight:700;">🧍 קונה</button>
+          <button type="button" id="wsTypeBrokerBtn" onclick="wsSwitchAddType('broker')" style="flex:1;padding:9px;border-radius:8px;border:1px solid #7a3fd1;background:#fff;color:#7a3fd1;cursor:pointer;font-family:inherit;font-weight:700;">🔵 מתווך / סוכן</button>
+        </div>
+        <div class="field"><label id="wsAddLabel">בחר קונה</label><div id="addBuyerBox">טוען...</div></div>
+        <div id="addBuyerStatus" style="min-height:20px;font-size:13px;font-weight:600;"></div>
+      </div>
+      <div class="modal-foot"><button class="btn-ghost" data-close>ביטול</button><button class="btn-primary" id="addBuyerBtn" onclick="confirmAddBuyer('${bizId}')">➕ צור התאמה</button></div>
+    </div></div>`;
+  document.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', ()=> document.getElementById('modalRoot').innerHTML=""));
+  wsRenderAddSelect();
+}
+// 03.09.2026 (מודול מתווכים): מחליף בין רשימת קונים לרשימת מתווכים בתוך
+// אותו מודאל - לא פותח מודאל נפרד. מתווכים חסומים אינם מוצגים לבחירה.
+function wsSwitchAddType(type){
+  window.WS_SELECTED_TYPE = type;
+  window.WS_SELECTED_BUYER = null;
+  window.WS_SELECTED_BROKER = null;
+  const buyerBtn = document.getElementById('wsTypeBuyerBtn');
+  const brokerBtn = document.getElementById('wsTypeBrokerBtn');
+  if (type === 'broker'){
+    buyerBtn.style.background = '#fff'; buyerBtn.style.color = '#2b6fc9';
+    brokerBtn.style.background = '#7a3fd1'; brokerBtn.style.color = '#fff';
+    document.getElementById('wsAddLabel').textContent = 'בחר מתווך / סוכן';
+  } else {
+    brokerBtn.style.background = '#fff'; brokerBtn.style.color = '#7a3fd1';
+    buyerBtn.style.background = '#2b6fc9'; buyerBtn.style.color = '#fff';
+    document.getElementById('wsAddLabel').textContent = 'בחר קונה';
+  }
+  wsRenderAddSelect();
+}
+function wsRenderAddSelect(){
+  const box = document.getElementById('addBuyerBox');
+  if (window.WS_SELECTED_TYPE === 'broker'){
+    box.innerHTML = window.searchSelectHTML({ boxId: 'addBuyerSelect', placeholder: 'הקלד שם מתווך לחיפוש...' });
+    window.initSearchSelect('addBuyerSelect', ALL_BROKERS.filter(b=>!b.is_archived && b.status!=='חסום'), {
+      getId: b => b.id,
+      getLabel: b => (b.full_name||'מתווך ללא שם') + ' (מתווך)',
+      onChange: (id)=>{ window.WS_SELECTED_BROKER = ALL_BROKERS.find(b=>b.id===id) || null; }
+    });
+  } else {
+    box.innerHTML = window.searchSelectHTML({ boxId: 'addBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
+    window.initSearchSelect('addBuyerSelect', ALL_LEADS.filter(l=>!l.is_archived), {
+      getId: b => b.id,
+      getLabel: b => (b.full_name||'קונה ללא שם') + (b.client_number?' ('+b.client_number+')':''),
+      onChange: (id)=>{ window.WS_SELECTED_BUYER = ALL_LEADS.find(l=>l.id===id) || null; }
+    });
+  }
+}
+async function confirmAddBuyer(bizId){
+  const isBroker = window.WS_SELECTED_TYPE === 'broker';
+  const rec = isBroker ? window.WS_SELECTED_BROKER : window.WS_SELECTED_BUYER;
+  const statusBox = document.getElementById('addBuyerStatus');
+  if (!rec){ statusBox.style.color='#b3402c'; statusBox.textContent = isBroker ? 'יש לבחור מתווך' : 'יש לבחור קונה'; return; }
+  try {
+    const existQuery = isBroker
+      ? window.supabaseClient.from('matches').select('id,status').eq('business_id', bizId).eq('broker_id', rec.id).maybeSingle()
+      : window.supabaseClient.from('matches').select('id,status').eq('business_id', bizId).eq('buyer_id', rec.id).maybeSingle();
+    const { data: existing } = await existQuery;
+    if (existing){
+      statusBox.style.color = '#8a5a00';
+      statusBox.innerHTML = `כבר קיימת התאמה (סטטוס: ${esc(existing.status)}). <a href="match-detail.html?id=${existing.id}" style="color:#1d4e89;font-weight:700;">פתח אותה</a>`;
+      return;
+    }
+    const insertPayload = isBroker
+      ? { business_id: bizId, broker_id: rec.id, counterparty_type: 'broker', status: 'התאמה חדשה', match_source: 'ידני - מרכז ההתאמות', created_by: CURRENT_PROFILE.id }
+      : { business_id: bizId, buyer_id: rec.id, status: 'התאמה חדשה', match_source: 'ידני - מרכז ההתאמות', created_by: CURRENT_PROFILE.id };
+    const { data: newMatch, error } = await window.supabaseClient.from('matches')
+      .insert(insertPayload).select('id').single();
+    if (error) throw new Error(error.message);
+    document.getElementById('modalRoot').innerHTML = '';
+    toast('ההתאמה נוצרה בהצלחה');
+    location.href = 'match-detail.html?id=' + newMatch.id;
+  } catch(e){ statusBox.style.color='#b3402c'; statusBox.textContent = 'שגיאה: ' + (e.message||String(e)); }
+}
+
+// ➕ התאמה חדשה — כפתור עליון במרכז ההתאמות (לא תלוי בעץ פתוח מראש):
+// בחירת קונה קיים + עסק קיים משני קצות, בדיקת כפילות זהה לחלוטין למנגנון
+// הקיים (openAddBuyerModal כאן ו-confirmAddBizToMatch ב-leads.html), אותה
+// טבלת matches, אותו סטטוס ברירת מחדל, אותה התנהגות פתיחה לאחר שמירה.
+function updateNewMatchUI(){
+  const isBroker = window.NM_SELECTED_TYPE === 'broker';
+  const rec = isBroker ? window.NM_SELECTED_BROKER : window.NM_SELECTED_BUYER;
+  const biz = window.NM_SELECTED_BIZ;
+  const preview = document.getElementById('nmPreview');
+  const btn = document.getElementById('nmSaveBtn');
+  document.getElementById('nmStatus').textContent = '';
+  if (!rec || !biz){
+    preview.style.display = 'none';
+    if (btn) btn.disabled = true;
+    return;
+  }
+  preview.style.display = 'block';
+  preview.innerHTML = `
+    <div>${isBroker?'🔵 מתווך / סוכן':'🧍 קונה'}: <b>${esc(rec.full_name||'—')}</b>${(!isBroker && rec.client_number)?' ('+esc(rec.client_number)+')':''}</div>
+    <div>📄 מצב הסכם: <b>${esc(rec.agreement_status||'אין הסכם')}</b></div>
+    <div>🏢 עסק: <b>${esc(biz.internal_name||'—')}</b></div>
+    <div>מספר עסק: <b>${esc(biz.business_number||'טרם הוקצה')}</b></div>`;
+  if (btn) btn.disabled = false;
+}
+function nmSwitchType(type){
+  window.NM_SELECTED_TYPE = type;
+  window.NM_SELECTED_BUYER = null;
+  window.NM_SELECTED_BROKER = null;
+  const buyerBtn = document.getElementById('nmTypeBuyerBtn');
+  const brokerBtn = document.getElementById('nmTypeBrokerBtn');
+  if (type === 'broker'){
+    buyerBtn.style.background = '#fff'; buyerBtn.style.color = '#2b6fc9';
+    brokerBtn.style.background = '#7a3fd1'; brokerBtn.style.color = '#fff';
+    document.getElementById('nmCounterpartyLabel').textContent = 'בחר מתווך / סוכן';
+  } else {
+    brokerBtn.style.background = '#fff'; brokerBtn.style.color = '#7a3fd1';
+    buyerBtn.style.background = '#2b6fc9'; buyerBtn.style.color = '#fff';
+    document.getElementById('nmCounterpartyLabel').textContent = 'בחר קונה';
+  }
+  nmRenderCounterpartySelect();
+  updateNewMatchUI();
+}
+function nmRenderCounterpartySelect(){
+  const box = document.getElementById('nmBuyerBox');
+  if (window.NM_SELECTED_TYPE === 'broker'){
+    box.innerHTML = window.searchSelectHTML({ boxId: 'nmBuyerSelect', placeholder: 'הקלד שם מתווך לחיפוש...' });
+    window.initSearchSelect('nmBuyerSelect', ALL_BROKERS.filter(b=>!b.is_archived && b.status!=='חסום'), {
+      getId: b => b.id,
+      getLabel: b => (b.full_name||'מתווך ללא שם') + ' (מתווך)',
+      onChange: (id)=>{ window.NM_SELECTED_BROKER = ALL_BROKERS.find(b=>b.id===id) || null; updateNewMatchUI(); }
+    });
+  } else {
+    box.innerHTML = window.searchSelectHTML({ boxId: 'nmBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
+    window.initSearchSelect('nmBuyerSelect', ALL_LEADS.filter(l=>!l.is_archived), {
+      getId: b => b.id,
+      getLabel: b => (b.full_name||'קונה ללא שם') + (b.client_number?' ('+b.client_number+')':''),
+      onChange: (id)=>{ window.NM_SELECTED_BUYER = ALL_LEADS.find(l=>l.id===id) || null; updateNewMatchUI(); }
+    });
+  }
+}
+function openNewMatchModal(){
+  window.NM_SELECTED_TYPE = 'buyer';
+  window.NM_SELECTED_BUYER = null;
+  window.NM_SELECTED_BROKER = null;
+  window.NM_SELECTED_BIZ = null;
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="overlay"><div class="modal">
+      <div class="modal-head"><h3>➕ התאמה חדשה</h3><button class="modal-close" data-close>✕</button></div>
+      <div class="modal-body">
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <button type="button" id="nmTypeBuyerBtn" onclick="nmSwitchType('buyer')" style="flex:1;padding:9px;border-radius:8px;border:1px solid #2b6fc9;background:#2b6fc9;color:#fff;cursor:pointer;font-family:inherit;font-weight:700;">🧍 קונה</button>
+          <button type="button" id="nmTypeBrokerBtn" onclick="nmSwitchType('broker')" style="flex:1;padding:9px;border-radius:8px;border:1px solid #7a3fd1;background:#fff;color:#7a3fd1;cursor:pointer;font-family:inherit;font-weight:700;">🔵 מתווך / סוכן</button>
+        </div>
+        <div class="field"><label id="nmCounterpartyLabel">בחר קונה</label><div id="nmBuyerBox"></div></div>
+        <div class="field"><label>בחר עסק</label><div id="nmBizBox"></div></div>
+        <div class="nm-preview" id="nmPreview" style="display:none;"></div>
+        <div id="nmStatus" style="min-height:20px;font-size:13px;font-weight:600;"></div>
+      </div>
+      <div class="modal-foot"><button class="btn-ghost" data-close>ביטול</button><button class="btn-primary" id="nmSaveBtn" disabled onclick="confirmNewMatch()">➕ צור התאמה</button></div>
+    </div></div>`;
+  document.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', ()=> document.getElementById('modalRoot').innerHTML=""));
+  nmRenderCounterpartySelect();
+  document.getElementById('nmBizBox').innerHTML = window.searchSelectHTML({ boxId: 'nmBizSelect', placeholder: 'הקלד שם עסק או מספר עסק לחיפוש...' });
+  const bizList = Object.values(ALL_BUSINESSES).filter(b=>!b.is_archived);
+  window.initSearchSelect('nmBizSelect', bizList, {
+    getId: b => b.id,
+    getLabel: b => (b.internal_name||'עסק ללא שם') + (b.business_number?' ('+b.business_number+')':'') + (b.field?' - '+b.field:''),
+    onChange: (id)=>{ window.NM_SELECTED_BIZ = ALL_BUSINESSES[id] || null; updateNewMatchUI(); }
+  });
+}
+async function confirmNewMatch(){
+  const isBroker = window.NM_SELECTED_TYPE === 'broker';
+  const rec = isBroker ? window.NM_SELECTED_BROKER : window.NM_SELECTED_BUYER;
+  const biz = window.NM_SELECTED_BIZ;
+  const statusBox = document.getElementById('nmStatus');
+  if (!rec || !biz){ statusBox.style.color='#b3402c'; statusBox.textContent = isBroker ? 'יש לבחור גם מתווך וגם עסק' : 'יש לבחור גם קונה וגם עסק'; return; }
+  const btn = document.getElementById('nmSaveBtn');
+  if (btn){ btn.disabled = true; btn.textContent = 'בודק...'; }
+  try {
+    const existQuery = isBroker
+      ? window.supabaseClient.from('matches').select('id,status').eq('business_id', biz.id).eq('broker_id', rec.id).maybeSingle()
+      : window.supabaseClient.from('matches').select('id,status').eq('business_id', biz.id).eq('buyer_id', rec.id).maybeSingle();
+    const { data: existing, error: existErr } = await existQuery;
+    if (existErr) throw new Error(existErr.message);
+    if (existing){
+      statusBox.style.color = '#8a5a00';
+      statusBox.innerHTML = `כבר קיימת התאמה בין ${isBroker?'המתווך':'הקונה'} לעסק הזה (סטטוס: ${esc(existing.status||'—')}). <a href="javascript:void(0)" onclick="location.href='match-detail.html?id=${existing.id}'" style="color:#1d4e89;font-weight:700;">פתח את ההתאמה הקיימת</a>`;
+      if (btn){ btn.disabled = false; btn.textContent = '➕ צור התאמה'; }
+      return;
+    }
+    const insertPayload = isBroker
+      ? { business_id: biz.id, broker_id: rec.id, counterparty_type: 'broker', status: 'התאמה חדשה', match_source: 'ידני - מרכז ההתאמות', created_by: CURRENT_PROFILE.id }
+      : { business_id: biz.id, buyer_id: rec.id, status: 'התאמה חדשה', match_source: 'ידני - מרכז ההתאמות', created_by: CURRENT_PROFILE.id };
+    const { data: newMatch, error: insErr } = await window.supabaseClient
+      .from('matches').insert(insertPayload).select('*').single();
+    if (insErr) throw new Error(insErr.message);
+    ALL_MATCHES.push(newMatch);
+    document.getElementById('modalRoot').innerHTML = '';
+    toast('ההתאמה נוצרה בהצלחה');
+    buildQuickViews(); buildStatStrip(); render();
+    location.href = 'match-detail.html?id=' + newMatch.id;
+  } catch(e){
+    statusBox.style.color='#b3402c';
+    statusBox.textContent = 'שגיאה ביצירת ההתאמה: ' + (e.message||String(e));
+    if (btn){ btn.disabled = false; btn.textContent = '➕ צור התאמה'; }
+  }
+}
+
+function openQuickTaskModal(matchId){
+  const m = ALL_MATCHES.find(x=>x.id===matchId);
+  const defaultDate = m.next_action_at ? new Date(m.next_action_at).toISOString().slice(0,10) : new Date().toISOString().slice(0,10);
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="overlay"><div class="modal">
+      <div class="modal-head"><h3>➕ משימה חדשה</h3><button class="modal-close" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="field"><label>כותרת</label><input type="text" id="qtTitle" value="${esc(m.next_action || 'מעקב אחר ההתאמה')}"></div>
+        <div class="field"><label>תאריך יעד</label><input type="date" id="qtDate" value="${defaultDate}"></div>
+      </div>
+      <div class="modal-foot"><button class="btn-ghost" data-close>ביטול</button><button class="btn-primary" onclick="saveQuickTask('${matchId}')">שמור</button></div>
+    </div></div>`;
+  document.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', ()=> document.getElementById('modalRoot').innerHTML=""));
+}
+async function saveQuickTask(matchId){
+  const m = ALL_MATCHES.find(x=>x.id===matchId);
+  const title = document.getElementById('qtTitle').value.trim();
+  const due = document.getElementById('qtDate').value;
+  if (!title){ toast('נא להזין כותרת'); return; }
+  const { data, error } = await window.supabaseClient.from('tasks').insert({
+    title, due_date: due||null, match_id: m.id, business_id: m.business_id, buyer_id: m.buyer_id,
+    assigned_to: CURRENT_PROFILE.id, source: 'matches_workspace'
+  }).select().single();
+  if (error){ toast('שגיאה: '+error.message); return; }
+  ALL_TASKS.push(data);
+  document.getElementById('modalRoot').innerHTML = '';
+  toast('המשימה נשמרה');
+  buildQuickViews(); buildStatStrip(); render();
+}
+
+function openQuickNoteModal(matchId, defaultAction){
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="overlay"><div class="modal">
+      <div class="modal-head"><h3>${defaultAction==='התקיימה שיחת טלפון'?'☎️ תיעוד שיחה':'📝 הוספת הערה'}</h3><button class="modal-close" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="field"><label>תיאור</label><textarea id="qnText" rows="4" placeholder="מה נאמר / מה קרה..."></textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn-ghost" data-close>ביטול</button><button class="btn-primary" onclick="saveQuickNote('${matchId}','${defaultAction}')">שמור</button></div>
+    </div></div>`;
+  document.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', ()=> document.getElementById('modalRoot').innerHTML=""));
+}
+async function saveQuickNote(matchId, actionType){
+  const text = document.getElementById('qnText').value.trim();
+  const { error } = await window.supabaseClient.from('match_activity_log').insert({
+    match_id: matchId, action_type: actionType, description: text || actionType, performed_by: CURRENT_PROFILE.id
+  });
+  if (error){ toast('שגיאה: '+error.message); return; }
+  await window.supabaseClient.from('matches').update({ last_action: actionType, last_action_at: new Date().toISOString() }).eq('id', matchId);
+  document.getElementById('modalRoot').innerHTML = '';
+  toast('נשמר בהצלחה');
+  const m = ALL_MATCHES.find(x=>x.id===matchId); if (m) m.updated_at = new Date().toISOString();
+  buildStatStrip();
+  render();
+}
+
+document.querySelectorAll('.view-toggle-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    currentView = btn.dataset.view;
+    document.querySelectorAll('.view-toggle-btn').forEach(b=>b.classList.toggle('active', b===btn));
+    render();
+  });
+});
+document.getElementById('searchBox').addEventListener('input', e=>{ searchTerm = e.target.value; render(); });
+document.getElementById('filterToggleBtn').addEventListener('click', ()=>{
+  const p = document.getElementById('filterPanel');
+  p.style.display = (p.style.display==='none') ? 'block' : 'none';
+});
+document.getElementById('sortModeSelect').addEventListener('change', e=>{ sortMode = e.target.value; render(); });
+
+(async function init(){
+  const profile = await requireAuth();
+  if (!profile) return;
+  CURRENT_PROFILE = profile;
+  document.getElementById('whoAmI').textContent = `מחובר: ${profile.full_name || profile.email} (${profile.role})`;
+  loadEverything();
+})();
+</script>
+</body>
+</html>
