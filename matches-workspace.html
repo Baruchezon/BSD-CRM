@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609040341';
+    var PAGE_BUILD = '202609040431';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -157,6 +157,67 @@
   .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:700;}
   .field input, .field select, .field textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;z-index:200;}
+  /* ===== שדרוג עיצובי - מרכז ההתאמות (Preview, 04.09.2026) - CSS בלבד, שום פונקציה/handler/API לא השתנו ===== */
+  .stat-strip{display:flex;gap:10px;flex-wrap:wrap;}
+  .stat-card{flex:1 1 150px;min-width:130px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;text-align:center;cursor:pointer;box-shadow:0 2px 6px rgba(14,27,52,.08);transition:box-shadow .15s,transform .15s;}
+  .stat-card:hover{box-shadow:0 4px 14px rgba(14,27,52,.16);transform:translateY(-1px);}
+  .stat-card.active{outline:2px solid var(--navy);}
+  .stat-card.stat-total{cursor:default;background:#f6f5ef;}
+  .stat-card.stat-total:hover{transform:none;box-shadow:0 2px 6px rgba(14,27,52,.08);}
+  .stat-card .stat-num{font-size:22px;font-weight:800;color:var(--navy);}
+  .stat-card .stat-label{font-size:12px;font-weight:700;color:var(--muted);margin-top:2px;}
+  .stat-card.stat-green .stat-num{color:#166534;} .stat-card.stat-red .stat-num{color:#a32d21;}
+  .stat-card.stat-orange .stat-num{color:#95590a;} .stat-card.stat-blue .stat-num{color:#1d4e89;}
+
+  .controls-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;}
+  .ctrl-btn{padding:9px 16px;border-radius:9px;border:1px solid var(--line);background:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;color:var(--text);}
+  .ctrl-btn:hover{background:#faf8f0;}
+  .sort-wrap{display:flex;align-items:center;gap:6px;margin-inline-start:auto;}
+  .ctrl-select{padding:8px 10px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;background:#fff;}
+  .filter-panel{margin-top:10px;background:#fbfaf5;border:1px dashed var(--line);border-radius:12px;padding:12px;}
+
+  .branch-row-new{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;background:#fff;box-shadow:0 1px 3px rgba(14,27,52,.05);}
+  .brn-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;cursor:pointer;margin-bottom:8px;}
+  .brn-name-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .brn-avatar{width:26px;height:26px;border-radius:50%;background:var(--navy);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:13px;flex:0 0 auto;}
+  .brn-name{font-weight:800;color:var(--navy);font-size:13.5px;}
+  .brn-facts{font-size:11px;color:var(--muted);width:100%;margin-top:2px;}
+
+  .step-path-wrap{margin:6px 0;}
+  .step-problem-flag{background:var(--c-red-bg);color:var(--c-red-fg);font-size:11.5px;font-weight:800;padding:5px 10px;border-radius:8px;margin-bottom:6px;display:inline-block;}
+  .step-path{display:flex;gap:8px;flex-wrap:wrap;overflow-x:auto;padding-bottom:2px;}
+  .step-box{position:relative;min-width:118px;height:80px;border-radius:12px;padding:8px 9px;display:flex;flex-direction:column;justify-content:center;gap:2px;cursor:pointer;font-size:11px;transition:transform .12s,box-shadow .12s;border-bottom:3px solid rgba(0,0,0,.18);box-shadow:0 2px 0 rgba(0,0,0,.12),0 3px 8px rgba(0,0,0,.10) inset,0 1px 0 rgba(255,255,255,.4) inset;}
+  .step-box:hover{transform:translateY(-2px);}
+  .step-box:active{transform:translateY(1px);box-shadow:0 1px 0 rgba(0,0,0,.12);}
+  .step-box .step-icon{font-size:15px;}
+  .step-box .step-name{font-weight:800;font-size:11.5px;}
+  .step-box .step-meta{font-size:10px;opacity:.85;}
+  .step-idle{background:linear-gradient(#f3f2ec,#e7e5db);color:#8a8a80;}
+  .step-purple{background:linear-gradient(#a06bdc,#7a3fd1);color:#fff;}
+  .step-blue{background:linear-gradient(#4a8fd6,#1d4e89);color:#fff;}
+  .step-gold{background:linear-gradient(#e8c26a,#c9a24b);color:#3a2c05;}
+  .step-gray{background:linear-gradient(#8b93a3,#5b6274);color:#fff;}
+  .step-green{background:linear-gradient(#3fae6e,#166534);color:#fff;}
+  .step-current{outline:3px solid #ffdd33;outline-offset:1px;}
+
+  #sideDetailPanel{position:fixed;top:140px;inset-inline-start:16px;width:300px;max-height:78vh;overflow-y:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(14,27,52,.25);display:none;z-index:55;}
+  #sideDetailPanel.open{display:block;}
+  .sdp-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);}
+  .sdp-head h3{margin:0;font-size:14px;color:var(--navy);}
+  .sdp-body{padding:12px 14px;}
+  .sdp-selected-chip{display:inline-block;background:var(--navy);color:#fff;font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;margin-bottom:10px;}
+  .sdp-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .sdp-avatar{font-size:22px;}
+  .sdp-name{font-weight:800;color:var(--navy);font-size:13.5px;}
+  .sdp-sub{font-size:11px;color:var(--muted);}
+  .sdp-field{margin-bottom:9px;}
+  .sdp-field label{display:block;font-size:10.5px;color:var(--muted);font-weight:700;margin-bottom:2px;}
+  .sdp-field .muted{color:var(--muted);}
+  .sdp-timeline{display:flex;flex-direction:column;gap:4px;}
+  .sdp-tl-item{font-size:11.5px;background:#f6f5ef;border-radius:7px;padding:5px 8px;}
+  .sdp-foot{padding:10px 14px 14px;}
+  body.panel-open .page, body.panel-open .toolbar{transition:margin-inline-start .2s;}
+  @media(min-width:900px){ body.panel-open .page, body.panel-open .toolbar{margin-inline-start:332px;} }
 </style>
 </head>
 <body>
@@ -224,15 +285,30 @@
 </div>
 
 <div class="toolbar">
-  <div class="view-toggle">
-    <button class="view-toggle-btn active" data-view="business">🏢 תצוגה לפי עסקים</button>
-    <button class="view-toggle-btn" data-view="buyer">🧍 תצוגה לפי קונים</button>
+  <div class="stat-strip" id="statStrip"></div>
+  <div class="controls-row">
+    <div class="view-toggle">
+      <button class="view-toggle-btn active" data-view="business">🏢 לפי עסקים</button>
+      <button class="view-toggle-btn" data-view="buyer">🧍 לפי קונים</button>
+    </div>
+    <button class="ctrl-btn" id="filterToggleBtn" type="button">🔍 סינון מתקדם</button>
+    <div class="sort-wrap">
+      <label style="font-size:12px;color:var(--muted);font-weight:700;">סדר לפי:</label>
+      <select id="sortModeSelect" class="ctrl-select">
+        <option value="recent">עדכון אחרון</option>
+        <option value="name">שם (א-ת)</option>
+        <option value="buyers">כמות קונים/עסקים</option>
+      </select>
+    </div>
   </div>
-  <div class="search-row">
-    <input type="text" id="searchBox" placeholder="חיפוש: שם עסק, מספר, שם קונה, מספר, טלפון, מטפל, סטטוס, הערה, משימה...">
+  <div class="filter-panel" id="filterPanel" style="display:none;">
+    <div class="search-row">
+      <input type="text" id="searchBox" placeholder="חיפוש: שם עסק, מספר, שם קונה, מספר, טלפון, מטפל, סטטוס, הערה, משימה...">
+    </div>
+    <div class="quickviews" id="quickviews"></div>
   </div>
-  <div class="quickviews" id="quickviews"></div>
 </div>
+<div id="sideDetailPanel"></div>
 
 <div class="page" id="mainContent">
   <div class="loading">טוען נתונים…</div>
@@ -256,6 +332,117 @@ const STATUS_COLOR = {
   'נדרש עדכון':'red'
 };
 const CLOSED_STATUSES = ['נסגר ללא עסקה','הקונה לא מעוניין','הוקפא'];
+
+// ===== תוספות עיצוב Preview (04.09.2026) - לוגיקת תצוגה בלבד, לא נוגעת בנתונים =====
+let statFilter = ''; // '', 'done', 'stuck', 'waiting', 'inprogress'
+let sortMode = 'recent'; // 'recent' | 'name' | 'buyers'
+const STUCK_STATUSES = ['הוקפא','נסגר ללא עסקה','נדרש עדכון','הקונה לא מעוניין'];
+const WAITING_STATUSES = ['ממתין לתגובה','ממתין לחתימת סודיות'];
+function matchStatBucket(m){
+  if (m.status === 'עסקה הושלמה') return 'done';
+  if (STUCK_STATUSES.includes(m.status)) return 'stuck';
+  if (WAITING_STATUSES.includes(m.status)) return 'waiting';
+  return 'inprogress';
+}
+function buildStatStrip(){
+  const wrap = document.getElementById('statStrip');
+  if (!wrap) return;
+  const counts = {done:0,stuck:0,waiting:0,inprogress:0};
+  ALL_MATCHES.forEach(m=> counts[matchStatBucket(m)]++ );
+  const cards = [
+    {key:'done', label:'הושלמו', icon:'✅', count:counts.done, cls:'stat-green'},
+    {key:'stuck', label:'תקועים', icon:'⏰', count:counts.stuck, cls:'stat-red'},
+    {key:'waiting', label:'ממתינים', icon:'⏳', count:counts.waiting, cls:'stat-orange'},
+    {key:'inprogress', label:'פעילות בתהליך', icon:'▶️', count:counts.inprogress, cls:'stat-blue'}
+  ];
+  wrap.innerHTML = cards.map(c=>`<div class="stat-card ${c.cls} ${statFilter===c.key?'active':''}" data-statfilter="${c.key}"><div class="stat-num">${c.count}</div><div class="stat-label">${c.icon} ${c.label}</div></div>`).join('')
+    + `<div class="stat-card stat-total"><div class="stat-num">${ALL_MATCHES.length}</div><div class="stat-label">📊 סיכום התאמות</div></div>`;
+  wrap.querySelectorAll('[data-statfilter]').forEach(el=>el.addEventListener('click', ()=>{
+    const k = el.dataset.statfilter;
+    statFilter = (statFilter===k) ? '' : k;
+    buildStatStrip(); render();
+  }));
+}
+function applySortMode(list, nameFn, countFn){
+  if (sortMode==='name') list.sort((a,b)=> (nameFn(a)||'').localeCompare(nameFn(b)||'','he'));
+  else if (sortMode==='buyers') list.sort((a,b)=> countFn(b)-countFn(a));
+  else list.sort((a,b)=> new Date(b.lastActivity) - new Date(a.lastActivity));
+}
+// מסלול השלבים הגרפי - בנוי אך ורק מתוך m.status הקיים (STATUS_STEP_INDEX למטה הוא מיפוי-תצוגה
+// שנקבע ע"י ברוך ב-04.09.2026, לא נתון קיים ב-DB). "למי הועבר"/"תאריך" מוצגים רק על השלב הנוכחי
+// (מנתוני current_handler / updated_at הקיימים) כי אין בפועל תיעוד היסטורי נפרד לכל שלב - לא הומצא נתון.
+const STEP_DEFS = [
+  {key:'new', label:'התאמה חדשה', icon:'➕', color:'purple'},
+  {key:'summary', label:'תקציר נשלח', icon:'📤', color:'blue'},
+  {key:'material', label:'חומר מלא', icon:'📁', color:'gold'},
+  {key:'meeting', label:'פגישה', icon:'🤝', color:'gray'},
+  {key:'lawyer', label:'הועבר לעו"ד', icon:'⚖️', color:'gray'}
+];
+const STATUS_STEP_INDEX = {
+  'התאמה חדשה':0, 'ממתין לחתימת סודיות':0, 'נחתמה סודיות':0, 'מידע ראשוני נשלח':0,
+  'תקציר נשלח':1,
+  'חומרים מלאים נשלחו':2, 'ממתין לתגובה':2, 'בבדיקת נתונים':2, 'הקונה מעוניין':2,
+  'נקבעה פגישה':3, 'התקיימה פגישה':3,
+  'במשא ומתן':4
+};
+const PROBLEM_STATUSES = ['הוקפא','נסגר ללא עסקה','נדרש עדכון','הקונה לא מעוניין'];
+function stepPathHtml(m){
+  const reached = STATUS_STEP_INDEX.hasOwnProperty(m.status) ? STATUS_STEP_INDEX[m.status] : -1;
+  const isProblem = PROBLEM_STATUSES.includes(m.status);
+  const isDone = m.status === 'עסקה הושלמה';
+  const handler = userName(m.current_handler);
+  let boxesHtml = STEP_DEFS.map((s, idx)=>{
+    const isCurrent = (!isDone && !isProblem && reached === idx);
+    const isPast = isDone || (reached > idx);
+    const cls = isPast ? `step-${s.color}` : (isCurrent ? `step-${s.color} step-current` : 'step-idle');
+    return `<div class="step-box ${cls}" data-stepclick="${m.id}" data-stepkey="${s.key}" data-stepname="${esc(s.label)}">
+      <span class="step-icon">${s.icon}</span>
+      <span class="step-name">${esc(s.label)}</span>
+      <span class="step-meta">למי הועבר: ${isCurrent && handler ? esc(handler) : '—'}</span>
+      <span class="step-meta">${isCurrent ? fmtDate(m.updated_at) : '—'}</span>
+    </div>`;
+  }).join('');
+  if (isDone){
+    boxesHtml += `<div class="step-box step-green" data-stepclick="${m.id}" data-stepkey="done" data-stepname="עסקה הושלמה">
+      <span class="step-icon">✅</span><span class="step-name">הושלם</span>
+      <span class="step-meta">למי הועבר: ${handler?esc(handler):'—'}</span>
+      <span class="step-meta">${fmtDate(m.updated_at)}</span></div>`;
+  }
+  const problemRibbon = isProblem ? `<div class="step-problem-flag">⚠️ סטטוס: ${esc(m.status)}</div>` : '';
+  return `<div class="step-path-wrap">${problemRibbon}<div class="step-path">${boxesHtml}</div></div>`;
+}
+function showSideDetailPanel(matchId, stepName){
+  const m = ALL_MATCHES.find(x=>x.id===matchId);
+  if (!m) return;
+  const {rec, isBroker} = counterpartyOf(m);
+  const biz = ALL_BUSINESSES[m.business_id];
+  const acts = ALL_ACTIVITY.filter(a=>a.match_id===matchId).slice(-6).reverse();
+  const tasks = ALL_TASKS.filter(t=>t.match_id===matchId && t.status!=='הושלמה');
+  const panel = document.getElementById('sideDetailPanel');
+  panel.innerHTML = `
+    <div class="sdp-head"><h3>פרטי שלב שנבחר</h3><button class="modal-close" id="sdpClose">✕</button></div>
+    <div class="sdp-body">
+      <div class="sdp-selected-chip">${esc(stepName)}</div>
+      <div class="sdp-row"><div class="sdp-avatar">${isBroker?'🔵':'🧍'}</div>
+        <div><div class="sdp-name">${esc(rec?.full_name||'—')}</div><div class="sdp-sub">${esc(biz?.internal_name||'—')}</div></div></div>
+      <div class="sdp-field"><label>למי הועבר</label><div>${esc(userName(m.current_handler)||'—')}</div></div>
+      <div class="sdp-field"><label>תאריך עדכון אחרון</label><div>${fmtDate(m.updated_at)}</div></div>
+      <div class="sdp-field"><label>סטטוס הסכם</label><div>${rec?agreementBadge(rec.agreement_status):'—'}</div></div>
+      <div class="sdp-field"><label>סטטוס התאמה</label><div><span class="chip chip-${STATUS_COLOR[m.status]||'gray'}">${esc(m.status||'—')}</span></div></div>
+      <div class="sdp-field"><label>הערות</label><div>${m.notes?esc(m.notes):'<span class="muted">אין הערות</span>'}</div></div>
+      <div class="sdp-field"><label>פעולה הבאה</label><div>${m.next_action?esc(m.next_action):'<span class="muted">לא הוגדרה</span>'}${m.next_action_at?' — '+fmtDate(m.next_action_at):''}</div></div>
+      <div class="sdp-field"><label>פעילות אחרונה בתיק</label>
+        <div class="sdp-timeline">${acts.length? acts.map(a=>`<div class="sdp-tl-item">${esc(a.description||a.note||'—')}</div>`).join('') : '<span class="muted">אין תיעוד</span>'}</div>
+      </div>
+      <div class="sdp-field"><label>משימות פתוחות</label>
+        <div>${tasks.length? tasks.map(t=>esc(t.title)+' ('+fmtDate(t.due_date)+')').join('<br>') : '<span class="muted">אין</span>'}</div>
+      </div>
+    </div>
+    <div class="sdp-foot"><button class="btn-primary" style="width:100%;" onclick="location.href='match-detail.html?id=${matchId}'">🔗 פתח במסך מלא</button></div>`;
+  document.getElementById('sdpClose').addEventListener('click', ()=>{ panel.classList.remove('open'); document.body.classList.remove('panel-open'); });
+  panel.classList.add('open');
+  document.body.classList.add('panel-open');
+}
 
 function esc(s){ return (s||"").toString().replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function fmtDate(iso){ if(!iso) return "—"; const d = new Date(iso); if(isNaN(d)) return "—"; return d.toLocaleDateString('he-IL'); }
@@ -375,6 +562,7 @@ async function loadEverything(){
     ALL_ACTIVITY = activity || [];
   }
   buildQuickViews();
+  buildStatStrip();
   render();
 }
 
@@ -427,6 +615,7 @@ function matchSearchHay(m){
 function filteredMatches(){
   const q = searchTerm.trim().toLowerCase();
   return ALL_MATCHES.filter(m=>{
+    if (statFilter && matchStatBucket(m) !== statFilter) return false;
     if (activeQuickView && !matchMatchesQuickView(m, activeQuickView)) return false;
     if (q && !matchSearchHay(m).includes(q)) return false;
     return true;
@@ -436,21 +625,26 @@ function filteredMatches(){
 function render(){ currentView === 'business' ? renderByBusiness() : renderByBuyer(); }
 
 function branchRowHtml(m, otherPartyLabel){
-  const color = STATUS_COLOR[m.status] || 'gray';
+  const {rec} = counterpartyOf(m);
+  const agreement = rec ? agreementBadge(rec.agreement_status) : '';
   const handler = userName(m.current_handler);
   const overdue = m.next_action_at && new Date(m.next_action_at) < new Date();
   const openTasks = matchOpenTaskCount(m.id);
-  return `<div class="branch-row" style="border-inline-start-color:var(--c-${color}-fg,#888);" data-match="${m.id}">
-    <div class="br-top" data-open="${m.id}">
-      <span class="br-name">${otherPartyLabel}</span>
-      <span class="chip chip-${color}">${esc(m.status||'—')}</span>
+  return `<div class="branch-row-new" data-match="${m.id}">
+    <div class="brn-head" data-open="${m.id}">
+      <div class="brn-name-wrap">
+        <span class="brn-avatar">🧍</span>
+        <span class="brn-name">${otherPartyLabel}</span>
+        ${agreement}
+      </div>
+      <span class="chip chip-${STATUS_COLOR[m.status]||'gray'}">${esc(m.status||'—')}</span>
     </div>
-    <div class="br-facts">
+    <div class="brn-facts">
       מטפל: ${handler?esc(handler):'<span class="chip chip-red">ללא מטפל</span>'}
-      · פעילות אחרונה: ${fmtDate(m.updated_at)}
       ${m.next_action_at?` · מעקב: <span class="${overdue?'overdue-flag':''}">${overdue?'⏰ ':''}${fmtDate(m.next_action_at)}</span>`:''}
       ${openTasks?` · ${openTasks} משימות פתוחות`:''}
     </div>
+    ${stepPathHtml(m)}
     <div class="br-actions">
       <button class="mini-btn" data-open="${m.id}">📁 פתח תיק</button>
       <button class="mini-btn" data-quicksend-match="${m.id}" style="background:#dff0e4;border-color:#a9d6b8;">💬 עדכון מהיר</button>
@@ -467,6 +661,7 @@ function wireBranchActions(container){
   container.querySelectorAll('[data-note]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickNoteModal(el.dataset.note, 'נוספה הערה'); }));
   container.querySelectorAll('[data-call]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickNoteModal(el.dataset.call, 'התקיימה שיחת טלפון'); }));
   container.querySelectorAll('[data-quicksend-match]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickCheckinModalForMatch(el.dataset.quicksendMatch); }));
+  container.querySelectorAll('[data-stepclick]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); showSideDetailPanel(el.dataset.stepclick, el.dataset.stepname); }));
 }
 
 function renderByBusiness(){
@@ -489,7 +684,7 @@ function renderByBusiness(){
       lastActivity
     };
   });
-  bizStats.sort((a,b)=> new Date(b.lastActivity) - new Date(a.lastActivity));
+  applySortMode(bizStats, s=>s.b?.internal_name, s=>s.matches.length);
 
   wrap.innerHTML = bizStats.map(s=>{
     const isOpen = OPEN_NODES.has('biz:'+s.bid);
@@ -555,7 +750,7 @@ function renderByBuyer(){
       lastActivity
     };
   });
-  groupStats.sort((a,b)=> new Date(b.lastActivity) - new Date(a.lastActivity));
+  applySortMode(groupStats, s=>s.rec?.full_name, s=>s.matches.length);
 
   wrap.innerHTML = groupStats.map(s=>{
     const isOpen = OPEN_NODES.has(s.key);
@@ -806,7 +1001,7 @@ async function confirmNewMatch(){
     ALL_MATCHES.push(newMatch);
     document.getElementById('modalRoot').innerHTML = '';
     toast('ההתאמה נוצרה בהצלחה');
-    buildQuickViews(); render();
+    buildQuickViews(); buildStatStrip(); render();
     location.href = 'match-detail.html?id=' + newMatch.id;
   } catch(e){
     statusBox.style.color='#b3402c';
@@ -842,7 +1037,7 @@ async function saveQuickTask(matchId){
   ALL_TASKS.push(data);
   document.getElementById('modalRoot').innerHTML = '';
   toast('המשימה נשמרה');
-  buildQuickViews(); render();
+  buildQuickViews(); buildStatStrip(); render();
 }
 
 function openQuickNoteModal(matchId, defaultAction){
@@ -866,6 +1061,7 @@ async function saveQuickNote(matchId, actionType){
   document.getElementById('modalRoot').innerHTML = '';
   toast('נשמר בהצלחה');
   const m = ALL_MATCHES.find(x=>x.id===matchId); if (m) m.updated_at = new Date().toISOString();
+  buildStatStrip();
   render();
 }
 
@@ -877,6 +1073,11 @@ document.querySelectorAll('.view-toggle-btn').forEach(btn=>{
   });
 });
 document.getElementById('searchBox').addEventListener('input', e=>{ searchTerm = e.target.value; render(); });
+document.getElementById('filterToggleBtn').addEventListener('click', ()=>{
+  const p = document.getElementById('filterPanel');
+  p.style.display = (p.style.display==='none') ? 'block' : 'none';
+});
+document.getElementById('sortModeSelect').addEventListener('change', e=>{ sortMode = e.target.value; render(); });
 
 (async function init(){
   const profile = await requireAuth();
