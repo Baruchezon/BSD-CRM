@@ -30,6 +30,9 @@
   header.top h1 { margin:0; font-size:1.5rem; color:#f3e7c4; }
   header.top .sub { color:#b9c2d6; font-size:.85rem; margin-top:4px; }
   header.top .date { color:var(--gold-light); font-size:.8rem; }
+  header.top .back-btn { background:transparent; border:1px solid rgba(255,255,255,0.35); color:#fff; font-family:inherit; font-size:12px; padding:6px 12px; border-radius:8px; cursor:pointer; text-decoration:none; white-space:nowrap; margin-top:6px; display:inline-block; }
+  header.top .back-btn:hover { background:rgba(255,255,255,0.1); }
+  header.top .top-right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
   /* ===== SEARCH BAR ===== */
   .search-wrap {
     position:sticky; top:0; z-index:50;
@@ -113,7 +116,10 @@
         <div class="sub">מערכת ניהול עסקים, קונים והתאמות | BSD Business Brokers Israel</div>
       </div>
     </div>
-    <div class="date">עודכן: 16.08.2026</div>
+    <div class="top-right">
+      <a class="back-btn" href="app.html">🔙 ללוח הבקרה</a>
+      <div class="date">עודכן: 16.08.2026</div>
+    </div>
   </div>
 </header>
 
