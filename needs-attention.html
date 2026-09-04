@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609010736';
+    var PAGE_BUILD = '202609040347';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -53,6 +53,8 @@
   .item-row .meta{color:#8a93ab;font-size:.78rem;}
   .empty{color:#999;font-size:.82rem;padding:8px 0;}
   .badge-overdue{background:#f9d6d2;color:#8a2e22;padding:2px 8px;border-radius:8px;font-size:.72rem;font-weight:700;}
+  .btn-mini{background:#eef4fb;border:1px solid #bcd6ee;color:#1c4e7a;border-radius:7px;padding:5px 10px;font-size:.75rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .btn-mini:hover{background:#e0edf9;}
 </style>
 </head>
 <body>
@@ -144,6 +146,12 @@
     <div id="list_staleWaiting"></div>
   </div>
 
+  <div class="section">
+    <h3>📵 בלי קשר עם הקונה <span class="count" id="cnt_staleContact">0</span></h3>
+    <div class="desc">התאמות פעילות שלא תועד בהן שום קשר עם הקונה (עדכון וואטסאפ / מייל / פגישה) 5 ימים ומעלה</div>
+    <div id="list_staleContact"></div>
+  </div>
+
   <div class="section" style="opacity:.6;">
     <h3>🎙️ פגישות ללא סיכום, מסמכים שהתבקשו ולא טופלו</h3>
     <div class="desc">כללים אלה יתווספו בשלב 2-3, יחד עם מודול הפגישות והתמלול.</div>
@@ -154,9 +162,9 @@
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202608251215"></script>
 <script src="js/permissions.js?v=202608251215"></script>
-<script src="js/attentionRules.js?v=202608131000"></script>
+<script src="js/attentionRules.js?v=202609040340"></script>
 <script>
-let ALL_USERS = [], CURRENT_PROFILE = null;
+let ALL_USERS = [], CURRENT_PROFILE = null, ALL_BUYERS = [];
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
 function userName(id){ const u = ALL_USERS.find(x=>x.id===id); return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—'; }
@@ -205,7 +213,41 @@ async function loadAttention(){
   }
 
   const items = computeAttentionItems({ matches: matches||[], tasks: tasks||[] });
-  document.getElementById('subLine').textContent = `סה"כ ${items.overdueTasks.length + items.dueTodayTasks.length + items.noNextAction.length + items.overdueNextAction.length + items.staleNegotiation.length + items.staleWaiting.length} פריטים דורשים תשומת לב`;
+
+  // 03.09.2026 - "בלי קשר עם הקונה": בודק audit_log של כל ההתאמות הפעילות עם buyer_id אמיתי
+  // (לא סוג broker), ומוצא את הקשר האחרון מתוך פעולות וואטסאפ/מייל/פגישה. התאמה בלי אף פעולת
+  // קשר כזו, או שעברו ≥5 ימים מהאחרונה - "בלי קשר". משתמש ב-ATTENTION_CLOSED_STATUSES האמיתי
+  // (מ-js/attentionRules.js, אחרי תיקון הבאג) - כך שהתאמה שסומנה "הקונה לא מעוניין"/"נסגר ללא
+  // עסקה"/"עסקה הושלמה" יוצאת החוצה מיד. גם מחריג התאמות עם "פעולה הבאה" שכבר נקבעה לתאריך
+  // עתידי (כלומר כבר דחית/תזמנת קשר קדימה - "דחה ל-X ימים" למטה קובע בדיוק את זה).
+  const STALE_CONTACT_DAYS = 5;
+  const CONTACT_ACTIONS = ['send_whatsapp_checkin','send_whatsapp','send_email','add_meeting'];
+  const activeMatchesForContact = (matches||[]).filter(m => !ATTENTION_CLOSED_STATUSES.includes(m.status) && m.buyer_id);
+  let staleContact = [];
+  if (activeMatchesForContact.length){
+    const ids = activeMatchesForContact.map(m=>m.id);
+    const buyerIds = [...new Set(activeMatchesForContact.map(m=>m.buyer_id))];
+    const [{ data: contactAudit }, { data: buyers }] = await Promise.all([
+      window.supabaseClient.from('audit_log').select('record_id,action,occurred_at')
+        .eq('table_name','matches').in('action', CONTACT_ACTIONS).in('record_id', ids),
+      window.supabaseClient.from('leads').select('id,full_name,phone').in('id', buyerIds)
+    ]);
+    ALL_BUYERS = buyers || [];
+    const lastContactByMatch = {};
+    (contactAudit||[]).forEach(a=>{
+      const cur = lastContactByMatch[a.record_id];
+      if (!cur || new Date(a.occurred_at) > new Date(cur)) lastContactByMatch[a.record_id] = a.occurred_at;
+    });
+    const today = new Date().toISOString().slice(0,10);
+    staleContact = activeMatchesForContact.filter(m=>{
+      if (m.next_action_at && m.next_action_at.slice(0,10) > today) return false; // כבר תוזמן קשר קדימה - לא להציק
+      const last = lastContactByMatch[m.id];
+      if (!last) return true;
+      return Math.floor((Date.now() - new Date(last).getTime()) / 86400000) >= STALE_CONTACT_DAYS;
+    }).map(m=>({ ...m, _lastContactAt: lastContactByMatch[m.id] || null }));
+  }
+
+  document.getElementById('subLine').textContent = `סה"כ ${items.overdueTasks.length + items.dueTodayTasks.length + items.noNextAction.length + items.overdueNextAction.length + items.staleNegotiation.length + items.staleWaiting.length + staleContact.length} פריטים דורשים תשומת לב`;
 
   renderSection('overdueTasks', items.overdueTasks, t=>`
     <div class="item-row" onclick="location.href='tasks.html?open=${t.id}'">
@@ -242,6 +284,57 @@ async function loadAttention(){
       <div><div class="main">התאמה #${m.id.slice(0,8)}</div><div class="meta">${esc(m.status)}</div></div>
       <span class="badge-overdue">עודכן: ${fmtDate(m.updated_at)}</span>
     </div>`);
+
+  renderSection('staleContact', staleContact, m=>`
+    <div class="item-row" style="flex-wrap:wrap;">
+      <div style="cursor:pointer;" onclick="location.href='match-detail.html?id=${m.id}'">
+        <div class="main">${esc(buyerName(m.buyer_id))}</div>
+        <div class="meta">${esc(m.status)} · ${m._lastContactAt ? 'קשר אחרון: '+fmtDate(m._lastContactAt) : 'מעולם לא תועד קשר'}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn-mini" onclick="event.stopPropagation();quickSendFromList('${m.id}','${m.buyer_id}')">💬 שלח עדכון</button>
+        <button class="btn-mini" onclick="event.stopPropagation();snoozeContact('${m.id}',2)">📅 בעוד יומיים</button>
+        <button class="btn-mini" onclick="event.stopPropagation();snoozeContact('${m.id}',3)">📅 בעוד 3 ימים</button>
+      </div>
+    </div>`);
+}
+
+function buyerName(id){ const b = ALL_BUYERS.find(x=>x.id===id); return b ? (b.full_name||'—') : 'קונה'; }
+function buyerPhone(id){ const b = ALL_BUYERS.find(x=>x.id===id); return b ? (b.phone||'') : ''; }
+
+// שליחת עדכון מהיר ישירות מהרשימה - בלי לצאת לכרטיס ההתאמה. אותה הודעת ברירת מחדל שאפשר
+// לערוך במלואה כמו ב-match-detail.html, ואותו תיעוד ל-audit_log (send_whatsapp_checkin).
+async function quickSendFromList(matchId, buyerId){
+  const name = buyerName(buyerId);
+  let phone = (buyerPhone(buyerId)||'').replace(/\D/g,'');
+  const text = `היי ${name}, רק רציתי לבדוק מולך - ראית את החומר ששלחנו? יש שאלות, או שאתה צריך עזרה מולי בקשר לזה?`;
+  const edited = prompt('תוכן ההודעה (אפשר לערוך):', text);
+  if (edited === null) return;
+  if (!phone){ phone = prompt('לא נמצא מספר טלפון לקונה - הזן מספר:'); if (!phone) return; phone = phone.replace(/\D/g,''); }
+  if (phone.startsWith('0')) phone = '972' + phone.slice(1);
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(edited)}`, '_blank');
+  await window.supabaseClient.from('audit_log').insert({
+    table_name: 'matches', record_id: matchId, action: 'send_whatsapp_checkin',
+    actor_id: CURRENT_PROFILE ? CURRENT_PROFILE.id : null,
+    details: { phone, message: edited, sent_from: 'needs-attention' }
+  });
+  await loadAttention();
+}
+
+// דחיית קשר ב-2/3 ימים - קובע "פעולה הבאה" קדימה (משתמש באותם שדות next_action/next_action_at
+// שכבר קיימים בהתאמה) כדי שהרשימה תפסיק להציק על ההתאמה הזו עד התאריך שנקבע.
+async function snoozeContact(matchId, days){
+  const d = new Date(); d.setDate(d.getDate() + days);
+  const dateStr = d.toISOString().slice(0,10);
+  await window.supabaseClient.from('matches').update({
+    next_action: 'ליצור קשר עם הקונה', next_action_at: dateStr
+  }).eq('id', matchId);
+  await window.supabaseClient.from('audit_log').insert({
+    table_name: 'matches', record_id: matchId, action: 'set_next_action',
+    actor_id: CURRENT_PROFILE ? CURRENT_PROFILE.id : null,
+    details: { next_action: 'ליצור קשר עם הקונה', next_action_at: dateStr, snoozed_from: 'needs-attention' }
+  });
+  await loadAttention();
 }
 
 (async function init(){
