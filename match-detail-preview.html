@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<script>
+// בדיקת גרסה אוטומטית - עוקפת בעיות קאשינג של דפדפני מובייל שלא תמיד
+// מכבדים meta cache-control. אם version.json (שנטען תמיד ללא קאש) שונה
+// ממה שנשמר בעבר בדפדפן הזה, מבצעים רענון כפוי עם פרמטר שובר-קאש.
+(function(){
+  try{
+    // PAGE_BUILD אפוי בתוך הדף עצמו (מתעדכן בכל push) - נבדק תמיד, גם
+    // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
+    // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
+    // לא תפסה בעיה כזו בטעינה ראשונה).
+    var PAGE_BUILD = '202609032300';
+    window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
+    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - תיק התאמה</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="js/pdfPipeline.js?v=202608261"></script>
+<link rel="stylesheet" href="css/style.css?v=202608251215">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:1200px;margin:0 auto;}
+  .breadcrumb{font-size:.82rem;color:#8a93ab;margin-bottom:10px;}
+  .breadcrumb a{color:#5a76b8;text-decoration:none;}
+  .hero{background:#fff;border-radius:14px;padding:22px 26px;margin-bottom:18px;box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 8px 20px rgba(14,27,52,.10),0 2px 6px rgba(14,27,52,.06);}
+  .hero-top{display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px;align-items:flex-start;}
+  .hero-title{font-size:1.4rem;font-weight:800;color:var(--navy);}
+  .hero-title .biz-name{font-size:1.55rem;}
+  .hero-title .buyer-name{font-size:1rem;font-weight:600;color:#5a6274;}
+  .hero-sub{font-size:.85rem;color:#8a93ab;margin-top:4px;}
+  .status-pill{padding:5px 14px;border-radius:14px;font-size:.85rem;font-weight:700;display:inline-block;white-space:nowrap;}
+  .disclosure-badge{padding:4px 10px;border-radius:10px;font-size:.75rem;font-weight:700;margin-inline-start:8px;}
+  .disc-1{background:#eee;color:#555;}
+  .disc-2{background:#fde9c8;color:#7a4d0a;}
+  .disc-3{background:#d6f0e0;color:#186a41;}
+  .disclosure-warning{background:#fff3cd;border:1px solid #ffe08a;color:#7a5b00;padding:8px 12px;border-radius:8px;font-size:.8rem;margin-top:10px;display:none;}
+
+  .quick-actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 4px;}
+  .qa-btn{background:#f7f5ee;border:1.5px solid #d8d3c4;border-radius:9px;padding:9px 14px;font-size:.82rem;font-weight:700;color:var(--navy);cursor:pointer;font-family:inherit;}
+  .agr-badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;white-space:nowrap;}
+  .agr-none{background:#f1f1f1;color:#777;}
+  .agr-sent{background:#fdeccb;color:#8a5a10;}
+  .agr-signed{background:#dff0e4;color:#245c40;}
+  .checkin-suggest{background:#eef4fb;border:1px solid #bcd6ee;color:#1c4e7a;border-radius:8px;padding:10px 12px;font-size:.85rem;margin:8px 0;cursor:pointer;}
+  .checkin-suggest:hover{background:#e0edf9;}
+  .qa-btn:hover{background:#eee8d8;}
+  .qa-btn.disabled{opacity:.45;cursor:not-allowed;}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px;}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr;}}
+  .card{background:#fff;border-radius:14px;padding:20px 22px;box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 8px 20px rgba(14,27,52,.10),0 2px 6px rgba(14,27,52,.06);}
+  .card h3{margin:0 0 12px;color:var(--navy);font-size:1rem;border-inline-start:4px solid var(--gold);padding-inline-start:10px;}
+  .card.full{grid-column:1/3;}
+  @media(max-width:900px){.card.full{grid-column:1;}}
+
+  .info-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed #eee;font-size:.85rem;}
+  .info-row .lbl{color:#8a93ab;}
+  .info-row .val{font-weight:600;color:#2a2f3e;text-align:left;}
+
+  .task-item{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f0ede4;font-size:.85rem;}
+  .task-item.done{opacity:.55;text-decoration:line-through;}
+  .task-item .tmeta{color:#8a93ab;font-size:.75rem;}
+  .empty-note{color:#999;font-size:.82rem;padding:10px 0;}
+
+  .note-item{padding:10px 0;border-bottom:1px solid #f0ede4;font-size:.85rem;}
+  .note-item .nmeta{color:#8a93ab;font-size:.75rem;margin-bottom:3px;}
+
+  .timeline{position:relative;padding-inline-start:18px;}
+  .timeline::before{content:'';position:absolute;top:4px;bottom:4px;right:5px;width:2px;background:#e5e0d0;}
+  .tl-item{position:relative;padding:0 0 16px 0;font-size:.82rem;}
+  .tl-item::before{content:'';position:absolute;right:-18px;top:3px;width:9px;height:9px;border-radius:50%;background:var(--gold);}
+  .tl-item .tl-date{color:#8a93ab;font-size:.72rem;}
+
+  .stage-note{background:#f4f2ec;border:1.5px dashed #cdbf9a;border-radius:8px;padding:10px 14px;font-size:.78rem;color:#8a7a52;margin-top:10px;}
+
+  .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
+  .overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:14px;max-width:560px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);box-sizing:border-box;overflow-x:hidden;}
+  .modal *{box-sizing:border-box;max-width:100%;}
+  .modal h3{margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:.92rem;font-weight:700;color:#3a3f4d;margin-bottom:6px;}
+  .field input,.field select,.field textarea{width:100%;padding:12px 13px;border:1.5px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:1rem;line-height:1.4;}
+  .field textarea{min-height:78px;resize:vertical;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+  @media(max-width:640px){
+    .overlay{padding:0;align-items:stretch;}
+    .modal{max-width:100%;width:100%;min-height:100%;border-radius:0;padding:20px 16px 100px;}
+    .modal h3{font-size:1.15rem;}
+    .field label{font-size:1rem;}
+    .field input,.field select,.field textarea{font-size:1.05rem;padding:13px 14px;}
+    .modal-actions{position:fixed;bottom:0;right:0;left:0;background:#fff;padding:12px 16px;box-shadow:0 -4px 16px rgba(0,0,0,.12);margin-top:0;z-index:5;}
+  }
+  .btn{border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-size:.85rem;cursor:pointer;font-weight:700;}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);}
+  .btn-danger{background:#fff;border:1px solid #e4b3ac;color:#a02c1d;}
+  .btn-sm{padding:6px 12px;font-size:.78rem;}
+
+  .meeting-card{border:1px solid #eee;border-radius:10px;padding:14px 16px;margin-bottom:12px;}
+  .meeting-card .mtop{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;}
+  .meeting-card .mtitle{font-weight:700;color:var(--navy);}
+  .meeting-card .mmeta{font-size:.78rem;color:#8a93ab;margin-top:2px;}
+  .meeting-card .mbody{margin-top:10px;font-size:.85rem;white-space:pre-wrap;}
+  .meeting-card .mactions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+  .participant-chip{background:#eef1f6;padding:4px 10px;border-radius:12px;font-size:.75rem;display:inline-flex;align-items:center;gap:6px;}
+  .participant-chip button{border:none;background:none;color:#a02c1d;cursor:pointer;font-size:.9rem;line-height:1;}
+  .draft-pill{background:#fdf3dd;color:#8a6a10;font-size:.7rem;padding:2px 8px;border-radius:8px;font-weight:700;}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span id="bsdVerLabel" style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה</span><script>(function(){var e=document.getElementById('bsdVerLabel');var b=window.PAGE_BUILD;if(e&&b&&b.length>=12){e.textContent='גרסה '+b.slice(6,8)+'.'+b.slice(4,6)+'.'+b.slice(0,4)+' '+b.slice(8,10)+':'+b.slice(10,12);}})();</script></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+  <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
+  <div class="nav">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="leads-hub.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לידים</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+  </div>
+  <div class="nav">
+    <a href="tasks.html" class="nav-tasks">✅ משימות</a>
+    <a href="needs-attention.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">🚨 דורש טיפול</a>
+    <a href="matches-workspace.html" style="color:#ffdd33;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">📁 מרכז ההתאמות</a>
+    <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+  </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="back-bar" style="margin-bottom:10px;"><a href="matches-workspace.html" style="display:inline-flex;align-items:center;gap:6px;color:var(--navy);text-decoration:none;font-size:.85rem;font-weight:700;border:1px solid #d8d3c4;border-radius:8px;padding:7px 14px;background:#fff;">← חזרה למרכז ההתאמות</a></div>
+
+  <div class="hero" id="heroBox">טוען...</div>
+
+  <div class="quick-actions" id="quickActions"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>משימות</h3>
+      <div id="tasksBox">טוען...</div>
+    </div>
+    <div class="card">
+      <h3>הערות</h3>
+      <div id="notesBox">טוען...</div>
+    </div>
+    <div class="card full">
+      <h3>שיחות ופגישות</h3>
+      <div id="meetingsBox">טוען...</div>
+    </div>
+    <div class="card full">
+      <h3>היסטוריה מלאה (Timeline)</h3>
+      <div id="timelineBox" class="timeline">טוען...</div>
+    </div>
+  </div>
+</div>
+
+<div id="captureOverlay" style="display:none;position:fixed;inset:0;background:#fff;z-index:99999;overflow:auto;">
+  <div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;color:#5c5648;font-size:13px;">⏳ יוצר קובץ סיכום...</div>
+  <div id="printTemplate" style="width:760px;max-width:92vw;margin:0 auto 40px;background:#fff;padding:36px;font-family:'Heebo','Rubik','Arial Hebrew',sans-serif;color:#1c2333;direction:rtl;text-align:right;word-spacing:normal;">
+    <div style="display:flex;flex-direction:row;align-items:center;gap:14px;border-bottom:3px solid #c9a24b;padding-bottom:16px;margin-bottom:20px;">
+      <div style="width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #e8cf8a, #c9a24b 70%);display:flex;align-items:center;justify-content:center;font-weight:800;color:#1c2333;font-size:20px;flex-shrink:0;">BSD</div>
+      <div>
+        <div style="font-size:20px;font-weight:800;">BSD Business Brokers Israel</div>
+        <div style="font-size:12px;color:#5c5648;">סיכום שיחה / פגישה</div>
+      </div>
+    </div>
+    <h2 id="pt_title" style="font-size:22px;margin:0 0 4px;"></h2>
+    <div id="pt_meta" style="font-size:12px;color:#5c5648;margin-bottom:22px;"></div>
+    <div id="pt_body" style="font-size:14px;line-height:1.8;"></div>
+    <div style="margin-top:30px;border-top:1px solid #e8dfc4;padding-top:12px;font-size:11px;color:#5c5648;text-align:center;">
+      Baruch Ezon &nbsp;·&nbsp; BSD Business Brokers Israel &nbsp;·&nbsp; 054-2424999 &nbsp;·&nbsp; baruch@bsd-bbi.co.il &nbsp;·&nbsp; bsd-bbi.co.il
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
+<div id="toastBox"></div>
+
+<script src="js/config.js?v=202608111530"></script>
+<script src="js/supabaseClient.js?v=202608111530"></script>
+<script src="js/auth.js?v=202608251215"></script>
+<script src="js/permissions.js?v=202608251215"></script>
+<script>
+const DISCLOSURE_LABELS = {1:'רמה 1 · אנונימי', 2:'רמה 2 · מורחב', 3:'רמה 3 · מלא'};
+const MATCH_STATUSES = ['התאמה חדשה','ממתין לחתימת סודיות','נחתמה סודיות','מידע ראשוני נשלח','תקציר נשלח',
+  'חומרים מלאים נשלחו','ממתין לתגובה','הקונה מעוניין','הקונה לא מעוניין','נקבעה פגישה','התקיימה פגישה',
+  'בבדיקת נתונים','במשא ומתן','הוקפא','נסגר ללא עסקה','עסקה הושלמה','נדרש עדכון'];
+const DROP_REASON_CATEGORIES = ['מחיר','תחום','מיקום','רווחיות','מימון','גודל העסק','סיכון',
+  'לא מתאים לקונה','לא מתאים לבעל העסק','בחר עסק אחר','הקונה עצר חיפוש','אחר'];
+
+let MATCH_ID = null, MATCH = null, CURRENT_PROFILE = null, ALL_USERS = [], BIZ = null, BUYER = null;
+
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
+function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
+function userName(id){ const u = ALL_USERS.find(x=>x.id===id); return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—'; }
+function userOptions(selected){
+  return '<option value="">— ללא —</option>' + ALL_USERS.map(u=>{
+    const label = u.full_name && u.full_name.trim() ? u.full_name : u.email;
+    return `<option value="${u.id}" ${u.id===selected?'selected':''}>${esc(label)}</option>`;
+  }).join('');
+}
+function toast(msg){
+  let box = document.getElementById('toastBox');
+  const isError = /שגיאה|error/i.test(msg);
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed;bottom:24px;left:24px;z-index:200;background:${isError ? '#b00020' : 'var(--navy)'};color:#fff;padding:14px 18px;border-radius:10px;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.35);max-width:380px;`;
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); document.getElementById('modalBox').innerHTML=''; }
+
+async function logAudit(action, details){
+  try {
+    await window.supabaseClient.from('audit_log').insert({
+      table_name: 'matches', record_id: MATCH_ID, action, actor_id: CURRENT_PROFILE ? CURRENT_PROFILE.id : null, details
+    });
+  } catch(e){ /* audit_log אופציונלי - לא חוסם פעולה אם הטבלה עדיין לא קיימת */ }
+}
+
+async function loadEverything(){
+  const { data: match, error } = await window.supabaseClient.from('matches').select('*').eq('id', MATCH_ID).single();
+  if (error || !match){ document.getElementById('heroBox').innerHTML = '<div style="color:#a02c1d;">התאמה לא נמצאה, או שאין לך הרשאה לצפות בה.</div>'; return; }
+  MATCH = match;
+
+  // 03.09.2026 (מודול מתווכים, שלב 4): כשההתאמה מסוג broker, אין buyer_id
+  // בכלל (ראו matches_counterparty_check מ-שלב 1) - שולפים מ-brokers
+  // במקום מ-leads. שם המשתנה BUYER נשאר כפי שהיה (המבנה - full_name/
+  // phone/email/agreement_status - זהה בשני הטבלאות, ולכן כל שאר הקוד
+  // בקובץ הזה שכבר קורא מ-BUYER ממשיך לעבוד נכון, בדיוק לפי ההנחיה
+  // "להשתמש באותו מנגנון של קונה ככל שניתן"). מסלול הקונה למטה לא השתנה.
+  const isBroker = match.counterparty_type === 'broker';
+  const [{data:biz}, {data:buyer}, {data:users}] = await Promise.all([
+    window.supabaseClient.from('businesses').select('*').eq('id', match.business_id).single(),
+    isBroker
+      ? window.supabaseClient.from('brokers').select('*').eq('id', match.broker_id).single()
+      : window.supabaseClient.from('leads').select('*').eq('id', match.buyer_id).single(),
+    window.supabaseClient.rpc('get_active_users_basic')
+  ]);
+  BIZ = biz; BUYER = buyer; ALL_USERS = users || [];
+
+  renderHero();
+  renderQuickActions();
+  await Promise.all([loadTasks(), loadNotes(), loadTimeline(), loadMeetings(), loadLastActions()]);
+}
+
+// 03.09.2026 (מודול מתווכים, שלב 4): האם הצד השני בהתאמה הזו הוא מתווך.
+// נבדק פעם אחת, בכל מקום שצריך סימון/ניסוח שונה בין קונה למתווך.
+function isCounterpartyBroker(){ return MATCH && MATCH.counterparty_type === 'broker'; }
+function counterpartyBadgeHtml(){
+  return isCounterpartyBroker() ? `<span style="display:inline-flex;align-items:center;gap:4px;background:#7a3fd1;color:#fff;font-weight:800;font-size:.7rem;padding:3px 10px;border-radius:12px;">🔵 מתווך / סוכן</span>` : '';
+}
+
+// ============================================================================
+// שלב 2 — שיחות/פגישות, משתתפים, סיכומים, PDF, וואטסאפ, מייל
+// ============================================================================
+const MEETING_TYPES = ['שיחה','שיחת וידאו','פגישה','פגישת נתונים','פגישת המשך','פגישת מו"מ','שיחה פנימית','אחר'];
+const PARTICIPANT_TYPES = ['קונה','בעל עסק','סוכן','עורך דין','רואה חשבון','אחר'];
+let CURRENT_MEETING_PARTICIPANTS = []; // מערך זמני בטופס העריכה, נשמר לטבלה בפועל רק ב-saveMeeting
+let CURRENT_AI_APPLY = null; // הצעות ה-AI (סטטוס/פעולה הבאה/משימות) - מוחלות בשקט בשמירה, לא כשדות נפרדים
+let CURRENT_AI_TRANSCRIPT = null;
+
+async function loadMeetings(){
+  const { data, error } = await window.supabaseClient.from('match_meetings').select('*').eq('match_id', MATCH_ID).is('deleted_at', null).order('meeting_date', {ascending:false});
+  const box = document.getElementById('meetingsBox');
+  if (error){
+    box.innerHTML = `<div class="stage-note">מודול הפגישות עדיין לא זמין (יש להריץ Migration שלב 2) — ${esc(error.message)}</div>`;
+    return;
+  }
+  if (!data || data.length === 0){ window._lastMeetings = []; window._lastParticipants = {}; box.innerHTML = '<div class="empty-note">אין עדיין שיחות/פגישות מתועדות</div>'; return; }
+
+  const participantsByMeeting = {};
+  const { data: parts } = await window.supabaseClient.from('meeting_participants').select('*').in('meeting_id', data.map(m=>m.id));
+  (parts||[]).forEach(p=>{ (participantsByMeeting[p.meeting_id] = participantsByMeeting[p.meeting_id]||[]).push(p); });
+  window._lastMeetings = data;
+  window._lastParticipants = participantsByMeeting;
+
+  box.innerHTML = data.map(m=>{
+    const pList = (participantsByMeeting[m.id]||[]).map(p=>`<span class="participant-chip">${esc(p.participant_type)}: ${esc(p.free_text_name || userName(p.linked_record_id))}</span>`).join(' ');
+    return `
+    <div class="meeting-card">
+      <div class="mtop">
+        <div>
+          <div class="mtitle">${esc(m.meeting_type||'—')} ${m.status==='טיוטה'?'<span class="draft-pill">טיוטה</span>':''}</div>
+          <div class="mmeta">${fmtDate(m.meeting_date)} ${m.start_time?('· '+m.start_time.slice(0,5)):''}${m.location?(' · '+esc(m.location)):''} · תיעד: ${esc(userName(m.agent_id||m.created_by))}</div>
+        </div>
+      </div>
+      ${pList ? `<div style="margin-top:8px;">${pList}</div>` : ''}
+      ${m.summary_text ? `<div class="mbody"><b>עיקרי הדברים:</b> ${esc(m.summary_text)}</div>` : ''}
+      ${m.decisions ? `<div class="mbody"><b>החלטות:</b> ${esc(m.decisions)}</div>` : ''}
+      ${m.next_action ? `<div class="mbody"><b>פעולה הבאה:</b> ${esc(m.next_action)}</div>` : ''}
+      <div class="mactions">
+        <button class="qa-btn btn-sm" onclick="openMeetingModal('${m.id}')">✏️ ערוך</button>
+        <button class="qa-btn btn-sm" onclick="viewMeetingPdf('${m.id}')">👁️ צפה</button>
+        <button class="qa-btn btn-sm" onclick="downloadMeetingPdf('${m.id}')">📄 PDF</button>
+        <button class="qa-btn btn-sm" onclick="openWhatsappModal('${m.id}')">💬 וואטסאפ</button>
+        <button class="qa-btn btn-sm" onclick="openEmailModal('${m.id}')">✉️ מייל</button>
+        <button class="qa-btn btn-sm" onclick="showVersionHistory('${m.id}')">🕘 גרסאות</button>
+        <button class="qa-btn btn-sm" style="color:#a02c1d;" onclick="deleteMeeting('${m.id}')">🗑️ מחק</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openMeetingModal(id, presetType, aiData, presetLocation){
+  const m = id ? window._lastMeetings.find(x=>x.id===id) : null;
+  CURRENT_MEETING_PARTICIPANTS = m ? (window._lastParticipants[id] || []) : [];
+  const a = aiData ? aiData.analysis : null;
+  CURRENT_AI_APPLY = a || null; // מוחל בשקט על ההתאמה בשמירה (סטטוס מוצע, פעולה הבאה, משימות) - לא מוצג כשדות נפרדים
+  CURRENT_AI_TRANSCRIPT = aiData ? aiData.transcript : null;
+
+  const mergedNotes = m?.summary_text || [a?.summary, a?.decisions && `החלטות: ${a.decisions}`, a?.open_questions && `שאלות פתוחות: ${a.open_questions}`, a?.requested_documents && `מסמכים שהתבקשו: ${a.requested_documents}`].filter(Boolean).join('\n\n');
+
+  const now = new Date();
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>${aiData ? '✅ אישור סיכום' : (m ? 'עריכת' : 'תיעוד')} פגישה</h3>
+    <div style="background:#f7f5ee;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-weight:700;color:var(--navy);">🏢 ${esc(BIZ?.internal_name||'—')} &nbsp;⇄&nbsp; ${isCounterpartyBroker() ? '🔵' : '🧍'} ${esc(BUYER?.full_name||'—')} ${counterpartyBadgeHtml()}</div>
+    <div class="field"><label>סוג</label><select id="mType">${MEETING_TYPES.map(t=>`<option value="${t}" ${(m?.meeting_type||presetType)===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    <div style="display:flex;gap:10px;">
+      <div class="field" style="flex:1;"><label>תאריך</label><input type="date" id="mDate" value="${m?.meeting_date || now.toISOString().slice(0,10)}"></div>
+      <div class="field" style="flex:1;"><label>שעה</label><input type="time" id="mStart" value="${m?.start_time ? m.start_time.slice(0,5) : now.toTimeString().slice(0,5)}"></div>
+    </div>
+    <div class="field"><label>מיקום (אופציונלי)</label><input type="text" id="mLocation" value="${esc(m?.location || presetLocation)}"></div>
+
+    <div class="field">
+      <label>משתתפים</label>
+      <div id="participantsList" style="margin-bottom:8px;"></div>
+      <div style="display:flex;gap:6px;">
+        <select id="newPartType" style="flex:1;">${PARTICIPANT_TYPES.map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
+        <input type="text" id="newPartName" placeholder="שם" style="flex:2;">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="addParticipantLocal()">הוסף</button>
+      </div>
+    </div>
+
+    <div class="field"><label>הערות</label><textarea id="mNotes" style="min-height:130px;">${esc(mergedNotes)}</textarea></div>
+
+    ${CURRENT_AI_TRANSCRIPT ? `<details style="margin-bottom:14px;"><summary style="cursor:pointer;color:#8a93ab;font-size:.85rem;">📄 הצג תמלול מלא (לעיון)</summary><textarea readonly style="min-height:90px;color:#888;margin-top:8px;">${esc(CURRENT_AI_TRANSCRIPT)}</textarea></details>` : ''}
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="saveMeeting('${id||''}', this)">${aiData ? 'אשר ושמור' : 'שמירה'}</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+  renderParticipantsLocal();
+}
+function renderParticipantsLocal(){
+  document.getElementById('participantsList').innerHTML = CURRENT_MEETING_PARTICIPANTS.map((p,i)=>
+    `<span class="participant-chip">${esc(p.participant_type)}: ${esc(p.free_text_name)} <button type="button" onclick="removeParticipantLocal(${i})">×</button></span>`
+  ).join(' ') || '<span class="empty-note">אין משתתפים עדיין</span>';
+}
+function addParticipantLocal(){
+  const type = document.getElementById('newPartType').value;
+  const name = document.getElementById('newPartName').value.trim();
+  if (!name){ toast('יש להזין שם'); return; }
+  CURRENT_MEETING_PARTICIPANTS.push({ participant_type: type, free_text_name: name, linked_record_type: null, linked_record_id: null });
+  document.getElementById('newPartName').value = '';
+  renderParticipantsLocal();
+}
+function removeParticipantLocal(i){ CURRENT_MEETING_PARTICIPANTS.splice(i,1); renderParticipantsLocal(); }
+
+async function saveMeeting(id, btn){
+  bsdSetButtonLoading(btn, true, 'שומר...');
+  try {
+  const payload = {
+    match_id: MATCH_ID, business_id: MATCH.business_id, buyer_id: MATCH.buyer_id,
+    meeting_type: document.getElementById('mType').value,
+    meeting_date: document.getElementById('mDate').value || null,
+    start_time: document.getElementById('mStart').value || null,
+    location: document.getElementById('mLocation').value || null,
+    agent_id: CURRENT_PROFILE.id,
+    summary_text: document.getElementById('mNotes').value || null,
+    status: 'סופי',
+    updated_by: CURRENT_PROFILE.id, updated_at: new Date().toISOString()
+  };
+  if (CURRENT_AI_TRANSCRIPT) payload.raw_transcript = CURRENT_AI_TRANSCRIPT;
+
+  let meetingId = id;
+  if (id){
+    const { error } = await window.supabaseClient.from('match_meetings').update(payload).eq('id', id);
+    if (error){ toast('שגיאה: ' + error.message); return; }
+  } else {
+    payload.created_by = CURRENT_PROFILE.id;
+    const { data, error } = await window.supabaseClient.from('match_meetings').insert(payload).select().single();
+    if (error){ toast('שגיאה: ' + error.message); return; }
+    meetingId = data.id;
+  }
+
+  // גרסת סיכום (סעיף 13) - snapshot מלא בכל שמירה
+  const { data: existingVersions } = await window.supabaseClient.from('meeting_summary_versions').select('version_number').eq('meeting_id', meetingId).order('version_number', {ascending:false}).limit(1);
+  const nextVersion = existingVersions && existingVersions.length ? existingVersions[0].version_number + 1 : 1;
+  await window.supabaseClient.from('meeting_summary_versions').insert({
+    meeting_id: meetingId, version_number: nextVersion, snapshot: payload, changed_by: CURRENT_PROFILE.id
+  }).then(null, ()=>{});
+
+  // משתתפים - מוחקים ומכניסים מחדש (הכי פשוט ובטוח)
+  await window.supabaseClient.from('meeting_participants').delete().eq('meeting_id', meetingId);
+  if (CURRENT_MEETING_PARTICIPANTS.length){
+    await window.supabaseClient.from('meeting_participants').insert(
+      CURRENT_MEETING_PARTICIPANTS.map(p=>({ ...p, meeting_id: meetingId }))
+    );
+  }
+
+  let autoAppliedNote = '';
+  // הצעות ה-AI מוחלות בשקט על ההתאמה בלחיצת "אשר ושמור" האחת - בלי מסך אישור נפרד לכל שדה (לפי בקשתו המפורשת)
+  if (!id && CURRENT_AI_APPLY){
+    const a = CURRENT_AI_APPLY;
+    const matchUpdate = { last_action: `תועדה ${payload.meeting_type}`, last_action_at: new Date().toISOString() };
+    if (a.next_action) matchUpdate.next_action = a.next_action;
+    if (a.follow_up_meeting_date) matchUpdate.next_action_at = a.follow_up_meeting_date;
+    if (a.suggested_status && MATCH_STATUSES.includes(a.suggested_status)){
+      matchUpdate.status = a.suggested_status;
+      if ((a.suggested_status === 'נסגר ללא עסקה' || a.suggested_status === 'הקונה לא מעוניין') && a.drop_reason_category) matchUpdate.drop_reason_category = a.drop_reason_category;
+    }
+    await window.supabaseClient.from('matches').update(matchUpdate).eq('id', MATCH_ID);
+    if (matchUpdate.status){
+      await window.supabaseClient.from('match_status_history').insert({ match_id: MATCH_ID, status: matchUpdate.status, changed_at: new Date().toISOString(), changed_by: CURRENT_PROFILE.id });
+    }
+    const tasksToCreate = Array.isArray(a.tasks) ? [...a.tasks] : [];
+    if (a.follow_up_meeting_date) tasksToCreate.push({ title: 'לקבוע פגישת המשך', due_date: a.follow_up_meeting_date });
+    if (tasksToCreate.length){
+      await window.supabaseClient.from('tasks').insert(tasksToCreate.map(t=>({
+        title: t.title, assigned_to: CURRENT_PROFILE.id,
+        due_date: t.due_date || null, priority: 'רגילה', status: 'פתוחה',
+        match_id: MATCH_ID, business_id: MATCH.business_id, buyer_id: MATCH.buyer_id, source: 'ai_meeting'
+      })));
+      autoAppliedNote = ` + ${tasksToCreate.length} משימות`;
+    }
+  } else {
+    await window.supabaseClient.from('matches').update({ last_action: `תועדה ${payload.meeting_type}`, last_action_at: new Date().toISOString() }).eq('id', MATCH_ID);
+  }
+
+  await logAudit(id ? 'edit_meeting' : 'add_meeting', { meeting_id: meetingId, type: payload.meeting_type, ai_generated: !!CURRENT_AI_TRANSCRIPT });
+
+  toast('הסיכום נשמר' + autoAppliedNote);
+  closeModal();
+  await loadEverything();
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
+}
+
+// ---------- מסך אישור AI עשיר (הקלטה בלבד) - כל הפרטים, גרפיקה ברורה ----------
+let CURRENT_AI_TASKS_RICH = [];
+
+function aiCard(icon, label, innerHtml){
+  return `<div style="border:1.5px solid #e3dfd0;border-radius:10px;padding:14px 16px;margin-bottom:14px;background:#fdfcf9;">
+    <div style="font-weight:700;color:var(--navy);font-size:1rem;margin-bottom:8px;display:flex;align-items:center;gap:8px;">${icon} ${label}</div>
+    ${innerHtml}
+  </div>`;
+}
+
+function openAiApprovalModal(aiData, meetingType, recLocation){
+  const a = aiData.analysis || {};
+  CURRENT_AI_APPLY = a;
+  CURRENT_MEETING_PARTICIPANTS = [];
+  CURRENT_AI_TRANSCRIPT = aiData.transcript || '';
+  CURRENT_AI_TASKS_RICH = (Array.isArray(a.tasks) ? a.tasks : []).map(t => ({
+    title: t.title, due_date: t.due_hint || null, assigned_to: CURRENT_PROFILE.id, approved: true
+  }));
+  if (a.follow_up_meeting_date){
+    CURRENT_AI_TASKS_RICH.push({ title: 'לקבוע פגישת המשך', due_date: a.follow_up_meeting_date, assigned_to: CURRENT_PROFILE.id, approved: true });
+  }
+
+  const now = new Date();
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>✅ אישור סיכום שנוצר מהקלטה</h3>
+    <div style="background:#f7f5ee;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-weight:700;color:var(--navy);">🏢 ${esc(BIZ?.internal_name||'—')} &nbsp;⇄&nbsp; ${isCounterpartyBroker() ? '🔵' : '🧍'} ${esc(BUYER?.full_name||'—')} ${counterpartyBadgeHtml()}</div>
+
+    <div style="display:flex;gap:10px;">
+      <div class="field" style="flex:1;"><label>סוג</label><select id="aiType">${MEETING_TYPES.map(t=>`<option value="${t}" ${t===meetingType?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="field" style="flex:1;"><label>תאריך</label><input type="date" id="aiDate" value="${now.toISOString().slice(0,10)}"></div>
+      <div class="field" style="flex:1;"><label>שעה</label><input type="time" id="aiStart" value="${now.toTimeString().slice(0,5)}"></div>
+    </div>
+    <div class="field"><label>מיקום</label><input type="text" id="aiLocation" value="${esc(recLocation)}"></div>
+
+    ${aiCard('📄','תמלול מלא', `<textarea readonly style="min-height:110px;color:#555;background:#fff;">${esc(CURRENT_AI_TRANSCRIPT || '(התמלול חזר ריק)')}</textarea>`)}
+    ${aiCard('📝','עיקרי הדברים', `<textarea id="aiSummary" style="min-height:80px;">${esc(a.summary)}</textarea>`)}
+    ${aiCard('✅','החלטות', `<textarea id="aiDecisions" style="min-height:60px;">${esc(a.decisions)}</textarea>`)}
+    ${aiCard('❓','שאלות פתוחות', `<textarea id="aiQuestions" style="min-height:60px;">${esc(a.open_questions)}</textarea>`)}
+    ${aiCard('📎','מסמכים שהתבקשו', `<textarea id="aiDocs" style="min-height:50px;">${esc(a.requested_documents)}</textarea>`)}
+    ${aiCard('➡️','פעולה הבאה', `<input type="text" id="aiNextAction" value="${esc(a.next_action)}">`)}
+    ${aiCard('🔄','סטטוס מוצע להתאמה', `
+      <select id="aiSuggestedStatus"><option value="">— ללא שינוי —</option>${MATCH_STATUSES.map(s=>`<option value="${s}" ${a.suggested_status===s?'selected':''}>${s}</option>`).join('')}</select>
+      ${a.drop_reason_category ? `<div style="font-size:.8rem;color:#8a6a10;margin-top:6px;">סיבת ירידה משוערת: ${esc(a.drop_reason_category)}</div>` : ''}
+    `)}
+    ${aiCard('✅','משימות שזוהו - סמן אילו לאשר, ואפשר לשנות אחראי/תאריך', `<div id="aiTasksListRich"></div>`)}
+    ${aiCard('🧍','משתתפים', `
+      <div id="participantsList" style="margin-bottom:8px;"></div>
+      <div style="display:flex;gap:6px;">
+        <select id="newPartType" style="flex:1;">${PARTICIPANT_TYPES.map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
+        <input type="text" id="newPartName" placeholder="שם" style="flex:2;">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="addParticipantLocal()">הוסף</button>
+      </div>
+    `)}
+    ${aiCard('🗒️','הערות נוספות (ידני)', `<textarea id="aiNotes" style="min-height:60px;"></textarea>`)}
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="saveAiApproval(this)">✅ אשר ושמור</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+  renderParticipantsLocal();
+  renderAiTasksRich();
+}
+function renderAiTasksRich(){
+  const box = document.getElementById('aiTasksListRich');
+  if (!CURRENT_AI_TASKS_RICH.length){ box.innerHTML = '<div class="empty-note">לא זוהו משימות בתמלול</div>'; return; }
+  box.innerHTML = CURRENT_AI_TASKS_RICH.map((t,i)=>`
+    <div style="padding:10px 0;border-bottom:1px solid #eee;">
+      <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;">
+        <input type="checkbox" ${t.approved?'checked':''} onchange="CURRENT_AI_TASKS_RICH[${i}].approved=this.checked" style="margin-top:3px;flex-shrink:0;">
+        <input type="text" value="${esc(t.title)}" oninput="CURRENT_AI_TASKS_RICH[${i}].title=this.value" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #d8d3c4;border-radius:6px;font-size:1rem;">
+      </label>
+      <div style="display:flex;gap:8px;">
+        <select onchange="CURRENT_AI_TASKS_RICH[${i}].assigned_to=this.value" style="flex:1;min-width:0;box-sizing:border-box;padding:9px 8px;border:1px solid #d8d3c4;border-radius:6px;font-size:.9rem;">${userOptions(t.assigned_to)}</select>
+        <input type="date" value="${t.due_date&&/^\d{4}-\d{2}-\d{2}$/.test(t.due_date)?t.due_date:''}" onchange="CURRENT_AI_TASKS_RICH[${i}].due_date=this.value" style="flex:1;min-width:0;box-sizing:border-box;padding:9px 8px;border:1px solid #d8d3c4;border-radius:6px;font-size:.9rem;">
+      </div>
+    </div>`).join('');
+}
+
+async function saveAiApproval(btn){
+  bsdSetButtonLoading(btn, true, 'שומר...');
+  try {
+  const meetingType = document.getElementById('aiType').value;
+  const payload = {
+    match_id: MATCH_ID, business_id: MATCH.business_id, buyer_id: MATCH.buyer_id,
+    meeting_type: meetingType,
+    meeting_date: document.getElementById('aiDate').value || null,
+    start_time: document.getElementById('aiStart').value || null,
+    location: document.getElementById('aiLocation').value || null,
+    agent_id: CURRENT_PROFILE.id,
+    summary_text: document.getElementById('aiSummary').value || null,
+    decisions: document.getElementById('aiDecisions').value || null,
+    open_questions: document.getElementById('aiQuestions').value || null,
+    requested_documents: document.getElementById('aiDocs').value || null,
+    next_action: document.getElementById('aiNextAction').value || null,
+    suggested_status: document.getElementById('aiSuggestedStatus').value || null,
+    notes: document.getElementById('aiNotes').value || null,
+    status: 'סופי',
+    raw_transcript: CURRENT_AI_TRANSCRIPT || null,
+    created_by: CURRENT_PROFILE.id, updated_by: CURRENT_PROFILE.id, updated_at: new Date().toISOString()
+  };
+
+  const { data, error } = await window.supabaseClient.from('match_meetings').insert(payload).select().single();
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  const meetingId = data.id;
+
+  await window.supabaseClient.from('meeting_summary_versions').insert({
+    meeting_id: meetingId, version_number: 1, snapshot: payload, changed_by: CURRENT_PROFILE.id
+  }).then(null, ()=>{});
+
+  if (CURRENT_MEETING_PARTICIPANTS.length){
+    await window.supabaseClient.from('meeting_participants').insert(
+      CURRENT_MEETING_PARTICIPANTS.map(p=>({ ...p, meeting_id: meetingId }))
+    );
+  }
+
+  const matchUpdate = { last_action: `תועדה ${meetingType}`, last_action_at: new Date().toISOString() };
+  const nextAction = document.getElementById('aiNextAction').value;
+  const suggestedStatus = document.getElementById('aiSuggestedStatus').value;
+  if (nextAction) matchUpdate.next_action = nextAction;
+  if (suggestedStatus && MATCH_STATUSES.includes(suggestedStatus)){
+    matchUpdate.status = suggestedStatus;
+    if ((suggestedStatus === 'נסגר ללא עסקה' || suggestedStatus === 'הקונה לא מעוניין') && CURRENT_AI_APPLY?.drop_reason_category) matchUpdate.drop_reason_category = CURRENT_AI_APPLY.drop_reason_category;
+  }
+  await window.supabaseClient.from('matches').update(matchUpdate).eq('id', MATCH_ID);
+  if (matchUpdate.status){
+    await window.supabaseClient.from('match_status_history').insert({ match_id: MATCH_ID, status: matchUpdate.status, changed_at: new Date().toISOString(), changed_by: CURRENT_PROFILE.id });
+  }
+
+  const approvedTasks = CURRENT_AI_TASKS_RICH.filter(t=>t.approved && t.title && t.title.trim());
+  if (approvedTasks.length){
+    await window.supabaseClient.from('tasks').insert(approvedTasks.map(t=>({
+      title: t.title, assigned_to: t.assigned_to || CURRENT_PROFILE.id,
+      due_date: (t.due_date && /^\d{4}-\d{2}-\d{2}$/.test(t.due_date)) ? t.due_date : null,
+      priority: 'רגילה', status: 'פתוחה',
+      match_id: MATCH_ID, business_id: MATCH.business_id, buyer_id: MATCH.buyer_id, source: 'ai_meeting'
+    })));
+  }
+
+  await logAudit('add_meeting', { meeting_id: meetingId, type: meetingType, ai_generated: true, approved_ai_tasks: approvedTasks.length });
+
+  toast(`הסיכום נשמר${approvedTasks.length ? ` + ${approvedTasks.length} משימות` : ''}`);
+  closeModal();
+  await loadEverything();
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
+}
+
+async function deleteMeeting(id){
+  if (!confirm('למחוק את הסיכום? ניתן לשחזר דרך Admin (Soft Delete).')) return;
+  const { error } = await window.supabaseClient.from('match_meetings').update({ deleted_at: new Date().toISOString(), deleted_by: CURRENT_PROFILE.id }).eq('id', id);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  await logAudit('delete_meeting', { meeting_id: id });
+  toast('הסיכום נמחק (ניתן לשחזור)');
+  await loadEverything();
+}
+
+async function showVersionHistory(meetingId){
+  const { data, error } = await window.supabaseClient.from('meeting_summary_versions').select('*').eq('meeting_id', meetingId).order('version_number', {ascending:false});
+  const modal = document.getElementById('modalBox');
+  if (error || !data || data.length === 0){
+    modal.innerHTML = `<h3>היסטוריית גרסאות</h3><div class="empty-note">אין עדיין גרסאות שמורות</div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">סגור</button></div>`;
+  } else {
+    modal.innerHTML = `<h3>היסטוריית גרסאות</h3>` + data.map(v=>`
+      <div class="note-item"><div class="nmeta">גרסה ${v.version_number} · ${esc(userName(v.changed_by))} · ${fmtDateTime(v.changed_at)}</div>
+      <div style="font-size:.8rem;color:#666;">${esc((v.snapshot?.summary_text||'').slice(0,200))}</div></div>
+    `).join('') + `<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">סגור</button></div>`;
+  }
+  document.getElementById('overlay').classList.add('open');
+}
+
+// ---------- PDF (מבוסס בדיוק על הצינור המאומת מ-intake-form.html) ----------
+function rowHtml(label, value){
+  if(!value) return '';
+  return '<div style="margin-bottom:12px;"><div style="font-weight:700;color:#c9a24b;font-size:12.5px;text-transform:uppercase;letter-spacing:.3px;">'+esc(label)+'</div>' +
+         '<div style="white-space:pre-wrap;">'+ esc(value) +'</div></div>';
+}
+async function nextPaint(){ await new Promise(r => requestAnimationFrame(()=>requestAnimationFrame(r))); }
+function isCanvasBlank(canvas){
+  try{
+    const ctx = canvas.getContext('2d');
+    const { data } = ctx.getImageData(0,0,canvas.width,canvas.height);
+    const r0=data[0],g0=data[1],b0=data[2],a0=data[3];
+    for (let i=0;i<data.length;i+=4){ if (data[i]!==r0||data[i+1]!==g0||data[i+2]!==b0||data[i+3]!==a0) return false; }
+    return true;
+  } catch(e){ return false; }
+}
+function buildMeetingPrintTemplate(m, forceLevel){
+  const dl = forceLevel != null ? forceLevel : (MATCH.disclosure_level || 1);
+  document.getElementById('pt_title').textContent = `${m.meeting_type||'סיכום'} — ${dl>=2 ? (BIZ?.internal_name||'') : 'עסק (אנונימי)'}`;
+  document.getElementById('pt_meta').textContent = `${fmtDate(m.meeting_date)} ${m.start_time?('· '+m.start_time.slice(0,5)):''}${m.location?(' · '+m.location):''} · תיעד: ${fillerLabel()}`;
+  let body = '';
+  body += rowHtml(isCounterpartyBroker() ? 'מתווך / סוכן' : 'קונה', BUYER?.full_name);
+  if (dl >= 2) body += rowHtml('עסק', BIZ?.internal_name);
+  if (dl >= 3) body += rowHtml('בעל העסק', BIZ?.owner_name);
+  body += rowHtml('עיקרי הדברים', m.summary_text);
+  body += rowHtml('החלטות', m.decisions);
+  body += rowHtml('שאלות פתוחות', m.open_questions);
+  body += rowHtml('מסמכים שהתבקשו', m.requested_documents);
+  body += rowHtml('פעולה הבאה', m.next_action);
+  body += rowHtml('הערות', m.notes);
+  document.getElementById('pt_body').innerHTML = body;
+  return `${esc0(BUYER?.full_name)} - ${esc0(BIZ?.internal_name)} - ${fmtDate(m.meeting_date)}.pdf`;
+}
+function esc0(s){ return (s||'—').replace(/[\\/:*?"<>|]/g,''); } // תווים אסורים בשם קובץ
+function fillerLabel(){ return CURRENT_PROFILE ? ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) : ''; }
+
+async function generateMeetingPdfBlob(meetingId, forceLevel){
+  const { data: m, error } = await window.supabaseClient.from('match_meetings').select('*').eq('id', meetingId).single();
+  if (error || !m) throw new Error('לא נמצא סיכום');
+  const filename = buildMeetingPrintTemplate(m, forceLevel);
+  const el = document.getElementById('printTemplate');
+  const overlay = document.getElementById('captureOverlay');
+  overlay.style.display = 'block';
+  window.scrollTo(0,0);
+  await nextPaint();
+  try{
+    // תוקן 26.08.2026 - שורש הבעיה: html2pdf.js (html2canvas הישן) שובר
+    // עברית מעורבת עם מספרים/אנגלית/מרכאות (למשל שם עסק עם בע"מ, מספרי
+    // טלפון) - נבדק בפועל על קובץ שהורד למחשב, לא רק בדפדפן. הוחלף
+    // ב-bsdRenderElementToPdf (js/pdfPipeline.js) שמבוסס על html2canvas-pro
+    // ותוקן ואומת על אותה בעיה בדיוק. שאר הארכיטקטורה (jsPDF, אותו
+    // printTemplate) זהה - זו החלפת שכבת הצילום בלבד, לא מנגנון מקביל.
+    const { blob } = await bsdRenderElementToPdf(el);
+    return { blob, filename };
+  } finally { overlay.style.display = 'none'; }
+}
+async function downloadMeetingPdf(meetingId){
+  try{
+    const { blob, filename } = await generateMeetingPdfBlob(meetingId);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch(e){ toast('שגיאה ביצירת PDF: ' + (e.message||e)); }
+}
+async function viewMeetingPdf(meetingId){
+  try{
+    const { blob } = await generateMeetingPdfBlob(meetingId);
+    window.open(URL.createObjectURL(blob), '_blank');
+  } catch(e){ toast('שגיאה ביצירת PDF: ' + (e.message||e)); }
+}
+
+// ---------- שלב 3: הקלטה, תמלול, ניתוח AI ----------
+let ACTIVE_RECORDER = null, ACTIVE_STREAM = null, RECORDED_CHUNKS = [], REC_START_TIME = null, REC_TIMER_HANDLE = null;
+
+function pickRecorderMimeType(){
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+  for (const c of candidates){ if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c; }
+  return '';
+}
+
+function openRecordingModal(meetingType){
+  if (CURRENT_PROFILE && CURRENT_PROFILE.can_record === false){
+    toast('אין לך הרשאה להקליט - פנה למנהל המערכת');
+    return;
+  }
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>🎙️ הקלטת שיחה/פגישה</h3>
+    <div class="field"><label>סוג</label><select id="recType">${MEETING_TYPES.map(t=>`<option value="${t}" ${t===meetingType?'selected':''}>${t}</option>`).join('')}</select></div>
+    <div class="field"><label>מיקום (אופציונלי)</label><input type="text" id="recLocation" placeholder="למשל: משרד הלקוח / שיחה"></div>
+    <div id="recArea" style="text-align:center;padding:20px 0;">
+      <div style="font-size:2.2rem;margin-bottom:14px;">🎙️</div>
+      <div id="recStatus" style="color:#8a93ab;font-size:.85rem;margin-bottom:16px;">לחץ להתחיל הקלטה. תתבקש לאשר גישה למיקרופון.</div>
+      <button class="btn btn-primary" id="recStartBtn" onclick="startRecording()">🔴 התחל הקלטה</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="cancelRecordingModal()">ביטול</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+function cancelRecordingModal(){
+  if (ACTIVE_RECORDER && ACTIVE_RECORDER.state !== 'inactive') ACTIVE_RECORDER.stop();
+  if (ACTIVE_STREAM) ACTIVE_STREAM.getTracks().forEach(t=>t.stop());
+  if (REC_TIMER_HANDLE) clearInterval(REC_TIMER_HANDLE);
+  closeModal();
+}
+
+async function startRecording(){
+  const meetingType = document.getElementById('recType').value;
+  const recLocation = document.getElementById('recLocation').value.trim();
+  const mimeType = pickRecorderMimeType();
+  if (!mimeType){ toast('הדפדפן הזה לא תומך בהקלטת אודיו'); return; }
+  try {
+    ACTIVE_STREAM = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch(e){
+    document.getElementById('recStatus').innerHTML = '❌ אין גישה למיקרופון. יש לאשר הרשאה בדפדפן ולנסות שוב.';
+    return;
+  }
+  RECORDED_CHUNKS = [];
+  ACTIVE_RECORDER = new MediaRecorder(ACTIVE_STREAM, { mimeType });
+  ACTIVE_RECORDER.ondataavailable = (e) => { if (e.data.size > 0) RECORDED_CHUNKS.push(e.data); };
+  ACTIVE_RECORDER.onstop = () => { processRecording(meetingType, recLocation, mimeType); };
+  ACTIVE_RECORDER.start();
+  REC_START_TIME = Date.now();
+
+  document.getElementById('recArea').innerHTML = `
+    <div style="font-size:2.2rem;margin-bottom:10px;color:#c0392b;">🔴</div>
+    <div id="recTimer" style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-bottom:16px;">00:00</div>
+    <div style="color:#8a93ab;font-size:.8rem;margin-bottom:16px;">מקליט... אפשר לדבר בעברית באופן טבעי.</div>
+    <button class="btn btn-danger" onclick="stopRecording()">⏹️ עצור הקלטה</button>`;
+  REC_TIMER_HANDLE = setInterval(()=>{
+    const secs = Math.floor((Date.now() - REC_START_TIME)/1000);
+    const mm = String(Math.floor(secs/60)).padStart(2,'0'), ss = String(secs%60).padStart(2,'0');
+    const el = document.getElementById('recTimer');
+    if (el) el.textContent = `${mm}:${ss}`;
+  }, 500);
+}
+
+function stopRecording(){
+  if (REC_TIMER_HANDLE) clearInterval(REC_TIMER_HANDLE);
+  if (ACTIVE_RECORDER && ACTIVE_RECORDER.state !== 'inactive') ACTIVE_RECORDER.stop();
+  if (ACTIVE_STREAM) ACTIVE_STREAM.getTracks().forEach(t=>t.stop());
+}
+
+async function processRecording(meetingType, recLocation, mimeType){
+  document.getElementById('recArea').innerHTML = `<div style="padding:20px 0;color:#8a93ab;">⏳ מעלה הקלטה...</div>`;
+  const blob = new Blob(RECORDED_CHUNKS, { type: mimeType });
+  const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+  const storagePath = `${MATCH_ID}/${Date.now()}.${ext}`;
+
+  const { error: upErr } = await window.supabaseClient.storage.from('temp-audio').upload(storagePath, blob, { contentType: mimeType });
+  if (upErr){
+    showRecordingError('שגיאה בהעלאת ההקלטה: ' + upErr.message, null, meetingType, recLocation);
+    return;
+  }
+
+  document.getElementById('recArea').innerHTML = `<div style="padding:20px 0;color:#8a93ab;">🧠 מתמלל ומנתח... זה יכול לקחת עד דקה.</div>`;
+  await runAnalysis(storagePath, meetingType, recLocation);
+}
+
+async function runAnalysis(storagePath, meetingType, recLocation){
+  const { data, error } = await window.supabaseClient.functions.invoke('analyze-meeting-audio', {
+    body: { storage_path: storagePath, meeting_type: meetingType, business_name: BIZ?.internal_name, buyer_name: BUYER?.full_name }
+  });
+  let result = data;
+  if (error || result?.error){
+    let detail = result?.error || error?.message || 'שגיאה לא ידועה';
+    if (error && error.context && typeof error.context.json === 'function'){
+      try { const b = await error.context.json(); if (b?.error) detail = b.error; } catch(e){}
+    }
+    showRecordingError(detail, storagePath, meetingType, recLocation);
+    return;
+  }
+  closeModal();
+  openAiApprovalModal(result, meetingType, recLocation);
+}
+
+function showRecordingError(message, storagePath, meetingType, recLocation){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>⚠️ קרתה תקלה</h3>
+    <div class="stage-note" style="border-color:#e39185;color:#7a1f10;background:#fbe1de;">${esc(message)}</div>
+    ${storagePath ? `<div style="font-size:.78rem;color:#8a93ab;margin:10px 0;">ההקלטה נשמרה ולא נמחקה - אפשר לנסות שוב בלי להקליט מחדש.</div>` : ''}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">סגור</button>
+      ${storagePath ? `<button class="btn btn-primary" onclick="retryAnalysis('${storagePath}','${meetingType}','${esc(recLocation||'')}')">🔁 נסה שוב</button>` : ''}
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+async function retryAnalysis(storagePath, meetingType, recLocation){
+  document.getElementById('modalBox').innerHTML = `<h3>🎙️ הקלטת ${meetingType}</h3><div style="padding:20px 0;text-align:center;color:#8a93ab;">🧠 מנסה שוב...</div>`;
+  await runAnalysis(storagePath, meetingType, recLocation);
+}
+
+// ---------- טקסט משותף לשיתוף (וואטסאפ/מייל) - תוויות ברורות, בלי שורות ריקות למידע שלא מולא ----------
+function meetingShareText(m){
+  const lines = [];
+  lines.push(`סיכום ${m.meeting_type||'פגישה'} - ${fmtDate(m.meeting_date)}`);
+  lines.push(`${BIZ?.internal_name||''} / ${BUYER?.full_name||''}`);
+  lines.push('');
+  if (m.summary_text) lines.push(`עיקרי הדברים:\n${m.summary_text}`);
+  if (m.decisions) lines.push(`\nהחלטות:\n${m.decisions}`);
+  if (m.open_questions) lines.push(`\nשאלות פתוחות:\n${m.open_questions}`);
+  lines.push(`\nפעולה הבאה: ${m.next_action||'—'}`);
+  return lines.join('\n');
+}
+
+// ---------- וואטסאפ ----------
+function resolveWaPhone(target){
+  let phone = target === 'buyer' ? BUYER?.phone : target === 'biz' ? BIZ?.owner_phone : '';
+  phone = (phone||'').replace(/\D/g,'');
+  return phone;
+}
+function openWhatsappModal(meetingId){
+  const m = window._lastMeetings.find(x=>x.id===meetingId);
+  const text = meetingShareText(m);
+  const signed = buyerAgreementSigned();
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>שליחה ב-WhatsApp — תצוגה מקדימה</h3>
+    ${!m.summary_text ? `<div class="stage-note">⚠️ לא הוזנו "עיקרי הדברים" בסיכום הזה — ההודעה תישלח כמעט ריקה. אפשר לחזור ל"✏️ ערוך" ולמלא לפני השליחה.</div>` : ''}
+    ${!signed ? `<div class="disclosure-warning" style="display:block;background:#fbe1de;border-color:#e39185;color:#7a1f10;font-weight:700;">🚫 לקונה הזה <u>אין הסכם חתום</u>! מותר לשלוח אליו (או למספר אחר) אך ורק מידע אנונימי — ללא שם עסק, כתובת או פרטי בעלים. שליחה לבעל העסק עצמו אינה מוגבלת.</div>` : ''}
+    <div class="field"><label>למי לשלוח</label>
+      <select id="waTarget" onchange="onWaTargetChange()">
+        <option value="buyer">${isCounterpartyBroker() ? 'מתווך / סוכן' : 'קונה'} (${esc(BUYER?.full_name||'—')})</option>
+        <option value="biz">בעל העסק (${esc(BIZ?.owner_name||'—')})</option>
+        <option value="other">מספר אחר</option>
+      </select>
+    </div>
+    <div class="field"><label>מספר טלפון (ניתן לתקן)</label><input type="text" id="waPhone" placeholder="05XXXXXXXX" value="${esc(resolveWaPhone('buyer'))}"></div>
+    <div class="field"><label>תוכן ההודעה</label><textarea id="waText" style="min-height:140px;">${esc(text)}</textarea></div>
+    <div class="field" id="waConfirmAnonField" style="display:none;">
+      <label style="display:flex;align-items:flex-start;gap:8px;font-weight:700;color:#7a1f10;"><input type="checkbox" id="waConfirmAnon" onchange="onWaTargetChange()" style="width:auto;margin-top:3px;"> אני מוודא שההודעה שלמעלה אנונימית בלבד — לא כוללת שם עסק, כתובת או פרטי בעלים</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" id="waSendBtn" onclick="sendWhatsapp('${meetingId}')">פתח ב-WhatsApp</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+  onWaTargetChange();
+}
+function onWaTargetChange(){
+  const target = document.getElementById('waTarget').value;
+  const phoneField = document.getElementById('waPhone');
+  if (target === 'other'){ phoneField.value = ''; phoneField.focus(); }
+  else phoneField.value = resolveWaPhone(target);
+
+  const signed = buyerAgreementSigned();
+  const needsGate = !signed && (target === 'buyer' || target === 'other');
+  document.getElementById('waConfirmAnonField').style.display = needsGate ? '' : 'none';
+  const sendBtn = document.getElementById('waSendBtn');
+  const confirmed = document.getElementById('waConfirmAnon')?.checked;
+  sendBtn.disabled = needsGate && !confirmed;
+  sendBtn.style.opacity = sendBtn.disabled ? '.5' : '1';
+}
+function sendWhatsapp(meetingId){
+  const target = document.getElementById('waTarget').value;
+  const signed = buyerAgreementSigned();
+  const needsGate = !signed && (target === 'buyer' || target === 'other');
+  if (needsGate && !document.getElementById('waConfirmAnon').checked){
+    toast('יש לאשר שההודעה אנונימית בלבד לפני שליחה לקונה ללא הסכם חתום');
+    return;
+  }
+  let phone = document.getElementById('waPhone').value.replace(/\D/g,'');
+  if (!phone){ toast('יש להזין מספר טלפון'); return; }
+  if (phone.startsWith('0')) phone = '972' + phone.slice(1);
+  const text = encodeURIComponent(document.getElementById('waText').value);
+  window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
+  logAudit('send_whatsapp', { meeting_id: meetingId, target, phone, forced_anonymous: needsGate });
+  closeModal();
+}
+
+// ---------- סטטוס הסכם - תג צבעוני (03.09.2026, תואם לצבעים ב-businesses.html) ----------
+function agreementShortLabel(status){
+  const s = status || 'אין הסכם';
+  return s === 'נשלח הסכם לחתימה' ? 'נשלח לחתימה' : s;
+}
+function agreementBadge(status){
+  const s = status || 'אין הסכם';
+  const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
+  return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>`;
+}
+
+// ---------- קשר אחרון עם הקונה (03.09.2026) ----------
+const CONTACT_ACTIONS = ['send_whatsapp_checkin','send_whatsapp','send_email','add_meeting'];
+async function loadLastContact(){
+  const el = document.getElementById('lastContactVal');
+  if (!el) return;
+  const { data } = await window.supabaseClient.from('audit_log').select('occurred_at,action')
+    .eq('table_name','matches').eq('record_id', MATCH_ID)
+    .in('action', CONTACT_ACTIONS).order('occurred_at', { ascending:false }).limit(1);
+  const last = data && data[0];
+  if (!last){ el.innerHTML = '<span style="color:#c0392b;font-weight:700;">מעולם לא תועד קשר ⚠️</span>'; return; }
+  const days = Math.floor((Date.now() - new Date(last.occurred_at).getTime()) / 86400000);
+  const warn = days >= 5;
+  el.innerHTML = `<span style="${warn?'color:#c0392b;font-weight:700;':''}">${fmtDate(last.occurred_at)}${days>0?` (לפני ${days} ימים)`:' (היום)'}${warn?' ⚠️':''}</span>`;
+}
+
+// ---------- עדכון מהיר לקונה בוואטסאפ (03.09.2026) ----------
+// הודעה קצרה שהוא כותב בעצמו (לא AI), עם מודעות לסטטוס ההסכם ותיעוד מלא של מה שנשלח.
+function defaultCheckinText(){
+  const name = BUYER?.full_name || '';
+  return `היי ${name}, רק רציתי לבדוק מולך - ראית את החומר ששלחנו? יש שאלות, או שאתה צריך עזרה מולי בקשר לזה?`;
+}
+function openQuickCheckinModal(){
+  const status = BUYER?.agreement_status;
+  const signed = status === 'יש הסכם חתום';
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>💬 עדכון מהיר לקונה</h3>
+    <div class="field"><label>סטטוס הסכם נוכחי</label><div>${agreementBadge(status)}</div></div>
+    ${!signed ? `<div class="checkin-suggest" onclick="appendAgreementSuggestion()">➕ להוסיף להודעה: מומלץ לשלוח לו הסכם התקשרות ושמירת סודיות (לכבד את הנהלים שלנו ולתת לו חומרים מדויקים יותר) - לחץ להוספה</div>` : ''}
+    <div class="field"><label>מספר טלפון (ניתן לתקן)</label><input type="text" id="ciPhone" placeholder="05XXXXXXXX" value="${esc((BUYER?.phone||'').replace(/\\D/g,''))}"></div>
+    <div class="field"><label>תוכן ההודעה (אתה כותב, אפשר לערוך חופשי)</label><textarea id="ciText" style="min-height:120px;">${esc(defaultCheckinText())}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="sendQuickCheckin()">פתח ב-WhatsApp</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+function appendAgreementSuggestion(){
+  const ta = document.getElementById('ciText');
+  const line = 'דרך אגב, כדי לכבד את הנהלים שלנו ולתת לך חומרים מדויקים יותר, מומלץ שנשלח לך הסכם התקשרות ושמירת סודיות - רוצה שאשלח?';
+  if (!ta.value.includes(line)) ta.value = ta.value.trim() + '\\n\\n' + line;
+}
+function sendQuickCheckin(){
+  let phone = document.getElementById('ciPhone').value.replace(/\\D/g,'');
+  if (!phone){ toast('יש להזין מספר טלפון'); return; }
+  if (phone.startsWith('0')) phone = '972' + phone.slice(1);
+  const messageText = document.getElementById('ciText').value;
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(messageText)}`, '_blank');
+  logAudit('send_whatsapp_checkin', { phone, message: messageText, agreement_status_at_send: BUYER?.agreement_status || null });
+  closeModal();
+  loadLastContact();
+  loadLastActions();
+  toast('נרשם בתיעוד ההתאמה');
+}
+
+// ---------- מייל ----------
+function buyerAgreementSigned(){ return BUYER?.agreement_status === 'יש הסכם חתום'; }
+
+function openEmailModal(meetingId){
+  const m = window._lastMeetings.find(x=>x.id===meetingId);
+  const modal = document.getElementById('modalBox');
+  const signed = buyerAgreementSigned();
+  modal.innerHTML = `
+    <h3>שליחה במייל — תצוגה מקדימה</h3>
+    ${!signed ? `<div class="disclosure-warning" style="display:block;background:#fbe1de;border-color:#e39185;color:#7a1f10;font-weight:700;">🚫 לקונה הזה <u>אין הסכם חתום</u>! מותר לשלוח אליו (או לכתובת אחרת) אך ורק מידע אנונימי — ללא שם עסק, כתובת או פרטי בעלים. שליחה לבעל העסק עצמו או אליך אינה מוגבלת.</div>` : ''}
+    <div class="field"><label>למי לשלוח</label>
+      <select id="emTarget" onchange="onEmailGateChange()">
+        <option value="self">אליי (${esc(CURRENT_PROFILE.email)})</option>
+        <option value="buyer" ${BUYER?.email?'':'disabled'}>${isCounterpartyBroker() ? 'מתווך / סוכן' : 'קונה'} ${BUYER?.email?('('+esc(BUYER.email)+')'):'(אין כתובת מייל)'}</option>
+        <option value="biz" ${BIZ?.owner_email?'':'disabled'}>בעל העסק ${BIZ?.owner_email?('('+esc(BIZ.owner_email)+')'):'(אין כתובת מייל)'}</option>
+        <option value="other">כתובת אחרת</option>
+      </select>
+    </div>
+    <div class="field" id="emOtherField" style="display:none;"><label>כתובת מייל לשליחה</label><input type="email" id="emOtherAddr" placeholder="name@example.com"></div>
+    <div class="field"><label>נושא</label><input type="text" id="emSubject" value="${esc('סיכום ' + (m.meeting_type||'פגישה') + ' - ' + (MATCH.disclosure_level>=2 ? (BIZ?.internal_name||'') : 'עסק'))}"></div>
+    <div class="field"><label>תוכן</label><select id="emContent"><option value="body">סיכום בגוף המייל</option><option value="pdf">PDF מצורף</option><option value="both">שניהם</option></select></div>
+    ${!m.summary_text ? `<div class="stage-note">⚠️ לא הוזנו "עיקרי הדברים" בסיכום הזה — הגוף כמעט ריק. אפשר לחזור ל"✏️ ערוך" ולמלא לפני השליחה.</div>` : ''}
+    <div class="field"><label>תצוגה מקדימה של הטקסט</label><textarea id="emPreviewText" style="min-height:140px;" readonly>${esc(meetingShareText(m))}</textarea></div>
+    <div class="field" id="emConfirmAnonField" style="display:none;">
+      <label style="display:flex;align-items:flex-start;gap:8px;font-weight:700;color:#7a1f10;"><input type="checkbox" id="emConfirmAnon" onchange="onEmailGateChange()" style="width:auto;margin-top:3px;"> אני מוודא שהתוכן שלמעלה אנונימי בלבד — לא כולל שם עסק, כתובת או פרטי בעלים</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" id="emSendBtn" onclick="sendEmail('${meetingId}')">שלח</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+  onEmailGateChange();
+}
+function onEmailGateChange(){
+  const target = document.getElementById('emTarget').value;
+  document.getElementById('emOtherField').style.display = target === 'other' ? '' : 'none';
+  const signed = buyerAgreementSigned();
+  const needsGate = !signed && (target === 'buyer' || target === 'other');
+  document.getElementById('emConfirmAnonField').style.display = needsGate ? '' : 'none';
+  const sendBtn = document.getElementById('emSendBtn');
+  const confirmed = document.getElementById('emConfirmAnon')?.checked;
+  sendBtn.disabled = needsGate && !confirmed;
+  sendBtn.style.opacity = sendBtn.disabled ? '.5' : '1';
+}
+
+function blobToBase64(blob){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function sendEmail(meetingId){
+  const target = document.getElementById('emTarget').value;
+  const to = target === 'self' ? CURRENT_PROFILE.email
+    : target === 'buyer' ? BUYER?.email
+    : target === 'biz' ? BIZ?.owner_email
+    : document.getElementById('emOtherAddr').value.trim();
+  if (!to){ toast('אין כתובת מייל תקינה'); return; }
+
+  const signed = buyerAgreementSigned();
+  const needsGate = !signed && (target === 'buyer' || target === 'other');
+  if (needsGate && !document.getElementById('emConfirmAnon').checked){
+    toast('יש לאשר שהתוכן אנונימי בלבד לפני שליחה לקונה ללא הסכם חתום');
+    return;
+  }
+
+  const subject = document.getElementById('emSubject').value || 'סיכום פגישה';
+  const contentMode = document.getElementById('emContent').value;
+  const bodyText = document.getElementById('emPreviewText').value;
+  const forcePdfLevel = needsGate ? 1 : null; // רשת ביטחון נוספת - PDF תמיד אנונימי לקונה ללא הסכם חתום, גם אם רמת החשיפה בהתאמה גבוהה יותר
+
+  const sendBtn = document.getElementById('emSendBtn');
+  if (sendBtn){ sendBtn.disabled = true; sendBtn.textContent = 'שולח...'; }
+
+  try {
+    let attachment_base64, attachment_filename;
+    if (contentMode === 'pdf' || contentMode === 'both'){
+      const { blob } = await generateMeetingPdfBlob(meetingId, forcePdfLevel);
+      attachment_base64 = await blobToBase64(blob);
+      // שם קובץ באנגלית בלבד לצירוף במייל - שמות עבריים בקובץ מצורף
+      // חשופים לאותה בעיית קידוד כמו גוף ה-HTML; בהורדה ישירה (📄 PDF)
+      // זה לא רלוונטי כי זה attribute של הדפדפן, לא כותרת MIME.
+      const m = window._lastMeetings.find(x=>x.id===meetingId);
+      attachment_filename = `meeting-summary-${(m?.meeting_date||'').replace(/[^0-9-]/g,'')||'file'}.pdf`;
+    }
+    const { data, error } = await window.supabaseClient.functions.invoke('send-match-summary', {
+      body: {
+        to, subject,
+        body_text: contentMode === 'pdf' ? 'מצורף PDF עם סיכום הפגישה.' : bodyText,
+        reply_to: CURRENT_PROFILE.email,
+        attachment_base64, attachment_filename
+      }
+    });
+    if (error || data?.error){
+      // supabase-js מסתיר את גוף השגיאה האמיתי מה-Edge Function מאחורי הודעה
+      // גנרית ("non-2xx status code") - מוציאים את הסיבה האמיתית מ-error.context.
+      let detail = data?.error || error?.message || 'שגיאה לא ידועה';
+      if (error && error.context && typeof error.context.json === 'function'){
+        try { const body = await error.context.json(); if (body?.error) detail = body.error; } catch(e){}
+      }
+      throw new Error(detail);
+    }
+    await logAudit('send_email', { meeting_id: meetingId, to, subject, forced_anonymous: !!forcePdfLevel });
+    toast('המייל נשלח בהצלחה');
+    closeModal();
+  } catch(e){
+    toast('שגיאה בשליחת המייל: ' + (e.message || e));
+    if (sendBtn){ sendBtn.disabled = false; sendBtn.textContent = 'שלח'; }
+  }
+}
+
+function renderHero(){
+  const dl = MATCH.disclosure_level || 1;
+  document.getElementById('heroBox').innerHTML = `
+    <div class="hero-top">
+      <div>
+        <div class="hero-title">🏢 <a href="businesses.html?open=${MATCH.business_id}" style="color:inherit;text-decoration:underline;" class="biz-name">${esc(BIZ?.internal_name||'—')}</a>${BIZ?.business_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BIZ.business_number)})</span>`:''}</div>
+        <div class="hero-title buyer-name" style="margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${isCounterpartyBroker() ? `🔵 <a href="brokers.html?open=${MATCH.broker_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>` : `🧍 <a href="leads.html?open=${MATCH.buyer_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>`}${BUYER?.client_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BUYER.client_number)})</span>`:''}${counterpartyBadgeHtml()}</div>
+        <div class="hero-sub">
+          נוצרה ע"י ${esc(userName(MATCH.created_by))} בתאריך ${fmtDate(MATCH.created_at)}
+          · מטפל כרגע: <b>${esc(userName(MATCH.current_handler))}</b>
+        </div>
+      </div>
+      <div style="text-align:left;">
+        <span class="status-pill" id="statusPillDisplay" style="background:#eef1f6;color:var(--navy);">${esc(MATCH.status)}</span>
+        <span class="disclosure-badge disc-${dl}">${DISCLOSURE_LABELS[dl]}</span>
+      </div>
+    </div>
+    <div id="matchNavBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid #eee;font-size:.78rem;"></div>
+    <div id="disclosureWarning" class="disclosure-warning"></div>
+    <div class="grid2" style="margin-top:16px;">
+      <div>
+        <div class="lbl" style="font-size:.8rem;color:#8a93ab;margin-bottom:4px;">3 פעולות אחרונות</div>
+        <div id="lastActionsBox" style="font-size:.85rem;">טוען...</div>
+      </div>
+      <div>
+        <div class="info-row"><span class="lbl">פעולה הבאה</span><span class="val" style="${!MATCH.next_action?'color:#c0392b;':''}">${esc(MATCH.next_action)||'אין פעולה הבאה מוגדרת ⚠️'}</span></div>
+        <div class="info-row"><span class="lbl">תאריך פעולה הבאה</span><span class="val">${fmtDate(MATCH.next_action_at)}</span></div>
+        <div class="info-row"><span class="lbl">אחראי לפעולה הבאה</span><span class="val">${esc(userName(MATCH.next_action_owner))}</span></div>
+        <div class="info-row"><span class="lbl">סטטוס הסכם קונה</span><span class="val">${agreementBadge(BUYER?.agreement_status)}</span></div>
+        <div class="info-row"><span class="lbl">קשר אחרון עם הקונה</span><span class="val" id="lastContactVal">טוען...</span></div>
+      </div>
+    </div>
+  `;
+  loadMatchNav();
+  loadLastContact();
+}
+
+// ו' - מעבר מהיר בין המסכים (הנחיית שדרוג המשך, 28.08.2026)
+async function loadMatchNav(){
+  const box = document.getElementById('matchNavBar');
+  if (!box) return;
+  const [{data:bizMatches}, {data:buyerMatches}] = await Promise.all([
+    window.supabaseClient.from('matches').select('id,created_at').eq('business_id', MATCH.business_id).order('created_at',{ascending:true}),
+    window.supabaseClient.from('matches').select('id').eq('buyer_id', MATCH.buyer_id)
+  ]);
+  const list = bizMatches || [];
+  const idx = list.findIndex(m=>m.id===MATCH_ID);
+  const prevId = idx > 0 ? list[idx-1].id : null;
+  const nextId = (idx >= 0 && idx < list.length-1) ? list[idx+1].id : null;
+  const linkBtn = (label, href, disabled) => disabled
+    ? `<span style="padding:5px 11px;border-radius:8px;background:#f1eee2;color:#bbb;">${label}</span>`
+    : `<a href="${href}" style="padding:5px 11px;border-radius:8px;background:#f1eee2;color:#0e1b34;text-decoration:none;font-weight:600;">${label}</a>`;
+  box.innerHTML = [
+    linkBtn('🏢 כרטיס העסק', `businesses.html?open=${MATCH.business_id}`),
+    linkBtn('🧍 כרטיס הקונה', `leads.html?open=${MATCH.buyer_id}`),
+    linkBtn('⬅️ ההתאמה הקודמת', prevId ? `match-detail.html?id=${prevId}` : '#', !prevId),
+    linkBtn('➡️ ההתאמה הבאה', nextId ? `match-detail.html?id=${nextId}` : '#', !nextId),
+    linkBtn(`📋 כל ${list.length} ההתאמות של העסק`, `businesses.html?open=${MATCH.business_id}`),
+    linkBtn(`📋 כל ${(buyerMatches||[]).length} ההתאמות של הקונה`, `leads.html?open=${MATCH.buyer_id}`)
+  ].join('');
+}
+
+async function loadLastActions(){
+  const box = document.getElementById('lastActionsBox');
+  if (!box) return;
+  const [{data:hist}, {data:audit}] = await Promise.all([
+    window.supabaseClient.from('match_status_history').select('*').eq('match_id', MATCH_ID),
+    window.supabaseClient.from('audit_log').select('*').eq('table_name','matches').eq('record_id', MATCH_ID)
+  ]);
+  const events = [];
+  (hist||[]).forEach(h=>events.push({ at: h.changed_at, who: h.changed_by, text: `סטטוס שונה ל"${h.status}"` }));
+  (audit||[]).forEach(a=>{
+    if (a.action === 'status_change') return;
+    let text = a.action;
+    if (a.action === 'add_note') text = 'נוספה הערה';
+    if (a.action === 'add_task') text = `נוספה משימה: ${a.details?.title||''}`;
+    if (a.action === 'add_meeting' || a.action === 'edit_meeting') text = `${a.action==='add_meeting'?'תועדה':'עודכנה'} ${a.details?.type||'פגישה'}`;
+    if (a.action === 'set_next_action') text = `נקבעה פעולה הבאה: ${a.details?.next_action||''}`;
+    if (a.action === 'disclosure_change') text = `רמת חשיפה שונתה ל${a.details?.to}`;
+    if (a.action === 'send_email') text = 'נשלח מייל';
+    if (a.action === 'send_whatsapp') text = 'נשלחה הודעת וואטסאפ';
+    if (a.action === 'send_whatsapp_checkin') text = `נשלח עדכון מהיר לקונה: "${(a.details?.message||'').slice(0,60)}${(a.details?.message||'').length>60?'...':''}"`;
+    events.push({ at: a.occurred_at, who: a.actor_id, text });
+  });
+  events.sort((a,b)=> new Date(b.at) - new Date(a.at));
+  const lastThree = events.slice(0,3).reverse(); // FIFO: הישן מבין השלושה למעלה, החדש למטה
+  if (!lastThree.length){ box.innerHTML = '<span style="color:#999;">אין עדיין פעולות</span>'; return; }
+  box.innerHTML = lastThree.map(e=>`<div style="padding:3px 0;">${esc(e.text)} <span style="color:#8a93ab;font-size:.78rem;">· ${fmtDate(e.at)}</span></div>`).join('');
+}
+
+
+function renderQuickActions(){
+  document.getElementById('quickActions').innerHTML = `
+    <button class="qa-btn" onclick="openQuickCheckinModal()" style="background:#dff0e4;border-color:#a9d6b8;">💬 עדכון מהיר לקונה</button>
+    <button class="qa-btn" onclick="openNoteModal()">📝 הוסף הערה</button>
+    <button class="qa-btn" onclick="openTaskModal()">✅ הוסף משימה</button>
+    <button class="qa-btn" onclick="openStatusModal()">🔄 שנה סטטוס</button>
+    <button class="qa-btn" onclick="openNextActionModal()">➡️ קבע פעולה הבאה</button>
+    ${CURRENT_PROFILE.can_record!==false ? `<button class="qa-btn" onclick="openRecordingModal('פגישה')">🎙️ הקלט פגישה</button>` : ''}
+    <button class="qa-btn" onclick="openMeetingModal(null,'פגישה')">📅 תעד פגישה</button>
+    <button class="qa-btn btn-danger" onclick="deleteMatchConfirm()" style="margin-inline-start:auto;">🗑️ מחק התאמה</button>
+  `;
+}
+
+// ---------- סטטוס ----------
+function openStatusModal(){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>שינוי סטטוס</h3>
+    <div class="field"><label>סטטוס חדש</label><select id="newStatus" onchange="onStatusModalChange()">${(!MATCH_STATUSES.includes(MATCH.status) && MATCH.status) ? `<option value="${esc(MATCH.status)}" selected>${esc(MATCH.status)} (ישן - יש לבחור סטטוס עדכני)</option>` : ''}${MATCH_STATUSES.map(s=>`<option value="${s}" ${s===MATCH.status?'selected':''}>${s}</option>`).join('')}</select></div>
+    <div class="field">
+      <label>רמת חשיפה נוכחית להתאמה זו</label>
+      <select id="newDisclosure" onchange="onStatusModalChange()">
+        <option value="1" ${(MATCH.disclosure_level||1)===1?'selected':''}>${DISCLOSURE_LABELS[1]}</option>
+        <option value="2" ${MATCH.disclosure_level===2?'selected':''}>${DISCLOSURE_LABELS[2]}</option>
+        <option value="3" ${MATCH.disclosure_level===3?'selected':''}>${DISCLOSURE_LABELS[3]}</option>
+      </select>
+    </div>
+    <div id="disclosureRiskWarning" class="disclosure-warning"></div>
+    <div class="field" id="dropReasonField" style="display:none;"><label>קטגוריית סיבת ירידה</label><select id="dropReasonCat"><option value="">— בחר —</option>${DROP_REASON_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
+    <div class="field" id="dropReasonNoteField" style="display:none;"><label>הערה</label><textarea id="dropReasonNote"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="saveStatusChange(this)">שמירה</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+  onStatusModalChange();
+}
+// סטטוסים שבהם בפועל מועבר מידע לקונה - אם רמת החשיפה עדיין נמוכה כאן, זה
+// בדיוק הרגע לוודא שלא נשלח בטעות יותר ממה שהקונה מורשה לקבל (סעיף 5).
+const STATUSES_THAT_SHARE_INFO = ['חומרים מלאים נשלחו','תקציר נשלח','בבדיקת נתונים','נקבעה פגישה','התקיימה פגישה','במשא ומתן'];
+function onStatusModalChange(){
+  const status = document.getElementById('newStatus').value;
+  const disclosure = Number(document.getElementById('newDisclosure').value);
+  const isDrop = (status === 'נסגר ללא עסקה' || status === 'הקונה לא מעוניין');
+  document.getElementById('dropReasonField').style.display = isDrop ? '' : 'none';
+  document.getElementById('dropReasonNoteField').style.display = isDrop ? '' : 'none';
+
+  const warnBox = document.getElementById('disclosureRiskWarning');
+  if (STATUSES_THAT_SHARE_INFO.includes(status) && disclosure < 2){
+    warnBox.style.display = 'block';
+    warnBox.innerHTML = '⚠️ הסטטוס הזה מניח שכבר הועבר מידע לקונה, אבל רמת החשיפה עדיין <b>רמה 1 · אנונימי</b>. ודא שרמת החשיפה מעודכנת נכון לפני שממשיכים, כדי שלא יישלח בטעות מידע מזהה למי שלא מורשה לקבל אותו.';
+  } else if (status === 'במשא ומתן' && disclosure < 3){
+    warnBox.style.display = 'block';
+    warnBox.innerHTML = '⚠️ שלב משא ומתן בדרך כלל דורש <b>רמה 3 · מלא</b>. ודא שזה אכן המצב.';
+  } else {
+    warnBox.style.display = 'none';
+  }
+}
+async function saveStatusChange(btn){
+  bsdSetButtonLoading(btn, true, 'שומר...');
+  try {
+  const newStatus = document.getElementById('newStatus').value;
+  const newDisclosure = Number(document.getElementById('newDisclosure').value);
+  const isDrop = (newStatus === 'נסגר ללא עסקה' || newStatus === 'הקונה לא מעוניין');
+  const dropCat = isDrop ? document.getElementById('dropReasonCat').value : null;
+  if (isDrop && !dropCat){ toast('יש לבחור קטגוריית סיבה'); return; }
+  const dropNote = isDrop ? document.getElementById('dropReasonNote').value : null;
+  const prevStatus = MATCH.status;
+  const prevDisclosure = MATCH.disclosure_level || 1;
+
+  const { error } = await window.supabaseClient.from('matches').update({
+    status: newStatus, disclosure_level: newDisclosure,
+    last_action: `שינוי סטטוס ל"${newStatus}"`, last_action_at: new Date().toISOString(),
+    drop_reason_category: dropCat, stopped_reason: dropNote
+  }).eq('id', MATCH_ID);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+
+  await window.supabaseClient.from('match_status_history').insert({
+    match_id: MATCH_ID, status: newStatus, changed_at: new Date().toISOString(), changed_by: CURRENT_PROFILE.id
+  });
+  await logAudit('status_change', { from: prevStatus, to: newStatus, drop_reason_category: dropCat });
+  if (newDisclosure !== prevDisclosure){
+    await logAudit('disclosure_change', { from: prevDisclosure, to: newDisclosure });
+  }
+
+  toast('הסטטוס עודכן');
+  closeModal();
+  await loadEverything();
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
+}
+
+// ---------- פעולה הבאה ----------
+function openNextActionModal(){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>קביעת פעולה הבאה</h3>
+    <div class="field"><label>מה צריך לקרות</label><input type="text" id="naText" value="${esc(MATCH.next_action)}" placeholder="למשל: להתקשר לקונה"></div>
+    <div class="field"><label>תאריך יעד</label><input type="date" id="naDate" value="${MATCH.next_action_at ? MATCH.next_action_at.slice(0,10) : ''}"></div>
+    <div class="field"><label>אחראי</label><select id="naOwner">${userOptions(MATCH.next_action_owner)}</select></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="saveNextAction(this)">שמירה</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+async function saveNextAction(btn){
+  bsdSetButtonLoading(btn, true, 'שומר...');
+  try {
+  const text = document.getElementById('naText').value.trim();
+  const date = document.getElementById('naDate').value || null;
+  const owner = document.getElementById('naOwner').value || null;
+  const { error } = await window.supabaseClient.from('matches').update({
+    next_action: text || null, next_action_at: date, next_action_owner: owner
+  }).eq('id', MATCH_ID);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  await logAudit('set_next_action', { next_action: text, next_action_at: date, next_action_owner: owner });
+  toast('פעולה הבאה עודכנה');
+  closeModal();
+  await loadEverything();
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
+}
+
+// ---------- הערות (record_notes) ----------
+function openNoteModal(){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>הוספת הערה</h3>
+    <div class="field"><textarea id="noteText" placeholder="הערה חופשית..."></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="saveNote(this)">שמירה</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+async function saveNote(btn){
+  const text = document.getElementById('noteText').value.trim();
+  if (!text){ toast('יש להזין טקסט'); return; }
+  bsdSetButtonLoading(btn, true, 'שומר...');
+  try {
+  const { error } = await window.supabaseClient.from('record_notes').insert({
+    table_name: 'matches', record_id: MATCH_ID, note_text: text, author_id: CURRENT_PROFILE.id
+  });
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  await window.supabaseClient.from('matches').update({ last_action: 'נוספה הערה', last_action_at: new Date().toISOString() }).eq('id', MATCH_ID);
+  await logAudit('add_note', { preview: text.slice(0,80) });
+  toast('ההערה נשמרה');
+  closeModal();
+  await loadEverything();
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
+}
+async function loadNotes(){
+  const { data, error } = await window.supabaseClient.from('record_notes').select('*').eq('table_name','matches').eq('record_id', MATCH_ID).order('created_at', {ascending:false});
+  const box = document.getElementById('notesBox');
+  if (error){ box.innerHTML = `<div class="empty-note">שגיאה בטעינת הערות: ${esc(error.message)}</div>`; return; }
+  if (!data || data.length === 0){ box.innerHTML = '<div class="empty-note">אין הערות עדיין</div>'; return; }
+  box.innerHTML = data.map(n=>`
+    <div class="note-item">
+      <div class="nmeta">${esc(userName(n.author_id))} · ${fmtDateTime(n.created_at)}</div>
+      <div>${esc(n.note_text)}</div>
+    </div>`).join('');
+}
+
+// ---------- משימות ----------
+function openTaskModal(){
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>הוספת משימה</h3>
+    <div class="field"><label>כותרת</label><input type="text" id="tTitle"></div>
+    <div class="field"><label>תיאור</label><textarea id="tDesc"></textarea></div>
+    <div class="field"><label>אחראי</label><select id="tAssignee">${userOptions(CURRENT_PROFILE.id)}</select></div>
+    <div class="field"><label>תאריך יעד</label><input type="date" id="tDue"></div>
+    <div class="field"><label>עדיפות</label><select id="tPriority"><option value="רגילה">רגילה</option><option value="גבוהה">גבוהה</option><option value="דחופה">דחופה</option></select></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-primary" onclick="saveTask(this)">שמירה</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+async function saveTask(btn){
+  const title = document.getElementById('tTitle').value.trim();
+  if (!title){ toast('יש להזין כותרת'); return; }
+  bsdSetButtonLoading(btn, true, 'שומר...');
+  try {
+  const payload = {
+    title, description: document.getElementById('tDesc').value || null,
+    assigned_to: document.getElementById('tAssignee').value || null,
+    due_date: document.getElementById('tDue').value || null,
+    priority: document.getElementById('tPriority').value, status: 'פתוחה',
+    match_id: MATCH_ID, business_id: MATCH.business_id, buyer_id: MATCH.buyer_id, source: 'manual'
+  };
+  const { error } = await window.supabaseClient.from('tasks').insert(payload);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  await logAudit('add_task', { title });
+  toast('המשימה נוספה');
+  closeModal();
+  await loadEverything();
+  } finally {
+    bsdSetButtonLoading(btn, false);
+  }
+}
+async function loadTasks(){
+  const { data, error } = await window.supabaseClient.from('tasks').select('*').eq('match_id', MATCH_ID).order('due_date', {ascending:true});
+  const box = document.getElementById('tasksBox');
+  if (error){ box.innerHTML = `<div class="empty-note">משימות עדיין לא זמינות עבור התאמות (יש להריץ Migration) — ${esc(error.message)}</div>`; return; }
+  if (!data || data.length === 0){ box.innerHTML = '<div class="empty-note">אין משימות משויכות</div>'; return; }
+  window._lastTasks = data;
+  box.innerHTML = data.map(t=>`
+    <div class="task-item ${t.status==='הושלמה'?'done':''}">
+      <input type="checkbox" ${t.status==='הושלמה'?'checked':''} onchange="onTaskCheckboxChange('${t.id}', this.checked)">
+      <div style="flex:1;">
+        <div>${esc(t.title)} ${t.status==='הושלמה'?'<span style="color:#2fae7a;font-weight:700;">✔ בוצעה</span>':'<span style="color:#c0392b;font-weight:700;">○ פתוחה</span>'}</div>
+        <div class="tmeta">${esc(userName(t.assigned_to))} · יעד: ${fmtDate(t.due_date)} · ${esc(t.priority||'')} ${t.source==='ai_meeting' ? '<span class="badge" style="background:#eef2fb;color:#3a5cad;font-size:.7rem;padding:1px 8px;border-radius:10px;margin-inline-start:6px;">🎙️ מהקלטה</span>' : ''}</div>
+        <div class="tmeta" style="color:#a9afc0;">נוצרה: ${fmtDate(t.created_at)}${t.updated_at && t.updated_at !== t.created_at ? ' · עודכנה: ' + fmtDate(t.updated_at) : ''}</div>
+        ${t.completion_note ? `<div class="tmeta" style="color:#2fae7a;margin-top:2px;">📝 ${esc(t.completion_note)}</div>` : ''}
+      </div>
+    </div>`).join('');
+}
+function onTaskCheckboxChange(id, done){
+  if (done) openTaskCompleteModal(id);
+  else toggleTask(id, false, null);
+}
+function openTaskCompleteModal(id){
+  const t = (window._lastTasks||[]).find(x=>x.id===id);
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>✔ סימון משימה כבוצעה</h3>
+    <div style="font-weight:700;color:var(--navy);margin-bottom:12px;">${esc(t?.title||'')}</div>
+    <div class="field"><label>הערה (אופציונלי)</label><textarea id="taskCompleteNote" placeholder="מה נעשה בפועל..."></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal();loadTasks();">ביטול</button>
+      <button class="btn btn-primary" onclick="confirmTaskComplete('${id}')">סמן כבוצעה</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+async function confirmTaskComplete(id){
+  const note = document.getElementById('taskCompleteNote').value.trim() || null;
+  await toggleTask(id, true, note);
+  closeModal();
+}
+async function toggleTask(id, done, note){
+  await window.supabaseClient.from('tasks').update({
+    status: done ? 'הושלמה' : 'פתוחה',
+    completed_at: done ? new Date().toISOString() : null,
+    completion_note: done ? note : null
+  }).eq('id', id);
+  await loadTasks();
+}
+
+// ---------- Timeline ----------
+async function loadTimeline(){
+  const [{data:hist}, {data:audit}] = await Promise.all([
+    window.supabaseClient.from('match_status_history').select('*').eq('match_id', MATCH_ID),
+    window.supabaseClient.from('audit_log').select('*').eq('table_name','matches').eq('record_id', MATCH_ID)
+  ]);
+  const events = [];
+  (hist||[]).forEach(h=>events.push({ at: h.changed_at, who: h.changed_by, text: `סטטוס שונה ל"${h.status}"` }));
+  (audit||[]).forEach(a=>{
+    if (a.action === 'status_change') return; // כבר מוצג מ-match_status_history
+    let text = a.action;
+    if (a.action === 'add_note') text = 'נוספה הערה';
+    if (a.action === 'add_task') text = `נוספה משימה: ${a.details?.title||''}`;
+    if (a.action === 'set_next_action') text = `נקבעה פעולה הבאה: ${a.details?.next_action||''}`;
+    if (a.action === 'add_meeting' || a.action === 'edit_meeting') text = `${a.action==='add_meeting'?'תועדה':'עודכנה'} ${a.details?.type||'פגישה'}`;
+    if (a.action === 'disclosure_change') text = `רמת חשיפה שונתה ל${a.details?.to}`;
+    if (a.action === 'send_email') text = 'נשלח מייל';
+    if (a.action === 'send_whatsapp') text = 'נשלחה הודעת וואטסאפ';
+    if (a.action === 'send_whatsapp_checkin') text = `נשלח עדכון מהיר לקונה: "${(a.details?.message||'').slice(0,80)}${(a.details?.message||'').length>80?'...':''}"`;
+    events.push({ at: a.occurred_at, who: a.actor_id, text });
+  });
+  events.sort((a,b)=> new Date(b.at) - new Date(a.at));
+  const box = document.getElementById('timelineBox');
+  if (events.length === 0){ box.innerHTML = '<div class="empty-note">אין עדיין היסטוריה</div>'; return; }
+  box.innerHTML = events.map(e=>`
+    <div class="tl-item">
+      <div>${esc(e.text)} <span style="color:#8a93ab;">· ${esc(userName(e.who))}</span></div>
+      <div class="tl-date">${fmtDateTime(e.at)}</div>
+    </div>`).join('');
+}
+
+// ---------- מחיקה ----------
+async function deleteMatchConfirm(){
+  if (!confirm('למחוק את ההתאמה הזו? הפעולה אינה הפיכה.')) return;
+  await logAudit('delete', { status: MATCH.status });
+  const { error } = await window.supabaseClient.from('matches').delete().eq('id', MATCH_ID);
+  if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
+  toast('ההתאמה נמחקה');
+  setTimeout(()=>{ location.href = 'matches-workspace.html'; }, 900);
+}
+
+(async function init(){
+  CURRENT_PROFILE = await requireAuth();
+  if (!CURRENT_PROFILE) return;
+  const params = new URLSearchParams(location.search);
+  MATCH_ID = params.get('id');
+  if (!MATCH_ID){ document.getElementById('heroBox').innerHTML = '<div style="color:#a02c1d;">לא צוין מזהה התאמה.</div>'; return; }
+  document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+  await loadEverything();
+})();
+</script>
+</body>
+</html>
