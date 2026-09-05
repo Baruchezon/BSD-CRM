@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609021230';
+    var PAGE_BUILD = '202609021230p1';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -131,6 +131,10 @@
 </style>
 </head>
 <body>
+<div style="position:sticky;top:0;z-index:9999;background:#b3402c;color:#fff;text-align:center;padding:6px 10px;font-size:.85rem;font-weight:700;">
+  🔧 גרסת תצוגה מקדימה — העלאת הסכם חתום ידנית (05.09.2026). זה לא האתר החי, אבל מחובר לאותו מסד נתונים אמיתי (שמירה כאן נשמרת בפועל)
+</div>
+
 
 <div class="bsd-header">
   <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span id="bsdVerLabel" style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה</span><script>(function(){var e=document.getElementById('bsdVerLabel');var b=window.PAGE_BUILD;if(e&&b&&b.length>=12){e.textContent='גרסה '+b.slice(6,8)+'.'+b.slice(4,6)+'.'+b.slice(0,4)+' '+b.slice(8,10)+':'+b.slice(10,12);}})();</script></div></a>
