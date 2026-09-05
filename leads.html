@@ -916,7 +916,7 @@ async function downloadAgreementPdf(tableName, recordId){
 function manualAgreementUploadWidget(tableName, recordId){
   if (!tableName || !recordId) return '';
   if (typeof canSendAgreement === 'function' && !canSendAgreement()) return '';
-  return `<div class="agr-note" style="margin-bottom:6px;">
+  return `<div class="agr-note agr-upload-row" style="margin-bottom:6px;">
     <input type="file" id="agrManualUploadInput" accept="application/pdf" style="display:none;" onchange="handleManualAgreementFile(event,'${tableName}','${recordId}')">
     <button type="button" class="btn btn-ghost" onclick="triggerManualAgreementUpload()" style="font-weight:700;">📤 העלאת הסכם חתום</button>
     <span id="agrManualUploadStatus" style="margin-inline-start:8px;font-size:.78rem;color:#665;"></span>
