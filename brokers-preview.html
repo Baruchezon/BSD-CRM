@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<script>
+(function(){
+  try{
+    var PAGE_BUILD = '202609032430p1';
+    window.PAGE_BUILD = PAGE_BUILD;
+    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - מתווכים / סוכנים</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=202608251709">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
+  .nav{display:flex;gap:6px;flex-wrap:wrap;}
+  .nav a{color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;}
+  .nav a.active{background:rgba(255,255,255,.12);color:#fff;font-weight:700;}
+  .nav a:hover{color:#fff;}
+
+  .back-bar{margin-bottom:14px;}
+  .back-bar a{display:inline-flex;align-items:center;gap:6px;color:var(--navy);text-decoration:none;font-size:.85rem;font-weight:700;border:1px solid #d8d3c4;border-radius:8px;padding:7px 14px;background:#fff;}
+  .back-bar a:hover{background:#f7f5ee;}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+  .toolbar h2{margin:0;color:var(--navy);font-size:1.3rem;}
+  .add-btns{display:flex;gap:8px;}
+  .btn{border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-size:.85rem;cursor:pointer;font-weight:700;}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-broker{background:#7a3fd1;color:#fff;}
+  .btn-danger{background:var(--danger);color:#fff;}
+  .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);}
+
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .filters input, .filters select{padding:9px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .filters input[type=text]{min-width:220px;}
+
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 8px 20px rgba(14,27,52,.10), 0 2px 6px rgba(14,27,52,.06);}
+  thead th{background:var(--navy);color:#fff;padding:12px 14px;font-size:.8rem;text-align:right;white-space:nowrap;}
+  tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
+  tbody tr:hover{background:#faf8f2;}
+  tbody tr.row-signed{background:#16a34a !important;border-right:10px solid #0b5e29;}
+  tbody tr.row-signed td{color:#fff !important;font-weight:700;}
+  tbody tr.row-signed:hover{background:#128a3e !important;}
+  tbody tr.row-sent{background:#fdeaea !important;border-right:10px solid #e08a80;}
+  tbody tr.row-sent td{color:#8a2c1f !important;font-weight:600;}
+  tbody tr.row-sent:hover{background:#fbdada !important;}
+  .row-menu-btn{border:1.5px solid #d8d3c4;background:#f7f5ee;color:#333;cursor:pointer;font-size:1.1rem;font-weight:700;padding:2px 8px;border-radius:8px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+  .row-menu-btn:hover{background:#eee8d8;}
+  .row-actions-menu{display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;}
+  .row-actions-menu a{display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);}
+  .row-actions-menu a:first-child{border-top:none;}
+  .proportional-table{table-layout:fixed;min-width:1050px;}
+  .proportional-table th, .proportional-table td{overflow-wrap:break-word;}
+  @media (max-width: 700px){ .proportional-table{table-layout:auto;min-width:0;} }
+  .empty-row td{text-align:center;color:#999;padding:30px;}
+  .primary-name{font-weight:700;color:var(--navy);}
+  .looking-cell{white-space:normal;word-break:break-word;max-width:320px;line-height:1.4;color:#555;}
+
+  /* Badge - "מתווך / סוכן": בולט ועקבי, זהה לכל מקום אחר שבו יופיע המתווך במערכת */
+  .broker-badge{display:inline-flex;align-items:center;gap:4px;background:#7a3fd1;color:#fff;font-weight:800;font-size:.7rem;padding:3px 10px;border-radius:12px;letter-spacing:.2px;white-space:nowrap;}
+  .agr-badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;white-space:nowrap;}
+  .agr-note{background:#f7f8fb;border:1px solid #e2e5ec;border-radius:8px;padding:9px 12px;font-size:.82rem;color:#33415c;}
+  .agr-note a{color:#1B2A4A;font-weight:700;text-decoration:underline;cursor:pointer;}
+  .agr-none{background:#f1f1f1;color:#777;}
+  .agr-sent{background:#fdeccb;color:#8a5a10;}
+  .agr-signed{background:#dff0e4;color:#245c40;}
+  .status-active{background:#dff0e4;color:#245c40;padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
+  .status-blocked{background:#fdeceb;color:#8a2c1f;padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
+
+  .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
+  .overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:14px;max-width:640px;width:100%;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  .modal h3{margin:0 0 18px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;display:flex;align-items:center;gap:10px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .form-grid .full{grid-column:1/3;}
+  .field label{display:block;font-size:.78rem;color:#666;margin-bottom:4px;}
+  .field input, .field select, .field textarea{width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .field textarea{resize:vertical;min-height:60px;}
+  .section-h{grid-column:1/3;font-size:.8rem;font-weight:700;color:var(--gold);margin:10px 0 -4px;text-transform:uppercase;letter-spacing:.5px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+  .doc-log-row{display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-bottom:1px solid #f0ede4;font-size:.8rem;}
+  .doc-log-row:last-child{border-bottom:none;}
+  @media (max-width:640px){
+    .overlay{padding:0;align-items:stretch;}
+    .modal{max-width:100%;width:100%;min-height:100%;border-radius:0;padding:16px 14px 100px;}
+    .modal h3{margin:0 0 8px;font-size:1.1rem;}
+    .form-grid{gap:8px;}
+    .section-h{margin:6px 0 -2px;}
+    .modal-actions{position:fixed;bottom:0;right:0;left:0;background:#fff;padding:12px 16px;box-shadow:0 -4px 16px rgba(0,0,0,.12);margin-top:0;z-index:5;}
+  }
+</style>
+</head>
+<body>
+<div style="position:sticky;top:0;z-index:9999;background:#b3402c;color:#fff;text-align:center;padding:6px 10px;font-size:.85rem;font-weight:700;">
+  🔧 גרסת תצוגה מקדימה — העלאת הסכם חתום ידנית (05.09.2026). זה לא האתר החי, אבל מחובר לאותו מסד נתונים אמיתי (שמירה כאן נשמרת בפועל)
+</div>
+
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span id="bsdVerLabel" style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה</span><script>(function(){var e=document.getElementById('bsdVerLabel');var b=window.PAGE_BUILD;if(e&&b&&b.length>=12){e.textContent='גרסה '+b.slice(6,8)+'.'+b.slice(4,6)+'.'+b.slice(0,4)+' '+b.slice(8,10)+':'+b.slice(10,12);}})();</script></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+  <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
+  <div class="nav">
+    <a href="app.html">לוח בקרה</a>
+    <a href="leads-hub.html">לידים</a>
+    <a href="businesses.html">עסקים למכירה</a>
+    <a href="leads.html">קונים ומשקיעים</a>
+    <a href="brokers.html" class="active">🧑‍💼 מתווכים / סוכנים</a>
+  </div>
+  <div class="nav">
+    <a href="tasks.html">✅ משימות</a>
+    <a href="matches-workspace.html">📁 מרכז ההתאמות</a>
+    <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+  </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="back-bar" id="backBar" style="display:none;"></div>
+
+  <div id="noAccessBox" style="display:none;background:#fdeceb;border:1px solid #e08a80;border-radius:10px;padding:16px;color:#8a2c1f;font-size:.9rem;"></div>
+
+  <div id="brokersModuleBox" style="display:none;">
+    <div class="toolbar">
+      <h2>🧑‍💼 מתווכים / סוכנים</h2>
+      <div class="add-btns">
+        <button type="button" class="btn btn-primary" id="viewActiveBtn" onclick="setViewMode('active')">📋 פעילים</button>
+        <button type="button" class="btn btn-ghost" id="viewArchiveBtn" onclick="setViewMode('archive')">📁 ארכיון</button>
+        <button type="button" class="btn btn-broker" id="newBrokerBtn" onclick="openBrokerForm(null)">+ מתווך חדש</button>
+        <a href="broker-reports.html" id="brokerReportsLink" class="btn btn-ghost" style="display:none;text-decoration:none;">📊 דוח פעילות</a>
+      </div>
+    </div>
+
+    <div class="filters">
+      <input type="text" id="fSearch" placeholder="חיפוש לפי שם, טלפון, אימייל, עיר, &quot;מה מחפש&quot;...">
+      <select id="fStatus">
+        <option value="all">כל הסטטוסים</option>
+        <option value="פעיל">פעיל</option>
+        <option value="חסום">חסום</option>
+      </select>
+      <select id="fAgreement">
+        <option value="all">כל סטטוסי ההסכם</option>
+        <option value="אין הסכם">אין הסכם</option>
+        <option value="נשלח הסכם לחתימה">נשלח הסכם לחתימה</option>
+        <option value="יש הסכם חתום">יש הסכם חתום</option>
+      </select>
+      <select id="fActivity">
+        <option value="all">כל המתווכים</option>
+        <option value="with">קיבלו עסקים</option>
+        <option value="without">עדיין לא קיבלו עסקים</option>
+      </select>
+    </div>
+
+    <div class="table-scroll-wrap" style="position:relative;">
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+    <table class="proportional-table">
+      <colgroup>
+        <col style="width:16%;"><col style="width:11%;"><col style="width:14%;"><col style="width:9%;">
+        <col style="width:25%;"><col style="width:9%;"><col style="width:9%;"><col style="width:7%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>שם</th><th>טלפון</th><th>אימייל</th><th>עיר</th><th>מה מחפש</th><th>סטטוס הסכם</th><th>סטטוס</th><th>עסקים שהועברו</th>
+        </tr>
+      </thead>
+      <tbody id="brokersBody">
+        <tr class="empty-row"><td colspan="8">טוען...</td></tr>
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
+<div id="toastBox"></div>
+
+<script src="js/config.js?v=202608111530"></script>
+<script src="js/supabaseClient.js?v=202608111530"></script>
+<script src="js/auth.js?v=202608251709"></script>
+<script src="js/permissions.js?v=202608251709"></script>
+<script>
+let ALL_BROKERS = [];
+let ARCHIVED_BROKERS = [];
+let ALL_USERS = [];
+let CURRENT_PROFILE = null;
+let DOC_COUNT_BY_BROKER = {};   // broker_id -> מספר שליחות בפועל (broker_document_log)
+let MATCH_COUNT_BY_BROKER = {}; // broker_id -> מספר התאמות (עסקים שהוא צד בהם)
+let REFERRED_BIZ_COUNT_BY_BROKER = {}; // broker_id -> מספר עסקים שהוא הביא/הפנה ל-BSD
+let VIEW_MODE = 'active';
+
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
+function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
+function toast(msg){
+  let box = document.getElementById('toastBox');
+  if (!box){
+    box = document.createElement('div');
+    box.id = 'toastBox';
+    box.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:200;display:flex;flex-direction:column;gap:8px;max-width:380px;';
+    document.body.appendChild(box);
+  }
+  const isError = /שגיאה|error/i.test(msg);
+  const el = document.createElement('div');
+  el.style.cssText = `background:${isError ? '#b00020' : 'var(--navy,#0e1b34)'};color:#fff;padding:14px 18px;border-radius:10px;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.35);display:flex;align-items:flex-start;gap:10px;line-height:1.5;`;
+  const textSpan = document.createElement('span');
+  textSpan.style.flex = '1';
+  textSpan.textContent = msg;
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '×';
+  closeBtn.style.cssText = 'background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;line-height:1;padding:0;';
+  closeBtn.onclick = () => el.remove();
+  el.appendChild(textSpan);
+  el.appendChild(closeBtn);
+  box.appendChild(el);
+  setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
+}
+
+// --- כפתור חזרה: קורא ?from= בדיוק כמו הדפוס הקיים ב-leads-hub/leads/businesses ---
+function renderBackBar(){
+  const params = new URLSearchParams(location.search);
+  const from = params.get('from');
+  const backBar = document.getElementById('backBar');
+  if (!from){ backBar.style.display = 'none'; return; }
+  const map = { 'leads-hub': 'leads-hub.html', 'app': 'app.html', 'businesses': 'businesses.html', 'leads': 'leads.html', 'matches-workspace': 'matches-workspace.html' };
+  const target = map[from] || 'app.html';
+  backBar.innerHTML = `<a href="${esc(target)}">← חזרה</a>`;
+  backBar.style.display = 'block';
+}
+
+// --- הרשאות (מראה בדיוק את מדיניות ה-RLS בסופאבייס, כך שהממשק לא "מבטיח" יותר ממה שהשרת יאפשר בפועל) ---
+function isBrokerViewer(){
+  return !!CURRENT_PROFILE && ['admin','manager','agent_authorized'].includes(CURRENT_PROFILE.role);
+}
+function canEditBroker(b){
+  if (!CURRENT_PROFILE) return false;
+  if (['admin','manager'].includes(CURRENT_PROFILE.role)) return true;
+  if (!b) return isBrokerViewer(); // יצירת מתווך חדש
+  return b.created_by === CURRENT_PROFILE.id || b.handled_by === CURRENT_PROFILE.id;
+}
+function canDeleteBroker(){
+  return !!CURRENT_PROFILE && ['admin','manager'].includes(CURRENT_PROFILE.role);
+}
+
+function brokerBadge(){
+  return `<span class="broker-badge">🔵 מתווך / סוכן</span>`;
+}
+function agreementBadgeHtml(status){
+  const s = status || 'אין הסכם';
+  const cls = s === 'יש הסכם חתום' ? 'agr-signed' : s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none';
+  return `<span class="agr-badge ${cls}">${esc(s)}</span>`;
+}
+function statusBadgeHtml(status){
+  return status === 'חסום' ? `<span class="status-blocked">🚫 חסום</span>` : `<span class="status-active">✅ פעיל</span>`;
+}
+
+/* ─────────── הסכם התקשרות עם מתווך (משתמש באותו מנגנון הסכמים קיים כמו לידים/עסקים) ─────────── */
+let DEFAULT_REFERRAL_PCT = 20, DEFAULT_FULL_PCT = 50;
+async function loadAgreementDefaults(){
+  const { data, error } = await window.supabaseClient.from('settings').select('extra').eq('id', 1).single();
+  if (!error && data?.extra){
+    if (data.extra.broker_referral_pct_default != null) DEFAULT_REFERRAL_PCT = data.extra.broker_referral_pct_default;
+    if (data.extra.broker_full_handling_pct_default != null) DEFAULT_FULL_PCT = data.extra.broker_full_handling_pct_default;
+  }
+}
+
+async function _agreementSignedUrl(tableName, recordId, download){
+  const path = `agreements/${tableName}/${recordId}.pdf`;
+  const opts = download ? { download: true } : {};
+  const { data, error } = await window.supabaseClient.storage
+    .from(window.BSD_CONFIG.STORAGE_BUCKET).createSignedUrl(path, 300, opts);
+  if (error || !data){ toast('שגיאה בפתיחת ההסכם: ' + (error?.message || '')); return null; }
+  return data.signedUrl;
+}
+async function viewAgreementPdf(tableName, recordId){
+  const win = window.open('', '_blank');
+  const url = await _agreementSignedUrl(tableName, recordId, false);
+  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
+}
+async function downloadAgreementPdf(tableName, recordId){
+  const win = window.open('', '_blank');
+  const url = await _agreementSignedUrl(tableName, recordId, true);
+  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
+}
+
+/* ─────────── העלאה ידנית של הסכם חתום מחוץ למערכת (05.09.2026) ───────────
+   הרחבה בטוחה של המנגנון הקיים בלבד - ר' הערה מקבילה ב-businesses.html. */
+function manualAgreementUploadWidget(tableName, recordId, canManage){
+  if (!tableName || !recordId || !canManage) return '';
+  return `<div class="agr-note" style="margin-bottom:6px;">
+    <input type="file" id="agrManualUploadInput" accept="application/pdf" style="display:none;" onchange="handleManualAgreementFile(event,'${tableName}','${recordId}')">
+    <button type="button" class="btn btn-ghost" onclick="triggerManualAgreementUpload()" style="font-weight:700;">📤 העלאת הסכם חתום</button>
+    <span id="agrManualUploadStatus" style="margin-inline-start:8px;font-size:.78rem;color:#665;"></span>
+  </div>`;
+}
+function triggerManualAgreementUpload(){
+  const input = document.getElementById('agrManualUploadInput');
+  if (input) input.click();
+}
+async function handleManualAgreementFile(event, tableName, recordId){
+  const input = event.target;
+  const statusEl = document.getElementById('agrManualUploadStatus');
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)){
+    toast('ניתן להעלות קובץ PDF בלבד');
+    input.value = '';
+    return;
+  }
+  if (file.size > 20 * 1024 * 1024){
+    toast('הקובץ גדול מדי (מקסימום 20MB)');
+    input.value = '';
+    return;
+  }
+  if (statusEl) statusEl.textContent = 'מעלה...';
+  const path = `agreements/${tableName}/${recordId}.pdf`;
+  const { error: upErr } = await bsdUploadFile(window.BSD_CONFIG.STORAGE_BUCKET, path, file, {
+    contentType: 'application/pdf',
+    upsert: true,
+    onProgress: pct => { if (statusEl) statusEl.textContent = `מעלה... ${pct}%`; }
+  });
+  if (upErr){
+    toast('שגיאה בהעלאת הקובץ: ' + upErr.message);
+    if (statusEl) statusEl.textContent = '';
+    input.value = '';
+    return;
+  }
+  const { error: rpcErr } = await window.supabaseClient.rpc('save_manual_signed_agreement', {
+    p_table_name: tableName,
+    p_record_id: recordId,
+    p_path: path,
+    p_uploaded_by: CURRENT_PROFILE.id
+  });
+  if (rpcErr){
+    toast('הקובץ הועלה אך השיוך לכרטיס נכשל: ' + rpcErr.message);
+    if (statusEl) statusEl.textContent = '';
+    input.value = '';
+    return;
+  }
+  toast('ההסכם החתום נשמר ושויך לכרטיס');
+  input.value = '';
+  await manualAgreementRefreshAfterUpload(tableName, recordId);
+}
+async function manualAgreementRefreshAfterUpload(tableName, recordId){
+  if (tableName === 'brokers'){ await loadBrokers(); openBrokerForm(recordId); }
+}
+
+function brokerAgreementBanner(b){
+  if (!b) return '';
+  const s = b.agreement_status || 'אין הסכם';
+  const icon = s === 'יש הסכם חתום' ? '✅' : (s === 'נשלח הסכם לחתימה' ? '📤' : '⭕');
+  const numPart = (s === 'יש הסכם חתום' && b.agreement_number) ? ` &nbsp;·&nbsp; מס' הסכם: ${esc(b.agreement_number)}` : '';
+  const commType = b.commission_type || (b.full_handling_pct != null ? 'טיפול מלא' : (b.referral_pct != null ? 'הפניה' : null));
+  const commPct = commType === 'טיפול מלא' ? b.full_handling_pct : b.referral_pct;
+  const pctPart = commType ? ` &nbsp;·&nbsp; ${esc(commType)} ${commPct}%` : '';
+  let html = manualAgreementUploadWidget('brokers', b.id, canEditBroker(b));
+  html += `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(s)}${numPart}${pctPart}</div>`;
+  const uploadedByPart = b.agreement_pdf_uploaded_by ? ` &nbsp;·&nbsp; הועלה ע"י ${esc(userName(b.agreement_pdf_uploaded_by))}` : '';
+  if (b.agreement_pdf_path){
+    html += `<div class="agr-note" style="margin-top:6px;">
+       📄 הסכם התקשרות חתום ${b.agreement_pdf_uploaded_at ? `&nbsp;·&nbsp; הועלה ${fmtDate(b.agreement_pdf_uploaded_at)}` : ''}${uploadedByPart}
+       &nbsp;·&nbsp;
+       <a href="javascript:void(0)" onclick="viewAgreementPdf('brokers','${b.id}')">צפייה</a>
+       &nbsp;·&nbsp;
+       <a href="javascript:void(0)" onclick="downloadAgreementPdf('brokers','${b.id}')">הורדה</a>
+     </div>`;
+  } else if (s === 'יש הסכם חתום'){
+    html += `<div class="agr-note" style="margin-top:6px;color:#8a6d1f;">⚠️ מסומן כחתום, אך קובץ ה-PDF החתום עדיין לא נשמר במערכת</div>`;
+  }
+  return html;
+}
+
+async function sendAgreementForBroker(id){
+  const b = ALL_BROKERS.find(x => x.id === id) || ARCHIVED_BROKERS.find(x => x.id === id);
+  if (!b){ toast('מתווך לא נמצא'); return; }
+  await loadAgreementDefaults();
+  // ללא שאלות כאן - סוג ההתקשרות והאחוז נקבעים במקום אחד בלבד, בממשק הכנת ההסכם עצמו
+  // (bsd-admin-prep.html), שכותב אותם בחזרה לכרטיס המתווך ברגע יצירת הקישור
+  const existingType = b.commission_type || (b.full_handling_pct != null && b.referral_pct == null ? 'טיפול מלא' : 'הפניה');
+  const existingPct = existingType === 'טיפול מלא' ? (b.full_handling_pct ?? DEFAULT_FULL_PCT) : (b.referral_pct ?? DEFAULT_REFERRAL_PCT);
+
+  const params = new URLSearchParams({
+    type: 'broker',
+    brokerId: id,
+    name: b.full_name || `${b.first_name} ${b.last_name}`,
+    phone: b.phone || '',
+    commissionType: existingType,
+    pct: String(existingPct)
+  });
+  window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
+  toast('נפתח ממשק הכנת ההסכם - קבע שם את סוג ההתקשרות והאחוז ולחץ "יצירת קישור"');
+}
+
+async function logBrokerAudit(brokerId, actionType, oldValue, newValue, details){
+  try{
+    await window.supabaseClient.from('broker_audit_log').insert({
+      broker_id: brokerId, action_type: actionType, actor_id: CURRENT_PROFILE.id,
+      old_value: oldValue || null, new_value: newValue || null, details: details || null
+    });
+  }catch(e){ console.error('[logBrokerAudit] שגיאה (לא חוסם את הפעולה עצמה):', e); }
+}
+
+function userName(id){
+  const u = ALL_USERS.find(x=>x.id===id);
+  return u ? (u.full_name || [u.first_name,u.last_name].filter(Boolean).join(' ') || u.email) : '—';
+}
+function userOptions(selected){
+  return ALL_USERS.map(u => `<option value="${u.id}" ${u.id===selected?'selected':''}>${esc(u.full_name || [u.first_name,u.last_name].filter(Boolean).join(' ') || u.email)}</option>`).join('');
+}
+function fieldRow(id,label,value,type='text'){
+  return `<div class="field"><label>${label}</label><input type="${type}" id="${id}" value="${esc(value??'')}"></div>`;
+}
+function textareaRow(id,label,value,minHeight){
+  return `<div class="field full"><label>${label}</label><textarea id="${id}" style="min-height:${minHeight||70}px;">${esc(value??'')}</textarea></div>`;
+}
+
+async function setViewMode(mode){
+  VIEW_MODE = mode;
+  document.getElementById('viewActiveBtn').className = mode==='active' ? 'btn btn-primary' : 'btn btn-ghost';
+  document.getElementById('viewArchiveBtn').className = mode==='archive' ? 'btn btn-primary' : 'btn btn-ghost';
+  if (mode==='archive' && ARCHIVED_BROKERS.length===0){ await loadArchivedBrokers(); }
+  renderTable();
+}
+
+async function loadBrokers(){
+  const { data, error } = await window.supabaseClient
+    .from('brokers').select('*').eq('is_archived', false).order('updated_at', { ascending:false });
+  if (error){ toast('שגיאה בטעינת מתווכים: ' + error.message); return; }
+  ALL_BROKERS = data || [];
+  await Promise.all([loadDocCounts(), loadMatchCounts(), loadReferredBizCounts()]);
+  renderTable();
+}
+async function loadArchivedBrokers(){
+  const { data, error } = await window.supabaseClient
+    .from('brokers').select('*').eq('is_archived', true).order('archived_at', { ascending:false });
+  if (error){ toast('שגיאה בטעינת ארכיון מתווכים: ' + error.message); return; }
+  ARCHIVED_BROKERS = data || [];
+}
+async function loadDocCounts(){
+  DOC_COUNT_BY_BROKER = {};
+  if (!ALL_BROKERS.length) return;
+  const ids = ALL_BROKERS.map(b=>b.id);
+  const { data } = await window.supabaseClient.from('broker_document_log').select('broker_id').in('broker_id', ids);
+  (data||[]).forEach(r => { DOC_COUNT_BY_BROKER[r.broker_id] = (DOC_COUNT_BY_BROKER[r.broker_id]||0)+1; });
+}
+// 03.09.2026 (משוב): מספר התאמות (עסקים) שהמתווך מחובר אליהם - בדיוק כמו
+// matchCountBadge אצל קונים ב-leads.html - כדי לראות במבט אחד ברשימה.
+async function loadMatchCounts(){
+  MATCH_COUNT_BY_BROKER = {};
+  if (!ALL_BROKERS.length) return;
+  const ids = ALL_BROKERS.map(b=>b.id);
+  const { data } = await window.supabaseClient.from('matches').select('broker_id').eq('counterparty_type','broker').in('broker_id', ids);
+  (data||[]).forEach(r => { MATCH_COUNT_BY_BROKER[r.broker_id] = (MATCH_COUNT_BY_BROKER[r.broker_id]||0)+1; });
+}
+// 03.09.2026 (משוב): מספר עסקים שהמתווך *הביא/הפנה* ל-BSD (שדה חדש
+// businesses.referred_by_broker_id) - נפרד לגמרי ממספר ההתאמות/מסמכים
+// שקיבל כנמען. מתווך יכול גם להביא עסק וגם לקבל עסקים כקונה פוטנציאלי.
+async function loadReferredBizCounts(){
+  REFERRED_BIZ_COUNT_BY_BROKER = {};
+  if (!ALL_BROKERS.length) return;
+  const ids = ALL_BROKERS.map(b=>b.id);
+  const { data } = await window.supabaseClient.from('businesses').select('referred_by_broker_id').in('referred_by_broker_id', ids).eq('is_archived', false);
+  (data||[]).forEach(r => { REFERRED_BIZ_COUNT_BY_BROKER[r.referred_by_broker_id] = (REFERRED_BIZ_COUNT_BY_BROKER[r.referred_by_broker_id]||0)+1; });
+}
+
+function renderTable(){
+  const list = VIEW_MODE==='archive' ? ARCHIVED_BROKERS : ALL_BROKERS;
+  const search = (document.getElementById('fSearch').value||'').trim().toLowerCase();
+  const fStatus = document.getElementById('fStatus').value;
+  const fAgreement = document.getElementById('fAgreement').value;
+  const fActivity = document.getElementById('fActivity').value;
+
+  let filtered = list.filter(b => {
+    if (fStatus!=='all' && b.status!==fStatus) return false;
+    if (fAgreement!=='all' && (b.agreement_status||'אין הסכם')!==fAgreement) return false;
+    const docCount = DOC_COUNT_BY_BROKER[b.id]||0;
+    if (fActivity==='with' && docCount===0) return false;
+    if (fActivity==='without' && docCount>0) return false;
+    if (search){
+      const name = (b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ')).toLowerCase();
+      const hay = [name, b.phone, b.email, b.city, b.looking_for].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const body = document.getElementById('brokersBody');
+  if (!filtered.length){
+    body.innerHTML = `<tr class="empty-row"><td colspan="8">${VIEW_MODE==='archive' ? 'אין מתווכים בארכיון' : 'אין מתווכים תואמים'}</td></tr>`;
+    return;
+  }
+  body.innerHTML = filtered.map(b => {
+    const name = b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || '(ללא שם)';
+    const docCount = DOC_COUNT_BY_BROKER[b.id]||0;
+    const agrStatus = b.agreement_status || 'אין הסכם';
+    const rowCls = agrStatus === 'יש הסכם חתום' ? 'row-signed' : (agrStatus === 'נשלח הסכם לחתימה' ? 'row-sent' : '');
+    const canEdit = canEditBroker(b);
+    const canDelete = canDeleteBroker() && !b.is_archived;
+    const canSendAgr = canEdit && agrStatus !== 'יש הסכם חתום';
+    // 03.09.2026 (משוב): תגיות קומפקטיות ליד השם - בדיוק כמו ה"extras" אצל
+    // קונים (ratingBadge/matchCountBadge ב-leads.html) - כדי שאפשר יהיה
+    // לראות במבט אחד, בלי לפתוח את הכרטיס: כמה עסקים/מסמכים כבר הועברו
+    // וסטטוס ההסכם. זה מודול שלנו - אפשר להוסיף כאן יותר ממה שיש לקונים.
+    const matchCount = MATCH_COUNT_BY_BROKER[b.id]||0;
+    const referredCount = REFERRED_BIZ_COUNT_BY_BROKER[b.id]||0;
+    const glanceBadges = `<span style="display:inline-flex;align-items:center;gap:3px;background:#eef1f6;color:var(--navy);font-weight:700;font-size:.68rem;padding:2px 8px;border-radius:10px;white-space:nowrap;">🔗 ${matchCount} התאמות</span>` +
+      `<span style="display:inline-flex;align-items:center;gap:3px;background:#eef1f6;color:var(--navy);font-weight:700;font-size:.68rem;padding:2px 8px;border-radius:10px;white-space:nowrap;">📄 ${docCount} מסמכים</span>` +
+      (referredCount ? `<span style="display:inline-flex;align-items:center;gap:3px;background:#fdf3d8;color:#8a651e;font-weight:700;font-size:.68rem;padding:2px 8px;border-radius:10px;white-space:nowrap;">🏢 הביא ${referredCount} עסקים</span>` : '') +
+      agreementBadgeHtml(b.agreement_status);
+    return `<tr class="${rowCls}" style="cursor:pointer;" onclick="openBrokerForm('${b.id}')">
+      <td data-label="שם">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
+            <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
+            <div class="row-actions-menu bsd-forms-menu">
+              <a href="javascript:void(0)" onclick="openBrokerForm('${b.id}')">${canEdit ? '✏️ ערוך' : '👁️ צפייה'}</a>
+              ${canSendAgr ? `<a href="javascript:void(0)" onclick="sendAgreementForBroker('${b.id}')">📄 שלח הסכם</a>` : ''}
+              ${canDelete ? `<a href="javascript:void(0)" onclick="archiveBroker('${b.id}')" style="color:#ffb4b4;">🗑️ מחק</a>` : ''}
+            </div>
+          </div>
+          <div>
+            <div class="primary-name">${esc(name)}</div>${brokerBadge()}
+            <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;" onclick="event.stopPropagation()">${glanceBadges}</div>
+          </div>
+        </div>
+      </td>
+      <td data-label="טלפון">${esc(b.phone||'—')}</td>
+      <td data-label="אימייל">${esc(b.email||'—')}</td>
+      <td data-label="עיר">${esc(b.city||'—')}</td>
+      <td class="looking-cell" data-label="מה מחפש">${esc(b.looking_for||'—')}</td>
+      <td data-label="סטטוס הסכם">${agreementBadgeHtml(b.agreement_status)}</td>
+      <td data-label="סטטוס">${statusBadgeHtml(b.status)}</td>
+      <td data-label="עסקים שהועברו" style="text-align:center;font-weight:700;">${docCount}</td>
+    </tr>`;
+  }).join('');
+}
+
+// --- כרטיס מתווך (יצירה/עריכה) ---
+function openBrokerForm(id){
+  const b = id ? [...ALL_BROKERS, ...ARCHIVED_BROKERS].find(x=>x.id===id) : null;
+  if (b && !isBrokerViewer()){ toast('אין לך הרשאה לצפות בכרטיס מתווך'); return; }
+  if (!b && !canEditBroker(null)){ toast('אין לך הרשאה ליצור מתווך חדש'); return; }
+  const editable = canEditBroker(b);
+
+  const modal = document.getElementById('modalBox');
+  modal.innerHTML = `
+    <h3>${b ? 'עריכת מתווך' : 'הוספת מתווך'} ${brokerBadge()}</h3>
+    ${b && b.status==='חסום' ? `<div style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#8a2c1f;margin-bottom:10px;">🚫 <b>מתווך חסום</b> — לא ניתן לבחור אותו כנמען חדש לשליחת חומר.</div>` : ''}
+    ${b ? `<div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;">הוזן ע"י: <b>${esc(userName(b.created_by))}</b> בתאריך ${fmtDate(b.created_at)}</div>` : ''}
+    <form id="brokerForm">
+      <div class="form-grid">
+        <div class="field"><label>מטפל כרגע</label><select id="handled_by" ${editable?'':'disabled'}>${userOptions(b?.handled_by)}</select></div>
+        <div class="section-h">פרטי קשר</div>
+        ${fieldRow('first_name','שם פרטי *', b?.first_name)}
+        ${fieldRow('last_name','שם משפחה *', b?.last_name)}
+        ${fieldRow('phone','טלפון *', b?.phone)}
+        ${fieldRow('email','דוא"ל', b?.email, 'email')}
+        ${fieldRow('city','עיר מגורים', b?.city)}
+        ${fieldRow('address','כתובת', b?.address)}
+        <div class="section-h">אודות</div>
+        ${textareaRow('short_note','כמה מילים עליו', b?.short_note, 50)}
+        <div class="field full" style="background:#f7f0ff;border:1px solid #e0cdfa;border-radius:8px;padding:10px 12px;">
+          <label style="font-weight:700;color:#5a2f9e;">🔎 מה המתווך מחפש</label>
+          <textarea id="looking_for" style="min-height:80px;">${esc(b?.looking_for||'')}</textarea>
+        </div>
+        ${textareaRow('notes','הערות חופשיות', b?.notes, 90)}
+        <div class="section-h">הסכם וסטטוס</div>
+        <div class="field"><label>סטטוס הסכם</label>
+          <select id="agreement_status" ${editable?'':'disabled'}>
+            <option value="אין הסכם" ${(!b?.agreement_status || b.agreement_status==='אין הסכם')?'selected':''}>אין הסכם</option>
+            <option value="נשלח הסכם לחתימה" ${b?.agreement_status==='נשלח הסכם לחתימה'?'selected':''}>הסכם נשלח לחתימה</option>
+            <option value="יש הסכם חתום" ${b?.agreement_status==='יש הסכם חתום'?'selected':''}>יש הסכם חתום</option>
+          </select>
+        </div>
+        ${b ? `<div class="field full">${brokerAgreementBanner(b)}
+          ${editable ? `<button type="button" class="btn btn-ghost" style="margin-top:8px;" onclick="sendAgreementForBroker('${b.id}')">📄 הפקת/שליחת הסכם התקשרות למתווך</button>` : ''}
+        </div>` : `<div class="field full" style="color:#888;font-size:.8rem;">ניתן להפיק ולשלוח הסכם התקשרות רק לאחר שמירת המתווך בפעם הראשונה</div>`}
+        <div class="field"><label>סטטוס מתווך</label>
+          <select id="broker_status" ${['admin','manager'].includes(CURRENT_PROFILE?.role) ? '' : 'disabled'}>
+            <option value="פעיל" ${(!b?.status || b.status==='פעיל')?'selected':''}>פעיל</option>
+            <option value="חסום" ${b?.status==='חסום'?'selected':''}>חסום</option>
+          </select>
+        </div>
+        ${b ? `<div class="field full"><label>🏢 עסקים שהמתווך הביא/הפנה ל-BSD</label><div id="brokerReferredBizBox" style="border:1px solid #e5e1d5;border-radius:8px;max-height:180px;overflow-y:auto;">טוען...</div></div>` : ''}
+        ${b ? `<div class="field full"><label>עסקים ומסמכים שהועברו</label><div id="brokerDocLogBox" style="border:1px solid #e5e1d5;border-radius:8px;max-height:220px;overflow-y:auto;">טוען...</div></div>` : ''}
+      </div>
+      <div class="modal-actions">
+        ${(b && canDeleteBroker() && !b.is_archived) ? `<button type="button" class="btn btn-ghost" style="color:#a33;margin-left:auto;" onclick="archiveBroker('${b.id}')">📁 העבר לארכיון</button>` : ''}
+        ${(b && b.is_archived && canDeleteBroker()) ? `<button type="button" class="btn btn-ghost" onclick="restoreBroker('${b.id}')">↩️ שחזר מהארכיון</button>` : ''}
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+        ${editable ? `<button type="button" class="btn btn-primary" onclick="saveBroker('${b?b.id:''}')">שמור</button>` : ''}
+      </div>
+    </form>`;
+  document.getElementById('overlay').classList.add('open');
+  if (b){ loadBrokerDocLog(b.id); loadBrokerReferredBiz(b.id); }
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+
+async function loadBrokerDocLog(brokerId){
+  const box = document.getElementById('brokerDocLogBox');
+  if (!box) return;
+  const { data, error } = await window.supabaseClient
+    .from('broker_document_log')
+    .select('id, business_id, business_number, file_name, document_type, channel, sent_by, sent_at, businesses(internal_name, business_number)')
+    .eq('broker_id', brokerId).order('sent_at', { ascending:false });
+  if (error){ box.innerHTML = `<div style="padding:10px;color:#a33;font-size:.8rem;">שגיאה בטעינת היסטוריה: ${esc(error.message)}</div>`; return; }
+  if (!data || !data.length){ box.innerHTML = `<div style="padding:14px;color:#999;font-size:.8rem;text-align:center;">אין עדיין עסקים או מסמכים שהועברו למתווך זה</div>`; return; }
+  box.innerHTML = data.map(r => {
+    const bizName = r.businesses?.internal_name || '—';
+    const bizNum = r.businesses?.business_number || r.business_number || '';
+    const channelLabel = r.channel==='whatsapp' ? '📱 WhatsApp' : '📧 מייל';
+    return `<div class="doc-log-row">
+      <div><b>${esc(bizName)}</b>${bizNum ? ' ('+esc(bizNum)+')' : ''}<br><span style="color:#888;">${esc(r.file_name||r.document_type||'מסמך')}</span></div>
+      <div style="text-align:left;white-space:nowrap;">${channelLabel}<br><span style="color:#888;">${fmtDateTime(r.sent_at)}</span><br><span style="color:#888;">ע"י ${esc(userName(r.sent_by))}</span></div>
+    </div>`;
+  }).join('');
+}
+
+// 03.09.2026 (משוב): עסקים שהמתווך *הביא/הפנה* ל-BSD - קשר הפוך למה
+// שברוקר-דוקיומנט-לוג מתעד (שם: עסקים שהועברו *אל* המתווך כנמען פוטנציאלי).
+// כאן: עסקים חדשים שנפתחו במערכת ומסומנים כ"הגיעו ממתווך זה".
+async function loadBrokerReferredBiz(brokerId){
+  const box = document.getElementById('brokerReferredBizBox');
+  if (!box) return;
+  const { data, error } = await window.supabaseClient
+    .from('businesses')
+    .select('id, internal_name, business_number, status, created_at')
+    .eq('referred_by_broker_id', brokerId).eq('is_archived', false)
+    .order('created_at', { ascending:false });
+  if (error){ box.innerHTML = `<div style="padding:10px;color:#a33;font-size:.8rem;">שגיאה בטעינת עסקים: ${esc(error.message)}</div>`; return; }
+  if (!data || !data.length){ box.innerHTML = `<div style="padding:14px;color:#999;font-size:.8rem;text-align:center;">מתווך זה עדיין לא הביא עסקים ל-BSD</div>`; return; }
+  box.innerHTML = data.map(r => `<div class="doc-log-row">
+    <div><a href="businesses.html?open=${r.id}" style="color:var(--navy);font-weight:700;text-decoration:underline;">${esc(r.internal_name||'—')}</a>${r.business_number ? ' <span style="color:#888;">('+esc(r.business_number)+')</span>' : ''}</div>
+    <div style="text-align:left;white-space:nowrap;color:#888;">${esc(r.status||'—')} · ${fmtDate(r.created_at)}</div>
+  </div>`).join('');
+}
+
+async function saveBroker(id){
+  const first_name = document.getElementById('first_name').value.trim();
+  const last_name = document.getElementById('last_name').value.trim();
+  const phone = document.getElementById('phone').value.trim();
+  if (!first_name || !last_name || !phone){ toast('שגיאה: שם פרטי, שם משפחה וטלפון הם שדות חובה'); return; }
+
+  // אזהרת כפילות (לא חוסמת) - טלפון/אימייל זהים למתווך קיים אחר
+  const email = document.getElementById('email').value.trim();
+  const dup = ALL_BROKERS.find(b => b.id!==id && ((phone && b.phone===phone) || (email && b.email && b.email===email)));
+  if (dup && !confirm(`קיים כבר מתווך עם אותו טלפון/אימייל (${dup.first_name} ${dup.last_name}). להמשיך בכל זאת?`)) return;
+
+  const payload = {
+    first_name, last_name, full_name: `${first_name} ${last_name}`,
+    phone, email: email || null,
+    city: document.getElementById('city').value.trim() || null,
+    address: document.getElementById('address').value.trim() || null,
+    short_note: document.getElementById('short_note').value.trim() || null,
+    looking_for: document.getElementById('looking_for').value.trim() || null,
+    notes: document.getElementById('notes').value.trim() || null,
+    agreement_status: document.getElementById('agreement_status').value,
+    status: document.getElementById('broker_status').value,
+    handled_by: document.getElementById('handled_by').value || null,
+    updated_at: new Date().toISOString()
+  };
+
+  if (id){
+    const before = ALL_BROKERS.find(b=>b.id===id) || ARCHIVED_BROKERS.find(b=>b.id===id);
+    const { error } = await window.supabaseClient.from('brokers').update(payload).eq('id', id);
+    if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+    const changed = {};
+    Object.keys(payload).forEach(k => { if (before && before[k]!==payload[k]) changed[k] = { from: before[k], to: payload[k] }; });
+    await logBrokerAudit(id, 'edited', before, payload, Object.keys(changed).length ? JSON.stringify(changed) : null);
+    toast('המתווך עודכן בהצלחה');
+  } else {
+    payload.created_by = CURRENT_PROFILE.id;
+    const { data, error } = await window.supabaseClient.from('brokers').insert(payload).select().single();
+    if (error){ toast('שגיאה ביצירת מתווך: ' + error.message); return; }
+    await logBrokerAudit(data.id, 'created', null, payload, null);
+    toast('המתווך נוצר בהצלחה');
+  }
+  closeModal();
+  await loadBrokers();
+  if (VIEW_MODE==='archive') await loadArchivedBrokers();
+  renderTable();
+}
+
+async function archiveBroker(id){
+  if (!confirm('להעביר את המתווך הזה לארכיון? היסטוריית ההתאמות, המסמכים וה-Audit Log יישמרו במלואם.')) return;
+  const before = ALL_BROKERS.find(b=>b.id===id);
+  const { error } = await window.supabaseClient.from('brokers').update({
+    is_archived: true, archived_at: new Date().toISOString(), archived_by: CURRENT_PROFILE.id
+  }).eq('id', id);
+  if (error){ toast('שגיאה בהעברה לארכיון: ' + error.message); return; }
+  await logBrokerAudit(id, 'archived', before, null, null);
+  toast('המתווך הועבר לארכיון');
+  closeModal();
+  await loadBrokers();
+  await loadArchivedBrokers();
+  renderTable();
+}
+async function restoreBroker(id){
+  const { error } = await window.supabaseClient.from('brokers').update({
+    is_archived: false, archived_at: null, archived_by: null
+  }).eq('id', id);
+  if (error){ toast('שגיאה בשחזור: ' + error.message); return; }
+  await logBrokerAudit(id, 'restored', null, null, null);
+  toast('המתווך שוחזר מהארכיון');
+  closeModal();
+  await loadBrokers();
+  await loadArchivedBrokers();
+  renderTable();
+}
+
+document.getElementById('fSearch').addEventListener('input', renderTable);
+document.getElementById('fStatus').addEventListener('change', renderTable);
+document.getElementById('fAgreement').addEventListener('change', renderTable);
+document.getElementById('fActivity').addEventListener('change', renderTable);
+document.getElementById('overlay').addEventListener('click', (e) => { if (e.target.id==='overlay') closeModal(); });
+
+(async function init(){
+  CURRENT_PROFILE = await requireAuth();
+  renderBackBar();
+  const headerEl = document.getElementById('headerUserInfo');
+  if (headerEl && CURRENT_PROFILE) headerEl.textContent = CURRENT_PROFILE.full_name || CURRENT_PROFILE.email;
+
+  if (!isBrokerViewer()){
+    document.getElementById('noAccessBox').style.display = 'block';
+    document.getElementById('noAccessBox').textContent = 'אין לך הרשאה לצפות ברשימת המתווכים / סוכנים. פנה למנהל המערכת אם לדעתך זו טעות.';
+    return;
+  }
+  document.getElementById('brokersModuleBox').style.display = 'block';
+  if (!canEditBroker(null)) document.getElementById('newBrokerBtn').style.display = 'none';
+  if (['admin','manager'].includes(CURRENT_PROFILE?.role)) document.getElementById('brokerReportsLink').style.display = 'inline-block';
+
+  const { data: users } = await window.supabaseClient.from('profiles').select('id, full_name, first_name, last_name, email');
+  ALL_USERS = users || [];
+
+  await loadBrokers();
+})();
+</script>
+</body>
+</html>

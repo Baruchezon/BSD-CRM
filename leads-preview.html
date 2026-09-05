@@ -1,0 +1,1779 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<script>
+// בדיקת גרסה אוטומטית - עוקפת בעיות קאשינג של דפדפני מובייל (ראו הסבר ב-match-detail.html)
+(function(){
+  try{
+    // PAGE_BUILD אפוי בתוך הדף עצמו (מתעדכן בכל push) - נבדק תמיד, גם
+    // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
+    // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
+    // לא תפסה בעיה כזו בטעינה ראשונה).
+    var PAGE_BUILD = '202609021230p1';
+    window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
+    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - קונים ומשקיעים</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=202608251709">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
+  .nav{display:flex;gap:6px;}
+  .nav a{color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;}
+  .nav a.active{background:rgba(255,255,255,.12);color:#fff;font-weight:700;}
+  .nav a:hover{color:#fff;}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+  .toolbar h2{margin:0;color:var(--navy);font-size:1.3rem;}
+  .add-btns{display:flex;gap:8px;}
+  .btn{border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-size:.85rem;cursor:pointer;font-weight:700;}
+  .btn-buyer{background:#2b6fc9;color:#fff;}
+  .btn-seller{background:var(--gold);color:#1c2333;}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-danger{background:var(--danger);color:#fff;}
+  .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);}
+
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .filters input, .filters select{padding:9px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .filters input[type=text]{min-width:220px;}
+
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 8px 20px rgba(14,27,52,.10), 0 2px 6px rgba(14,27,52,.06);}
+  thead th{background:var(--navy);color:#fff;padding:12px 14px;font-size:.8rem;text-align:right;cursor:pointer;white-space:nowrap;}
+  thead th:hover{background:var(--navy-light);}
+  tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
+  tbody tr:hover{background:#faf8f2;}
+  .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
+  .badge-buyer{background:#e3edfa;color:#1a4a8f;}
+  .badge-seller{background:#f7ecd4;color:#8a651e;}
+  .badge-partner{background:#ece3fa;color:#5a2f9e;}
+  .agr-badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;white-space:nowrap;}
+  .agr-num{display:inline-block;font-size:.72rem;font-weight:600;color:#555;white-space:nowrap;margin-right:6px;}
+  .agr-none{background:#f1f1f1;color:#777;}
+  .agr-sent{background:#fdeccb;color:#8a5a10;}
+  .agr-signed{background:#dff0e4;color:#245c40;}
+  .agr-note{width:100%;box-sizing:border-box;padding:2px 2px 12px;font-size:.8rem;font-weight:400;color:#8a8578;margin-bottom:4px;text-align:right;}
+  tbody tr.row-signed{background:#16a34a !important;border-right:10px solid #0b5e29;}
+  tbody tr.row-signed td{color:#fff !important;font-weight:700;}
+  tbody tr.row-signed:hover{background:#128a3e !important;}
+  tbody tr.row-sent{background:#ffe9cc !important;border-right:10px solid #e0932e;}
+  tbody tr.row-sent td{color:#7a4a00 !important;font-weight:600;}
+  tbody tr.row-sent:hover{background:#ffdcae !important;}
+  .primary-name{font-weight:700;color:var(--navy);}
+  .sub-name{font-size:.75rem;color:#888;margin-top:2px;}
+  .row-menu-btn{border:1.5px solid #d8d3c4;background:#f7f5ee;color:#333;cursor:pointer;font-size:1.1rem;font-weight:700;padding:2px 8px;border-radius:8px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+  .row-menu-btn:hover{background:#eee8d8;}
+  .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
+  .notes-cell{white-space:normal;word-break:break-word;max-width:420px;line-height:1.4;}
+  .email-cell{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help;}
+  .phone-cell{white-space:nowrap;min-width:100px;}
+  @media (max-width: 700px){ .phone-cell{min-width:0;} }
+  .proportional-table{table-layout:fixed;min-width:1150px;}
+  .proportional-table th, .proportional-table td{overflow-wrap:break-word;}
+  @media (max-width: 700px){ .proportional-table{table-layout:auto;min-width:0;} }
+  .empty-row td{text-align:center;color:#999;padding:30px;}
+
+  .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
+  .overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:14px;max-width:640px;width:100%;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  .modal h3{margin:0 0 18px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .form-grid .full{grid-column:1/3;}
+  .field label{display:block;font-size:.78rem;color:#666;margin-bottom:4px;}
+  .field input, .field select, .field textarea{width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
+  .field textarea{resize:vertical;min-height:60px;}
+  .type-toggle{display:flex;gap:8px;margin-bottom:16px;}
+  .type-toggle button{flex:1;padding:10px;border-radius:8px;border:1px solid #d8d3c4;background:#fff;cursor:pointer;font-family:inherit;font-weight:700;}
+  .type-toggle button.active.buyer{background:#2b6fc9;color:#fff;border-color:#2b6fc9;}
+  .type-toggle button.active.seller{background:var(--gold);color:#1c2333;border-color:var(--gold);}
+  .type-toggle button.active.partner{background:#7a3fd1;color:#fff;border-color:#7a3fd1;}
+  .type-toggle .type-label{flex:1;padding:10px;border-radius:8px;border:1px solid transparent;font-weight:700;text-align:center;cursor:default;}
+  .section-h{grid-column:1/3;font-size:.8rem;font-weight:700;color:var(--gold);margin:10px 0 -4px;text-transform:uppercase;letter-spacing:.5px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+  .toast{position:fixed;bottom:24px;left:24px;background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.3);}
+  /* מסך מובייל: אותה בעיה שכבר תוקנה פעם ב-match-detail.html ולא הופצה לכאן -
+     ה-overlay דוחף 40px padding מלמעלה, וה-.modal לא מנצל את גובה המסך אלא
+     נשאר "מרחף" עם המון ריפוד/מרווח מעליו ומתחתיו. הפתרון הזהה שכבר עובד:
+     במובייל המודאל הופך למסך מלא (בלי padding על ה-overlay, בלי עיגול
+     פינות), וכפתורי שמירה/ביטול מוצמדים לתחתית המסך במקום לצוף איפשהו
+     באמצע אחרי השדות - כך השדות הראשונים (שם פרטי/שם משפחה) עולים מיד
+     לתחילת המסך הנגיש, בלי לגעת בתוכן או בלוגיקה. */
+  @media (max-width:640px){
+    .overlay{padding:0;align-items:stretch;}
+    .modal{max-width:100%;width:100%;min-height:100%;border-radius:0;padding:16px 14px 100px;}
+    .modal h3{margin:0 0 8px;font-size:1.1rem;}
+    .agr-note{padding:2px 2px 4px;margin-bottom:0;}
+    .form-grid{gap:8px;}
+    .section-h{margin:6px 0 -2px;}
+    .modal-actions{position:fixed;bottom:0;right:0;left:0;background:#fff;padding:12px 16px;box-shadow:0 -4px 16px rgba(0,0,0,.12);margin-top:0;z-index:5;}
+  }
+</style>
+</head>
+<body>
+<div style="position:sticky;top:0;z-index:9999;background:#b3402c;color:#fff;text-align:center;padding:6px 10px;font-size:.85rem;font-weight:700;">
+  🔧 גרסת תצוגה מקדימה — העלאת הסכם חתום ידנית (05.09.2026). זה לא האתר החי, אבל מחובר לאותו מסד נתונים אמיתי (שמירה כאן נשמרת בפועל)
+</div>
+
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span id="bsdVerLabel" style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה</span><script>(function(){var e=document.getElementById('bsdVerLabel');var b=window.PAGE_BUILD;if(e&&b&&b.length>=12){e.textContent='גרסה '+b.slice(6,8)+'.'+b.slice(4,6)+'.'+b.slice(0,4)+' '+b.slice(8,10)+':'+b.slice(10,12);}})();</script></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+        <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
+  <div class="nav">
+    <a href="app.html">לוח בקרה</a>
+    <a href="leads-hub.html">לידים</a>
+    <a href="businesses.html">עסקים למכירה</a>
+    <a href="leads.html" class="active">קונים ומשקיעים</a>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">📋 טפסים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a id="navFormsAllLink" href="intake-forms.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">📁 כל הטפסים שהוגשו</a>
+    </div>
+  </div>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">⚙️ הגדרות ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="backup.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">💾 גיבוי נתונים</a>
+      <a href="javascript:void(0)" id="pushBellBtn" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔕 הפעל התראות</a>
+      <a href="help.html" target="_blank" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">❓ עזרה</a>
+      <a href="javascript:void(0)" onclick="openMyProfile()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👤 פרטים אישיים</a>
+      <a href="javascript:void(0)" onclick="openChangePassword()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔑 שנה סיסמה</a>
+    </div>
+  </div>
+  </div>
+  <div class="nav">
+    <a href="tasks.html" class="nav-tasks">✅ משימות</a>
+    <a href="messages.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;position:relative;">💬 הודעות<span id="navMsgBadge" style="display:none;position:absolute;top:2px;left:2px;background:#b3402c;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;font-weight:700;"></span></a>
+    <a href="matches-workspace.html">📁 מרכז ההתאמות</a>
+    <a href="commission-simulator.html" style="color:#c9a24b;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;border:1px solid rgba(201,162,75,.4);">🧮 סימולטור עמלות</a>
+    <div id="navToolsWrap" style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">🛠️ כלים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="recordings.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🎙️ הקלטות</a>
+      <a href="training-admin.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🎓 הכשרות ומתעניינים</a>
+      <a href="messages.html?admin_view=1" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ כל ההודעות במערכת</a>
+      <a href="stats.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 סטטיסטיקה</a>
+      <a href="users.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👥 משתמשים</a>
+      <a href="anon-distributions.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 דוח הפצת אנונימי</a>
+    </div>
+  </div>
+    <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+  </div>
+</div>
+  
+</div>
+
+<div class="wrap">
+  <div class="toolbar">
+    <h2>קונים ומשקיעים</h2>
+    <div class="add-btns">
+      <button type="button" class="btn btn-primary" id="leadViewActiveBtn" onclick="setLeadViewMode('active')">📋 פעילים</button>
+      <button type="button" class="btn btn-ghost" id="leadViewArchiveBtn" onclick="setLeadViewMode('archive')">📁 ארכיון</button>
+      <button class="btn btn-buyer" onclick="openLeadForm(null,'buyer')">+ קונה חדש</button>
+      <button class="btn" style="background:#7a3fd1;color:#fff;" onclick="openLeadForm(null,'partner')">+ שותפות/השקעה</button>
+    </div>
+  </div>
+
+  <div class="lead-type-tabs" style="display:flex;gap:8px;margin-bottom:16px;border-bottom:2px solid #eee6d4;">
+    <button type="button" id="tabBuyerBtn" class="lead-type-tab active" onclick="switchLeadTypeTab('buyer')" style="padding:12px 22px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:.95rem;font-weight:700;color:#8a8578;border-bottom:3px solid var(--gold);margin-bottom:-2px;">🧍 קונים</button>
+    <button type="button" id="tabPartnerBtn" class="lead-type-tab" onclick="switchLeadTypeTab('partner')" style="padding:12px 22px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:.95rem;font-weight:700;color:#8a8578;border-bottom:3px solid transparent;margin-bottom:-2px;">🤝 משקיעים/שותפות</button>
+  </div>
+
+  <div class="filters">
+    <input type="text" id="fSearch" placeholder="חיפוש לפי שם, טלפון, עיר, תחום, הערות...">
+    <select id="fType">
+      <option value="all">כל הסוגים</option>
+      <option value="buyer">קונים בלבד</option>
+      <option value="partner">שותפות/השקעה בלבד</option>
+      <option value="seller">מוכרים בלבד</option>
+    </select>
+    <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
+    <select id="fAgreement">
+      <option value="all">כל סטטוסי ההסכם</option>
+      <option value="אין הסכם">אין הסכם</option>
+      <option value="נשלח הסכם לחתימה">נשלח הסכם לחתימה</option>
+      <option value="יש הסכם חתום">יש הסכם חתום</option>
+    </select>
+    <select id="fCreatedBy"><option value="all">כל מי שהזין</option></select>
+    <select id="fRating" style="display:none;"><option value="all">כל רמות הרצינות</option></select>
+    <select id="fSort">
+      <option value="updated_desc">עודכן לאחרונה</option>
+      <option value="created_desc">נוצר לאחרונה</option>
+      <option value="name_asc">שם (א-ת)</option>
+      <option value="city_asc">עיר (א-ת)</option>
+      <option value="created_by_asc">הוזן ע"י (א-ת)</option>
+      <option value="rating_desc">רמת רצינות (מהגבוה לנמוך)</option>
+      <option value="agreement_asc">סטטוס הסכם</option>
+    </select>
+  </div>
+
+  <div class="table-scroll-wrap" style="position:relative;">
+  <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+  <table class="proportional-table">
+    <colgroup>
+      <col style="width:11%;"><col style="width:8%;"><col style="width:9%;"><col style="width:7%;">
+      <col style="width:8%;"><col style="width:8%;"><col style="width:8%;"><col style="width:8%;">
+      <col style="width:6%;"><col style="width:6%;"><col style="width:23%;"><col style="width:6%;">
+    </colgroup>
+    <thead>
+      <tr>
+        <th>שם / עסק</th><th>סוג</th><th>טלפון</th><th>עיר</th><th>אימייל</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>נוצר</th><th>עודכן</th><th>הערות</th>
+      </tr>
+    </thead>
+    <tbody id="leadsBody">
+      <tr class="empty-row"><td colspan="11">טוען...</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div style="display:flex;justify-content:center;gap:10px;margin:8px 0 2px;">
+    <button type="button" class="btn btn-ghost" onclick="scrollTableBy(this,-260)">⬅ גלול לעוד עמודות</button>
+    <button type="button" class="btn btn-ghost" onclick="scrollTableBy(this,260)">➡ גלול חזרה</button>
+  </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
+<div id="toastBox"></div>
+
+<script src="js/config.js?v=202608111530"></script>
+<script src="js/supabaseClient.js?v=202608111530"></script>
+<script src="js/auth.js?v=202608251709"></script>
+<script src="js/permissions.js?v=202608251709"></script>
+<script src="js/push.js?v=202608122320"></script>
+<script src="js/standaloneRecording.js?v=202608251709"></script>
+<script src="js/notesRecording.js?v=2"></script>
+<script src="js/searchSelect.js?v=202608281530"></script>
+<script src="js/pdfPipeline.js?v=202608291000"></script>
+<script src="js/dedupeCheckModule.js?v=202608311200"></script>
+<script src="js/waSendModule.js?v=202608300456"></script>
+<script src="js/archiveModule.js?v=202609021200"></script>
+<script>
+let ALL_LEADS = [];
+let ARCHIVED_LEADS = [];
+function clientNumberBadge(l){
+  if (!l || !l.client_number) return '';
+  return `<span style="display:inline-block;background:#0e1b34;color:#e8cf8a;font-weight:700;font-size:.72rem;padding:2px 9px;border-radius:12px;letter-spacing:.3px;white-space:nowrap;">${esc(l.client_number)}</span>`;
+}
+let ALL_USERS = [];
+let CURRENT_PROFILE = null;
+let RATING_LEVELS = [];           // רשימת הרמות הפעילות, ממוינות לפי sort_order
+let RATING_BY_ID = {};            // id -> אובייקט הרמה
+let MATCH_COUNT_BY_BUYER = {};    // buyer_id (leads.id) -> מספר התאמות בפועל
+
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
+function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('he-IL'); }catch(e){ return iso; } }
+function toast(msg){
+  let box = document.getElementById('toastBox');
+  if (!box){
+    box = document.createElement('div');
+    box.id = 'toastBox';
+    box.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:200;display:flex;flex-direction:column;gap:8px;max-width:380px;';
+    document.body.appendChild(box);
+  }
+  const isError = /שגיאה|error/i.test(msg);
+  const el = document.createElement('div');
+  el.style.cssText = `background:${isError ? '#b00020' : 'var(--navy,#0e1b34)'};color:#fff;padding:14px 18px;border-radius:10px;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.35);display:flex;align-items:flex-start;gap:10px;line-height:1.5;`;
+  const textSpan = document.createElement('span');
+  textSpan.style.flex = '1';
+  textSpan.textContent = msg;
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '×';
+  closeBtn.style.cssText = 'background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;line-height:1;padding:0;';
+  closeBtn.onclick = () => el.remove();
+  el.appendChild(textSpan);
+  el.appendChild(closeBtn);
+  box.appendChild(el);
+  setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
+}
+function openLeadFormFromDup(id){
+  closeModal();
+  openLeadForm(id);
+}
+
+function cancelLeadForm(){
+  if (new URLSearchParams(location.search).get('from') === 'leads-hub'){
+    location.href = 'leads-hub.html';
+    return;
+  }
+  closeModal();
+}
+
+function closeModal(){
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('modalBox').innerHTML = '';
+}
+
+// ➕ הוסף עסק להתאמה - מתוך כרטיס קונה (סעיף ג' בהנחיית שדרוג מודול ההתאמות, 28.08.2026)
+async function openAddBizToMatchModal(buyerId){
+  const buyer = (ALL_LEADS || []).find(l => l.id === buyerId);
+  document.getElementById('modalBox').innerHTML = `
+    <h3>➕ הוסף עסק להתאמה — ${esc(buyer ? (buyer.full_name||'') : '')}</h3>
+    <div class="field full" style="margin-bottom:10px;">
+      <label>בחר עסק</label>
+      <div id="addBizMatchBox">טוען רשימת עסקים...</div>
+    </div>
+    <div id="addBizMatchStatus" style="min-height:20px;margin-bottom:8px;font-size:.85rem;font-weight:600;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button type="button" class="btn btn-primary" id="addBizMatchBtn" style="opacity:.5;" onclick="confirmAddBizToMatch('${buyerId}')">➕ צור התאמה</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+
+  const box = document.getElementById('addBizMatchBox');
+  let bizList = [];
+  try {
+    const { data, error } = await window.supabaseClient
+      .from('businesses').select('id,internal_name,business_number,field')
+      .eq('is_archived', false)
+      .order('internal_name', { ascending: true });
+    if (error) throw new Error(error.message);
+    bizList = data || [];
+  } catch(e){
+    box.innerHTML = `<span style="color:#b3402c;">שגיאה בטעינת רשימת העסקים: ${esc(e.message || String(e))}</span>`;
+    return;
+  }
+  if (!bizList.length){
+    box.innerHTML = `<span style="color:#8a5a00;">אין עסקים ברשימה שלך.</span>`;
+    return;
+  }
+  box.innerHTML = window.searchSelectHTML({ boxId: 'addBizMatchSelect', placeholder: 'הקלד שם עסק או מספר עסק לחיפוש...' });
+  window.initSearchSelect('addBizMatchSelect', bizList, {
+    getId: b => b.id,
+    getLabel: b => (b.internal_name || 'עסק ללא שם') + (b.business_number ? ' (' + b.business_number + ')' : '') + (b.field ? ' - ' + b.field : ''),
+    onChange: (bizId) => {
+      window.ADD_BIZ_MATCH_SELECTED = bizList.find(b => b.id === bizId) || null;
+      const btn = document.getElementById('addBizMatchBtn');
+      if (btn) btn.style.opacity = window.ADD_BIZ_MATCH_SELECTED ? '1' : '.5';
+      document.getElementById('addBizMatchStatus').textContent = '';
+    }
+  });
+}
+
+async function confirmAddBizToMatch(buyerId){
+  const biz = window.ADD_BIZ_MATCH_SELECTED;
+  const statusBox = document.getElementById('addBizMatchStatus');
+  if (!biz){ statusBox.textContent = 'יש לבחור עסק מהרשימה'; statusBox.style.color = '#b3402c'; return; }
+  const btn = document.getElementById('addBizMatchBtn');
+  if (btn){ btn.disabled = true; btn.textContent = 'בודק...'; }
+  try {
+    const { data: existing, error: existErr } = await window.supabaseClient
+      .from('matches').select('id,status').eq('business_id', biz.id).eq('buyer_id', buyerId).maybeSingle();
+    if (existErr) throw new Error(existErr.message);
+    if (existing){
+      statusBox.style.color = '#8a5a00';
+      statusBox.innerHTML = `כבר קיימת התאמה בין העסק לקונה הזה (סטטוס: ${esc(existing.status||'—')}). <a href="javascript:void(0)" onclick="location.href='match-detail.html?id=${existing.id}'" style="color:#1d4e89;font-weight:700;">פתח את ההתאמה הקיימת</a>`;
+      if (btn){ btn.disabled = false; btn.textContent = '➕ צור התאמה'; }
+      return;
+    }
+    const { data: newMatch, error: insErr } = await window.supabaseClient
+      .from('matches').insert({ business_id: biz.id, buyer_id: buyerId, status: 'התאמה חדשה', match_source: 'ידני - מכרטיס קונה', created_by: CURRENT_PROFILE.id })
+      .select('id').single();
+    if (insErr) throw new Error(insErr.message);
+    closeModal();
+    toast('ההתאמה נוצרה בהצלחה');
+    location.href = 'match-detail.html?id=' + newMatch.id;
+  } catch(e){
+    statusBox.style.color = '#b3402c';
+    statusBox.textContent = 'שגיאה ביצירת ההתאמה: ' + (e.message || String(e));
+    if (btn){ btn.disabled = false; btn.textContent = '➕ צור התאמה'; }
+  }
+}
+
+// 📊 הפק דוח עסקים לקונה - סעיף י' בהנחיית שדרוג המשך (28.08.2026)
+// דוח הפוך לדוח הפעילות לבעל העסק: מוצג לקונה עצמו, לכן לעולם לא כולל
+// הערות פנימיות, פרטי קשר של הקונה עצמו אינם רלוונטיים כאן, ובעיקר -
+// לעולם לא נחשף מידע ששייך לקונים אחרים של אותם עסקים.
+const BUYER_REPORT_STATUS_LABEL = {
+  'התאמה חדשה':'העסק הועבר אליך לבדיקה', 'ממתין לחתימת סודיות':'ממתין לחתימת הסכם סודיות',
+  'נחתמה סודיות':'הסכם סודיות נחתם', 'מידע ראשוני נשלח':'הועבר אליך מידע ראשוני',
+  'תקציר נשלח':'הועבר אליך תקציר', 'חומרים מלאים נשלחו':'הועברו אליך חומרים מלאים',
+  'ממתין לתגובה':'ממתינים לתגובתך', 'הקונה מעוניין':'הבעת עניין בהמשך התהליך',
+  'הקונה לא מעוניין':'התהליך הסתיים ללא המשך', 'נקבעה פגישה':'נקבעה פגישה',
+  'התקיימה פגישה':'התקיימה פגישה', 'בבדיקת נתונים':'בבדיקת נתונים',
+  'במשא ומתן':'בשלב משא ומתן', 'הוקפא':'התהליך מוקפא זמנית',
+  'נסגר ללא עסקה':'התהליך נסגר ללא עסקה', 'עסקה הושלמה':'העסקה הושלמה בהצלחה',
+  'נדרש עדכון':'בבדיקה'
+};
+const BUYER_REPORT_CLOSED_STATUSES = ['נסגר ללא עסקה','הקונה לא מעוניין','הוקפא'];
+
+function openBuyerActivityReportModal(leadId){
+  const lead = ALL_LEADS.find(l => l.id === leadId);
+  const leadName = (lead?.full_name) || [lead?.first_name,lead?.last_name].filter(Boolean).join(' ') || 'קונה';
+  const today = new Date().toISOString().slice(0,10);
+  const ninetyDaysAgo = new Date(Date.now() - 90*86400000).toISOString().slice(0,10);
+  document.getElementById('modalBox').innerHTML = `
+    <h3>📊 הפק דוח עסקים לקונה — ${esc(leadName)}</h3>
+    <div style="display:flex;gap:10px;margin-bottom:10px;">
+      <div class="field" style="flex:1;"><label>מתאריך</label><input type="date" id="bRepFrom" value="${ninetyDaysAgo}"></div>
+      <div class="field" style="flex:1;"><label>עד תאריך</label><input type="date" id="bRepTo" value="${today}"></div>
+    </div>
+    <div class="field full" style="margin-bottom:10px;"><label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="bRepActiveOnly" checked> לכלול רק תהליכים פעילים (לא סגורים)</label></div>
+    <div style="font-size:.78rem;color:#8a8368;margin-bottom:10px;">הדוח מיועד לקונה עצמו - לעולם לא יכלול הערות פנימיות של BSD ולא כל מידע השייך לקונים אחרים.</div>
+    <div id="buyerReportStatus" style="min-height:20px;margin-bottom:8px;font-size:.85rem;font-weight:600;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button type="button" class="btn btn-primary" id="genBuyerReportBtn" onclick="generateBuyerActivityReport('${leadId}')">📄 הפק PDF</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+}
+
+async function generateBuyerActivityReport(leadId){
+  const lead = ALL_LEADS.find(l => l.id === leadId);
+  const leadName = (lead?.full_name) || [lead?.first_name,lead?.last_name].filter(Boolean).join(' ') || 'קונה';
+  const statusEl = document.getElementById('buyerReportStatus');
+  const btn = document.getElementById('genBuyerReportBtn');
+  const fromDate = document.getElementById('bRepFrom').value;
+  const toDate = document.getElementById('bRepTo').value;
+  const activeOnly = document.getElementById('bRepActiveOnly').checked;
+  if (btn){ btn.disabled = true; btn.textContent = 'טוען נתונים...'; }
+  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = 'אוסף את פעילות ההתאמות...'; }
+  try {
+    const { data: matches, error: mErr } = await window.supabaseClient
+      .from('matches').select('*').eq('buyer_id', leadId)
+      .gte('created_at', fromDate).lte('created_at', toDate + 'T23:59:59');
+    if (mErr) throw new Error(mErr.message);
+    let rows = matches || [];
+    if (activeOnly) rows = rows.filter(m => !BUYER_REPORT_CLOSED_STATUSES.includes(m.status));
+    if (!rows.length){ statusEl.style.color = '#8a5a00'; statusEl.textContent = 'לא נמצאו עסקים תואמים לטווח/לסינון שנבחר.'; if(btn){btn.disabled=false;btn.textContent='📄 הפק PDF';} return; }
+
+    const bizIds = [...new Set(rows.map(m=>m.business_id))];
+    const matchIds = rows.map(m=>m.id);
+    const [{data: bizList}, {data: meetings}] = await Promise.all([
+      window.supabaseClient.from('businesses').select('id,internal_name,business_number,anon_display_name').in('id', bizIds),
+      window.supabaseClient.from('match_meetings').select('*').in('match_id', matchIds).is('deleted_at', null)
+    ]);
+    const bizById = {}; (bizList||[]).forEach(b=>bizById[b.id]=b);
+
+    rows.sort((a,b)=> new Date(b.updated_at) - new Date(a.updated_at));
+
+    const bodyEl = document.createElement('div');
+    bodyEl.style.cssText = 'font-size:12.5px;line-height:1.8;';
+    const summaryDiv = document.createElement('div');
+    summaryDiv.style.cssText = 'margin-bottom:14px;padding:10px 14px;background:#fff;border-inline-start:4px solid #c9a24b;border-radius:8px;';
+    summaryDiv.innerHTML = `<b>תקופת הדוח:</b> ${new Date(fromDate).toLocaleDateString('he-IL')} — ${new Date(toDate).toLocaleDateString('he-IL')} &nbsp;|&nbsp; <b>מספר עסקים בתקופה:</b> ${rows.length}`;
+    bodyEl.appendChild(summaryDiv);
+
+    rows.forEach(m => {
+      const biz = bizById[m.business_id];
+      const bizLabel = biz ? (biz.internal_name || biz.anon_display_name || 'עסק') : 'עסק';
+      const statusLabel = BUYER_REPORT_STATUS_LABEL[m.status] || m.status || '—';
+      const matchMeetings = (meetings||[]).filter(mt=>mt.match_id===m.id);
+
+      const sec = document.createElement('div');
+      sec.style.cssText = 'margin-bottom:16px;padding:12px 14px;background:#fff;border:1px solid #e3ddcf;border-radius:10px;';
+      let html = `<div style="font-size:13.5px;font-weight:800;color:#0e1b34;margin-bottom:4px;">${esc(bizLabel)}${biz?.business_number?' ('+esc(biz.business_number)+')':''}</div>`;
+      html += `<div style="margin-bottom:6px;"><b>מצב נוכחי:</b> ${esc(statusLabel)}</div>`;
+      if (m.material_sent_at) html += `<div style="margin-bottom:6px;"><b>תאריך העברת מידע:</b> ${new Date(m.material_sent_at).toLocaleDateString('he-IL')}</div>`;
+      if (matchMeetings.length){
+        html += `<div style="margin-bottom:6px;"><b>פגישות:</b> ${matchMeetings.map(mt=>esc(mt.meeting_type||'פגישה')+' - '+(mt.meeting_date?new Date(mt.meeting_date).toLocaleDateString('he-IL'):'')).join('; ')}</div>`;
+      }
+      if (m.next_action) html += `<div><b>השלב הבא:</b> ${esc(m.next_action)}${m.next_action_at?' (עד '+new Date(m.next_action_at).toLocaleDateString('he-IL')+')':''}</div>`;
+      sec.innerHTML = html;
+      bodyEl.appendChild(sec);
+    });
+
+    if (statusEl) statusEl.textContent = '📄 מפיק PDF...';
+    const producerName = (CURRENT_PROFILE && (CURRENT_PROFILE.full_name || CURRENT_PROFILE.email)) || '';
+    const { blob } = await bsdRenderBrandedPdf({
+      titleText: `דוח עסקים — ${leadName}`,
+      subtitleText: `הופק ${new Date().toLocaleDateString('he-IL')} ע"י ${producerName}`,
+      bodyEl,
+      tagline: 'שקיפות מלאה בכל שלב בתהליך החיפוש',
+    });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `דוח עסקים - ${leadName}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    statusEl.style.color = '#1e7b34'; statusEl.textContent = '✓ הדוח הופק והורד בהצלחה';
+    toast('דוח עסקים לקונה הופק בהצלחה');
+  } catch(e){
+    const msg = e && e.message ? e.message : String(e);
+    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
+    if (btn){ btn.disabled = false; btn.textContent = '📄 הפק PDF'; }
+  }
+}
+
+async function loadUsers(){
+  const { data } = await window.supabaseClient.rpc('get_active_users_basic');
+  ALL_USERS = data || [];
+}
+async function loadRatingLevels(){
+  if (!canViewBuyerRating(CURRENT_PROFILE)) { RATING_LEVELS = []; RATING_BY_ID = {}; return; }
+  const { data, error } = await window.supabaseClient
+    .from('buyer_rating_levels').select('*').eq('is_active', true).order('sort_order', { ascending: true });
+  if (error){ RATING_LEVELS = []; RATING_BY_ID = {}; return; }
+  RATING_LEVELS = data || [];
+  RATING_BY_ID = {};
+  RATING_LEVELS.forEach(r => { RATING_BY_ID[r.id] = r; });
+}
+async function loadMatchCounts(){
+  // סופר מכל ההתאמות הקיימות בפועל (matches.buyer_id) - לא שדה ידני. RLS על
+  // matches כבר מגביל לשורות שהמשתמש הנוכחי רשאי לראות, בדיוק כמו בכל מקום
+  // אחר במערכת.
+  const { data, error } = await window.supabaseClient.from('matches').select('buyer_id');
+  MATCH_COUNT_BY_BUYER = {};
+  if (error || !data) return;
+  data.forEach(m => { if (m.buyer_id) MATCH_COUNT_BY_BUYER[m.buyer_id] = (MATCH_COUNT_BY_BUYER[m.buyer_id] || 0) + 1; });
+}
+function ratingLevelOptions(selectedId){
+  if (!RATING_LEVELS.length) return '<option value="">—</option>';
+  return RATING_LEVELS.map(r => `<option value="${r.id}" ${r.id===selectedId?'selected':''}>${esc(r.icon||'')} ${esc(r.name)}</option>`).join('');
+}
+function ratingBadge(leadId){
+  if (!canViewBuyerRating(CURRENT_PROFILE)) return '';
+  const lead = ALL_LEADS.find(l => l.id === leadId);
+  const level = lead && lead.rating_level_id ? RATING_BY_ID[lead.rating_level_id] : null;
+  if (!level) return '';
+  const canEdit = canEditBuyerRating(CURRENT_PROFILE);
+  const label = `${level.icon || ''} ${esc(level.name)}`;
+  const c = esc(level.color || '#8a93ab');
+  // רקע לבן מלא (לא שקוף) עם !important - שורות "הסכם חתום"/"נשלח לחתימה"
+  // כופות צבע רקע/טקסט על כל ה-td עם !important (ר' row-signed/row-sent
+  // ב-CSS למעלה), כך שתג עם רקע שקוף או צבע טקסט בלי !important פשוט נבלע
+  // ולא נראה בכלל על רקע ירוק/כתום. תג לבן מלא עם border+color בצבע הרמה,
+  // שניהם !important, נשאר קריא על כל רקע שורה.
+  if (!canEdit){
+    return `<span style="background:#fff !important;color:${c} !important;border:1px solid ${c};border-radius:10px;padding:1px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">${label}</span>`;
+  }
+  // תג הניתן לשינוי ישירות מהרשימה, בלי לפתוח את הכרטיס - <select> קומפקטי
+  // עם אותם צבעים, תואם מגע גם באנדרואיד.
+  return `<select onclick="event.stopPropagation()" onchange="event.stopPropagation();quickChangeRating('${leadId}', this.value)"
+    style="border:1px solid ${c};color:${c} !important;background:#fff !important;border-radius:10px;padding:1px 6px;font-size:.7rem;font-weight:700;font-family:inherit;cursor:pointer;">
+    ${ratingLevelOptions(lead.rating_level_id)}
+  </select>`;
+}
+async function quickChangeRating(leadId, newLevelId){
+  const { error } = await window.supabaseClient.from('leads').update({ rating_level_id: newLevelId || null }).eq('id', leadId);
+  if (error){ toast('שגיאה בעדכון דירוג: ' + error.message); return; }
+  const lead = ALL_LEADS.find(l => l.id === leadId);
+  if (lead) lead.rating_level_id = newLevelId || null;
+  toast('הדירוג עודכן');
+  renderTable();
+}
+function matchCountBadge(leadId){
+  const count = MATCH_COUNT_BY_BUYER[leadId] || 0;
+  if (!count) return '';
+  return `<span onclick="event.stopPropagation();location.href='leads.html?open=${leadId}'" title="עסקים שהותאמו לקונה זה" style="cursor:pointer;font-size:.7rem;color:#3a5cad !important;font-weight:700;white-space:nowrap;background:#fff !important;border:1px solid #3a5cad;border-radius:10px;padding:1px 8px;">🔗 עסקים שהותאמו: ${count}</span>`;
+}
+function userName(id){
+  const u = ALL_USERS.find(x=>x.id===id);
+  return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
+}
+function creatorColor(id){
+  const u = ALL_USERS.find(x=>x.id===id);
+  if (!u) return null;
+  if (u.role === 'agent') return '#e6c200'; // צהוב זוהר - סוכן
+  if (u.role === 'agent_authorized') return '#2ecc40'; // ירוק זוהר - סוכן מורשה
+  return null;
+}
+function userOptions(selected){
+  return '<option value="">— ללא —</option>' + ALL_USERS.map(u=>{
+    const label = u.full_name && u.full_name.trim() ? u.full_name : u.email;
+    return `<option value="${u.id}" ${u.id===selected?'selected':''}>${esc(label)}</option>`;
+  }).join('');
+}
+
+async function loadLeads(){
+  let q = window.supabaseClient
+    .from('leads')
+    .select('*')
+    .order('updated_at', { ascending: false });
+  // הסינון לפי created_by הוסר - RLS (leads_select) כבר מחזיר בשרת רק את מה שמותר.
+  const { data, error } = await q;
+  if (error){ toast('שגיאה בטעינת נתונים: ' + error.message); return; }
+  // תיקון 25.08.2026 (כלל עסקי מחייב): קיום/הצגה של ליד (קונה, שותף או
+  // מוכר ישן) לעולם לא מותנים בסטטוס הסכם. ליד חדש חייב להישאר ולהופיע
+  // כאן מהרגע שנשמר, גם בלי הסכם, גם לפני שנשלח הסכם. הסינון הקודם (רק
+  // "נשלח הסכם"/"יש הסכם חתום") היה הגורם לכך שליד חדש נשמר בהצלחה
+  // במסד הנתונים אך נעלם בשקט מהמסך הזה. הסינון היחיד שנשאר הוא ארכיון
+  // (is_archived) - ליד בארכיון מוצג בטאב הארכיון הנפרד, לא כאן.
+  ALL_LEADS = (data || []).filter(l => !l.is_archived);
+  ARCHIVED_LEADS = (data || []).filter(l => l.is_archived);
+  populateStatusFilter();
+  populateCreatedByFilter();
+  populateRatingFilter();
+  renderTable();
+  await maybeHandleUrlParams();
+}
+
+async function maybeHandleUrlParams(){
+  const params = new URLSearchParams(location.search);
+  const openId = params.get('open');
+  if (openId){
+    let lead = ALL_LEADS.find(l => l.id === openId);
+    if (!lead){
+      const { data } = await window.supabaseClient.from('leads').select('*').eq('id', openId).maybeSingle();
+      lead = data;
+      if (lead) ALL_LEADS.push(lead);
+    }
+    if (lead) openLeadForm(lead.id);
+    // מסירים את open= מה-URL מיד אחרי שהשתמשנו בו: אחרת בכל loadLeads() הבא
+    // (למשל אחרי שמירה מוצלחת, ש-saveLead קורא לה) maybeHandleUrlParams רץ שוב,
+    // עדיין רואה open=<id> באותו URL, ופותח את אותו הטופס מחדש - לולאה אינסופית
+    // שנראית כאילו "שמירה" תמיד מחזירה לאותו מסך בדיוק, ורק "ביטול" יוצא ממנה.
+    params.delete('open');
+    history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params.toString() : ''));
+  } else if (params.get('new') === '1'){
+    const t = params.get('type') === 'partner' ? 'partner' : params.get('type') === 'seller' ? 'seller' : 'buyer';
+    const pf = {
+      first_name: params.get('pf_first_name') || null,
+      last_name: params.get('pf_last_name') || null,
+      phone: params.get('pf_phone') || null,
+      email: params.get('pf_email') || null,
+      notes: params.get('pf_notes') || null
+    };
+    openLeadForm(null, t, pf);
+    params.delete('new'); params.delete('type');
+    params.delete('pf_first_name'); params.delete('pf_last_name'); params.delete('pf_phone'); params.delete('pf_email'); params.delete('pf_notes');
+    history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params.toString() : ''));
+  }
+}
+
+function populateStatusFilter(){
+  const sel = document.getElementById('fStatus');
+  const existing = new Set(Array.from(sel.options).map(o=>o.value));
+  const statuses = [...new Set(ALL_LEADS.map(l=>l.status).filter(Boolean))];
+  statuses.forEach(s=>{
+    if (!existing.has(s)){
+      const opt = document.createElement('option');
+      opt.value = s; opt.textContent = s;
+      sel.appendChild(opt);
+    }
+  });
+}
+
+function populateCreatedByFilter(){
+  const sel = document.getElementById('fCreatedBy');
+  const existing = new Set(Array.from(sel.options).map(o=>o.value));
+  const creators = [...new Set(ALL_LEADS.map(l=>l.created_by).filter(Boolean))];
+  creators.forEach(uid=>{
+    if (!existing.has(uid)){
+      const opt = document.createElement('option');
+      opt.value = uid; opt.textContent = userName(uid);
+      sel.appendChild(opt);
+    }
+  });
+}
+
+function populateRatingFilter(){
+  const sel = document.getElementById('fRating');
+  if (!sel) return;
+  if (!canViewBuyerRating(CURRENT_PROFILE) || !RATING_LEVELS.length){ sel.style.display = 'none'; return; }
+  // בונים מחדש בכל טעינה (הרמות עצמן עלולות להשתנות בעתיד דרך מסך ההגדרות)
+  sel.innerHTML = '<option value="all">כל רמות הרצינות</option>'
+    + '<option value="serious_plus">קונים פעילים ורציניים ומעלה</option>'
+    + RATING_LEVELS.map(r => `<option value="${r.id}">${esc(r.icon||'')} ${esc(r.name)} בלבד</option>`).join('');
+}
+
+function switchLeadTypeTab(type){
+  document.getElementById('fType').value = type;
+  document.getElementById('tabBuyerBtn').style.borderBottomColor = type === 'buyer' ? 'var(--gold)' : 'transparent';
+  document.getElementById('tabBuyerBtn').style.color = type === 'buyer' ? 'var(--navy)' : '#8a8578';
+  document.getElementById('tabPartnerBtn').style.borderBottomColor = type === 'partner' ? 'var(--gold)' : 'transparent';
+  document.getElementById('tabPartnerBtn').style.color = type === 'partner' ? 'var(--navy)' : '#8a8578';
+  const ratingSel = document.getElementById('fRating');
+  if (ratingSel) ratingSel.style.display = canViewBuyerRating(CURRENT_PROFILE) && RATING_LEVELS.length ? '' : 'none';
+  renderTable();
+}
+
+function renderTable(){
+  if (typeof LEAD_VIEW_MODE !== 'undefined' && LEAD_VIEW_MODE === 'archive'){ renderArchiveLeadsTable(); return; }
+  const search = document.getElementById('fSearch').value.trim().toLowerCase();
+  const type = document.getElementById('fType').value;
+  const status = document.getElementById('fStatus').value;
+  const agreement = document.getElementById('fAgreement').value;
+  const createdBy = document.getElementById('fCreatedBy').value;
+  const sort = document.getElementById('fSort').value;
+  const ratingFilter = document.getElementById('fRating') ? document.getElementById('fRating').value : 'all';
+  const activeBuyerLevel = RATING_LEVELS.find(r => r.level_key === 'active_buyer');
+
+  let rows = ALL_LEADS.filter(l=>{
+    if (type !== 'all' && l.type !== type) return false;
+    if (status !== 'all' && l.status !== status) return false;
+    if (agreement !== 'all' && (l.agreement_status || 'אין הסכם') !== agreement) return false;
+    if (createdBy !== 'all' && l.created_by !== createdBy) return false;
+    if (ratingFilter && ratingFilter !== 'all' && (l.type === 'buyer' || l.type === 'partner')){
+      if (ratingFilter === 'serious_plus'){
+        const lvl = l.rating_level_id ? RATING_BY_ID[l.rating_level_id] : null;
+        if (!lvl || !activeBuyerLevel || lvl.sort_order < activeBuyerLevel.sort_order) return false;
+      } else if (l.rating_level_id !== ratingFilter){
+        return false;
+      }
+    }
+    if (search){
+      const clientNumDigits = (l.client_number||'').match(/(\d{3,4})$/)?.[1] || '';
+      const hay = [l.full_name, l.first_name, l.last_name, l.phone, l.phone2, l.city, l.source, l.status, l.email,
+        l.business_name, l.business_field, l.business_city, l.requested_field, l.requested_area,
+        l.requested_categories, l.company, l.address, l.id_number, l.notes,
+        l.client_number, l.client_number ? l.client_number.replace(/^BSD-C-/,'') : '', clientNumDigits].join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  rows.sort((a,b)=>{
+    if (sort === 'name_asc') return (a.full_name||'').localeCompare(b.full_name||'', 'he');
+    if (sort === 'city_asc') return (a.city||'').localeCompare(b.city||'', 'he');
+    if (sort === 'created_desc') return new Date(b.created_at) - new Date(a.created_at);
+    if (sort === 'created_by_asc') return userName(a.created_by).localeCompare(userName(b.created_by), 'he');
+    if (sort === 'agreement_asc') return (a.agreement_status||'').localeCompare(b.agreement_status||'', 'he');
+    if (sort === 'rating_desc'){
+      const oa = a.rating_level_id && RATING_BY_ID[a.rating_level_id] ? RATING_BY_ID[a.rating_level_id].sort_order : -1;
+      const ob = b.rating_level_id && RATING_BY_ID[b.rating_level_id] ? RATING_BY_ID[b.rating_level_id].sort_order : -1;
+      return ob - oa;
+    }
+    return new Date(b.updated_at) - new Date(a.updated_at);
+  });
+
+  const body = document.getElementById('leadsBody');
+  if (rows.length === 0){
+    body.innerHTML = '<tr class="empty-row"><td colspan="11">לא נמצאו רשומות</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(l=>{
+    const personName = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || '—';
+    const typeBadge = l.type === 'buyer'
+      ? '<span class="badge badge-buyer">קונה</span>'
+      : l.type === 'partner'
+      ? '<span class="badge badge-partner">שותפות/השקעה</span>'
+      : '<span class="badge badge-seller">מוכר</span>';
+
+    let nameCell, cityCell;
+    if (l.type === 'seller'){
+      const bizName = l.business_name && l.business_name.trim() ? l.business_name : '(ללא שם עסק)';
+      nameCell = `<div class="primary-name">${esc(bizName)}</div><div class="sub-name">${esc(personName)}</div>`;
+      cityCell = esc(l.business_city || l.city || '—');
+    } else {
+      nameCell = `<div class="primary-name">${esc(personName)} ${clientNumberBadge(l)}</div>`;
+      cityCell = esc(l.requested_area || l.city || '—');
+    }
+
+    if (l.type === 'buyer' || l.type === 'partner'){
+      const extras = [ratingBadge(l.id), l.type === 'buyer' ? matchCountBadge(l.id) : ''].filter(Boolean).join(' ');
+      if (extras) nameCell += `<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;" onclick="event.stopPropagation()">${extras}</div>`;
+    }
+
+    const agrStatus = l.agreement_status || 'אין הסכם';
+    const rowCls = agrStatus === 'יש הסכם חתום' ? 'row-signed' : (agrStatus === 'נשלח הסכם לחתימה' ? 'row-sent' : 'row-none');
+    const statusEmoji = rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
+    nameCell = statusEmoji + nameCell;
+    if (isGrantOnlyViewer(l)){
+      nameCell = nameCell.replace('</div>', ' <span style="font-size:.68rem;background:#eef4fb;color:#1a3d8f;border-radius:8px;padding:1px 7px;font-weight:700;white-space:nowrap;">🔓 שוחרר אליי</span></div>');
+    }
+    if (notesIconStyle(l.id)){
+      const noteDot = `<span onclick="event.stopPropagation();openNotesPanel('leads','${l.id}','${esc((personName||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(l.id))}" style="cursor:pointer;font-size:.72rem;color:#1a3d8f !important;font-weight:700;white-space:nowrap;margin-inline-start:6px;background:#fff !important;border-radius:8px;padding:1px 6px;">🔵 קיימת הערה</span>`;
+      nameCell = nameCell.replace('</div>', noteDot + '</div>');
+    }
+
+    return `<tr class="${rowCls}" style="cursor:pointer;" onclick="openLeadForm('${l.id}')">
+      <td data-label="שם / עסק">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
+            <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
+            <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
+              <a href="javascript:void(0)" onclick="openLeadForm('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">${isGrantOnlyViewer(l) ? '👁️ צפייה' : '✏️ ערוך'}</a>
+              ${isGrantOnlyViewer(l) ? '' : `<a href="javascript:void(0)" onclick="openNotesPanel('leads','${l.id}','${esc((l.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(l.id))}${notesIconStyle(l.id) ? ' 🔵' : ''}</a>`}
+              ${(l.type === 'buyer' && !isGrantOnlyViewer(l)) ? `<a href="javascript:void(0)" onclick="openAddBizToMatchModal('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">➕ הוסף עסק להתאמה</a>` : ''}
+              ${(canSendAgreement() && l.agreement_status !== 'יש הסכם חתום' && !isGrantOnlyViewer(l)) ? `<a href="javascript:void(0)" onclick="sendAgreementForLead('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
+              ${canManageLead(l) ? `<a href="javascript:void(0)" onclick="archiveLead('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 העבר לארכיון</a>` : ''}
+              ${canDeleteLead(l) ? `<a href="javascript:void(0)" onclick="deleteLead('${l.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
+            </div>
+          </div>
+          <div>${nameCell}</div>
+        </div>
+      </td>
+      <td data-label="סוג">${typeBadge}</td>
+      <td data-label="טלפון" class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;" onclick="event.stopPropagation()">${l.phone ? `<a href="tel:${esc(l.phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(l.phone)}</a>${waBtn(l.phone)}` : '—'}</td>
+      <td data-label="עיר">${cityCell}</td>
+      <td data-label="אימייל" class="email-cell" title="${esc(l.email||'')}">${esc(l.email||'—')}</td>
+      <td data-label="הוזן ע&quot;י">${l.created_by ? `<b style="color:${creatorColor(l.created_by) || '#333'};">${esc(userName(l.created_by))}</b>` : 'לא ידוע'}</td>
+      <td data-label="מטופל ע&quot;י">${l.handled_by ? esc(userName(l.handled_by)) : '—'}</td>
+      <td data-label="סטטוס הסכם">${agreementBadge(l.agreement_status)}</td>
+      <td data-label="נוצר">${fmtDate(l.created_at)}</td>
+      <td data-label="עודכן">${fmtDate(l.updated_at)}</td>
+      <td data-label="הערות" class="notes-cell">${esc(l.notes||'—')}</td>
+    </tr>`;
+  }).join('');
+}
+
+function canEditRecord(createdBy){
+  if (!CURRENT_PROFILE) return false;
+  if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
+  return createdBy === CURRENT_PROFILE.id;
+}
+
+// הנחיה 02.09.2026 (הסדרת הרשאות + ארכיון): מי מורשה לנהל (ערוך/מחק/ארכב) ליד
+// נתון - תואם בדיוק ל-leads_update/leads_delete המעודכנות ב-DB: אדמין תמיד;
+// seller - manager/יוצר/מטפל; buyer/partner - יוצר בלבד (לא manager, לא handled_by).
+function canManageLead(l){
+  if (!CURRENT_PROFILE || !l) return false;
+  if (CURRENT_PROFILE.role === 'admin') return true;
+  if (l.type === 'seller') return CURRENT_PROFILE.role === 'manager' || l.created_by === CURRENT_PROFILE.id || l.handled_by === CURRENT_PROFILE.id;
+  return l.created_by === CURRENT_PROFILE.id;
+}
+// מחיקה עוברת כעת דרך אותה מדיניות בדיוק כמו עריכה/ארכוב (leads_delete עודכנה
+// ב-02.09.2026 להתאים ל-leads_update - כולל ענף יוצר לכל סוגי הליד).
+function canDeleteLead(l){ return canManageLead(l); }
+// שחזור מהארכיון - תואם לטריגר enforce_lead_archive_integrity: אדמין תמיד,
+// או מי שביצע בעצמו את הארכוב (archived_by).
+function canRestoreLead(l){
+  if (!CURRENT_PROFILE || !l) return false;
+  if (CURRENT_PROFILE.role === 'admin') return true;
+  return l.archived_by === CURRENT_PROFILE.id;
+}
+// תואם ל-leads_update/lag_insert/lag_update: רק יוצר הכרטיס (created_by) או
+// אדמין יכולים לנהל שחרור/ביטול צפייה על buyer/partner (לא manager).
+function canManageLeadAccess(l){
+  if (!CURRENT_PROFILE || !l) return false;
+  return CURRENT_PROFILE.role === 'admin' || l.created_by === CURRENT_PROFILE.id;
+}
+// אם זה buyer/partner, המשתמש הנוכחי אינו אדמין ואינו היוצר - הדרך היחידה
+// ש-RLS (leads_select) בכלל מאפשרת לו לראות את השורה היא grant פעיל.
+function isGrantOnlyViewer(l){
+  if (!l || !CURRENT_PROFILE) return false;
+  if (l.type !== 'buyer' && l.type !== 'partner') return false;
+  return CURRENT_PROFILE.role !== 'admin' && l.created_by !== CURRENT_PROFILE.id;
+}
+
+function canSendAgreement(){
+  if (!CURRENT_PROFILE) return false;
+  if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
+  return !!CURRENT_PROFILE.can_send_agreement;
+}
+
+// תצוגה מקוצרת בלבד (לא משפיע על הערך הנשמר בבסיס הנתונים)
+function agreementShortLabel(status){
+  const s = status || 'אין הסכם';
+  return s === 'נשלח הסכם לחתימה' ? 'נשלח לחתימה' : s;
+}
+function agreementBadge(status){
+  const s = status || 'אין הסכם';
+  const cls = s === 'יש הסכם חתום' ? 'agr-signed' : (s === 'נשלח הסכם לחתימה' ? 'agr-sent' : 'agr-none');
+  return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>`;
+}
+// שורת מידע פשוטה בלבד (לא באנר בולט) - השדה האמיתי הניתן לעריכה נמצא בטופס עצמו למטה
+function agreementBanner(status, agreementNumber, tableName, recordId, pdfPath, pdfUploadedAt, pdfUploadedBy){
+  const s = status || 'אין הסכם';
+  const icon = s === 'יש הסכם חתום' ? '✅' : (s === 'נשלח הסכם לחתימה' ? '📤' : '⭕');
+  const numPart = (s === 'יש הסכם חתום' && agreementNumber) ? ` &nbsp;·&nbsp; מס' הסכם: ${esc(agreementNumber)}` : '';
+  const statusLine = `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(agreementShortLabel(s))}${numPart}</div>`;
+  if (!tableName || !recordId) return statusLine;
+  const uploadWidget = manualAgreementUploadWidget(tableName, recordId);
+  const uploadedByPart = pdfUploadedBy ? ` &nbsp;·&nbsp; הועלה ע"י ${esc(userName(pdfUploadedBy))}` : '';
+  const pdfLine = pdfPath
+    ? `<div class="agr-note" style="margin-top:6px;">
+         📄 הסכם התקשרות חתום ${pdfUploadedAt ? `&nbsp;·&nbsp; הועלה ${fmtDate(pdfUploadedAt)}` : ''}${uploadedByPart}
+         &nbsp;·&nbsp;
+         <a href="javascript:void(0)" onclick="viewAgreementPdf('${tableName}','${recordId}')">צפייה</a>
+         &nbsp;·&nbsp;
+         <a href="javascript:void(0)" onclick="downloadAgreementPdf('${tableName}','${recordId}')">הורדה</a>
+       </div>`
+    : (s === 'יש הסכם חתום'
+        ? `<div class="agr-note" style="margin-top:6px;color:#8a6d1f;">⚠️ מסומן כחתום, אך קובץ ה-PDF החתום עדיין לא נשמר במערכת</div>`
+        : '');
+  return uploadWidget + statusLine + pdfLine;
+}
+
+async function _agreementSignedUrl(tableName, recordId, download){
+  const path = `agreements/${tableName}/${recordId}.pdf`;
+  const opts = download ? { download: true } : {};
+  const { data, error } = await window.supabaseClient.storage
+    .from(window.BSD_CONFIG.STORAGE_BUCKET).createSignedUrl(path, 300, opts);
+  if (error || !data){ toast('שגיאה בפתיחת ההסכם: ' + (error?.message || '')); return null; }
+  return data.signedUrl;
+}
+async function viewAgreementPdf(tableName, recordId){
+  const win = window.open('', '_blank');
+  const url = await _agreementSignedUrl(tableName, recordId, false);
+  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
+}
+async function downloadAgreementPdf(tableName, recordId){
+  const win = window.open('', '_blank');
+  const url = await _agreementSignedUrl(tableName, recordId, true);
+  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
+}
+
+/* ─────────── העלאה ידנית של הסכם חתום מחוץ למערכת (05.09.2026) ───────────
+   הרחבה בטוחה של המנגנון הקיים בלבד - ר' הערה מקבילה ב-businesses.html. */
+function manualAgreementUploadWidget(tableName, recordId){
+  if (!tableName || !recordId) return '';
+  if (typeof canSendAgreement === 'function' && !canSendAgreement()) return '';
+  return `<div class="agr-note" style="margin-bottom:6px;">
+    <input type="file" id="agrManualUploadInput" accept="application/pdf" style="display:none;" onchange="handleManualAgreementFile(event,'${tableName}','${recordId}')">
+    <button type="button" class="btn btn-ghost" onclick="triggerManualAgreementUpload()" style="font-weight:700;">📤 העלאת הסכם חתום</button>
+    <span id="agrManualUploadStatus" style="margin-inline-start:8px;font-size:.78rem;color:#665;"></span>
+  </div>`;
+}
+function triggerManualAgreementUpload(){
+  const input = document.getElementById('agrManualUploadInput');
+  if (input) input.click();
+}
+async function handleManualAgreementFile(event, tableName, recordId){
+  const input = event.target;
+  const statusEl = document.getElementById('agrManualUploadStatus');
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)){
+    toast('ניתן להעלות קובץ PDF בלבד');
+    input.value = '';
+    return;
+  }
+  if (file.size > 20 * 1024 * 1024){
+    toast('הקובץ גדול מדי (מקסימום 20MB)');
+    input.value = '';
+    return;
+  }
+  if (statusEl) statusEl.textContent = 'מעלה...';
+  const path = `agreements/${tableName}/${recordId}.pdf`;
+  const { error: upErr } = await bsdUploadFile(window.BSD_CONFIG.STORAGE_BUCKET, path, file, {
+    contentType: 'application/pdf',
+    upsert: true,
+    onProgress: pct => { if (statusEl) statusEl.textContent = `מעלה... ${pct}%`; }
+  });
+  if (upErr){
+    toast('שגיאה בהעלאת הקובץ: ' + upErr.message);
+    if (statusEl) statusEl.textContent = '';
+    input.value = '';
+    return;
+  }
+  const { error: rpcErr } = await window.supabaseClient.rpc('save_manual_signed_agreement', {
+    p_table_name: tableName,
+    p_record_id: recordId,
+    p_path: path,
+    p_uploaded_by: CURRENT_PROFILE.id
+  });
+  if (rpcErr){
+    toast('הקובץ הועלה אך השיוך לכרטיס נכשל: ' + rpcErr.message);
+    if (statusEl) statusEl.textContent = '';
+    input.value = '';
+    return;
+  }
+  toast('ההסכם החתום נשמר ושויך לכרטיס');
+  input.value = '';
+  await manualAgreementRefreshAfterUpload(tableName, recordId);
+}
+async function manualAgreementRefreshAfterUpload(tableName, recordId){
+  if (tableName === 'leads'){ await loadLeads(); openLeadForm(recordId); }
+}
+
+['fSearch','fType','fStatus','fAgreement','fCreatedBy','fSort','fRating'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', renderTable);
+  document.getElementById(id).addEventListener('change', renderTable);
+});
+
+function fmtPhone(phone){
+  if (!phone) return '—';
+  const p = String(phone);
+  if (/^0\d{9}$/.test(p)) return p.slice(0,3) + '-' + p.slice(3);
+  if (/^0\d{8}$/.test(p)) return p.slice(0,2) + '-' + p.slice(2);
+  return p;
+}
+function waPhoneDigits(phone){
+  if (!phone) return null;
+  let d = String(phone).replace(/\D/g,'');
+  if (!d) return null;
+  if (d.startsWith('972')) return d;
+  if (d.startsWith('0')) return '972' + d.slice(1);
+  return null;
+}
+function waBtn(phone){
+  const d = waPhoneDigits(phone);
+  if (!d) return '';
+  return `<a href="https://wa.me/${d}" target="_blank" rel="noopener" title="WhatsApp" onclick="event.stopPropagation()" style="display:inline-flex;vertical-align:middle;margin-inline-start:6px;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="#25D366" viewBox="0 0 16 16"><path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/></svg></a>`;
+}
+function last9Digits(phone){
+  const d = (phone || '').replace(/\D/g, '');
+  return d.length >= 9 ? d.slice(-9) : d;
+}
+async function findPossibleDuplicateLead(phone, email){
+  const last9 = last9Digits(phone);
+  const emailNorm = email ? email.trim().toLowerCase() : '';
+  if (!last9 && !emailNorm) return null;
+  const orParts = [];
+  if (last9) { orParts.push(`phone.ilike.%${last9}%`); orParts.push(`phone2.ilike.%${last9}%`); }
+  if (emailNorm) orParts.push(`email.ilike.${emailNorm}`);
+  const { data } = await window.supabaseClient.from('leads').select('id, full_name, phone, phone2, email, updated_at').or(orParts.join(','));
+  const verified = (data || []).filter(c => {
+    const phoneMatch = last9 && (last9Digits(c.phone) === last9 || last9Digits(c.phone2) === last9);
+    const emailMatch = emailNorm && (c.email || '').trim().toLowerCase() === emailNorm;
+    return phoneMatch || emailMatch;
+  });
+  if (!verified.length) return null;
+  verified.sort((a,b) => new Date(b.updated_at||0) - new Date(a.updated_at||0));
+  return verified[0];
+}
+function truncate(s, n){
+  if (!s) return '—';
+  return s.length > n ? esc(s.slice(0,n)) + '…' : esc(s);
+}
+function fieldRow(id,label,value,type='text'){
+  return `<div class="field"><label>${label}</label><input type="${type}" id="${id}" value="${esc(value||'')}"></div>`;
+}
+function fieldRowPhone(id,label,value){
+  const v = value ? fmtPhone(value) : '';
+  return `<div class="field"><label>${label}</label><input type="tel" id="${id}" value="${esc(v)}" dir="ltr" style="text-align:right;" placeholder="05X-XXXXXXX" oninput="this.value=this.value.replace(/[^0-9+\\-]/g,'')" onblur="if(this.value) this.value=fmtPhone(this.value)"></div>`;
+}
+function textareaRow(id,label,value,minHeight){
+  return `<div class="field full"><label>${label}</label><textarea id="${id}" style="min-height:${minHeight||60}px;">${esc(value||'')}</textarea></div>`;
+}
+
+function openLeadForm(id, forcedType, prefillData){
+  const lead = id ? ALL_LEADS.find(l=>l.id===id) : null;
+  const type = forcedType || (lead ? lead.type : 'buyer');
+  const pf = prefillData || {};
+
+  const modal = document.getElementById('modalBox');
+  const typeLabel = type==='buyer' ? 'קונה' : type==='partner' ? 'שותפות/השקעה' : 'מוכר';
+  modal.innerHTML = `
+    <h3>${lead ? 'עריכת' : 'הוספת'} ${typeLabel}</h3>
+    ${(lead && isGrantOnlyViewer(lead)) ? `<div style="background:#eef4fb;border:1px solid #cddcef;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#1a3d8f;margin-bottom:10px;">🔓 <b>שוחרר אליי</b> — צפייה בלבד, ללא אפשרות עריכה, מחיקה או שחרור לאחרים.</div>` : ''}
+    ${lead ? agreementBanner(lead.agreement_status, lead.agreement_number, 'leads', lead.id, lead.agreement_pdf_path, lead.agreement_pdf_uploaded_at, lead.agreement_pdf_uploaded_by) : ''}
+    ${lead && type === 'buyer' ? '<div id="anonReceivedBox" style="margin-bottom:10px;"></div>' : ''}
+    ${lead ? '' : `<div class="type-toggle">
+      <button type="button" class="${type==='buyer'?'active buyer':''}" onclick="switchLeadType('buyer', null)">קונה</button>
+      <button type="button" class="${type==='partner'?'active partner':''}" onclick="switchLeadType('partner', null)">שותפות/השקעה</button>
+      <button type="button" class="${type==='seller'?'active seller':''}" onclick="switchLeadType('seller', null)">מוכר</button>
+    </div>`}
+    ${!lead ? '<div id="leadDupBanner" style="display:none;"></div>' : ''}
+    <form id="leadForm">
+      <div class="form-grid">
+        ${lead ? `<div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;">
+          ${lead.client_number ? `מספר קונה/משקיע: <b style="font-size:.95rem;">${esc(lead.client_number)}</b> · ` : ''}הוזן ע"י: <b>${esc(userName(lead.created_by))}</b> בתאריך ${fmtDate(lead.created_at)}
+          ${(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin' && lead.internal_code) ? `<div style="margin-top:4px;font-size:.68rem;color:#aaa;">מזהה טכני (מנהל בלבד): ${esc(lead.internal_code)}</div>` : ''}
+        </div>
+        ${lead.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 רשומה זו נמצאת בארכיון${lead.archive_reason ? ' — סיבה: '+esc(lead.archive_reason) : ''}${canRestoreLead(lead) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreLeadFromArchive('${lead.id}')">↩️ שחזר מהארכיון</button>` : ''}</div>` : (canManageLead(lead) ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveLead('${lead.id}')">📁 העבר לארכיון</button></div>` : '')}` : ''}
+        <div class="field"><label>מטפל כרגע</label><select id="handled_by">${userOptions(lead?.handled_by)}</select></div>
+        <div class="section-h">פרטים כלליים</div>
+        ${fieldRow('first_name','שם פרטי', lead?.first_name || pf.first_name)}
+        ${fieldRow('last_name','שם משפחה', lead?.last_name || pf.last_name)}
+        ${fieldRowPhone('phone','טלפון', lead?.phone || pf.phone)}
+        ${fieldRowPhone('phone2','טלפון נוסף', lead?.phone2)}
+        ${fieldRow('email','דוא"ל', lead?.email || pf.email, 'email')}
+        ${fieldRow('city','עיר', lead?.city)}
+        ${fieldRow('address','כתובת', lead?.address)}
+        ${fieldRow('id_number','ת.ז / ח.פ / עוסק מורשה', lead?.id_number)}
+        ${fieldRow('company','חברה', lead?.company)}
+        ${fieldRow('source','מקור הפנייה', lead?.source)}
+        ${fieldRow('status','סטטוס', lead?.status)}
+        <div class="field"><label>סטטוס הסכם</label>
+          <select id="agreement_status">
+            <option value="אין הסכם" ${(!lead?.agreement_status || lead.agreement_status==='אין הסכם')?'selected':''}>אין הסכם</option>
+            <option value="נשלח הסכם לחתימה" ${lead?.agreement_status==='נשלח הסכם לחתימה'?'selected':''}>נשלח הסכם לחתימה</option>
+            <option value="יש הסכם חתום" ${lead?.agreement_status==='יש הסכם חתום'?'selected':''}>יש הסכם חתום</option>
+          </select>
+        </div>
+
+        ${(type==='buyer' || type==='partner') ? `
+          <div class="section-h">${type==='partner' ? 'פרטי שותפות/השקעה' : 'פרטי קונה'}</div>
+          ${canViewBuyerRating(CURRENT_PROFILE) ? `
+          <div class="field"><label>רמת רצינות</label>
+            <select id="rating_level_id" ${canEditBuyerRating(CURRENT_PROFILE) ? '' : 'disabled'}>
+              ${ratingLevelOptions(lead?.rating_level_id)}
+            </select>
+          </div>` : ''}
+          ${fieldRow('buyer_type','סוג הקונה', lead?.buyer_type)}
+          ${fieldRow('requested_field','תחום עסקי מבוקש', lead?.requested_field)}
+          ${fieldRow('requested_categories','קטגוריות מבוקשות', lead?.requested_categories)}
+          ${fieldRow('requested_area','עיר/אזור מבוקש', lead?.requested_area)}
+          ${fieldRow('budget','תקציב', lead?.budget, 'number')}
+          ${fieldRow('equity','הון עצמי', lead?.equity, 'number')}
+          ${fieldRow('financing_capacity','יכולת מימון', lead?.financing_capacity)}
+          ${fieldRow('requested_revenue','מחזור מבוקש', lead?.requested_revenue, 'number')}
+          ${fieldRow('requested_profit','רווח מבוקש', lead?.requested_profit, 'number')}
+          ${fieldRow('involvement_level','רמת מעורבות רצויה', lead?.involvement_level)}
+          ${fieldRow('partnership_willingness','נכונות לשותפות', lead?.partnership_willingness)}
+        ` : `
+          <div class="section-h">פרטי העסק והמוכר</div>
+          ${fieldRow('business_name','שם העסק', lead?.business_name)}
+          ${fieldRow('business_field','תחום העסק', lead?.business_field)}
+          ${fieldRow('business_city','עיר העסק', lead?.business_city)}
+          ${fieldRow('business_address','כתובת העסק', lead?.business_address)}
+          ${fieldRow('website','אתר אינטרנט', lead?.website)}
+          ${fieldRow('role_in_business','תפקיד בעסק', lead?.role_in_business)}
+          ${fieldRow('ownership_percent','אחוז בעלות', lead?.ownership_percent, 'number')}
+          ${fieldRow('asking_price','מחיר מבוקש', lead?.asking_price, 'number')}
+          ${fieldRow('sale_reason','סיבת מכירה', lead?.sale_reason)}
+          ${fieldRow('agreement_signed_date','תאריך חתימת הסכם (אם רלוונטי)', lead?.agreement_signed_date, 'date')}
+        `}
+        <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>הערות</span>
+          <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="openNotesRecording({recordId:'${lead ? lead.id : 'new-' + Date.now()}', label:'${esc((lead?.full_name || 'רשומה חדשה').replace(/'/g,''))}', textareaId:'notes', currentProfile:CURRENT_PROFILE})">🎙️ הקלט הערות</button>
+        </div>
+        ${textareaRow('notes','הערות', lead?.notes || pf.notes, 180)}
+        ${(lead && !isGrantOnlyViewer(lead)) ? `
+        <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>📲 WhatsApp</span>
+          <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;color:#128C4A;" onclick="waOpenSendModal({entityType:'lead', entityId:'${lead.id}', phone:'${esc(lead.phone||'')}', recipientName:'${esc((lead.full_name||'').replace(/'/g,''))}', templateKey:'${type}', ctx:{firstName:'${esc((lead.first_name||'').replace(/'/g,''))}', area:'${esc((lead.requested_area||'').replace(/'/g,''))}', businessName:'${esc((lead.business_name||'').replace(/'/g,''))}'}, onLogged: () => waRenderHistory('lead','${lead.id}','leadWaHistoryBox')})">שלח WhatsApp</button>
+        </div>
+        <div class="field full" id="leadWaHistoryBox" style="font-size:.82rem;">טוען...</div>
+        ` : ''}
+        ${(lead && !isGrantOnlyViewer(lead)) ? `
+        <div class="section-h">🎙️ הקלטות ותמלולים</div>
+        <div class="field full">
+          ${CURRENT_PROFILE.can_record!==false ? `<button type="button" class="btn btn-ghost" onclick="window.openStandaloneRecording({type:'buyer', id:'${lead.id}', label:'${esc((lead.full_name||'קונה').replace(/'/g,''))}', currentProfile:CURRENT_PROFILE, onSaved: () => loadLeadMeetings('${lead.id}')})">🔴 הקלט שיחה/פגישה</button>` : ''}
+          <div id="leadMeetingsList" style="margin-top:10px;font-size:.82rem;">טוען...</div>
+        </div>
+        ` : ''}
+        ${(lead && type === 'buyer') ? `
+        <div class="section-h">🏢 עסקים שהוצעו לקונה</div>
+        <div class="field full" id="leadMatchesModuleBox">טוען...</div>
+        ` : ''}
+        ${(lead && (type === 'buyer' || type === 'partner') && canManageLeadAccess(lead)) ? `
+        <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>🔓 שחרור לצפייה</span>
+          <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="openReleaseLeadAccessModal('${lead.id}')">+ שחרר לצפייה</button>
+        </div>
+        <div class="field full">
+          <div id="leadAccessGrantsList" style="font-size:.82rem;">טוען...</div>
+        </div>
+        ` : ''}
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="cancelLeadForm()">ביטול</button>
+        ${(lead && isGrantOnlyViewer(lead)) ? '' : '<button type="submit" class="btn btn-primary">שמירה</button>'}
+      </div>
+    </form>
+  `;
+
+  if (type === 'seller' && lead){
+  // (agreement_status הוחלף בשדה מאוחד - אין צורך למלא checkbox-ים ישנים)
+  }
+
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('overlay').scrollTop = 0;
+  document.getElementById('leadForm').dataset.leadId = lead ? lead.id : '';
+  document.getElementById('leadForm').dataset.leadType = type;
+  document.getElementById('leadForm').addEventListener('submit', saveLead);
+  // בדיקת כפילות בזמן הקלדה - רק בהוספת קונה/ליד חדש (לא בעריכת רשומה קיימת)
+  if (!lead){
+    const dupCheck = bsdDupDebounce(async () => {
+      const fName = document.getElementById('first_name').value;
+      const lName = document.getElementById('last_name').value;
+      const fullName = [fName, lName].filter(Boolean).join(' ');
+      const phone = document.getElementById('phone').value;
+      const idNumEl = document.getElementById('id_number');
+      const idNum = idNumEl ? idNumEl.value : '';
+      if (!fullName && !phone) { bsdRenderDupBanner('leadDupBanner', [], 'openLeadFormFromDup'); return; }
+      const { data, error } = await window.supabaseClient.rpc('bsd_check_lead_duplicate', {
+        p_full_name: fullName || null, p_phone: phone || null, p_id_number: idNum || null, p_exclude_id: null
+      });
+      if (!error) bsdRenderDupBanner('leadDupBanner', data || [], 'openLeadFormFromDup');
+    }, 600);
+    ['first_name', 'last_name', 'phone'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', dupCheck);
+    });
+  }
+  if (lead && !isGrantOnlyViewer(lead)) loadLeadMeetings(lead.id);
+  if (lead && !isGrantOnlyViewer(lead)) waRenderHistory('lead', lead.id, 'leadWaHistoryBox');
+  if (lead && type === 'buyer') loadAnonReceived(lead.id);
+  if (lead && type === 'buyer') loadLeadMatchesModule(lead.id);
+  if (lead && (type === 'buyer' || type === 'partner') && canManageLeadAccess(lead)) loadLeadAccessGrants(lead.id);
+  if (lead && isGrantOnlyViewer(lead)) applyReadOnlyLeadForm();
+}
+
+function applyReadOnlyLeadForm(){
+  const form = document.getElementById('leadForm');
+  if (!form) return;
+  form.querySelectorAll('input, select, textarea').forEach(el => { el.disabled = true; });
+}
+
+// שחרור קונים/משקיעים לצפייה (24.08.2026) - RLS (lag_select/insert/update)
+// כבר אוכפת שרק היוצר או אדמין יכולים לנהל את זה; הממשק רק חושף פעולה
+// שממילא חסומה בשרת למי שאין לו הרשאה - לא מסתמך על הסתרת הכפתור בלבד.
+async function loadLeadAccessGrants(leadId){
+  const box = document.getElementById('leadAccessGrantsList');
+  if (!box) return;
+  const { data, error } = await window.supabaseClient
+    .from('lead_access_grants')
+    .select('*')
+    .eq('lead_id', leadId)
+    .eq('active', true)
+    .order('granted_at', { ascending: false });
+  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה: ${esc(error.message)}</span>`; return; }
+  window.CURRENT_LEAD_GRANTS = data || [];
+  if (!data || !data.length){ box.innerHTML = '<span style="color:#999;">עדיין לא שוחרר לאף משתמש</span>'; return; }
+  box.innerHTML = data.map(g => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eee;flex-wrap:wrap;gap:6px;">
+      <span><b>${esc(userName(g.granted_to))}</b> · שוחרר ב-${fmtDate(g.granted_at)} ע"י ${esc(userName(g.granted_by))}</span>
+      <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="revokeLeadAccessGrant('${g.id}','${leadId}')">בטל צפייה</button>
+    </div>
+  `).join('');
+}
+
+function openReleaseLeadAccessModal(leadId){
+  const alreadyGranted = (window.CURRENT_LEAD_GRANTS || []).map(g => g.granted_to);
+  const candidateUsers = ALL_USERS.filter(u => u.id !== CURRENT_PROFILE.id && !alreadyGranted.includes(u.id));
+  const overlay = document.createElement('div');
+  overlay.id = 'releaseLeadAccessOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:400;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;max-height:80vh;overflow:auto;">
+      <h3 style="margin:0 0 16px;color:#0e1b34;border-right:4px solid #c9a24b;padding-right:10px;">שחרור לצפייה</h3>
+      <label style="display:block;font-size:.8rem;color:#666;margin-bottom:8px;">בחר משתמש אחד או יותר לשחרור צפייה בכרטיס:</label>
+      <div id="releaseLeadUserList" style="max-height:260px;overflow:auto;border:1px solid #d8d3c4;border-radius:8px;padding:8px;margin-bottom:10px;">
+        ${candidateUsers.length ? candidateUsers.map(u => `
+          <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;cursor:pointer;">
+            <input type="checkbox" value="${u.id}" class="release-lead-user-cb">
+            <span>${esc(u.full_name && u.full_name.trim() ? u.full_name : u.email)}</span>
+          </label>
+        `).join('') : '<span style="color:#999;font-size:.85rem;">כל המשתמשים הפעילים כבר משוחררים</span>'}
+      </div>
+      <div id="releaseLeadAccessError" style="display:none;color:#b00020;font-size:.82rem;margin-bottom:8px;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button onclick="document.getElementById('releaseLeadAccessOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
+        <button id="releaseLeadAccessSubmitBtn" onclick="submitReleaseLeadAccess('${leadId}')" style="background:#c9a24b;color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שחרר לנבחרים</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function submitReleaseLeadAccess(leadId){
+  const checked = Array.from(document.querySelectorAll('.release-lead-user-cb:checked')).map(cb => cb.value);
+  const errEl = document.getElementById('releaseLeadAccessError');
+  if (errEl) errEl.style.display = 'none';
+  if (!checked.length){
+    if (errEl){ errEl.textContent = '⚠️ יש לבחור לפחות משתמש אחד'; errEl.style.display = 'block'; }
+    return;
+  }
+  const btn = document.getElementById('releaseLeadAccessSubmitBtn');
+  if (btn){ btn.disabled = true; btn.textContent = 'משחרר...'; }
+  const rows = checked.map(uid => ({ lead_id: leadId, granted_to: uid, granted_by: CURRENT_PROFILE.id }));
+  const { error } = await window.supabaseClient.from('lead_access_grants').insert(rows);
+  if (btn){ btn.disabled = false; btn.textContent = 'שחרר לנבחרים'; }
+  if (error){
+    if (errEl){ errEl.textContent = 'שגיאה: ' + error.message; errEl.style.display = 'block'; }
+    return;
+  }
+  if (typeof bsdLogActivity === 'function') bsdLogActivity('release_lead_access', 'leads', leadId, { users: checked });
+  document.getElementById('releaseLeadAccessOverlay').remove();
+  toast('שוחרר בהצלחה');
+  await loadLeadAccessGrants(leadId);
+}
+
+async function revokeLeadAccessGrant(grantId, leadId){
+  if (!confirm('לבטל את הצפייה של המשתמש הזה בכרטיס? הוא לא יראה אותו יותר ברשימה שלו.')) return;
+  const { error } = await window.supabaseClient.from('lead_access_grants')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('id', grantId);
+  if (error){ toast('שגיאה: ' + error.message); return; }
+  if (typeof bsdLogActivity === 'function') bsdLogActivity('revoke_lead_access', 'leads', leadId, { grant_id: grantId });
+  toast('הצפייה בוטלה');
+  await loadLeadAccessGrants(leadId);
+}
+
+// סעיף 6 באפיון: מה קיבל הקונה - אילו עסקים אנונימיים, מתי, ממי, ובאיזה סטטוס
+async function loadAnonReceived(buyerId){
+  const box = document.getElementById('anonReceivedBox');
+  if (!box) return;
+  const { data, error } = await window.supabaseClient
+    .from('anon_distributions')
+    .select('id, business_id, sender_user_id, followup_status, delivery_status, sent_at')
+    .eq('buyer_id', buyerId)
+    .order('sent_at', { ascending: false });
+  if (error || !data || !data.length){ box.innerHTML = ''; return; }
+  box.innerHTML = `
+    <div style="background:#eef4fb;border:1px solid #cddcef;border-radius:8px;padding:10px 12px;font-size:.8rem;">
+      <b>📥 חומר אנונימי שהתקבל:</b>
+      <div style="margin-top:6px;">
+        ${data.map(d => `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:.78rem;">
+            <span>${fmtDate(d.sent_at)} · נשלח ע"י ${esc(userName(d.sender_user_id))}${d.delivery_status==='failed' ? ' (שליחה נכשלה)' : ''}</span>
+            <select onchange="updateAnonFollowup('${d.id}', this.value)" style="font-size:.75rem;padding:2px 4px;">
+              ${['נשלח','התקבל','נוצר קשר','הקונה מתעניין','מבקש פרטים מלאים','בקשת שחרור נשלחה','פרטים שוחררו','פגישה נקבעה','לא רלוונטי','נדחה']
+                .map(s => `<option value="${esc(s)}" ${d.followup_status===s?'selected':''}>${esc(s)}</option>`).join('')}
+            </select>
+          </div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+async function updateAnonFollowup(distId, status){
+  const { error } = await window.supabaseClient.from('anon_distributions').update({ followup_status: status }).eq('id', distId);
+  if (error){ toast('שגיאה בעדכון סטטוס: ' + error.message); return; }
+  toast('סטטוס עודכן');
+}
+
+async function loadLeadMeetings(leadId){
+  const box = document.getElementById('leadMeetingsList');
+  if (!box) return;
+  const { data, error } = await window.supabaseClient.from('match_meetings').select('*').eq('buyer_id', leadId).is('match_id', null).is('deleted_at', null).order('meeting_date', {ascending:false});
+  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה: ${esc(error.message)}</span>`; return; }
+  if (!data || !data.length){ box.innerHTML = '<span style="color:#999;">אין עדיין הקלטות</span>'; return; }
+  const lead = ALL_LEADS.find(l=>l.id===leadId);
+  const leadName = (lead?.full_name) || [lead?.first_name,lead?.last_name].filter(Boolean).join(' ') || 'קונה';
+  box.innerHTML = data.map(m=>`
+    <div style="border:1px solid #eee;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
+      <div style="font-weight:700;">${esc(m.meeting_type||'—')} <span style="font-weight:400;color:#8a93ab;">· ${fmtDate(m.meeting_date)}</span></div>
+      ${m.summary_text ? `<div style="font-size:.8rem;color:#555;margin-top:3px;">${esc(m.summary_text).slice(0,140)}${m.summary_text.length>140?'…':''}</div>` : ''}
+      <div style="margin-top:6px;display:flex;gap:6px;">
+        <button type="button" class="btn btn-ghost" style="padding:5px 10px;font-size:.78rem;" onclick='window.viewStandaloneMeetingPdf(${JSON.stringify(m)}, ${JSON.stringify(leadName)})'>👁️ צפה</button>
+        <button type="button" class="btn btn-ghost" style="padding:5px 10px;font-size:.78rem;" onclick='window.downloadStandaloneMeetingPdf(${JSON.stringify(m)}, ${JSON.stringify(leadName)})'>📄 הורד PDF</button>
+      </div>
+    </div>`).join('');
+}
+
+// 🏢 "עסקים שהוצעו לקונה" - אזור מוטמע בכרטיס הקונה (הנחיית שדרוג המשך, 28.08.2026 שלב ב')
+const LEAD_MATCH_CLOSED_STATUSES = ['נסגר ללא עסקה','הקונה לא מעוניין','הוקפא','עסקה הושלמה'];
+async function loadLeadMatchesModule(leadId){
+  const box = document.getElementById('leadMatchesModuleBox');
+  if (!box) return;
+  const lead = ALL_LEADS.find(l=>l.id===leadId);
+  const { data: matches, error } = await window.supabaseClient.from('matches').select('*').eq('buyer_id', leadId).order('updated_at',{ascending:false});
+  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה בטעינת ההתאמות: ${esc(error.message)}</span>`; return; }
+  const rows = matches || [];
+  const bizIds = [...new Set(rows.map(m=>m.business_id))];
+  let bizList = [];
+  if (bizIds.length){
+    const { data } = await window.supabaseClient.from('businesses').select('id,internal_name,business_number,anon_display_name').in('id', bizIds);
+    bizList = data || [];
+  }
+  const bizById = {}; bizList.forEach(b=>bizById[b.id]=b);
+  const activeCount = rows.filter(m=>!LEAD_MATCH_CLOSED_STATUSES.includes(m.status)).length;
+  const closedCount = rows.length - activeCount;
+  const leadName = (lead?.full_name) || [lead?.first_name,lead?.last_name].filter(Boolean).join(' ') || 'קונה';
+
+  let html = `
+    <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:.85rem;">
+        <b>${esc(leadName)}</b> ${lead?.client_number?`(${esc(lead.client_number)})`:''} &nbsp;·&nbsp;
+        ${rows.length} עסקים &nbsp;·&nbsp; <span style="color:#1e7b34;font-weight:700;">${activeCount} פעילות</span> &nbsp;·&nbsp; <span style="color:#8a8368;">${closedCount} שהסתיימו</span>
+      </div>
+      <button type="button" class="btn btn-ghost" onclick="openAddBizToMatchModal('${leadId}')">➕ הוסף עסק להתאמה</button>
+      <button type="button" class="btn btn-ghost" onclick="openBuyerActivityReportModal('${leadId}')">📊 הפק דוח עסקים לקונה</button>
+    </div>`;
+
+  if (!rows.length){
+    html += `<div style="color:#999;font-size:.82rem;">אין עדיין עסקים שהוצעו לקונה זה.</div>`;
+  } else {
+    html += `<input type="text" id="leadMatchSearch" placeholder="חיפוש בטבלה: שם עסק, מספר, סטטוס, מטפל..." style="width:100%;padding:7px 10px;border:1px solid #d8d3c4;border-radius:8px;margin-bottom:8px;font-family:inherit;font-size:.8rem;box-sizing:border-box;">
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.78rem;" id="leadMatchTable">
+      <thead><tr style="background:#0e1b34;color:#fff;">
+        <th style="padding:6px 8px;text-align:right;">עסק</th>
+        <th style="padding:6px 8px;text-align:right;">מספר עסק</th>
+        <th style="padding:6px 8px;text-align:right;">נוצרה</th>
+        <th style="padding:6px 8px;text-align:right;">הועבר</th>
+        <th style="padding:6px 8px;text-align:right;">סטטוס</th>
+        <th style="padding:6px 8px;text-align:right;">פעילות אחרונה</th>
+        <th style="padding:6px 8px;text-align:right;">מעקב הבא</th>
+        <th style="padding:6px 8px;text-align:right;">מטפל</th>
+        <th style="padding:6px 8px;text-align:right;">תוצאה</th>
+        <th></th>
+      </tr></thead><tbody>
+      ${rows.map(m=>{
+        const biz = bizById[m.business_id];
+        const bizLabel = biz ? (biz.internal_name || biz.anon_display_name || 'עסק') : 'עסק מוגן (אין הרשאת צפייה)';
+        const searchHay = [bizLabel, biz?.business_number, m.status, userName(m.current_handler), m.final_result, m.notes].filter(Boolean).join(' ').toLowerCase();
+        return `<tr data-hay="${esc(searchHay)}" style="border-bottom:1px solid #eee;cursor:pointer;" onclick="location.href='match-detail.html?id=${m.id}'">
+          <td style="padding:6px 8px;" onclick="event.stopPropagation();${biz?`location.href='businesses.html?open=${m.business_id}'`:''}"><span style="${biz?'color:#1d4e89;font-weight:700;text-decoration:underline;':'color:#999;'}">${esc(bizLabel)}</span></td>
+          <td style="padding:6px 8px;">${esc(biz?.business_number||'—')}</td>
+          <td style="padding:6px 8px;">${fmtDate(m.created_at)}</td>
+          <td style="padding:6px 8px;">${esc(m.material_type||'—')}</td>
+          <td style="padding:6px 8px;"><span style="background:#eef1f8;border-radius:10px;padding:2px 8px;">${esc(m.status||'—')}</span></td>
+          <td style="padding:6px 8px;">${fmtDate(m.updated_at)}</td>
+          <td style="padding:6px 8px;">${m.next_action_at?fmtDate(m.next_action_at):'—'}</td>
+          <td style="padding:6px 8px;">${esc(userName(m.current_handler)||'—')}</td>
+          <td style="padding:6px 8px;">${esc(m.final_result||'—')}</td>
+          <td style="padding:6px 8px;"><button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;" onclick="event.stopPropagation();location.href='match-detail.html?id=${m.id}'">📁 פתח תיק</button></td>
+        </tr>`;
+      }).join('')}
+      </tbody></table></div>`;
+  }
+  box.innerHTML = html;
+  const searchBox = document.getElementById('leadMatchSearch');
+  if (searchBox) searchBox.addEventListener('input', ()=>{
+    const q = searchBox.value.trim().toLowerCase();
+    document.querySelectorAll('#leadMatchTable tbody tr').forEach(tr=>{
+      tr.style.display = (!q || (tr.dataset.hay||'').includes(q)) ? '' : 'none';
+    });
+  });
+}
+
+function switchLeadType(newType, leadId){
+  const lead = leadId ? ALL_LEADS.find(l=>l.id===leadId) : null;
+  openLeadForm(leadId, newType);
+}
+
+async function saveLead(e){
+  e.preventDefault();
+  const form = e.target;
+  const submitBtn = form.querySelector('button[type="submit"]');
+  bsdSetButtonLoading(submitBtn, true, 'שומר...');
+  try {
+  const leadId = form.dataset.leadId;
+  const type = form.dataset.leadType;
+
+  const g = id => document.getElementById(id) ? document.getElementById(id).value : null;
+  const num = v => v === '' || v === null ? null : Number(v);
+
+  const payload = {
+    type,
+    first_name: g('first_name'), last_name: g('last_name'),
+    full_name: [g('first_name'), g('last_name')].filter(Boolean).join(' '),
+    phone: g('phone'), phone2: g('phone2'), email: g('email'),
+    city: g('city'), address: g('address'), id_number: g('id_number'), company: g('company'),
+    source: g('source'), status: g('status'), notes: g('notes'),
+    handled_by: g('handled_by') || null,
+    agreement_status: g('agreement_status') || 'אין הסכם'
+  };
+
+  if (type === 'buyer' || type === 'partner'){
+    Object.assign(payload, {
+      buyer_type: g('buyer_type'), requested_field: g('requested_field'),
+      requested_categories: g('requested_categories'), requested_area: g('requested_area'),
+      budget: num(g('budget')), equity: num(g('equity')),
+      financing_capacity: g('financing_capacity'),
+      requested_revenue: num(g('requested_revenue')), requested_profit: num(g('requested_profit')),
+      involvement_level: g('involvement_level'), partnership_willingness: g('partnership_willingness')
+    });
+    // רמת הרצינות נשלחת רק אם השדה בפועל מוצג וניתן לעריכה בטופס הזה - אם
+    // אין הרשאת עריכה השדה disabled וכלל לא נשלח, כדי לא לדרוס בטעות דירוג
+    // קיים בעדכון של שדה אחר. leads_update+הטריגר בשרת חוסמים בכל מקרה שינוי
+    // בפועל ללא הרשאה, זו רק מניעה נוספת בצד הלקוח.
+    const ratingEl = document.getElementById('rating_level_id');
+    if (ratingEl && !ratingEl.disabled) payload.rating_level_id = ratingEl.value || null;
+  } else {
+    Object.assign(payload, {
+      business_name: g('business_name'), business_field: g('business_field'),
+      business_city: g('business_city'), business_address: g('business_address'),
+      website: (function(){ let w=g('website'); if(!w) return null; w=w.trim(); if(!w) return null; if(!/^https?:\/\//i.test(w)) w='https://'+w; return w; })(),
+      role_in_business: g('role_in_business'), ownership_percent: num(g('ownership_percent')),
+      asking_price: num(g('asking_price')), sale_reason: g('sale_reason'),
+      agreement_signed_date: g('agreement_signed_date') || null
+    });
+  }
+
+  let error;
+  if (leadId){
+    ({ error } = await window.supabaseClient.from('leads').update(payload).eq('id', leadId));
+    if (!error) bsdLogActivity('update', 'leads', leadId);
+  } else {
+    // בדיקה כפולה לפני שמירה (סעיף 5 באפיון): גם אם כבר בוצעה בדיקה בזמן
+    // ההקלדה, בודקים שוב ממש לפני היצירה. בדיקת טלפון/ת.ז מרוכזת דרך
+    // bsd_check_lead_duplicate (RPC); בדיקת מייל נשארת בנוסף דרך
+    // findPossibleDuplicateLead הקיימת - שתי הבדיקות משלימות זו את זו.
+    const [dupMatchesResult, emailDup] = await Promise.all([
+      window.supabaseClient.rpc('bsd_check_lead_duplicate', {
+        p_full_name: payload.full_name || null, p_phone: payload.phone || null,
+        p_id_number: payload.id_number || null, p_exclude_id: null
+      }),
+      findPossibleDuplicateLead(null, payload.email)
+    ]);
+    const dupMatches = dupMatchesResult.data || [];
+    const strongMatches = dupMatches.filter(m => m.match_level === 'phone' || m.match_level === 'id_number');
+    if (strongMatches.length || emailDup){
+      const combined = strongMatches.length ? dupMatches : (emailDup ? [{
+        id: emailDup.id, full_name: emailDup.full_name, phone: emailDup.phone,
+        match_level: 'email'
+      }] : dupMatches);
+      const decision = await bsdShowDupConfirmDialog({ matches: combined, entityLabel: type === 'buyer' ? 'קונה' : 'ליד' });
+      if (decision.action === 'cancel'){ bsdSetButtonLoading(submitBtn, false); return; }
+      if (decision.action === 'open'){ closeModal(); openLeadForm(decision.id); return; }
+      if (decision.action === 'override'){ payload.dedupe_override_reason = decision.reason; }
+    }
+    payload.created_by = CURRENT_PROFILE ? CURRENT_PROFILE.id : null;
+    const insertResult = await window.supabaseClient.from('leads').insert(payload).select('id').single();
+    error = insertResult.error;
+    if (!error && insertResult.data) bsdLogActivity('create', 'leads', insertResult.data.id);
+  }
+
+  if (error){
+    const serverMatches = bsdParseServerDupError(error);
+    if (serverMatches){
+      toast('⚠️ קיים כבר במערכת קונה/ליד שעשוי להתאים לפרטים שהוזנו');
+      bsdRenderDupBanner('leadDupBanner', serverMatches, 'openLeadFormFromDup');
+      document.getElementById('leadDupBanner')?.scrollIntoView({behavior:'smooth', block:'nearest'});
+      return;
+    }
+    toast('שגיאה בשמירה: ' + error.message); return;
+  }
+  // תיקון 25.08.2026 (כלל עסקי מחייב): הצגת ליד במסך הזה לעולם לא מותנית
+  // בהסכם (ראו loadLeads) - לכן אין יותר צורך להעביר החוצה ל"לידים" כשאין
+  // הסכם. ליד חדש נשאר ומופיע כאן מיד אחרי השמירה, בדיוק כמו כל ליד אחר.
+  // ה"תיקון" הקודם (הפניה ל-leads-hub עם הודעה) הוסר - הוא היה מבוסס על
+  // הנחה שגויה שהסינון-לפי-הסכם הוא עיצוב תקין; זו בדיוק ההנחה שהתבררה
+  // כשגויה ותוקנה בשורש.
+  toast('נשמר בהצלחה');
+  closeModal();
+  await loadLeads();
+  } finally {
+    bsdSetButtonLoading(submitBtn, false);
+  }
+}
+
+async function sendAgreementForLead(id){
+  const l = ALL_LEADS.find(x=>x.id===id);
+  if (!l){ toast('רשומה לא נמצאה'); return; }
+  const personName = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || '';
+  const bizField = l.type === 'seller' ? (l.business_name || '') : (l.requested_field || '');
+  const params = new URLSearchParams({
+    type: l.type === 'seller' ? 'seller' : 'buyer',
+    name: personName,
+    phone: l.phone || '',
+    biz: bizField
+  });
+  window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
+
+  // סימון הרשומה כ"נשלח הסכם לחתימה" (אלא אם כבר חתום)
+  if (l.agreement_status !== 'יש הסכם חתום'){
+    const { error } = await window.supabaseClient.from('leads')
+      .update({ agreement_status: 'נשלח הסכם לחתימה' }).eq('id', id);
+    if (!error){
+      l.agreement_status = 'נשלח הסכם לחתימה';
+      renderTable();
+    }
+  }
+}
+
+function closeNotesPanel(){
+  const ov = document.getElementById('notesOverlay');
+  if (ov) ov.remove();
+}
+
+let NOTES_SUMMARY = {}; // record_id -> { count, maxCreatedAt }
+let NOTES_READS = {};   // record_id -> last_read_at (של המשתמש הנוכחי)
+
+async function loadNotesSummary(tableName){
+  const { data: notesData } = await window.supabaseClient
+    .from('record_notes').select('record_id, created_at, note_text').eq('table_name', tableName);
+  NOTES_SUMMARY = {};
+  (notesData || []).forEach(n => {
+    const cur = NOTES_SUMMARY[n.record_id];
+    if (!cur || n.created_at > cur.maxCreatedAt) {
+      NOTES_SUMMARY[n.record_id] = { count: (cur ? cur.count : 0) + 1, maxCreatedAt: n.created_at, latestText: n.note_text };
+    } else {
+      cur.count += 1;
+    }
+  });
+
+  if (CURRENT_PROFILE) {
+    const { data: readsData } = await window.supabaseClient
+      .from('record_notes_reads').select('record_id, last_read_at')
+      .eq('table_name', tableName).eq('user_id', CURRENT_PROFILE.id);
+    NOTES_READS = {};
+    (readsData || []).forEach(r => { NOTES_READS[r.record_id] = r.last_read_at; });
+  }
+}
+
+function notesIconStyle(recordId){
+  const summary = NOTES_SUMMARY[recordId];
+  if (!summary) return ''; // אין הערות בכלל - אייקון רגיל
+  const lastRead = NOTES_READS[recordId];
+  const unread = !lastRead || lastRead < summary.maxCreatedAt;
+  return unread
+    ? 'background:#1a3d8f;border-radius:6px;box-shadow:0 0 0 2px #1a3d8f;'
+    : 'background:#cfe8fb;border-radius:6px;';
+}
+
+function notesTooltip(recordId){
+  const summary = NOTES_SUMMARY[recordId];
+  if (!summary || !summary.count) return 'הערות (אין הערות עדיין)';
+  const countLabel = summary.count === 1 ? 'הערה אחת' : `${summary.count} הערות`;
+  // תקציר קצר של ההערה האחרונה - מוצג ב-title (מעבר עכבר) בלי לפתוח את הכרטיס
+  const excerpt = (summary.latestText || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+  return excerpt ? `${countLabel} - אחרונה: "${excerpt}${summary.latestText.trim().length > 80 ? '…' : ''}"` : countLabel;
+}
+
+async function markNotesRead(tableName, recordId){
+  if (!CURRENT_PROFILE) return;
+  await window.supabaseClient.from('record_notes_reads').upsert({
+    user_id: CURRENT_PROFILE.id, table_name: tableName, record_id: recordId,
+    last_read_at: new Date().toISOString()
+  }, { onConflict: 'user_id,table_name,record_id' });
+  NOTES_READS[recordId] = new Date().toISOString();
+  renderTable();
+}
+
+async function openNotesPanel(tableName, recordId, recordLabel){
+  closeNotesPanel();
+  const overlay = document.createElement('div');
+  overlay.id = 'notesOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:95;padding:40px 20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:560px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+      <h3 style="margin:0 0 16px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">הערות - ${esc(recordLabel)}</h3>
+      <div id="notesList" style="max-height:200px;overflow-y:scroll;margin-bottom:16px;scrollbar-width:thin;"></div>
+      <textarea id="newNoteText" placeholder="הוסף הערה..." style="width:100%;min-height:70px;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;margin-bottom:10px;"></textarea>
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button onclick="closeNotesPanel()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
+        <button onclick="addNote('${tableName}','${recordId}')" style="background:var(--gold);color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">הוסף הערה</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  await loadNotes(tableName, recordId);
+  await markNotesRead(tableName, recordId);
+}
+
+async function loadNotes(tableName, recordId){
+  const { data } = await window.supabaseClient
+    .from('record_notes')
+    .select('id, note_text, created_at, author_id')
+    .eq('table_name', tableName).eq('record_id', recordId)
+    .order('created_at', { ascending: false });
+  const list = document.getElementById('notesList');
+  if (!list) return;
+  if (!data || data.length === 0){
+    list.innerHTML = '<div style="color:#999;text-align:center;padding:14px;">אין הערות עדיין</div>';
+    return;
+  }
+  list.innerHTML = data.map(n => `
+    <div style="border-bottom:1px solid #f0ede4;padding:10px 0;">
+      <div style="font-size:.78rem;color:#999;margin-bottom:3px;">
+        <b style="color:${creatorColor(n.author_id) || 'var(--navy)'};">${esc(userName(n.author_id))}</b> · ${fmtDateTime(n.created_at)}
+      </div>
+      <div style="font-size:.88rem;color:#333;white-space:pre-wrap;">${esc(n.note_text)}</div>
+    </div>`).join('');
+}
+
+async function addNote(tableName, recordId){
+  const text = document.getElementById('newNoteText').value.trim();
+  if (!text){ toast('נא להזין טקסט הערה'); return; }
+  const { error } = await window.supabaseClient.from('record_notes').insert({
+    table_name: tableName, record_id: recordId,
+    author_id: CURRENT_PROFILE ? CURRENT_PROFILE.id : null,
+    note_text: text
+  });
+  if (error){ toast('שגיאה בשמירת ההערה: ' + error.message); return; }
+  document.getElementById('newNoteText').value = '';
+  await loadNotes(tableName, recordId);
+  await loadNotesSummary(tableName);
+  await markNotesRead(tableName, recordId);
+}
+
+async function archiveLead(id){
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
+  const l = ALL_LEADS.find(x=>x.id===id);
+  if (!canManageLead(l)){ toast('אין לך הרשאה להעביר רשומה זו לארכיון'); return; }
+  const personName = l ? (l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ')) : '';
+  openArchiveReasonModal('העברת "' + (personName||'הרשומה') + '" לארכיון', async (reason)=>{
+    const { error } = await window.supabaseClient.from('leads').update({ is_archived: true, archive_reason: reason }).eq('id', id);
+    if (error){ toast('שגיאה בהעברה לארכיון: ' + error.message); return; }
+    toast('הועבר לארכיון');
+    await loadLeads();
+  });
+}
+async function restoreLeadFromArchive(id){
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
+  const l = ARCHIVED_LEADS.find(x=>x.id===id);
+  if (!canRestoreLead(l)){ toast('שחזור מהארכיון מותר רק לאדמין או למי שהעביר את הכרטיס לארכיון'); return; }
+  if (!confirm('לשחזר רשומה זו מהארכיון?')) return;
+  const { error } = await window.supabaseClient.from('leads').update({ is_archived: false }).eq('id', id);
+  if (error){ toast('שגיאה בשחזור: ' + error.message); return; }
+  toast('שוחזר מהארכיון');
+  await loadLeads();
+}
+// תיקון 02.09.2026: בדיוק כמו deleteBiz בעסקים - לפני מחיקה בודקים היסטוריה
+// אמיתית (get_lead_history_summary, SECURITY DEFINER) ולעולם לא ממשיכים
+// למחיקה פיזית אם הבדיקה עצמה נכשלה. אם יש היסטוריה קשורה - מעבירים
+// לארכיון אוטומטית במקום למחוק, כדי לשמר קבצים/הערות/התאמות/הסכמים.
+async function leadHasAnyHistory(id){
+  const { data, error } = await window.supabaseClient.rpc('get_lead_history_summary', { p_lead_id: id });
+  if (error) throw new Error('בדיקת היסטוריה נכשלה: ' + error.message);
+  const rows = (data || []).filter(r => r.row_count > 0);
+  return { hasHistory: rows.length > 0, details: rows.map(r => `${r.table_name}: ${r.row_count}`) };
+}
+async function deleteLead(id){
+  if (!confirm('להסיר רשומה זו מהמערכת? אם אין לה היסטוריה קשורה היא תימחק לצמיתות. אם יש לה היסטוריה (התאמות, משימות, הסכמים וכו׳) היא תועבר אוטומטית לארכיון כדי לשמר אותה.')) return;
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
+  let hasHistory, details;
+  try {
+    ({ hasHistory, details } = await leadHasAnyHistory(id));
+  } catch (e){
+    toast('❌ ' + e.message + ' - הפעולה בוטלה לביטחון');
+    return;
+  }
+  if (!hasHistory){
+    const { error } = await window.supabaseClient.from('leads').delete().eq('id', id);
+    if (error){ toast('❌ שגיאה במחיקה: ' + error.message); return; }
+    bsdLogActivity('delete', 'leads', id);
+    toast('✅ נמחק בהצלחה');
+    await loadLeads();
+    return;
+  }
+  const { error } = await window.supabaseClient.from('leads').update({
+    is_archived: true,
+    archive_reason: 'הועבר אוטומטית לארכיון בעת ניסיון מחיקה - קיימת היסטוריה קשורה (' + details.join(', ') + ')'
+  }).eq('id', id);
+  if (error){ toast('❌ שגיאה בהעברה לארכיון: ' + error.message); return; }
+  toast('📁 לרשומה זו יש היסטוריה קשורה - הועברה לארכיון (לא נמחקה) כדי לשמר אותה. ניתן לשחזר מהארכיון בכל עת.');
+  await loadLeads();
+}
+// מסך ארכיון אמיתי (סעיף 5 בהנחיה) - טאב נפרד עם כל השדות הנדרשים.
+let LEAD_VIEW_MODE = 'active';
+function setLeadViewMode(mode){
+  LEAD_VIEW_MODE = mode;
+  const activeBtn = document.getElementById('leadViewActiveBtn'), archBtn = document.getElementById('leadViewArchiveBtn');
+  if (activeBtn && archBtn){
+    activeBtn.classList.toggle('btn-primary', mode==='active');
+    activeBtn.classList.toggle('btn-ghost', mode!=='active');
+    archBtn.classList.toggle('btn-primary', mode==='archive');
+    archBtn.classList.toggle('btn-ghost', mode!=='archive');
+  }
+  renderTable();
+}
+function renderArchiveLeadsTable(){
+  const body = document.getElementById('leadsBody');
+  if (!body) return;
+  if (!ARCHIVED_LEADS.length){ body.innerHTML = '<tr class="empty-row"><td colspan="10">אין רשומות בארכיון</td></tr>'; return; }
+  body.innerHTML = ARCHIVED_LEADS.map(l => {
+    const personName = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || (l.business_name||'—');
+    return `
+    <tr>
+      <td data-label="שם">${esc(personName)}</td>
+      <td data-label="סוג">${esc(l.type||'—')}</td>
+      <td data-label="טלפון" dir="ltr">${l.phone ? fmtPhone(l.phone) : '—'}</td>
+      <td data-label="הוזן ע&quot;י">${l.created_by ? esc(userName(l.created_by)) : 'לא ידוע'}</td>
+      <td data-label="הועבר ע&quot;י">${l.archived_by ? esc(userName(l.archived_by)) : '—'}</td>
+      <td data-label="סטטוס הסכם קודם">${agreementBadge(l.agreement_status)}</td>
+      <td data-label="נוצר">${fmtDate(l.created_at)}</td>
+      <td data-label="תאריך העברה">${fmtDate(l.archived_at)}</td>
+      <td data-label="סיבה">${esc(l.archive_reason||'—')}</td>
+      <td data-label="פעולות" style="white-space:nowrap;">
+        <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="openLeadForm('${l.id}')">📄 פתח כרטיס</button>
+        ${canRestoreLead(l) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="restoreLeadFromArchive('${l.id}')">↩️ החזר לפעילים</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+(async function init(){
+  CURRENT_PROFILE = await requireAuth();
+  if (!CURRENT_PROFILE) return;
+  document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+  refreshNavMsgBadge();
+  if (!canCreateBuyer(CURRENT_PROFILE)){
+    document.querySelectorAll('button[onclick^="openLeadForm(null"]').forEach(b => b.style.display = 'none');
+  }
+  await loadUsers();
+  await loadRatingLevels();
+  await loadMatchCounts();
+  await loadNotesSummary('leads');
+  await loadLeads();
+  switchLeadTypeTab('buyer');
+})();
+</script>
+</body>
+</html>
