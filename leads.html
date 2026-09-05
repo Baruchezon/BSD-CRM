@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609021230';
+    var PAGE_BUILD = '202609051530';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -870,15 +870,17 @@ function agreementBadge(status){
   return `<span class="agr-badge ${cls}">${esc(agreementShortLabel(s))}</span>`;
 }
 // שורת מידע פשוטה בלבד (לא באנר בולט) - השדה האמיתי הניתן לעריכה נמצא בטופס עצמו למטה
-function agreementBanner(status, agreementNumber, tableName, recordId, pdfPath, pdfUploadedAt){
+function agreementBanner(status, agreementNumber, tableName, recordId, pdfPath, pdfUploadedAt, pdfUploadedBy){
   const s = status || 'אין הסכם';
   const icon = s === 'יש הסכם חתום' ? '✅' : (s === 'נשלח הסכם לחתימה' ? '📤' : '⭕');
   const numPart = (s === 'יש הסכם חתום' && agreementNumber) ? ` &nbsp;·&nbsp; מס' הסכם: ${esc(agreementNumber)}` : '';
   const statusLine = `<div class="agr-note">${icon} סטטוס הסכם נוכחי: ${esc(agreementShortLabel(s))}${numPart}</div>`;
   if (!tableName || !recordId) return statusLine;
+  const uploadWidget = manualAgreementUploadWidget(tableName, recordId);
+  const uploadedByPart = pdfUploadedBy ? ` &nbsp;·&nbsp; הועלה ע"י ${esc(userName(pdfUploadedBy))}` : '';
   const pdfLine = pdfPath
     ? `<div class="agr-note" style="margin-top:6px;">
-         📄 הסכם התקשרות חתום ${pdfUploadedAt ? `&nbsp;·&nbsp; הועלה ${fmtDate(pdfUploadedAt)}` : ''}
+         📄 הסכם התקשרות חתום ${pdfUploadedAt ? `&nbsp;·&nbsp; הועלה ${fmtDate(pdfUploadedAt)}` : ''}${uploadedByPart}
          &nbsp;·&nbsp;
          <a href="javascript:void(0)" onclick="viewAgreementPdf('${tableName}','${recordId}')">צפייה</a>
          &nbsp;·&nbsp;
@@ -887,7 +889,7 @@ function agreementBanner(status, agreementNumber, tableName, recordId, pdfPath, 
     : (s === 'יש הסכם חתום'
         ? `<div class="agr-note" style="margin-top:6px;color:#8a6d1f;">⚠️ מסומן כחתום, אך קובץ ה-PDF החתום עדיין לא נשמר במערכת</div>`
         : '');
-  return statusLine + pdfLine;
+  return uploadWidget + statusLine + pdfLine;
 }
 
 async function _agreementSignedUrl(tableName, recordId, download){
@@ -907,6 +909,69 @@ async function downloadAgreementPdf(tableName, recordId){
   const win = window.open('', '_blank');
   const url = await _agreementSignedUrl(tableName, recordId, true);
   if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
+}
+
+/* ─────────── העלאה ידנית של הסכם חתום מחוץ למערכת (05.09.2026) ───────────
+   הרחבה בטוחה של המנגנון הקיים בלבד - ר' הערה מקבילה ב-businesses.html. */
+function manualAgreementUploadWidget(tableName, recordId){
+  if (!tableName || !recordId) return '';
+  if (typeof canSendAgreement === 'function' && !canSendAgreement()) return '';
+  return `<div class="agr-note agr-upload-row" style="margin-bottom:6px;">
+    <input type="file" id="agrManualUploadInput" accept="application/pdf" style="display:none;" onchange="handleManualAgreementFile(event,'${tableName}','${recordId}')">
+    <button type="button" class="btn btn-ghost" onclick="triggerManualAgreementUpload()" style="font-weight:700;">📤 העלאת הסכם חתום</button>
+    <span id="agrManualUploadStatus" style="margin-inline-start:8px;font-size:.78rem;color:#665;"></span>
+  </div>`;
+}
+function triggerManualAgreementUpload(){
+  const input = document.getElementById('agrManualUploadInput');
+  if (input) input.click();
+}
+async function handleManualAgreementFile(event, tableName, recordId){
+  const input = event.target;
+  const statusEl = document.getElementById('agrManualUploadStatus');
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)){
+    toast('ניתן להעלות קובץ PDF בלבד');
+    input.value = '';
+    return;
+  }
+  if (file.size > 20 * 1024 * 1024){
+    toast('הקובץ גדול מדי (מקסימום 20MB)');
+    input.value = '';
+    return;
+  }
+  if (statusEl) statusEl.textContent = 'מעלה...';
+  const path = `agreements/${tableName}/${recordId}.pdf`;
+  const { error: upErr } = await bsdUploadFile(window.BSD_CONFIG.STORAGE_BUCKET, path, file, {
+    contentType: 'application/pdf',
+    upsert: true,
+    onProgress: pct => { if (statusEl) statusEl.textContent = `מעלה... ${pct}%`; }
+  });
+  if (upErr){
+    toast('שגיאה בהעלאת הקובץ: ' + upErr.message);
+    if (statusEl) statusEl.textContent = '';
+    input.value = '';
+    return;
+  }
+  const { error: rpcErr } = await window.supabaseClient.rpc('save_manual_signed_agreement', {
+    p_table_name: tableName,
+    p_record_id: recordId,
+    p_path: path,
+    p_uploaded_by: CURRENT_PROFILE.id
+  });
+  if (rpcErr){
+    toast('הקובץ הועלה אך השיוך לכרטיס נכשל: ' + rpcErr.message);
+    if (statusEl) statusEl.textContent = '';
+    input.value = '';
+    return;
+  }
+  toast('ההסכם החתום נשמר ושויך לכרטיס');
+  input.value = '';
+  await manualAgreementRefreshAfterUpload(tableName, recordId);
+}
+async function manualAgreementRefreshAfterUpload(tableName, recordId){
+  if (tableName === 'leads'){ await loadLeads(); openLeadForm(recordId); }
 }
 
 ['fSearch','fType','fStatus','fAgreement','fCreatedBy','fSort','fRating'].forEach(id=>{
@@ -980,7 +1045,7 @@ function openLeadForm(id, forcedType, prefillData){
   modal.innerHTML = `
     <h3>${lead ? 'עריכת' : 'הוספת'} ${typeLabel}</h3>
     ${(lead && isGrantOnlyViewer(lead)) ? `<div style="background:#eef4fb;border:1px solid #cddcef;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#1a3d8f;margin-bottom:10px;">🔓 <b>שוחרר אליי</b> — צפייה בלבד, ללא אפשרות עריכה, מחיקה או שחרור לאחרים.</div>` : ''}
-    ${lead ? agreementBanner(lead.agreement_status, lead.agreement_number, 'leads', lead.id, lead.agreement_pdf_path, lead.agreement_pdf_uploaded_at) : ''}
+    ${lead ? agreementBanner(lead.agreement_status, lead.agreement_number, 'leads', lead.id, lead.agreement_pdf_path, lead.agreement_pdf_uploaded_at, lead.agreement_pdf_uploaded_by) : ''}
     ${lead && type === 'buyer' ? '<div id="anonReceivedBox" style="margin-bottom:10px;"></div>' : ''}
     ${lead ? '' : `<div class="type-toggle">
       <button type="button" class="${type==='buyer'?'active buyer':''}" onclick="switchLeadType('buyer', null)">קונה</button>
