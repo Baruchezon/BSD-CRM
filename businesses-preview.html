@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609032430p1';
+    var PAGE_BUILD = '202609051500';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -726,7 +726,7 @@ async function downloadAgreementPdf(tableName, recordId){
 function manualAgreementUploadWidget(tableName, recordId){
   if (!tableName || !recordId) return '';
   if (typeof canSendAgreement === 'function' && !canSendAgreement()) return '';
-  return `<div class="agr-note" style="margin-bottom:6px;">
+  return `<div class="agr-note agr-upload-row" style="margin-bottom:6px;">
     <input type="file" id="agrManualUploadInput" accept="application/pdf" style="display:none;" onchange="handleManualAgreementFile(event,'${tableName}','${recordId}')">
     <button type="button" class="btn btn-ghost" onclick="triggerManualAgreementUpload()" style="font-weight:700;">📤 העלאת הסכם חתום</button>
     <span id="agrManualUploadStatus" style="margin-inline-start:8px;font-size:.78rem;color:#665;"></span>
@@ -1010,7 +1010,7 @@ function bsdTabifyBizForm(biz){
 
     // צביעה פונקציונלית עדינה (לפי בקשתו 03.09.2026): רק מוסיפה class לצביעה,
     // לא משנה טקסט/לוגיקה. ירוק=חתום, כתום=נשלח וממתין, אדום=אין הסכם/מסמך חסר.
-    const agrNotes = stickyTop.querySelectorAll('.agr-note');
+    const agrNotes = stickyTop.querySelectorAll('.agr-note:not(.agr-upload-row)');
     if (agrNotes.length){
       const statusText = agrNotes[0].textContent || '';
       let cls = null;
