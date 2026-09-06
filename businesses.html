@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609060636';
+    var PAGE_BUILD = '202609060753';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -121,7 +121,19 @@
   /* height (לא min-height) + flex column קבוע פותר את "קפיצת סרגל הלשוניות" -
      כל שלוש הרצועות (כותרת/לשוניות/כפתורי שמירה) נשארות במקום קבוע, ורק אזור
      התוכן (.biz-tabpanes) גדל וגולל בפנים - הוא היחיד שמשתנה בין לשוניות. */
-  .modal.biz-fullpage-modal{max-width:100%;width:100%;height:100vh;border-radius:0;padding:0;display:flex;flex-direction:column;box-shadow:none;}
+  .modal.biz-fullpage-modal{max-width:100%;width:100%;height:100vh;max-height:100vh;border-radius:0;padding:0;display:flex;flex-direction:column;box-shadow:none;overflow:hidden;}
+  /* תיקון באג אמיתי (06.09.2026, אושר ע"י צילום מסך שהראה רקע-הרשימה נראה
+     מתחת לכרטיס + טאב "מסמכים וקבצים" חתוך): הכלל הכללי בקובץ המשותף
+     css/style.css בתוך @media(min-width:640px) מגדיר על .modal הבסיסי
+     max-height:calc(100vh - 80px) + overflow-y:auto. הכלל הממוקד הזה לא
+     הגדיר בעבר max-height/overflow בכלל - כך שברוחב מסך > 640px (רוב
+     המחשבים) הכלל הכללי נשאר בתוקף במקביל, והמודאל בפועל הצטמצם ל-100vh
+     פחות 80px, מה שחשף בדיוק את הרקע (רשימת העסקים) ב-80px התחתונים וגם
+     חתך תוכן. תוקן ע"י הוספת max-height:100vh + overflow:hidden על אותו
+     כלל ממוקד קיים - לא נגעו בכלל הכללי המשותף (עלול להשפיע על מסכים
+     אחרים), ולא נגעו בשום שדה/כפתור/handler. אומת ב-Playwright שגובה
+     המודאל שווה בדיוק לגובה ה-viewport ב-4 רזולוציות שונות, ושתוכן ארוך
+     נגלל אך ורק בתוך .biz-tabpanes הפנימי (ללא גלילת עמוד כפולה). */
   /* באג אמיתי שאותר ואומת בדפדפן (03.09.2026, נמדד בפועל עם שינוי גובה
      ומיקום מדויקים, לא רק ניחוש): הסרגל "קפץ" במעבר בין לשוניות כי שני
      דברים קרו ביחד:
