@@ -89,8 +89,10 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json();
     const { business_id, buyer_id, broker_id, recipient_type, file_ids } = body || {};
-    const recipientType: 'buyer' | 'broker' = recipient_type === 'broker' ? 'broker' : 'buyer';
-    const recipientId = recipientType === 'broker' ? broker_id : buyer_id;
+    // 05.09.2026 (שליחה לבעל העסק): מקביל לטיפול ב-send-sale-files-to-buyer -
+    // מסלול 'owner' נוסף, מזוהה אך ורק לפי business_id.
+    const recipientType: 'buyer' | 'broker' | 'owner' = recipient_type === 'broker' ? 'broker' : (recipient_type === 'owner' ? 'owner' : 'buyer');
+    const recipientId = recipientType === 'broker' ? broker_id : (recipientType === 'owner' ? business_id : buyer_id);
     businessIdForLog = business_id || '';
 
     if (!business_id || !recipientId || !Array.isArray(file_ids) || !file_ids.length) {
@@ -116,6 +118,17 @@ Deno.serve(async (req: Request) => {
         return jsonResponse(403, { error: 'מתווך זה חסום - לא ניתן לשלוח אליו חומרים חדשים' });
       }
       buyer = broker;
+    } else if (recipientType === 'owner') {
+      // 05.09.2026 (שליחה לבעל העסק): שליפה ישירה מטבלת businesses, זהה
+      // בדיוק לענף המקביל ב-send-sale-files-to-buyer.
+      const { data: bizOwnerRow, error: ownerErr } = await supabase
+        .from('businesses')
+        .select('owner_name, owner_phone, owner_email')
+        .eq('id', business_id)
+        .maybeSingle();
+      if (ownerErr) { log('owner_lookup_error', { message: ownerErr.message }); return jsonResponse(500, { error: 'שגיאה בשליפת פרטי בעל העסק: ' + ownerErr.message }); }
+      if (!bizOwnerRow) { log('owner_not_found'); return jsonResponse(404, { error: 'עסק לא נמצא' }); }
+      buyer = { id: business_id, full_name: bizOwnerRow.owner_name || '', phone: bizOwnerRow.owner_phone || '' };
     } else {
       const { data: leadBuyer, error: buyerErr } = await supabase
         .from('leads')
@@ -127,7 +140,8 @@ Deno.serve(async (req: Request) => {
       if (!leadBuyer) { log('buyer_not_found'); return jsonResponse(404, { error: 'קונה לא נמצא' }); }
       buyer = leadBuyer;
     }
-    const signed = buyer.agreement_status === 'יש הסכם חתום';
+    // 05.09.2026: בעל העסק תמיד "signed" - זהה להחלטת העיצוב ב-send-sale-files-to-buyer.
+    const signed = recipientType === 'owner' ? true : buyer.agreement_status === 'יש הסכם חתום';
 
     // שליפת הקבצים מה-DB בלבד - מתעלמים משם/רמת סודיות שהלקוח שלח
     const { data: files, error: filesErr } = await supabase
@@ -156,7 +170,7 @@ Deno.serve(async (req: Request) => {
       }, actorId, business_id);
       const names = disallowed.map((f) => f.file_name).join(', ');
       return jsonResponse(403, {
-        error: `לא ניתן לשלוח את הקבצים הבאים: ${names}. ${recipientType === 'broker' ? 'למתווך' : 'לקונה'} אין הסכם סודיות חתום.`,
+        error: `לא ניתן לשלוח את הקבצים הבאים: ${names}. ${recipientType === 'broker' ? 'למתווך' : recipientType === 'owner' ? 'לבעל העסק' : 'לקונה'} אין הסכם סודיות חתום.`,
         disallowed_file_ids: disallowed.map((f) => f.id),
       });
     }
