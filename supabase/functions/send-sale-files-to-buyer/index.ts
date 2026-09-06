@@ -125,8 +125,10 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json();
     const { business_id, buyer_id, broker_id, recipient_type, file_ids, subject, intro_text, intro_html } = body || {};
-    const recipientType: 'buyer' | 'broker' = recipient_type === 'broker' ? 'broker' : 'buyer';
-    const recipientId = recipientType === 'broker' ? broker_id : buyer_id;
+    // 05.09.2026 (שליחה לבעל העסק): נוסף מסלול שלישי 'owner' - מזוהה אך ורק
+    // לפי business_id (יש בעל עסק אחד בלבד לכל עסק, אין owner_id נפרד).
+    const recipientType: 'buyer' | 'broker' | 'owner' = recipient_type === 'broker' ? 'broker' : (recipient_type === 'owner' ? 'owner' : 'buyer');
+    const recipientId = recipientType === 'broker' ? broker_id : (recipientType === 'owner' ? business_id : buyer_id);
     businessIdForLog = business_id || '';
     log('body_parsed', { business_id, recipient_type: recipientType, recipient_id: recipientId, file_ids_count: Array.isArray(file_ids) ? file_ids.length : null });
 
@@ -153,6 +155,19 @@ Deno.serve(async (req: Request) => {
         return jsonResponse(403, { error: 'מתווך זה חסום - לא ניתן לשלוח אליו חומרים חדשים' });
       }
       buyer = broker;
+    } else if (recipientType === 'owner') {
+      // 05.09.2026 (שליחה לבעל העסק): שליפה ישירה מטבלת businesses לפי מזהה
+      // העסק - אין טבלה נפרדת לבעלים, השדות (owner_name/phone/email) יושבים
+      // על שורת העסק עצמה. אין כאן בדיקת חסימה (status='חסום') כמו אצל
+      // מתווכים - אין מקבילה כזו לבעל עסק.
+      const { data: bizOwnerRow, error: ownerErr } = await supabase
+        .from('businesses')
+        .select('owner_name, owner_phone, owner_email')
+        .eq('id', business_id)
+        .maybeSingle();
+      if (ownerErr) { log('owner_lookup_error', { message: ownerErr.message }); return jsonResponse(500, { error: 'שגיאה בשליפת פרטי בעל העסק: ' + ownerErr.message }); }
+      if (!bizOwnerRow) { log('owner_not_found'); return jsonResponse(404, { error: 'עסק לא נמצא' }); }
+      buyer = { id: business_id, full_name: bizOwnerRow.owner_name || '', phone: bizOwnerRow.owner_phone || '', email: bizOwnerRow.owner_email || '' };
     } else {
       const { data: leadBuyer, error: buyerErr } = await supabase
         .from('leads')
@@ -167,10 +182,12 @@ Deno.serve(async (req: Request) => {
     log('buyer_ok', { has_email: !!buyer.email, agreement_status: buyer.agreement_status || null });
     if (!buyer.email) {
       await logAttempt({ buyer_id: recipientId, reason: 'buyer_missing_email', status: 'failed' }, actorId, business_id);
-      return jsonResponse(400, { error: recipientType === 'broker' ? 'למתווך הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס המתווך קודם' : 'לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם' });
+      return jsonResponse(400, { error: recipientType === 'broker' ? 'למתווך הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס המתווך קודם' : recipientType === 'owner' ? 'לבעל העסק הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס העסק (לשונית בעלים) קודם' : 'לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם' });
     }
-    const buyerName = buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || (recipientType === 'broker' ? 'מתווך' : 'קונה');
-    const signed = buyer.agreement_status === 'יש הסכם חתום';
+    const buyerName = buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || (recipientType === 'broker' ? 'מתווך' : recipientType === 'owner' ? 'בעל העסק' : 'קונה');
+    // 05.09.2026: בעל העסק תמיד "signed" - הוא הבעלים של המידע, אין מושג
+    // הסכם סודיות מולו כמו שיש מול קונה/מתווך חיצוניים (החלטת עיצוב מפורשת).
+    const signed = recipientType === 'owner' ? true : buyer.agreement_status === 'יש הסכם חתום';
 
     // 3. שליפת הקבצים מה-DB לפי business_id+id בלבד - מתעלמים לגמרי משם קובץ/
     //    רמת סודיות/נתיב שהלקוח אולי שלח; רק מה שבאמת רשום כרגע ב-DB קובע.
@@ -203,7 +220,7 @@ Deno.serve(async (req: Request) => {
       }, actorId, business_id);
       const names = disallowed.map((f) => f.file_name).join(', ');
       return jsonResponse(403, {
-        error: `לא ניתן לשלוח את הקבצים הבאים: ${names}. ${recipientType === 'broker' ? 'למתווך' : 'לקונה'} אין הסכם סודיות חתום.`,
+        error: `לא ניתן לשלוח את הקבצים הבאים: ${names}. ${recipientType === 'broker' ? 'למתווך' : recipientType === 'owner' ? 'לבעל העסק' : 'לקונה'} אין הסכם סודיות חתום.`,
         disallowed_file_ids: disallowed.map((f) => f.id),
       });
     }
@@ -344,51 +361,58 @@ Deno.serve(async (req: Request) => {
     // שכותב ל-broker_id/counterparty_type='broker' ב-matches (לא buyer_id),
     // ומתעד גם בטבלת broker_document_log (אין מקבילה כזו לקונים - זו
     // דרישה ייעודית למתווכים, "מעקב עסקים ומסמכים שהועברו").
-    let matchAction: 'created' | 'updated' | 'failed' = 'failed';
-    try {
-      const fileNamesText = (files || []).map((f) => f.file_name).join(', ');
-      const actionText = `נשלחו ל${recipientType === 'broker' ? 'מתווך' : 'קונה'} ${buyerName} קבצים: ${fileNamesText} (מייל)`;
-      const nowIso = new Date().toISOString();
+    // 05.09.2026 (שליחה לבעל העסק): matches הוא מושג ששייך רק לקונה/מתווך
+    // (התאמה בין העסק לצד חיצוני) - אין "התאמה" מול בעל העסק עצמו, ולכן כל
+    // בלוק תיעוד ה-matches/broker_document_log מדולג לגמרי במסלול הזה.
+    let matchAction: 'created' | 'updated' | 'failed' | 'skipped' = 'failed';
+    if (recipientType === 'owner') {
+      matchAction = 'skipped';
+    } else {
+      try {
+        const fileNamesText = (files || []).map((f) => f.file_name).join(', ');
+        const actionText = `נשלחו ל${recipientType === 'broker' ? 'מתווך' : 'קונה'} ${buyerName} קבצים: ${fileNamesText} (מייל)`;
+        const nowIso = new Date().toISOString();
 
-      const matchQuery = recipientType === 'broker'
-        ? supabase.from('matches').select('id').eq('business_id', business_id).eq('broker_id', recipientId).maybeSingle()
-        : supabase.from('matches').select('id').eq('business_id', business_id).eq('buyer_id', recipientId).maybeSingle();
-      const { data: existingMatch, error: matchLookupErr } = await matchQuery;
-      if (matchLookupErr) throw matchLookupErr;
+        const matchQuery = recipientType === 'broker'
+          ? supabase.from('matches').select('id').eq('business_id', business_id).eq('broker_id', recipientId).maybeSingle()
+          : supabase.from('matches').select('id').eq('business_id', business_id).eq('buyer_id', recipientId).maybeSingle();
+        const { data: existingMatch, error: matchLookupErr } = await matchQuery;
+        if (matchLookupErr) throw matchLookupErr;
 
-      let matchId: string | undefined = existingMatch?.id;
-      if (existingMatch) {
-        const { error: updErr } = await supabase.from('matches')
-          .update({ last_action: actionText, last_action_at: nowIso })
-          .eq('id', existingMatch.id);
-        if (updErr) throw updErr;
-        matchAction = 'updated';
-        log('match_updated', { match_id: existingMatch.id });
-      } else {
-        const insertPayload: Record<string, unknown> = recipientType === 'broker'
-          ? { business_id, broker_id: recipientId, counterparty_type: 'broker', status: 'חומרים מלאים נשלחו',
-              match_source: 'אוטומטי - נשלחו קבצים במייל', last_action: actionText, last_action_at: nowIso, created_by: actorId }
-          : { business_id, buyer_id: recipientId, status: 'חומרים מלאים נשלחו',
-              match_source: 'אוטומטי - נשלחו קבצים במייל', last_action: actionText, last_action_at: nowIso, created_by: actorId };
-        const { data: newMatch, error: insErr } = await supabase.from('matches')
-          .insert(insertPayload).select('id').single();
-        if (insErr) throw insErr;
-        matchAction = 'created';
-        matchId = newMatch?.id;
-        log('match_created', { match_id: newMatch?.id });
+        let matchId: string | undefined = existingMatch?.id;
+        if (existingMatch) {
+          const { error: updErr } = await supabase.from('matches')
+            .update({ last_action: actionText, last_action_at: nowIso })
+            .eq('id', existingMatch.id);
+          if (updErr) throw updErr;
+          matchAction = 'updated';
+          log('match_updated', { match_id: existingMatch.id });
+        } else {
+          const insertPayload: Record<string, unknown> = recipientType === 'broker'
+            ? { business_id, broker_id: recipientId, counterparty_type: 'broker', status: 'חומרים מלאים נשלחו',
+                match_source: 'אוטומטי - נשלחו קבצים במייל', last_action: actionText, last_action_at: nowIso, created_by: actorId }
+            : { business_id, buyer_id: recipientId, status: 'חומרים מלאים נשלחו',
+                match_source: 'אוטומטי - נשלחו קבצים במייל', last_action: actionText, last_action_at: nowIso, created_by: actorId };
+          const { data: newMatch, error: insErr } = await supabase.from('matches')
+            .insert(insertPayload).select('id').single();
+          if (insErr) throw insErr;
+          matchAction = 'created';
+          matchId = newMatch?.id;
+          log('match_created', { match_id: newMatch?.id });
+        }
+
+        if (recipientType === 'broker') {
+          const docLogRows = (files || []).map((f) => ({
+            broker_id: recipientId, business_id, match_id: matchId || null,
+            file_id: f.id, file_name: f.file_name, document_type: f.document_type || f.category || null,
+            channel: 'email', sent_by: actorId,
+          }));
+          const { error: docLogErr } = await supabase.from('broker_document_log').insert(docLogRows);
+          if (docLogErr) log('broker_document_log_failed', { error: docLogErr.message });
+        }
+      } catch (me) {
+        log('match_documentation_failed', { error: me instanceof Error ? me.message : String(me) });
       }
-
-      if (recipientType === 'broker') {
-        const docLogRows = (files || []).map((f) => ({
-          broker_id: recipientId, business_id, match_id: matchId || null,
-          file_id: f.id, file_name: f.file_name, document_type: f.document_type || f.category || null,
-          channel: 'email', sent_by: actorId,
-        }));
-        const { error: docLogErr } = await supabase.from('broker_document_log').insert(docLogRows);
-        if (docLogErr) log('broker_document_log_failed', { error: docLogErr.message });
-      }
-    } catch (me) {
-      log('match_documentation_failed', { error: me instanceof Error ? me.message : String(me) });
     }
 
     return jsonResponse(200, { ok: true, match_action: matchAction });
