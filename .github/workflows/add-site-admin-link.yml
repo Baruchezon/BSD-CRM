@@ -20,13 +20,14 @@ jobs:
           for old in [
               'href="site-admin.html"',
               'href="site-admin.html?v=2026090703"',
-              'href="site-admin.html?v=2026090704"'
+              'href="site-admin.html?v=2026090704"',
+              'href="site-admin.html?v=2026090710"'
           ]:
               if old in s:
-                  s = s.replace(old, 'href="site-admin.html?v=2026090710"', 1)
-          if 'href="site-admin.html?v=2026090710"' not in s:
+                  s = s.replace(old, 'href="site-admin.html?v=2026090711"', 1)
+          if 'href="site-admin.html?v=2026090711"' not in s:
               marker = '<a href="users.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👥 משתמשים</a>'
-              link = '<a href="site-admin.html?v=2026090710" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🌐 ניהול אתר BSD</a>'
+              link = '<a href="site-admin.html?v=2026090711" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🌐 ניהול אתר BSD</a>'
               if marker not in s:
                   raise SystemExit('navigation marker not found')
               s = s.replace(marker, marker + '\n      ' + link, 1)
@@ -35,18 +36,22 @@ jobs:
           page = Path('site-admin.html')
           h = page.read_text(encoding='utf-8')
           old_head = '<div class="cardhead"><h3>תוכן וכתבות</h3></div>'
-          new_head = '<div class="cardhead"><h3>תוכן וכתבות</h3><a class="btn primary" href="site-content-editor.html?v=2026090710">ניהול תוכן מלא</a></div>'
+          new_head = '<div class="cardhead"><h3>תוכן וכתבות</h3><a class="btn primary" href="site-content-editor.html?v=2026090711">ניהול תוכן מלא</a></div>'
           if old_head in h:
               h = h.replace(old_head, new_head, 1)
-          elif 'site-content-editor.html' not in h:
-              raise SystemExit('content panel marker not found')
-          h = h.replace('site-admin-v2.js?v=2026090703','site-admin-v2.js?v=2026090710')
-          h = h.replace('site-admin-v2.js?v=2026090704','site-admin-v2.js?v=2026090710')
-          h = h.replace('site-admin-v2.js?v=2026090705','site-admin-v2.js?v=2026090710')
+          h = h.replace('site-content-editor.html?v=2026090710','site-content-editor.html?v=2026090711')
+          for v in ['2026090703','2026090704','2026090705','2026090710']:
+              h = h.replace(f'site-admin-v2.js?v={v}','site-admin-v2.js?v=2026090711')
           page.write_text(h, encoding='utf-8')
+
+          editor = Path('site-content-editor.html')
+          e = editor.read_text(encoding='utf-8')
+          if 'js/site-content-ai.js' not in e:
+              e = e.replace('</body>', '<script src="js/site-content-ai.js?v=2026090711"></script></body>', 1)
+          editor.write_text(e, encoding='utf-8')
           PY
           git config user.name "BSD Automation"
           git config user.email "actions@users.noreply.github.com"
-          git add app.html site-admin.html
-          git diff --cached --quiet || git commit -m "Connect BSD content editor"
+          git add app.html site-admin.html site-content-editor.html
+          git diff --cached --quiet || git commit -m "Wire BSD content AI assistant"
           git push
