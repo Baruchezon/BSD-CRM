@@ -1,0 +1,31 @@
+name: Add BSD site admin link
+on:
+  push:
+    paths:
+      - '.github/workflows/add-site-admin-link.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add site admin link
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app.html')
+          s = p.read_text(encoding='utf-8')
+          if 'href="site-admin.html"' not in s:
+              marker = '<a href="users.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👥 משתמשים</a>'
+              link = '<a href="site-admin.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🌐 ניהול אתר BSD</a>'
+              if marker not in s:
+                  raise SystemExit('navigation marker not found')
+              s = s.replace(marker, marker + '\n      ' + link, 1)
+              p.write_text(s, encoding='utf-8')
+          PY
+          git config user.name "BSD Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app.html
+          git diff --cached --quiet || git commit -m "Add site admin button to BSD CRM"
+          git push
