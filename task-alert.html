@@ -208,9 +208,18 @@ async function stopAlert(){
 async function markDone(){
   root.innerHTML = `<div class="loading" style="color:var(--navy);"><div class="spinner" style="border-color:rgba(14,27,52,.2);border-top-color:var(--navy);"></div>שומר...</div>`;
   let { error } = await window.supabaseClient.from('tasks').update({ status: 'הושלמה', completed_at: new Date().toISOString() }).eq('id', taskId);
-  if (error){
+  if (error && /column|schema cache/i.test(error.message || '')){
     // completed_at column might not exist yet on some setups - fall back
     ({ error } = await window.supabaseClient.from('tasks').update({ status: 'הושלמה' }).eq('id', taskId));
+  }
+  // 08.09.2026 fix: the fallback's result was never checked before - this screen
+  // showed "✅ הושלמה" even when BOTH updates failed (RLS/network/other real error),
+  // leaving the task open in the DB while the user believed it was closed - the
+  // reminder engine would then keep nagging on a task the user thinks they closed.
+  // Mirrors the check tasks.html's completeTask() already does.
+  if (error){
+    root.innerHTML = `<div class="error-state"><div style="font-size:2.5rem;">⚠️</div><p style="color:#40485c;margin-top:10px;">שגיאה בסימון המשימה כהושלמה: ${esc(error.message)}<br>המשימה נשארה פתוחה - נסה שוב.</p><button class="action btn-open" style="margin-top:16px;" onclick="markDone()">נסה שוב</button><button class="action btn-open" style="margin-top:10px;background:#fff;color:var(--navy);border:1px solid #d8d3c4;" onclick="location.href='tasks.html'">לרשימת המשימות</button></div>`;
+    return;
   }
   root.innerHTML = `
     <div class="done-state">
