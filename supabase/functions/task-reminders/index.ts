@@ -23,7 +23,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import webpush from 'npm:web-push@3';
 
 const MORNING_HOUR = 8;                 // local hour tasks with date-only fire their reminder
-const NUDNIK_INTERVAL_MIN = 10;         // minutes between repeat nudges once due_time has passed
+const NUDNIK_INTERVAL_MIN = 30;         // minutes between repeat nudges once due_time has passed (was 10, changed 08.09.2026)
 const NUDNIK_MAX_REPEATS = 6;           // stop nagging after this many pushes (task likely stuck/forgotten -> still visible in tasks.html)
 const TIMEZONE = 'Asia/Jerusalem';
 
@@ -147,6 +147,21 @@ Deno.serve(async () => {
     const minutesSince = (Date.now() - last) / 60000;
     if (last !== 0 && minutesSince < NUDNIK_INTERVAL_MIN) continue; // too soon since last nudge
 
+    // 08.09.2026: claim the task BEFORE sending, not after - an atomic conditional
+    // update (only succeeds if last_notified_at still matches what we just read)
+    // guards against a duplicate/overlapping cron invocation sending the same nudge
+    // twice for the same task. If two invocations race, only one's claim can match
+    // and return a row; the loser sees 0 rows back and skips the send entirely.
+    const claimQuery = supabase.from('tasks').update({
+      last_notified_at: new Date().toISOString(),
+      notify_count: (t.notify_count ?? 0) + 1
+    }).eq('id', t.id).eq('status', 'פתוחה').is('read_at', null);
+    const { data: claimed, error: claimErr } = t.last_notified_at
+      ? await claimQuery.eq('last_notified_at', t.last_notified_at).select('id')
+      : await claimQuery.is('last_notified_at', null).select('id');
+
+    if (claimErr || !claimed || claimed.length === 0) continue; // lost the race, already completed/read, or a real error - either way, do not send
+
     await sendToUser(t.assigned_to, {
       title: '⏰ תזכורת: משימה ממתינה',
       body: t.title,
@@ -154,10 +169,6 @@ Deno.serve(async () => {
       url: `task-alert.html?id=${t.id}&kind=nudnik`,
       tag: `bsd-task-${t.id}` // same tag = replaces the previous nudge instead of piling up
     });
-    await supabase.from('tasks').update({
-      last_notified_at: new Date().toISOString(),
-      notify_count: (t.notify_count ?? 0) + 1
-    }).eq('id', t.id);
     sentNudnik++;
   }
 

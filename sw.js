@@ -33,15 +33,45 @@ self.addEventListener('push', event => {
   );
 });
 
+// 08.09.2026: reworked to actually satisfy "if BSD CRM is already open in a tab,
+// bring it to the front and open the task there instead of a new tab" - the old
+// version only reused a tab if its URL happened to ALREADY be targetUrl exactly,
+// so a tab open on any other BSD CRM page (the common case) always opened a brand
+// new tab instead of being reused/navigated. Now: (1) exact-URL tab -> focus it;
+// (2) any other BSD-CRM tab -> navigate it to targetUrl, then focus it;
+// (3) nothing open -> new window. Wrapped so a failure at one step still falls
+// through to opening a new window rather than silently doing nothing (this is the
+// most likely explanation for "sometimes I can't open it" - the old code had no
+// fallback if focus()/openWindow() rejected).
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   const targetUrl = (event.notification.data && event.notification.data.url) || 'tasks.html';
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
-      for (const client of windowClients) {
-        if (client.url.includes(targetUrl) && 'focus' in client) return client.focus();
+
+  async function handleClick() {
+    const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+
+    // 1) A tab already sitting on this exact task-alert URL -> just focus it.
+    for (const client of windowClients) {
+      if (client.url.includes(targetUrl) && 'focus' in client) {
+        try { return await client.focus(); } catch (e) { /* fall through */ }
       }
-      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
-    })
-  );
+    }
+
+    // 2) Any other BSD CRM tab already open -> navigate it to the task, then focus.
+    for (const client of windowClients) {
+      if ('focus' in client) {
+        try {
+          if ('navigate' in client) await client.navigate(targetUrl);
+          return await client.focus();
+        } catch (e) { /* this client failed to navigate/focus - try the next one, or fall through to a new window */ }
+      }
+    }
+
+    // 3) Nothing usable was open -> open a fresh tab/window on the task.
+    if (self.clients.openWindow) {
+      try { return await self.clients.openWindow(targetUrl); } catch (e) { /* nothing more we can do */ }
+    }
+  }
+
+  event.waitUntil(handleClick());
 });
