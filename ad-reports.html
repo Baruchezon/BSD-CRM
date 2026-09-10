@@ -68,6 +68,24 @@
   .btn[disabled]{opacity:.45; cursor:not-allowed;}
   .btn-sm{padding:6px 13px; font-size:12px;}
 
+  /* ===================== EMAIL MODAL ===================== */
+  .mail-overlay{position:fixed; inset:0; background:rgba(14,27,52,.55); display:none; align-items:center; justify-content:center; z-index:500; padding:20px;}
+  .mail-modal{background:#fff; width:100%; max-width:520px; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.3); overflow:hidden; max-height:90vh; display:flex; flex-direction:column;}
+  .mail-modal-head{background:linear-gradient(90deg,var(--navy),var(--navy2)); color:var(--cream); padding:14px 18px; display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:14.5px;}
+  .mail-close{background:none; border:none; color:var(--cream); font-size:16px; cursor:pointer; line-height:1;}
+  .mail-modal-body{padding:16px 18px; overflow-y:auto;}
+  .mail-modal-body label{display:block; font-size:12.5px; color:var(--muted); margin:12px 0 4px; font-weight:600;}
+  .mail-modal-body input, .mail-modal-body textarea{width:100%; box-sizing:border-box; border:1px solid #ddd6c2; border-radius:7px; padding:8px 10px; font-family:inherit; font-size:13.5px; color:var(--text); direction:rtl;}
+  .mail-modal-body textarea{resize:vertical; line-height:1.6;}
+  .mail-row{display:flex; gap:8px;}
+  .mail-row input{flex:1;}
+  .mail-lookup-status{font-size:12px; color:var(--muted); margin-top:6px; min-height:14px; line-height:1.6;}
+  .mail-lookup-status a{color:var(--navy); font-weight:600; text-decoration:underline; cursor:pointer;}
+  .mail-send-status{font-size:12.5px; margin-top:10px; min-height:16px;}
+  .mail-send-status.err{color:#a3282c;}
+  .mail-send-status.ok{color:#1e7a34; font-weight:600;}
+  .mail-modal-foot{padding:12px 18px; display:flex; justify-content:flex-end; gap:8px; border-top:1px solid #eee6cf; background:#faf8f2;}
+
   .toolbar{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; flex-wrap:wrap;}
   .toolbar .links{font-size:12.5px;}
   .toolbar .links a{color:var(--navy); cursor:pointer; text-decoration:underline; margin-inline-start:12px;}
@@ -258,6 +276,43 @@
 <!-- Hidden print area: filled dynamically per-business -->
 <div id="printRoot"></div>
 
+<!-- Email-to-owner modal -->
+<div id="mailOverlay" class="mail-overlay">
+  <div class="mail-modal">
+    <div class="mail-modal-head">
+      <div>📧 שליחת הדוח במייל לבעל העסק</div>
+      <button type="button" class="mail-close" id="mailCloseBtn">✕</button>
+    </div>
+    <div class="mail-modal-body">
+      <label>שם העסק</label>
+      <div class="mail-row">
+        <input type="text" id="mailBizName">
+        <button type="button" class="btn btn-ghost btn-sm" id="mailLookupBtn">אתר מייל</button>
+      </div>
+      <div id="mailLookupStatus" class="mail-lookup-status"></div>
+
+      <label>כתובת המייל של בעל העסק</label>
+      <input type="email" id="mailTo" placeholder="owner@example.com">
+
+      <label>נושא ההודעה</label>
+      <input type="text" id="mailSubject">
+
+      <label>גוף ההודעה</label>
+      <textarea id="mailBody" rows="9"></textarea>
+
+      <div id="mailSendStatus" class="mail-send-status"></div>
+    </div>
+    <div class="mail-modal-foot">
+      <button type="button" class="btn btn-ghost btn-sm" id="mailCancelBtn">ביטול</button>
+      <button type="button" class="btn btn-gold" id="mailSendBtn">שליחת המייל</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/pdfPipeline.js"></script>
 <script>
 /* ==================== APP LOGIC ==================== */
 
@@ -795,6 +850,7 @@ function renderResults(){
       '<div class="ractions">' +
         '<button class="btn btn-ghost btn-sm" data-act="preview" data-idx="'+i+'">תצוגה מקדימה</button>' +
         '<button class="btn btn-gold btn-sm" data-act="print" data-idx="'+i+'">הדפסה / שמירה כ-PDF</button>' +
+        '<button class="btn btn-navy btn-sm" data-act="email" data-idx="'+i+'">📧 שלח באימייל לבעל העסק</button>' +
       '</div>';
     els.resultsList.appendChild(row);
   });
@@ -816,6 +872,7 @@ function renderResults(){
       if (act === 'preview') openPreview(GENERATED[parseInt(btn.dataset.idx)], btn);
       else if (act === 'print') printBusiness(GENERATED[parseInt(btn.dataset.idx)], btn);
       else if (act === 'printAll') printAll(btn);
+      else if (act === 'email') openMailModal(GENERATED[parseInt(btn.dataset.idx)]);
     });
   });
 }
@@ -884,6 +941,186 @@ function openPreview(g, btn){
 }
 
 window.addEventListener('afterprint', () => { els.printRoot.innerHTML = ''; });
+
+/* ==================== EMAIL TO BUSINESS OWNER ==================== */
+let MAIL_CURRENT_G = null;
+const mailEls = {
+  overlay: document.getElementById('mailOverlay'),
+  bizName: document.getElementById('mailBizName'),
+  lookupBtn: document.getElementById('mailLookupBtn'),
+  lookupStatus: document.getElementById('mailLookupStatus'),
+  to: document.getElementById('mailTo'),
+  subject: document.getElementById('mailSubject'),
+  body: document.getElementById('mailBody'),
+  sendStatus: document.getElementById('mailSendStatus'),
+  sendBtn: document.getElementById('mailSendBtn'),
+  closeBtn: document.getElementById('mailCloseBtn'),
+  cancelBtn: document.getElementById('mailCancelBtn'),
+};
+
+function buildDefaultMailBody(ownerName){
+  return (
+    (ownerName ? 'שלום ' + ownerName + ',' : 'שלום רב,') + '\n\n' +
+    'מצורף דוח מעודכן של הפעילות השיווקית והפרסומית שביצענו עבור העסק שלך ברשת הפייסבוק, ' +
+    'הכולל את כל הפרסומים, הקבוצות והחשיפה המצטברת שהושגה בתקופה המדווחת.\n\n' +
+    'אנו ממשיכים לפעול באופן שוטף ורציף, מתוך מחויבות מלאה לאתר עבורך את הקונה המתאים ביותר, ' +
+    'תוך שמירה קפדנית על דיסקרטיות ומקצועיות.\n\n' +
+    'לכל שאלה או עדכון נשמח לעמוד לרשותך.\n\n' +
+    'בברכה,\nברוך איזון\nBSD Business Brokers Israel\n054-2424999\nbaruch@bsd-bbi.co.il'
+  );
+}
+
+function openMailModal(g){
+  MAIL_CURRENT_G = g;
+  mailEls.bizName.value = g.name;
+  mailEls.to.value = '';
+  mailEls.lookupStatus.innerHTML = '';
+  mailEls.sendStatus.textContent = '';
+  mailEls.sendStatus.className = 'mail-send-status';
+  mailEls.subject.value = 'דוח פעילות שיווקית ופרסום – BSD Business Brokers Israel';
+  mailEls.body.value = buildDefaultMailBody('');
+  mailEls.overlay.style.display = 'flex';
+  lookupOwnerEmail(g.name);
+}
+
+function closeMailModal(){
+  mailEls.overlay.style.display = 'none';
+  MAIL_CURRENT_G = null;
+}
+
+async function lookupOwnerEmail(name){
+  name = (name || '').trim();
+  if (!name || !window.supabaseClient){ mailEls.lookupStatus.textContent = ''; return; }
+  mailEls.lookupStatus.textContent = 'מאתר את מייל בעל העסק במערכת...';
+  try {
+    const [byInternal, byAnon] = await Promise.all([
+      window.supabaseClient.from('businesses').select('id, internal_name, anonymous_name, owner_name, owner_email').ilike('internal_name', '%'+name+'%').limit(5),
+      window.supabaseClient.from('businesses').select('id, internal_name, anonymous_name, owner_name, owner_email').ilike('anonymous_name', '%'+name+'%').limit(5)
+    ]);
+    const rows = [];
+    const seen = new Set();
+    (byInternal.data || []).concat(byAnon.data || []).forEach(r => {
+      if (!seen.has(r.id)){ seen.add(r.id); rows.push(r); }
+    });
+    const withEmail = rows.filter(r => r.owner_email);
+    if (withEmail.length === 1){
+      const r = withEmail[0];
+      mailEls.to.value = r.owner_email;
+      mailEls.body.value = buildDefaultMailBody(r.owner_name || '');
+      mailEls.lookupStatus.textContent = 'נמצא: ' + (r.owner_name ? r.owner_name + ' · ' : '') + r.owner_email;
+    } else if (withEmail.length > 1){
+      mailEls.lookupStatus.innerHTML = 'נמצאו כמה התאמות — לחץ לבחירה: ' + withEmail.map(r =>
+        '<a href="#" class="mail-pick" data-email="'+escapeHtml(r.owner_email)+'" data-name="'+escapeHtml(r.owner_name||'')+'">'+escapeHtml(r.internal_name || r.anonymous_name || r.owner_email)+'</a>'
+      ).join(' &nbsp;·&nbsp; ');
+      mailEls.lookupStatus.querySelectorAll('.mail-pick').forEach(a => {
+        a.addEventListener('click', ev => {
+          ev.preventDefault();
+          mailEls.to.value = a.dataset.email;
+          mailEls.body.value = buildDefaultMailBody(a.dataset.name);
+          mailEls.lookupStatus.textContent = 'נבחר: ' + a.dataset.email;
+        });
+      });
+    } else if (rows.length){
+      mailEls.lookupStatus.textContent = 'העסק נמצא במערכת אך אין לו כתובת מייל שמורה בכרטיס העסק — יש להזין ידנית.';
+    } else {
+      mailEls.lookupStatus.textContent = 'לא נמצאה התאמה אוטומטית לפי שם העסק — יש להזין את כתובת המייל ידנית.';
+    }
+  } catch (err){
+    console.error(err);
+    mailEls.lookupStatus.textContent = 'שגיאה באיתור אוטומטי — ניתן להזין את המייל ידנית.';
+  }
+}
+
+async function buildPdfBlobForBusiness(g){
+  const pages = getPages(g);
+  setPrintRootPages(pages);
+  await bsdNextPaint();
+  await window.__bsdPdfLibsPromise;
+  const pageEls = els.printRoot.querySelectorAll('.page');
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+  for (let i = 0; i < pageEls.length; i++){
+    const canvas = await window.html2canvas(pageEls[i], { scale:2, useCORS:true, backgroundColor:'#ffffff' });
+    const img = canvas.toDataURL('image/png');
+    if (i > 0) pdf.addPage();
+    pdf.addImage(img, 'PNG', 0, 0, 210, 297);
+  }
+  els.printRoot.innerHTML = '';
+  const blob = pdf.output('blob');
+  if (!blob || blob.size < 500) throw new Error('קובץ ה-PDF יצא פגום');
+  return blob;
+}
+
+function blobToBase64(blob){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1]);
+    r.onerror = () => reject(new Error('קריאת קובץ ה-PDF נכשלה'));
+    r.readAsDataURL(blob);
+  });
+}
+
+mailEls.closeBtn.addEventListener('click', closeMailModal);
+mailEls.cancelBtn.addEventListener('click', closeMailModal);
+mailEls.overlay.addEventListener('click', e => { if (e.target === mailEls.overlay) closeMailModal(); });
+mailEls.lookupBtn.addEventListener('click', () => lookupOwnerEmail(mailEls.bizName.value));
+
+mailEls.sendBtn.addEventListener('click', async () => {
+  const to = mailEls.to.value.trim();
+  const subject = mailEls.subject.value.trim();
+  const bodyText = mailEls.body.value;
+  if (!MAIL_CURRENT_G) return;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)){
+    mailEls.sendStatus.className = 'mail-send-status err';
+    mailEls.sendStatus.textContent = 'כתובת המייל אינה תקינה.';
+    return;
+  }
+  mailEls.sendBtn.disabled = true;
+  const origText = mailEls.sendBtn.textContent;
+  mailEls.sendBtn.textContent = 'שולח...';
+  mailEls.sendStatus.className = 'mail-send-status';
+  mailEls.sendStatus.textContent = 'מייצר PDF ושולח...';
+  try {
+    const pdfBlob = await buildPdfBlobForBusiness(MAIL_CURRENT_G);
+    const base64 = await blobToBase64(pdfBlob);
+    const { data: sessionData } = await window.supabaseClient.auth.getSession();
+    const accessToken = sessionData && sessionData.session ? sessionData.session.access_token : null;
+    if (!accessToken){
+      throw new Error('לא זוהתה התחברות פעילה ל-BSD-CRM. יש להתחבר למערכת (דרך app.html) ולנסות שוב.');
+    }
+    const htmlBody = '<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px;line-height:1.8;white-space:pre-wrap;">' + escapeHtml(bodyText) + '</div>';
+    const filenameSafe = (MAIL_CURRENT_G.name || 'business').replace(/[\\/:*?"<>|]/g,'').trim() || 'business';
+    const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/send-ad-report-email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + accessToken,
+        'apikey': window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY
+      },
+      body: JSON.stringify({
+        to,
+        subject,
+        html: htmlBody,
+        attachment_base64: base64,
+        attachment_filename: 'דוח פרסום - ' + filenameSafe + '.pdf'
+      })
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.error){
+      throw new Error(json.error || ('שגיאת שרת (' + res.status + ')'));
+    }
+    mailEls.sendStatus.className = 'mail-send-status ok';
+    mailEls.sendStatus.textContent = 'המייל נשלח בהצלחה ל-' + to;
+    setTimeout(closeMailModal, 1800);
+  } catch (err){
+    console.error(err);
+    mailEls.sendStatus.className = 'mail-send-status err';
+    mailEls.sendStatus.textContent = 'שגיאה בשליחה: ' + err.message;
+  } finally {
+    mailEls.sendBtn.disabled = false;
+    mailEls.sendBtn.textContent = origText;
+  }
+});
 
 tryAutoLoadSavedFile();
 
