@@ -81,6 +81,12 @@
   .mail-row input{flex:1;}
   .mail-lookup-status{font-size:12px; color:var(--muted); margin-top:6px; min-height:14px; line-height:1.6;}
   .mail-lookup-status a{color:var(--navy); font-weight:600; text-decoration:underline; cursor:pointer;}
+  .mail-suggestions{position:relative; margin-top:4px; border:1px solid #ddd6c2; border-radius:8px; background:#fff; box-shadow:0 6px 18px rgba(0,0,0,.1); max-height:190px; overflow-y:auto; display:none;}
+  .mail-suggest-item{display:flex; justify-content:space-between; gap:10px; padding:8px 11px; font-size:12.5px; cursor:pointer; border-bottom:1px solid #f1ecdc;}
+  .mail-suggest-item:last-child{border-bottom:none;}
+  .mail-suggest-item:hover{background:#faf7ef;}
+  .mail-suggest-item .ms-name{color:var(--text); font-weight:600;}
+  .mail-suggest-item .ms-email{color:var(--muted); direction:ltr;}
   .mail-send-status{font-size:12.5px; margin-top:10px; min-height:16px;}
   .mail-send-status.err{color:#a3282c;}
   .mail-send-status.ok{color:#1e7a34; font-weight:600;}
@@ -284,11 +290,12 @@
       <button type="button" class="mail-close" id="mailCloseBtn">✕</button>
     </div>
     <div class="mail-modal-body">
-      <label>שם העסק</label>
+      <label>שם העסק — הקלד/י לחיפוש</label>
       <div class="mail-row">
-        <input type="text" id="mailBizName">
-        <button type="button" class="btn btn-ghost btn-sm" id="mailLookupBtn">אתר מייל</button>
+        <input type="text" id="mailBizName" autocomplete="off" placeholder="הקלידו שם עסק לחיפוש...">
+        <button type="button" class="btn btn-ghost btn-sm" id="mailLookupBtn">חיפוש</button>
       </div>
+      <div id="mailBizSuggestions" class="mail-suggestions"></div>
       <div id="mailLookupStatus" class="mail-lookup-status"></div>
 
       <label>כתובת המייל של בעל העסק</label>
@@ -933,8 +940,17 @@ function openPreview(g, btn){
     w.document.open();
     w.document.write(
       '<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>תצוגה מקדימה - '+escapeHtml(g.name)+'</title>' +
-      styleTag + '</head><body style="background:#e9e5d8; padding:20px 0;">' +
-      pages.join('\n') + '</body></html>'
+      styleTag +
+      '<style>' +
+        '.bsd-preview-topbar{position:sticky; top:0; z-index:50; background:#0e1b34; color:#f3e7c4; display:flex; align-items:center; justify-content:space-between; padding:10px 16px; font-family:"Heebo","Rubik","Arial Hebrew",sans-serif; box-shadow:0 2px 8px rgba(0,0,0,.25);}' +
+        '.bsd-preview-topbar button{background:linear-gradient(90deg,#c9a24b,#e8cf8a); color:#0e1b34; border:none; border-radius:7px; padding:8px 16px; font-weight:700; font-size:13px; cursor:pointer; font-family:inherit;}' +
+        '.bsd-preview-topbar button:hover{filter:brightness(1.05);}' +
+        '.bsd-preview-topbar span{font-size:13px;}' +
+      '</style>' +
+      '</head><body style="background:#e9e5d8; padding:0 0 20px;">' +
+      '<div class="bsd-preview-topbar"><span>תצוגה מקדימה — '+escapeHtml(g.name)+'</span><button type="button" onclick="window.close()">→ חזרה למסך השליחה</button></div>' +
+      '<div style="padding-top:20px;">' + pages.join('\n') + '</div>' +
+      '</body></html>'
     );
     w.document.close();
   });
@@ -949,6 +965,7 @@ const mailEls = {
   bizName: document.getElementById('mailBizName'),
   lookupBtn: document.getElementById('mailLookupBtn'),
   lookupStatus: document.getElementById('mailLookupStatus'),
+  suggestions: document.getElementById('mailBizSuggestions'),
   to: document.getElementById('mailTo'),
   subject: document.getElementById('mailSubject'),
   body: document.getElementById('mailBody'),
@@ -975,12 +992,14 @@ function openMailModal(g){
   mailEls.bizName.value = g.name;
   mailEls.to.value = '';
   mailEls.lookupStatus.innerHTML = '';
+  mailEls.suggestions.style.display = 'none';
+  mailEls.suggestions.innerHTML = '';
   mailEls.sendStatus.textContent = '';
   mailEls.sendStatus.className = 'mail-send-status';
   mailEls.subject.value = 'דוח פעילות שיווקית ופרסום – BSD Business Brokers Israel';
   mailEls.body.value = buildDefaultMailBody('');
   mailEls.overlay.style.display = 'flex';
-  lookupOwnerEmail(g.name);
+  autoLookupOwnerEmail(g.name);
 }
 
 function closeMailModal(){
@@ -988,46 +1007,93 @@ function closeMailModal(){
   MAIL_CURRENT_G = null;
 }
 
-async function lookupOwnerEmail(name){
+async function searchBusinesses(name){
+  name = (name || '').trim();
+  if (!name || !window.supabaseClient) return [];
+  const [byInternal, byAnon] = await Promise.all([
+    window.supabaseClient.from('businesses').select('id, internal_name, anonymous_name, owner_name, owner_email').ilike('internal_name', '%'+name+'%').limit(8),
+    window.supabaseClient.from('businesses').select('id, internal_name, anonymous_name, owner_name, owner_email').ilike('anonymous_name', '%'+name+'%').limit(8)
+  ]);
+  const rows = [];
+  const seen = new Set();
+  (byInternal.data || []).concat(byAnon.data || []).forEach(r => {
+    if (!seen.has(r.id)){ seen.add(r.id); rows.push(r); }
+  });
+  return rows;
+}
+
+function pickBusinessSuggestion(r){
+  const label = r.internal_name || r.anonymous_name || '(ללא שם)';
+  mailEls.bizName.value = label;
+  mailEls.suggestions.style.display = 'none';
+  mailEls.suggestions.innerHTML = '';
+  if (r.owner_email){
+    mailEls.to.value = r.owner_email;
+    mailEls.body.value = buildDefaultMailBody(r.owner_name || '');
+    mailEls.lookupStatus.textContent = 'נבחר: ' + (r.owner_name ? r.owner_name + ' · ' : '') + r.owner_email;
+  } else {
+    mailEls.lookupStatus.textContent = 'העסק נבחר, אך אין לו כתובת מייל שמורה בכרטיס העסק — יש להזין אותה ידנית למטה.';
+  }
+}
+
+function renderBizSuggestions(rows){
+  const box = mailEls.suggestions;
+  if (!rows.length){
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = rows.map((r, i) => {
+    const label = r.internal_name || r.anonymous_name || '(ללא שם)';
+    const emailNote = r.owner_email || 'אין מייל שמור';
+    return '<div class="mail-suggest-item" data-idx="'+i+'"><span class="ms-name">'+escapeHtml(label)+'</span><span class="ms-email">'+escapeHtml(emailNote)+'</span></div>';
+  }).join('');
+  box.style.display = 'block';
+  box.querySelectorAll('.mail-suggest-item').forEach(item => {
+    item.addEventListener('click', () => pickBusinessSuggestion(rows[parseInt(item.dataset.idx)]));
+  });
+}
+
+async function searchAndShowSuggestions(name){
+  mailEls.lookupStatus.textContent = 'מחפש עסקים תואמים...';
+  try {
+    const rows = await searchBusinesses(name);
+    renderBizSuggestions(rows);
+    if (!rows.length){
+      mailEls.lookupStatus.textContent = 'לא נמצא עסק תואם לשם שהוזן — ניתן להזין את כתובת המייל ידנית למטה.';
+    } else if (rows.length === 1 && rows[0].owner_email){
+      // exact-ish single match with an email on file: fill it in directly
+      pickBusinessSuggestion(rows[0]);
+    } else {
+      mailEls.lookupStatus.textContent = 'נמצאו ' + rows.length + ' עסקים תואמים — בחר/י מהרשימה.';
+    }
+  } catch (err){
+    console.error(err);
+    mailEls.lookupStatus.textContent = 'שגיאה בחיפוש — ניתן להזין את המייל ידנית.';
+  }
+}
+
+/* silent best-effort auto-lookup used only when the modal first opens */
+async function autoLookupOwnerEmail(name){
   name = (name || '').trim();
   if (!name || !window.supabaseClient){ mailEls.lookupStatus.textContent = ''; return; }
   mailEls.lookupStatus.textContent = 'מאתר את מייל בעל העסק במערכת...';
   try {
-    const [byInternal, byAnon] = await Promise.all([
-      window.supabaseClient.from('businesses').select('id, internal_name, anonymous_name, owner_name, owner_email').ilike('internal_name', '%'+name+'%').limit(5),
-      window.supabaseClient.from('businesses').select('id, internal_name, anonymous_name, owner_name, owner_email').ilike('anonymous_name', '%'+name+'%').limit(5)
-    ]);
-    const rows = [];
-    const seen = new Set();
-    (byInternal.data || []).concat(byAnon.data || []).forEach(r => {
-      if (!seen.has(r.id)){ seen.add(r.id); rows.push(r); }
-    });
+    const rows = await searchBusinesses(name);
     const withEmail = rows.filter(r => r.owner_email);
     if (withEmail.length === 1){
-      const r = withEmail[0];
-      mailEls.to.value = r.owner_email;
-      mailEls.body.value = buildDefaultMailBody(r.owner_name || '');
-      mailEls.lookupStatus.textContent = 'נמצא: ' + (r.owner_name ? r.owner_name + ' · ' : '') + r.owner_email;
-    } else if (withEmail.length > 1){
-      mailEls.lookupStatus.innerHTML = 'נמצאו כמה התאמות — לחץ לבחירה: ' + withEmail.map(r =>
-        '<a href="#" class="mail-pick" data-email="'+escapeHtml(r.owner_email)+'" data-name="'+escapeHtml(r.owner_name||'')+'">'+escapeHtml(r.internal_name || r.anonymous_name || r.owner_email)+'</a>'
-      ).join(' &nbsp;·&nbsp; ');
-      mailEls.lookupStatus.querySelectorAll('.mail-pick').forEach(a => {
-        a.addEventListener('click', ev => {
-          ev.preventDefault();
-          mailEls.to.value = a.dataset.email;
-          mailEls.body.value = buildDefaultMailBody(a.dataset.name);
-          mailEls.lookupStatus.textContent = 'נבחר: ' + a.dataset.email;
-        });
-      });
+      pickBusinessSuggestion(withEmail[0]);
     } else if (rows.length){
-      mailEls.lookupStatus.textContent = 'העסק נמצא במערכת אך אין לו כתובת מייל שמורה בכרטיס העסק — יש להזין ידנית.';
+      renderBizSuggestions(rows);
+      mailEls.lookupStatus.textContent = withEmail.length > 1
+        ? 'נמצאו כמה התאמות עם מייל שמור — בחר/י מהרשימה.'
+        : 'נמצאו התאמות אך אין להן מייל שמור — בחר/י את העסק הנכון או הזן/י מייל ידנית.';
     } else {
-      mailEls.lookupStatus.textContent = 'לא נמצאה התאמה אוטומטית לפי שם העסק — יש להזין את כתובת המייל ידנית.';
+      mailEls.lookupStatus.textContent = 'לא נמצאה התאמה אוטומטית לפי שם העסק — ניתן לחפש למעלה או להזין מייל ידנית.';
     }
   } catch (err){
     console.error(err);
-    mailEls.lookupStatus.textContent = 'שגיאה באיתור אוטומטי — ניתן להזין את המייל ידנית.';
+    mailEls.lookupStatus.textContent = 'שגיאה באיתור אוטומטי — ניתן לחפש למעלה או להזין מייל ידנית.';
   }
 }
 
@@ -1063,7 +1129,20 @@ function blobToBase64(blob){
 mailEls.closeBtn.addEventListener('click', closeMailModal);
 mailEls.cancelBtn.addEventListener('click', closeMailModal);
 mailEls.overlay.addEventListener('click', e => { if (e.target === mailEls.overlay) closeMailModal(); });
-mailEls.lookupBtn.addEventListener('click', () => lookupOwnerEmail(mailEls.bizName.value));
+mailEls.lookupBtn.addEventListener('click', () => searchAndShowSuggestions(mailEls.bizName.value));
+
+let mailSearchTimer = null;
+mailEls.bizName.addEventListener('input', () => {
+  clearTimeout(mailSearchTimer);
+  const val = mailEls.bizName.value;
+  if (val.trim().length < 2){ mailEls.suggestions.style.display = 'none'; mailEls.suggestions.innerHTML = ''; return; }
+  mailSearchTimer = setTimeout(() => searchAndShowSuggestions(val), 350);
+});
+document.addEventListener('click', e => {
+  if (mailEls.suggestions.style.display === 'block' && !mailEls.suggestions.contains(e.target) && e.target !== mailEls.bizName){
+    mailEls.suggestions.style.display = 'none';
+  }
+});
 
 mailEls.sendBtn.addEventListener('click', async () => {
   const to = mailEls.to.value.trim();
