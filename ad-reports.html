@@ -92,6 +92,15 @@
   .mail-send-status.ok{color:#1e7a34; font-weight:600;}
   .mail-modal-foot{padding:12px 18px; display:flex; justify-content:flex-end; gap:8px; border-top:1px solid #eee6cf; background:#faf8f2;}
 
+  /* ===================== IN-PAGE PREVIEW (no popup/new-tab — works reliably on mobile) ===================== */
+  .preview-overlay{position:fixed; inset:0; background:#e9e5d8; z-index:600; display:none; flex-direction:column;}
+  .preview-overlay.open{display:flex;}
+  .preview-topbar{flex:none; background:linear-gradient(90deg,var(--navy),var(--navy2)); color:var(--cream); display:flex; align-items:center; justify-content:space-between; padding:12px 18px; box-shadow:0 2px 8px rgba(0,0,0,.25); z-index:2;}
+  .preview-topbar span{font-size:13.5px; font-weight:600;}
+  .preview-topbar button{background:linear-gradient(90deg,var(--gold),var(--gold-light)); color:var(--navy); border:none; border-radius:7px; padding:9px 18px; font-weight:700; font-size:13px; cursor:pointer; font-family:inherit;}
+  .preview-topbar button:hover{filter:brightness(1.05);}
+  .preview-scroll{flex:1; overflow-y:auto; padding:20px 0 30px;}
+
   .toolbar{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; flex-wrap:wrap;}
   .toolbar .links{font-size:12.5px;}
   .toolbar .links a{color:var(--navy); cursor:pointer; text-decoration:underline; margin-inline-start:12px;}
@@ -281,6 +290,16 @@
 
 <!-- Hidden print area: filled dynamically per-business -->
 <div id="printRoot"></div>
+
+<!-- In-page report preview (replaces the old popup-window approach, which some
+     mobile browsers open in the SAME tab with no reliable window.close()) -->
+<div id="previewOverlay" class="preview-overlay">
+  <div class="preview-topbar">
+    <span id="previewTitle"></span>
+    <button type="button" id="previewCloseBtn">→ חזרה למסך השליחה</button>
+  </div>
+  <div class="preview-scroll" id="previewScroll"></div>
+</div>
 
 <!-- Email-to-owner modal -->
 <div id="mailOverlay" class="mail-overlay">
@@ -924,37 +943,33 @@ function printAll(btn){
   });
 }
 
+const previewEls = {
+  overlay: document.getElementById('previewOverlay'),
+  title: document.getElementById('previewTitle'),
+  scroll: document.getElementById('previewScroll'),
+  closeBtn: document.getElementById('previewCloseBtn'),
+};
+
 function openPreview(g, btn){
-  // open the window synchronously (within the click gesture) so popup blockers allow it,
-  // then fill it in once the (possibly heavy) HTML is ready.
-  const w = window.open('', '_blank');
-  if (!w){
-    els.genStatus.textContent = 'הדפדפן חסם את פתיחת חלון התצוגה המקדימה. יש לאפשר חלונות קופצים באתר זה ולנסות שוב.';
-    els.genStatus.scrollIntoView({behavior:'smooth', block:'center'});
-    return;
-  }
-  w.document.write('<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>טוען תצוגה מקדימה...</title></head><body style="font-family:sans-serif; padding:40px; text-align:center; color:#666;">טוען את הדוח...</body></html>');
+  // Rendered in-page (no window.open/new tab): some mobile browsers open
+  // window.open('', '_blank') in the SAME tab and then ignore window.close(),
+  // which left users stuck with no way back. An in-page overlay with its own
+  // close button always works, on any device.
   withBusyButton(btn, 'מכין תצוגה מקדימה...', () => {
     const pages = getPages(g);
-    const styleTag = document.querySelector('style').outerHTML;
-    w.document.open();
-    w.document.write(
-      '<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>תצוגה מקדימה - '+escapeHtml(g.name)+'</title>' +
-      styleTag +
-      '<style>' +
-        '.bsd-preview-topbar{position:sticky; top:0; z-index:50; background:#0e1b34; color:#f3e7c4; display:flex; align-items:center; justify-content:space-between; padding:10px 16px; font-family:"Heebo","Rubik","Arial Hebrew",sans-serif; box-shadow:0 2px 8px rgba(0,0,0,.25);}' +
-        '.bsd-preview-topbar button{background:linear-gradient(90deg,#c9a24b,#e8cf8a); color:#0e1b34; border:none; border-radius:7px; padding:8px 16px; font-weight:700; font-size:13px; cursor:pointer; font-family:inherit;}' +
-        '.bsd-preview-topbar button:hover{filter:brightness(1.05);}' +
-        '.bsd-preview-topbar span{font-size:13px;}' +
-      '</style>' +
-      '</head><body style="background:#e9e5d8; padding:0 0 20px;">' +
-      '<div class="bsd-preview-topbar"><span>תצוגה מקדימה — '+escapeHtml(g.name)+'</span><button type="button" onclick="window.close()">→ חזרה למסך השליחה</button></div>' +
-      '<div style="padding-top:20px;">' + pages.join('\n') + '</div>' +
-      '</body></html>'
-    );
-    w.document.close();
+    previewEls.title.textContent = 'תצוגה מקדימה — ' + g.name;
+    previewEls.scroll.innerHTML = pages.join('\n');
+    previewEls.overlay.classList.add('open');
+    previewEls.scroll.scrollTop = 0;
   });
 }
+
+function closePreview(){
+  previewEls.overlay.classList.remove('open');
+  previewEls.scroll.innerHTML = '';
+}
+
+previewEls.closeBtn.addEventListener('click', closePreview);
 
 window.addEventListener('afterprint', () => { els.printRoot.innerHTML = ''; });
 
