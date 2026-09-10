@@ -210,6 +210,7 @@
       <input type="file" id="fileInput" accept=".csv,text/csv">
     </div>
     <div id="fileMeta"></div>
+    <div id="savedFileNote" style="font-size:12px; color:var(--muted); margin-top:6px;"></div>
     <div id="status"></div>
   </div>
 
@@ -269,6 +270,7 @@ const els = {
   dropzone: document.getElementById('dropzone'),
   fileInput: document.getElementById('fileInput'),
   fileMeta: document.getElementById('fileMeta'),
+  savedFileNote: document.getElementById('savedFileNote'),
   status: document.getElementById('status'),
   bizCard: document.getElementById('bizCard'),
   bizTbody: document.getElementById('bizTbody'),
@@ -459,23 +461,71 @@ function handleFile(file){
   els.genCard.style.display = 'none';
   const reader = new FileReader();
   reader.onload = function(e){
-    try {
-      const allRows = parseCSV(e.target.result);
-      ROWS = extractDataRows(allRows);
-      if (!ROWS.length) throw new Error('לא נמצאו שורות נתונים בקובץ.');
-      BUSINESSES = groupBusinesses(ROWS);
-      renderBusinessTable();
-      els.fileMeta.textContent = 'נטען: ' + file.name + ' — ' + ROWS.length + ' רשומות פרסום, ' + BUSINESSES.length + ' עסקים שונים.';
-      setStatus('');
-      els.bizCard.style.display = 'block';
-      els.genCard.style.display = 'block';
-    } catch (err){
-      console.error(err);
-      setStatus('שגיאה בקריאת הקובץ: ' + err.message, true);
-    }
+    const ok = loadCsvText(e.target.result, file.name);
+    if (ok) saveToStorage(e.target.result, file.name);
   };
   reader.onerror = function(){ setStatus('שגיאה בקריאת הקובץ.', true); };
   reader.readAsText(file, 'utf-8');
+}
+
+/* parses CSV text and updates the UI; returns true on success */
+function loadCsvText(text, filename){
+  try {
+    const allRows = parseCSV(text);
+    ROWS = extractDataRows(allRows);
+    if (!ROWS.length) throw new Error('לא נמצאו שורות נתונים בקובץ.');
+    BUSINESSES = groupBusinesses(ROWS);
+    renderBusinessTable();
+    els.fileMeta.textContent = 'נטען: ' + filename + ' — ' + ROWS.length + ' רשומות פרסום, ' + BUSINESSES.length + ' עסקים שונים.';
+    setStatus('');
+    els.bizCard.style.display = 'block';
+    els.genCard.style.display = 'block';
+    return true;
+  } catch (err){
+    console.error(err);
+    setStatus('שגיאה בקריאת הקובץ: ' + err.message, true);
+    return false;
+  }
+}
+
+/* ---------- remember the last uploaded file (this browser only) ---------- */
+const STORAGE_KEY = 'bsd_ad_reports_last_csv';
+
+function saveToStorage(text, filename){
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ filename, text, savedAt: new Date().toISOString() }));
+    showSavedFileNote(filename, new Date());
+  } catch (err){
+    console.warn('לא ניתן היה לשמור את הקובץ בדפדפן לשימוש הבא:', err);
+  }
+}
+
+function showSavedFileNote(filename, savedAtDate){
+  const d = savedAtDate.toLocaleDateString('he-IL') + ' ' + savedAtDate.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+  els.savedFileNote.innerHTML = 'הקובץ נשמר בדפדפן זה ויטען אוטומטית בפעם הבאה (' + d + ') — ' +
+    '<a href="javascript:void(0)" id="clearSavedBtn" style="color:#a3282c;text-decoration:underline;">מחק קובץ שמור</a>';
+  const clearBtn = document.getElementById('clearSavedBtn');
+  if (clearBtn) clearBtn.addEventListener('click', clearSavedFile);
+}
+
+function clearSavedFile(){
+  try { localStorage.removeItem(STORAGE_KEY); } catch (err){}
+  els.savedFileNote.textContent = '';
+}
+
+function tryAutoLoadSavedFile(){
+  let saved;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    saved = JSON.parse(raw);
+  } catch (err){ return; }
+  if (!saved || !saved.text) return;
+  const ok = loadCsvText(saved.text, saved.filename);
+  if (ok){
+    els.fileMeta.textContent += ' (נטען אוטומטית מהקובץ השמור)';
+    showSavedFileNote(saved.filename, new Date(saved.savedAt));
+  }
 }
 
 /* ---------- business selection table ---------- */
@@ -834,6 +884,8 @@ function openPreview(g, btn){
 }
 
 window.addEventListener('afterprint', () => { els.printRoot.innerHTML = ''; });
+
+tryAutoLoadSavedFile();
 
 </script>
 </body>
