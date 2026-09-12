@@ -15,7 +15,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          VERSION = '2026090713'
+          VERSION = '2026091223'
 
           app = Path('app.html')
           s = app.read_text(encoding='utf-8')
