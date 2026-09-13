@@ -15,7 +15,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          VERSION = '2026091223'
+          VERSION = '2026091307'
 
           app = Path('app.html')
           s = app.read_text(encoding='utf-8')
@@ -32,12 +32,7 @@ jobs:
 
           page = Path('site-admin.html')
           h = page.read_text(encoding='utf-8')
-          old_head = '<div class="cardhead"><h3>תוכן וכתבות</h3></div>'
-          new_head = f'<div class="cardhead"><h3>תוכן וכתבות</h3><a class="btn primary" href="site-content-editor.html?v={VERSION}">ניהול תוכן מלא</a></div>'
-          if old_head in h:
-              h = h.replace(old_head, new_head, 1)
-          h = re.sub(r'site-content-editor\.html\?v=\d+', f'site-content-editor.html?v={VERSION}', h)
-          h = re.sub(r'site-admin-v2\.js\?v=\d+', f'site-admin-v2.js?v={VERSION}', h)
+          h = re.sub(r'site-admin-v3\.html\?v=\d+', f'site-admin-v3.html?v={VERSION}', h)
           page.write_text(h, encoding='utf-8')
 
           editor = Path('site-content-editor.html')
