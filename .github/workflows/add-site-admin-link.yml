@@ -3,6 +3,10 @@ on:
   push:
     paths:
       - '.github/workflows/add-site-admin-link.yml'
+      - 'js/site-content-ai.js'
+      - 'js/site-content-finalize.js'
+      - 'js/site-admin-v2.js'
+      - 'js/site-admin-v3-fixes.js'
 permissions:
   contents: write
 jobs:
@@ -10,6 +14,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify site admin JavaScript syntax
+        run: |
+          node --check js/site-content-ai.js
+          node --check js/site-content-finalize.js
+          node --check js/site-admin-v2.js
+          node --check js/site-admin-v3-fixes.js
       - name: Keep site admin navigation current
         run: |
           python - <<'PY'
