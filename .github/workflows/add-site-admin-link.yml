@@ -7,6 +7,7 @@ on:
       - 'js/site-content-finalize.js'
       - 'js/site-admin-v2.js'
       - 'js/site-admin-v3-fixes.js'
+      - 'js/site-analytics.js'
 permissions:
   contents: write
 jobs:
@@ -20,6 +21,7 @@ jobs:
           node --check js/site-content-finalize.js
           node --check js/site-admin-v2.js
           node --check js/site-admin-v3-fixes.js
+          node --check js/site-analytics.js
       - name: Keep site admin navigation current
         run: |
           python - <<'PY'
