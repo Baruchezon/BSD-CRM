@@ -5,6 +5,8 @@ on:
       - '.github/workflows/add-site-admin-link.yml'
       - 'js/site-content-ai.js'
       - 'js/site-content-finalize.js'
+      - 'js/site-content-studio.js'
+      - 'site-content-studio.html'
       - 'js/site-admin-v2.js'
       - 'js/site-admin-v3-fixes.js'
       - 'js/site-analytics.js'
@@ -19,6 +21,7 @@ jobs:
         run: |
           node --check js/site-content-ai.js
           node --check js/site-content-finalize.js
+          node --check js/site-content-studio.js
           node --check js/site-admin-v2.js
           node --check js/site-admin-v3-fixes.js
           node --check js/site-analytics.js
@@ -26,12 +29,12 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
-          VERSION = '2026091307'
+          VERSION = '2026091308'
 
           app = Path('app.html')
           s = app.read_text(encoding='utf-8')
-          import re
           if re.search(r'href="site-admin\.html(?:\?v=\d+)?"', s):
               s = re.sub(r'href="site-admin\.html(?:\?v=\d+)?"', f'href="site-admin.html?v={VERSION}"', s, count=1)
           else:
@@ -54,21 +57,9 @@ jobs:
           else:
               v = re.sub(r'js/site-admin-v3-fixes\.js\?v=\d+', f'js/site-admin-v3-fixes.js?v={VERSION}', v)
           v3.write_text(v, encoding='utf-8')
-
-          editor = Path('site-content-editor.html')
-          e = editor.read_text(encoding='utf-8')
-          if 'js/site-content-ai.js' not in e:
-              e = e.replace('</body>', f'<script src="js/site-content-ai.js?v={VERSION}"></script></body>', 1)
-          else:
-              e = re.sub(r'js/site-content-ai\.js\?v=\d+', f'js/site-content-ai.js?v={VERSION}', e)
-          if 'js/site-content-finalize.js' not in e:
-              e = e.replace('</body>', f'<script src="js/site-content-finalize.js?v={VERSION}"></script></body>', 1)
-          else:
-              e = re.sub(r'js/site-content-finalize\.js\?v=\d+', f'js/site-content-finalize.js?v={VERSION}', e)
-          editor.write_text(e, encoding='utf-8')
           PY
           git config user.name "BSD Automation"
           git config user.email "actions@users.noreply.github.com"
-          git add app.html site-admin.html site-admin-v3.html site-content-editor.html
-          git diff --cached --quiet || git commit -m "Refresh BSD content editor assets"
+          git add app.html site-admin.html site-admin-v3.html
+          git diff --cached --quiet || git commit -m "Refresh BSD site management assets"
           git push
