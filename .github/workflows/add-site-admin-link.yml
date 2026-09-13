@@ -35,16 +35,28 @@ jobs:
           h = re.sub(r'site-admin-v3\.html\?v=\d+', f'site-admin-v3.html?v={VERSION}', h)
           page.write_text(h, encoding='utf-8')
 
+          v3 = Path('site-admin-v3.html')
+          v = v3.read_text(encoding='utf-8')
+          if 'js/site-admin-v3-fixes.js' not in v:
+              v = v.replace('</body>', f'<script src="js/site-admin-v3-fixes.js?v={VERSION}"></script></body>', 1)
+          else:
+              v = re.sub(r'js/site-admin-v3-fixes\.js\?v=\d+', f'js/site-admin-v3-fixes.js?v={VERSION}', v)
+          v3.write_text(v, encoding='utf-8')
+
           editor = Path('site-content-editor.html')
           e = editor.read_text(encoding='utf-8')
           if 'js/site-content-ai.js' not in e:
               e = e.replace('</body>', f'<script src="js/site-content-ai.js?v={VERSION}"></script></body>', 1)
           else:
               e = re.sub(r'js/site-content-ai\.js\?v=\d+', f'js/site-content-ai.js?v={VERSION}', e)
+          if 'js/site-content-finalize.js' not in e:
+              e = e.replace('</body>', f'<script src="js/site-content-finalize.js?v={VERSION}"></script></body>', 1)
+          else:
+              e = re.sub(r'js/site-content-finalize\.js\?v=\d+', f'js/site-content-finalize.js?v={VERSION}', e)
           editor.write_text(e, encoding='utf-8')
           PY
           git config user.name "BSD Automation"
           git config user.email "actions@users.noreply.github.com"
-          git add app.html site-admin.html site-content-editor.html
+          git add app.html site-admin.html site-admin-v3.html site-content-editor.html
           git diff --cached --quiet || git commit -m "Refresh BSD content editor assets"
           git push
