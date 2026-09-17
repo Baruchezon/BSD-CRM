@@ -393,66 +393,19 @@ async function handleInterest(req: Request, auth: any, body: any) {
   const interested = body.interested !== false;
   if (!(await isPublishedBusiness(businessId))) return reply(req, 404, { ok: false, error: "business_not_available" });
 
-  await supabase.from("vip_interests").upsert({
-    vip_account_id: auth.account.id,
-    business_id: businessId,
-    interested,
-    first_marked_at: new Date().toISOString()
-  }, { onConflict: "vip_account_id,business_id" });
+  const { data: existingFavorite, error: favoriteReadError } = await supabase
+    .from("vip_interests")
+    .select("vip_account_id,business_id")
+    .eq("vip_account_id", auth.account.id)
+    .eq("business_id", businessId)
+    .maybeSingle();
+  if (favoriteReadError) return reply(req, 500, { ok: false, error: "favorite_read_failed" });
+  const write = existingFavorite
+    ? await supabase.from("vip_interests").update({ interested }).eq("vip_account_id", auth.account.id).eq("business_id", businessId)
+    : await supabase.from("vip_interests").insert({ vip_account_id: auth.account.id, business_id: businessId, interested });
+  if (write.error) return reply(req, 500, { ok: false, error: "favorite_save_failed" });
 
   await logVipEvent(auth.account.id, auth.session.id, interested ? "interest_marked" : "interest_removed", { business_id: businessId });
-
-  if (interested) {
-    const { data: existing } = await supabase
-      .from("matches")
-      .select("id")
-      .eq("buyer_id", auth.account.buyer_id)
-      .eq("business_id", businessId)
-      .maybeSingle();
-    let matchId = existing?.id || null;
-    if (!existing) {
-      const created = await supabase.from("matches").insert({
-        buyer_id: auth.account.buyer_id,
-        business_id: businessId,
-        status: "מתעניין",
-        buyer_response: "מעניין אותי דרך אזור BSD VIP",
-        match_source: "BSD VIP",
-        disclosure_level: 1,
-        last_action: "סימון מעניין אותי באזור VIP",
-        last_action_at: new Date().toISOString()
-      }).select("id").single();
-      matchId = created.data?.id || null;
-    }
-
-    const { data: buyer } = await supabase
-      .from("leads")
-      .select("handled_by,created_by")
-      .eq("id", auth.account.buyer_id)
-      .maybeSingle();
-    const dedupeKey = `vip-interest:${auth.account.buyer_id}:${businessId}`;
-    const { data: existingTask } = await supabase
-      .from("tasks")
-      .select("id,status")
-      .eq("dedupe_key", dedupeKey)
-      .neq("status", "הושלמה")
-      .maybeSingle();
-    if (!existingTask) {
-      await supabase.from("tasks").insert({
-        title: "לקוח VIP סימן עסק כמעניין",
-        description: "לקוח VIP סימן את העסק כמעניין באזור הלקוחות.",
-        related_type: "buyer",
-        related_id: auth.account.buyer_id,
-        buyer_id: auth.account.buyer_id,
-        business_id: businessId,
-        match_id: matchId,
-        assigned_to: buyer?.handled_by || buyer?.created_by || null,
-        due_date: new Date().toISOString().slice(0, 10),
-        priority: "רגילה",
-        source: "vip",
-        dedupe_key: dedupeKey
-      });
-    }
-  }
   return reply(req, 200, { ok: true, interested });
 }
 

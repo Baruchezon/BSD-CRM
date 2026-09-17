@@ -48,3 +48,16 @@ test('VIP leads remain linked to existing buyer and business cards', async () =>
   assert.match(api, /handleAdminInquiries/);
   assert.match(api, /internal_name,business_number/);
 });
+
+test('VIP favorites are personal bookmarks and do not create workflow records', async () => {
+  const api = await readFile(new URL('../../supabase/functions/vip-api/index.ts', import.meta.url), 'utf8');
+  const portal = await readFile(new URL('../../vip-test.html', import.meta.url), 'utf8');
+  const start = api.indexOf('async function handleInterest');
+  const end = api.indexOf('async function handleInquiry', start);
+  const handler = api.slice(start, end);
+  assert.match(handler, /vip_interests/);
+  assert.doesNotMatch(handler, /from\("matches"\)|from\("tasks"\)/);
+  assert.match(portal, /המועדפים שלי/);
+  assert.match(portal, /שמור במועדפים/);
+  assert.match(portal, /נשמר במועדפים/);
+});
