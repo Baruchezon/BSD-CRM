@@ -152,7 +152,17 @@
     <button type="button" class="lead-tab" data-tab="seller" onclick="switchTab('seller')">לידים מהאתר <span class="count" id="countSeller">0</span></button>
     <button type="button" class="lead-tab" data-tab="buyer" onclick="switchTab('buyer')">קונים <span class="count" id="countBuyer">0</span></button>
     <button type="button" class="lead-tab" data-tab="partner" onclick="switchTab('partner')">שותפות/השקעה <span class="count" id="countPartner">0</span></button>
+    <button type="button" class="lead-tab" data-tab="vip" onclick="switchTab('vip')">לידים לקוחות VIP <span class="count" id="countVip">0</span></button>
     <button type="button" class="lead-tab" data-tab="y2026" onclick="switchTab('y2026')">לידים 2026 <span class="count" id="countY2026">0</span></button>
+  </div>
+  <div id="vipLeadsSection" style="display:none;">
+    <div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input id="vipLeadSearch" type="text" oninput="renderVipLeads()" placeholder="חיפוש לפי לקוח, טלפון, עסק או הודעה" style="flex:1;min-width:220px;">
+      <select id="vipLeadStatus" onchange="renderVipLeads()"><option value="all">כל הסטטוסים</option><option value="new">חדשים</option><option value="handled">בטיפול</option><option value="closed">סגורים</option></select>
+    </div>
+    <div class="table-scroll-wrap"><div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+      <table><thead><tr><th>לקוח VIP</th><th>טלפון</th><th>עסק שהתעניין בו</th><th>הודעה</th><th>הסכם</th><th>התקבל</th><th>סטטוס</th></tr></thead><tbody id="vipLeadsBody"><tr class="empty-row"><td colspan="7">טוען...</td></tr></tbody></table>
+    </div></div>
   </div>
   <div id="y2026HiddenLinkWrap" style="display:none;margin:-6px 0 10px;">
     <a href="javascript:void(0)" onclick="openHiddenY2026Panel()" style="font-size:.78rem;color:#8a8578;">📁 רשומות שהוסרו מרשימת 2026 (<span id="countY2026Hidden">0</span>) — צפייה ושחזור</a>
@@ -249,6 +259,7 @@ let ALL_SELLERS = [];
 let ALL_BUYERS = [];
 let ALL_PARTNERS = [];
 let ALL_LEADS_2026 = [];
+let ALL_VIP_INQUIRIES = [];
 let HIDDEN_Y2026_IDS = new Set();
 let HIDDEN_Y2026_DETAILS = [];
 let Y2026_VIEW_MODE = 'new'; // 'new' = leads_2026_review (default) | 'legacy' = old leads_2026_hidden view
@@ -261,6 +272,7 @@ let CURRENT_PROFILE = null;
 let RATING_LEVELS = [];
 let RATING_BY_ID = {};
 let CURRENT_TAB = 'business';
+const VIP_API = (window.BSD_CONFIG && window.BSD_CONFIG.VIP_API_URL) || 'https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/vip-api';
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
@@ -305,6 +317,15 @@ function toast(msg){
 function closeModal(){
   document.getElementById('overlay').classList.remove('open');
   document.getElementById('modalBox').innerHTML = '';
+}
+
+async function vipAdminApi(action, payload={}){
+  const { data:{ session } } = await window.supabaseClient.auth.getSession();
+  if (!session?.access_token) throw new Error('ההתחברות למערכת פגה');
+  const res = await fetch(VIP_API, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+session.access_token }, body:JSON.stringify({ action, ...payload }) });
+  let data={}; try { data=await res.json(); } catch(e){}
+  if (!res.ok || data.ok===false) throw new Error(data.message || data.error || 'שגיאה בטעינת לידי VIP');
+  return data;
 }
 
 async function loadUsers(){
@@ -373,6 +394,8 @@ async function loadAll(){
   if (bizErr){ toast('שגיאה בטעינת עסקים: ' + bizErr.message); }
   if (leadErr){ toast('שגיאה בטעינת לידים: ' + leadErr.message); }
 
+  ALL_BUSINESSES = bizData || [];
+
   const noAgreement = r => !r.agreement_status || r.agreement_status === 'אין הסכם';
   // "לידים מהאתר" (טאב seller, ראו rename למעלה): כל ליד שהאוטומציה קלטה
   // ועדיין לא סווג/הועבר סופית (website_intake_stage != null) - בלי קשר
@@ -418,10 +441,19 @@ async function loadAll(){
   Y2026_REVIEW_ROWS = reviewRows.filter(r => !r.is_hidden);
   Y2026_REVIEW_HIDDEN_ROWS = reviewRows.filter(r => r.is_hidden);
 
+  ALL_VIP_INQUIRIES = [];
+  if (CURRENT_PROFILE && ['admin','manager'].includes(CURRENT_PROFILE.role)) {
+    try {
+      const vipData = await vipAdminApi('admin_inquiries');
+      ALL_VIP_INQUIRIES = vipData.inquiries || [];
+    } catch (e) { toast('שגיאה בטעינת לידי VIP: ' + e.message); }
+  }
+
   document.getElementById('countBusiness').textContent = ALL_BUSINESSES.length;
   document.getElementById('countSeller').textContent = ALL_SELLERS.length;
   document.getElementById('countBuyer').textContent = ALL_BUYERS.length;
   document.getElementById('countPartner').textContent = ALL_PARTNERS.length;
+  document.getElementById('countVip').textContent = ALL_VIP_INQUIRIES.filter(x=>x.status==='new').length;
   document.getElementById('countY2026').textContent = Y2026_REVIEW_ROWS.length;
   const cntReviewHidden = document.getElementById('countY2026ReviewHidden');
   if (cntReviewHidden) cntReviewHidden.textContent = Y2026_REVIEW_HIDDEN_ROWS.length;
@@ -429,7 +461,8 @@ async function loadAll(){
 
   await loadNotesSummary();
   applyY2026ViewVisibility();
-  if (CURRENT_TAB === 'y2026' && Y2026_VIEW_MODE === 'new') renderY2026ReviewTable();
+  if (CURRENT_TAB === 'vip') renderVipLeads();
+  else if (CURRENT_TAB === 'y2026' && Y2026_VIEW_MODE === 'new') renderY2026ReviewTable();
   else renderTable();
 }
 
@@ -438,18 +471,25 @@ function switchTab(tab){
   document.querySelectorAll('.lead-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   renderHiddenY2026Link();
   applyY2026ViewVisibility();
+  if (tab === 'vip') { renderVipLeads(); return; }
   if (tab === 'y2026' && Y2026_VIEW_MODE === 'new') { renderY2026ReviewTable(); return; }
   renderTable();
 }
 function applyY2026ViewVisibility(){
   const isY2026 = CURRENT_TAB === 'y2026';
+  const isVip = CURRENT_TAB === 'vip';
   const isAdmin = !!(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin');
   const toggleWrap = document.getElementById('y2026ViewToggleWrap');
   if (toggleWrap) toggleWrap.style.display = (isY2026 && isAdmin) ? 'block' : 'none';
   const reviewSection = document.getElementById('y2026ReviewSection');
   const legacySection = document.getElementById('legacyY2026AndOtherTabsSection');
+  const vipSection = document.getElementById('vipLeadsSection');
+  if (vipSection) vipSection.style.display = isVip ? 'block' : 'none';
   const eeWrapV = document.getElementById('y2026ExistsElsewhereWrap');
-  if (isY2026 && isAdmin && Y2026_VIEW_MODE === 'new'){
+  if (isVip) {
+    if (reviewSection) reviewSection.style.display = 'none';
+    if (legacySection) legacySection.style.display = 'none';
+  } else if (isY2026 && isAdmin && Y2026_VIEW_MODE === 'new'){
     if (reviewSection) reviewSection.style.display = 'block';
     if (legacySection) legacySection.style.display = 'none';
   } else {
@@ -470,6 +510,55 @@ function setY2026ViewMode(mode){
 function toggleY2026ShowExistsElsewhere(){
   Y2026_SHOW_EXISTS_ELSEWHERE = !Y2026_SHOW_EXISTS_ELSEWHERE;
   renderY2026ReviewTable();
+}
+
+function vipAgreementLabel(buyer){
+  if (!buyer) return 'לא ידוע';
+  if (buyer.agreement_signed || buyer.agreement_status === 'יש הסכם חתום') return 'יש הסכם חתום';
+  if (buyer.agreement_sent || buyer.agreement_status === 'נשלח הסכם לחתימה') return 'נשלח לחתימה';
+  return buyer.agreement_status || 'אין הסכם';
+}
+function vipLeadStatusLabel(status){
+  return ({new:'חדש',handled:'בטיפול',closed:'סגור'})[status] || status || 'חדש';
+}
+function renderVipLeads(){
+  const body=document.getElementById('vipLeadsBody');
+  if(!body) return;
+  const q=(document.getElementById('vipLeadSearch')?.value||'').trim().toLowerCase();
+  const status=document.getElementById('vipLeadStatus')?.value||'all';
+  const filtered=ALL_VIP_INQUIRIES.filter(x=>{
+    const buyer=x.buyer||{}, business=x.business||{};
+    const hay=[buyer.full_name,x.name_snapshot,buyer.phone,x.phone_snapshot,buyer.client_number,business.internal_name,business.business_number,x.message].join(' ').toLowerCase();
+    return (!q||hay.includes(q)) && (status==='all'||x.status===status);
+  });
+  if(!filtered.length){body.innerHTML='<tr class="empty-row"><td colspan="7">אין פניות VIP להצגה</td></tr>';return;}
+  body.innerHTML=filtered.map(x=>{const b=x.buyer||{}, biz=x.business||{};const phone=b.phone||x.phone_snapshot||'';const bg=x.status==='new'?'#fdece0':x.status==='handled'?'#eaf1fb':'#edf3ed';const fg=x.status==='new'?'#a3521a':x.status==='handled'?'#2b5fa3':'#426342';return `<tr onclick="openVipInquiry('${x.id}')" style="cursor:pointer;">
+    <td><div class="primary-name">${esc(b.full_name||x.name_snapshot||'לקוח VIP')}</div><div class="sub-name">${esc(b.client_number||'')}</div></td>
+    <td dir="ltr" style="text-align:right;unicode-bidi:isolate;" onclick="event.stopPropagation()">${phone?`<a href="tel:${esc(phone)}" style="color:inherit;text-decoration:none;">📞 ${esc(phone)}</a>${waBtn(phone)}`:'—'}</td>
+    <td><b>${esc(biz.internal_name||'עסק ללא שם')}</b><br><span class="sub-name">${esc(biz.business_number||'')}</span></td>
+    <td>${esc(x.message||'בקשה לקבלת פרטים')}</td><td>${esc(vipAgreementLabel(b))}</td><td>${fmtDateTime(x.created_at)}</td>
+    <td><span class="badge" style="background:${bg};color:${fg};">${esc(vipLeadStatusLabel(x.status))}</span></td></tr>`}).join('');
+}
+function openVipInquiry(id){
+  const x=ALL_VIP_INQUIRIES.find(v=>v.id===id); if(!x){toast('פניית VIP לא נמצאה');return;}
+  const b=x.buyer||{}, biz=x.business||{}, phone=b.phone||x.phone_snapshot||'', digits=waPhoneDigits(phone);
+  const modal=document.getElementById('modalBox');
+  modal.innerHTML=`<h3>ליד לקוח VIP</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+      <div><div style="font-size:.75rem;color:#999;">לקוח</div><a href="leads.html?open=${encodeURIComponent(x.buyer_id)}" style="font-size:1.05rem;font-weight:800;color:var(--navy);">${esc(b.full_name||x.name_snapshot||'לקוח VIP')}</a><div>${esc(b.client_number||'')}</div></div>
+      <div><div style="font-size:.75rem;color:#999;">עסק</div><a href="businesses.html?open=${encodeURIComponent(x.business_id)}" style="font-size:1.05rem;font-weight:800;color:var(--navy);">${esc(biz.internal_name||'עסק ללא שם')}</a><div>${esc(biz.business_number||'')}</div></div>
+      <div><div style="font-size:.75rem;color:#999;">טלפון</div><div>${esc(phone||'—')}</div></div>
+      <div><div style="font-size:.75rem;color:#999;">הסכם</div><div><b>${esc(vipAgreementLabel(b))}</b>${b.agreement_signed_date?` · ${fmtDate(b.agreement_signed_date)}`:''}</div></div>
+      <div><div style="font-size:.75rem;color:#999;">התקבל</div><div>${fmtDateTime(x.created_at)}</div></div>
+      <div><div style="font-size:.75rem;color:#999;">סטטוס</div><div>${esc(vipLeadStatusLabel(x.status))}${x.handler?` · ${esc(x.handler.full_name||x.handler.email||'')}`:''}</div></div>
+    </div>
+    <div style="background:#f7f5ee;border-radius:10px;padding:14px;margin-bottom:16px;"><div style="font-size:.75rem;color:#777;margin-bottom:4px;">תוכן הפנייה</div><div style="white-space:pre-wrap;">${esc(x.message||'בקשה לקבלת פרטים נוספים')}</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">${phone?`<a class="btn btn-navy" href="tel:${esc(phone)}">📞 התקשר</a>`:''}${digits?`<a class="btn" style="background:#1f9d55;color:#fff;" target="_blank" rel="noopener" href="https://wa.me/${digits}">WhatsApp</a>`:''}${b.agreement_pdf_path?'<span class="badge" style="background:#e7f4ea;color:#287144;">קיים קובץ הסכם</span>':''}</div>
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">סגירה</button>${x.status!=='new'?`<button class="btn btn-ghost" onclick="setVipInquiryStatus('${x.id}','new')">החזר לחדש</button>`:''}${x.status!=='handled'?`<button class="btn btn-navy" onclick="setVipInquiryStatus('${x.id}','handled')">סמן בטיפול</button>`:''}${x.status!=='closed'?`<button class="btn" style="background:#426342;color:#fff;" onclick="setVipInquiryStatus('${x.id}','closed')">סגור ליד</button>`:''}</div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+async function setVipInquiryStatus(id,status){
+  try{await vipAdminApi('admin_inquiry_action',{inquiry_id:id,status});const x=ALL_VIP_INQUIRIES.find(v=>v.id===id);if(x){x.status=status;x.handled_at=status==='new'?null:new Date().toISOString();x.handled_by=status==='new'?null:CURRENT_PROFILE.id;x.handler=status==='new'?null:{id:CURRENT_PROFILE.id,full_name:CURRENT_PROFILE.full_name,email:CURRENT_PROFILE.email};}closeModal();renderVipLeads();document.getElementById('countVip').textContent=ALL_VIP_INQUIRIES.filter(v=>v.status==='new').length;toast('סטטוס ליד VIP עודכן');}catch(e){toast('שגיאה בעדכון ליד VIP: '+e.message);}
 }
 
 // ============================================================
@@ -1460,6 +1549,8 @@ async function rejectWebsiteLead(id){
 (async function init(){
   CURRENT_PROFILE = await requireAuth();
   if (!CURRENT_PROFILE) return;
+  const vipTabButton=document.querySelector('[data-tab="vip"]');
+  if(vipTabButton && !['admin','manager'].includes(CURRENT_PROFILE.role)) vipTabButton.style.display='none';
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
   refreshNavMsgBadge();
   await loadUsers();
@@ -1471,7 +1562,11 @@ async function rejectWebsiteLead(id){
   // התיקון שכבר בוצע פעם ב-leads.html) כדי שרענון דף לא יפתח את זה שוב.
   const params = new URLSearchParams(location.search);
   const openId = params.get('open');
-  if (openId){
+  if (params.get('tab') === 'vip' && ['admin','manager'].includes(CURRENT_PROFILE.role)) {
+    switchTab('vip');
+    history.replaceState(null, '', location.pathname);
+    if (openId) openVipInquiry(openId);
+  } else if (openId){
     switchTab('seller');
     const row = ALL_SELLERS.find(x => x.id === openId);
     history.replaceState(null, '', location.pathname);

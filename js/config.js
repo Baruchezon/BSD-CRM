@@ -184,7 +184,8 @@ window.BSD_CONFIG = {
       const menu = toolsWrap.querySelector('.bsd-forms-menu');
       if (!menu) return false;
       const link = document.createElement('a');
-      link.href = 'vip-admin.html';
+      const currentScreen = (location.pathname.split('/').pop() || 'app.html') + location.search;
+      link.href = 'vip-admin.html?return=' + encodeURIComponent(currentScreen);
       link.dataset.vipAdminLink = '1';
       link.textContent = '⭐ ניהול לקוחות VIP';
       link.style.cssText = 'display:block;color:#f1d98d;text-decoration:none;padding:11px 16px;font-size:.85rem;font-weight:800;border-top:1px solid rgba(255,255,255,.08);';

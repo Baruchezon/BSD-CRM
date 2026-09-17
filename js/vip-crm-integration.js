@@ -11,6 +11,11 @@
     return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
+  function vipAdminHref(returnTo){
+    const fallback = (location.pathname.split('/').pop() || 'app.html') + location.search;
+    return 'vip-admin.html?return=' + encodeURIComponent(returnTo || fallback);
+  }
+
   function toast(message, isError){
     if (typeof window.showToast === 'function') {
       try { window.showToast(message, !!isError); return; } catch(e){}
@@ -46,11 +51,11 @@
     return data;
   }
 
-  function vipBox(title, body){
+  function vipBox(title, body, returnTo){
     return `<section data-vip-crm-box style="grid-column:1/3;margin-top:16px;border:2px solid #d5b85c;border-radius:12px;background:linear-gradient(180deg,#fffdf6,#fff);padding:16px;box-shadow:0 4px 14px rgba(14,27,52,.07);">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
         <strong style="color:#0e1b34;font-size:1rem;">⭐ ${esc(title)}</strong>
-        <a href="vip-admin.html" style="font-size:.78rem;color:#0e1b34;font-weight:700;">ניהול לקוחות VIP</a>
+        <a href="${vipAdminHref(returnTo)}" style="font-size:.78rem;color:#0e1b34;font-weight:700;">ניהול לקוחות VIP</a>
       </div>${body}</section>`;
   }
 
@@ -59,7 +64,7 @@
     const toolbar = document.querySelector('.toolbar .add-btns') || document.querySelector('.toolbar');
     if (!toolbar) return;
     const a=document.createElement('a');
-    a.href='vip-admin.html';
+    a.href=vipAdminHref();
     a.dataset.vipAdminShortcut='1';
     a.textContent='⭐ לקוחות VIP';
     a.style.cssText='display:inline-flex;align-items:center;text-decoration:none;background:#d5b85c;color:#172033;border-radius:8px;padding:10px 16px;font-size:.85rem;font-weight:800;';
@@ -78,7 +83,7 @@
       const list=await adminApi('admin_list');
       account=(list.accounts||[]).find(a=>a.buyer_id===lead.id) || null;
     } catch(e){
-      modal.insertAdjacentHTML('beforeend',vipBox('גישת לקוח VIP',`<div style="color:#a72a2a;font-size:.85rem;">לא ניתן לטעון כרגע את סטטוס VIP: ${esc(e.message)}</div>`));
+      modal.insertAdjacentHTML('beforeend',vipBox('גישת לקוח VIP',`<div style="color:#a72a2a;font-size:.85rem;">לא ניתן לטעון כרגע את סטטוס VIP: ${esc(e.message)}</div>`,`leads.html?open=${encodeURIComponent(lead.id)}`));
       return;
     }
 
@@ -101,7 +106,7 @@
       ${account ? `<div style="margin-top:10px;font-size:.85rem;"><b>שם משתמש:</b> ${esc(account.username)}</div>` : ''}
       ${reason}
       <div id="vipBuyerCredentials" style="margin-top:10px;"></div>
-    `));
+    `,`leads.html?open=${encodeURIComponent(lead.id)}`));
 
     const checkbox=document.getElementById('vipEnableBuyer');
     if(checkbox && !checkbox.disabled){
@@ -142,7 +147,7 @@
     let status;
     try { status=await adminApi('admin_business_status',{business_id:biz.id}); }
     catch(e){
-      modal.insertAdjacentHTML('beforeend',vipBox('פרסום ללקוחות VIP',`<div style="color:#a72a2a;font-size:.85rem;">לא ניתן לטעון סטטוס פרסום: ${esc(e.message)}</div>`));
+      modal.insertAdjacentHTML('beforeend',vipBox('פרסום ללקוחות VIP',`<div style="color:#a72a2a;font-size:.85rem;">לא ניתן לטעון סטטוס פרסום: ${esc(e.message)}</div>`,`businesses.html?open=${encodeURIComponent(biz.id)}`));
       return;
     }
     const files=status.eligible_files || [];
@@ -165,7 +170,7 @@
       <div style="margin-top:8px;font-size:.76rem;color:${noFiles?'#a72a2a':'#6f7787'};line-height:1.5;">
         ${noFiles ? 'הפרסום חסום. יש ליצור או להעלות קובץ שמוגדר anonymous_summary ברמת סודיות 1.' : 'המערכת מאפשרת פרסום רק של קובץ anonymous_summary פעיל ברמת סודיות 1. קבצים פנימיים וחסויים חסומים גם בצד השרת.'}
       </div>
-    `));
+    `,`businesses.html?open=${encodeURIComponent(biz.id)}`));
 
     const checkbox=document.getElementById('vipPublishBusiness');
     const select=document.getElementById('vipAnonymousFile');

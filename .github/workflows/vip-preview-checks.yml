@@ -10,10 +10,12 @@ on:
       - 'js/vip-ui-fixes.js'
       - 'js/config.js'
       - 'vip-admin.html'
+      - 'leads-hub.html'
       - 'migrations/2026-09-17_vip_clients.sql'
       - 'supabase/functions/vip-api/**'
       - '.github/scripts/test-vip-migration.sql'
       - '.github/scripts/test-vip-ui-fixes.mjs'
+      - '.github/scripts/test-vip-crm-contracts.mjs'
       - '.github/workflows/vip-preview-checks.yml'
   pull_request:
     paths:
@@ -21,10 +23,12 @@ on:
       - 'js/vip-ui-fixes.js'
       - 'js/config.js'
       - 'vip-admin.html'
+      - 'leads-hub.html'
       - 'migrations/2026-09-17_vip_clients.sql'
       - 'supabase/functions/vip-api/**'
       - '.github/scripts/test-vip-migration.sql'
       - '.github/scripts/test-vip-ui-fixes.mjs'
+      - '.github/scripts/test-vip-crm-contracts.mjs'
       - '.github/workflows/vip-preview-checks.yml'
   workflow_dispatch:
 
@@ -46,6 +50,8 @@ jobs:
         run: node --check js/vip-ui-fixes.js
       - name: Test VIP UI mutation safety
         run: node --test .github/scripts/test-vip-ui-fixes.mjs
+      - name: Test VIP CRM navigation and lead contracts
+        run: node --test .github/scripts/test-vip-crm-contracts.mjs
       - name: Verify VIP safety and management gates
         shell: bash
         run: |
@@ -61,6 +67,8 @@ jobs:
           grep -q "vip-interest:" supabase/functions/vip-api/index.ts
           grep -q "recent_sessions" supabase/functions/vip-api/index.ts
           grep -q "file_label" supabase/functions/vip-api/index.ts
+          grep -q "admin_inquiries" supabase/functions/vip-api/index.ts
+          grep -q "לידים לקוחות VIP" leads-hub.html
           grep -q "active_seconds" vip-admin.html
           grep -q "שלח ב WhatsApp" vip-admin.html
       - name: Ensure no service role key is committed
