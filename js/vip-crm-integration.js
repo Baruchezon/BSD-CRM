@@ -59,11 +59,13 @@
       </div>${body}</section>`;
   }
 
-  // בכרטיס עסק במסך מלא אסור להוסיף את אזור VIP כילד ישיר של המודאל.
-  // ילד כזה הופך לרצועה קבועה נוספת ומכווץ את אזור העבודה של כל הלשוניות.
-  // הפרסום שייך לתוכן האנונימי ולכן נטען בתוך לשונית התקצירים ונגלל איתה.
+  // בכרטיס עסק אין פאנל VIP נפרד. גם פאנל קצר גוזל גובה מאזור העבודה
+  // ומופיע באיחור אחרי תשובת השרת. תיבת הסימון משובצת בתוך שורת סטטוס
+  // ההסכם שכבר קיימת בכותרת ולכן אינה מוסיפה אפילו שורה אחת למסך.
   function businessVipTarget(modal){
-    return modal.querySelector('.biz-sticky-top')
+    const notes=[...modal.querySelectorAll('.biz-sticky-top .agr-note:not(.agr-upload-row)')];
+    return notes.find(note=>note.textContent.includes('סטטוס הסכם נוכחי'))
+      || modal.querySelector('.biz-sticky-top')
       || modal.querySelector('.biz-tabpane[data-tab="summaries"]')
       || modal.querySelector('.biz-tabpanes .biz-tabpane')
       || modal.querySelector('#bizForm .form-grid')
@@ -72,7 +74,7 @@
   }
 
   function businessVipBox(body){
-    return `<section data-vip-crm-box class="biz-vip-top">${body}</section>`;
+    return `<span data-vip-crm-box class="biz-vip-inline">${body}</span>`;
   }
 
   function addAdminShortcut(){
@@ -160,11 +162,18 @@
     if(!profile || !['admin','manager'].includes(profile.role)) return;
     modal.querySelectorAll('[data-vip-crm-box]').forEach(x=>x.remove());
     const target=businessVipTarget(modal);
+    target.dataset.vipReturn=`businesses.html?open=${encodeURIComponent(biz.id)}`;
+
+    // מוכנס מיד כאלמנט קטן וקבוע כדי שלא תהיה קפיצת פריסה כשהשרת חוזר.
+    target.insertAdjacentHTML('beforeend',businessVipBox(`
+      <label title="טוען סטטוס פרסום"><input id="vipPublishBusiness" type="checkbox" disabled> פרסום ללקוחות VIP</label>
+    `));
+    const checkbox=document.getElementById('vipPublishBusiness');
 
     let status;
     try { status=await adminApi('admin_business_status',{business_id:biz.id}); }
     catch(e){
-      target.insertAdjacentHTML('beforeend',businessVipBox(`<strong>⭐ פרסום ללקוחות VIP</strong><span style="color:#a72a2a;font-size:.8rem;">לא ניתן לטעון סטטוס פרסום: ${esc(e.message)}</span><a href="${vipAdminHref(`businesses.html?open=${encodeURIComponent(biz.id)}`)}">ניהול לקוחות VIP</a>`));
+      if(checkbox?.parentElement) checkbox.parentElement.title='לא ניתן לטעון כרגע את סטטוס הפרסום';
       return;
     }
     const files=status.eligible_files || [];
@@ -172,30 +181,23 @@
     const enabled=!!publication?.enabled;
     const chosen=publication?.anonymous_file_id || files[0]?.id || '';
     const noFiles=!files.length;
-    const options=files.map(f=>`<option value="${esc(f.id)}" ${f.id===chosen?'selected':''}>${esc(f.file_name || 'תקציר אנונימי')} ${f.version_number?`גרסה ${esc(f.version_number)}`:''}</option>`).join('');
-
-    target.insertAdjacentHTML('beforeend',businessVipBox(`
-      <strong>⭐ פרסום ללקוחות VIP</strong>
-      <label style="${noFiles?'opacity:.55':''}"><input id="vipPublishBusiness" type="checkbox" ${enabled?'checked':''} ${noFiles?'disabled':''} style="width:19px;height:19px;accent-color:#d5b85c;"> פרסם</label>
-      <label style="flex:1;min-width:320px;"><span>התקציר ללקוחות</span><select id="vipAnonymousFile" ${noFiles?'disabled':''}>${options || '<option>אין תקציר אנונימי מאושר</option>'}</select></label>
-      <span class="biz-vip-note" style="color:${noFiles?'#a72a2a':'#6f6238'};">${noFiles ? 'הפרסום חסום עד שתועלה גרסה מלאה של התקציר האנונימי.' : 'ללקוחות מוצגת רק הגרסה האנונימית שנבחרה. מסמכים פנימיים נשארים חסומים.'}</span>
-      <a href="${vipAdminHref(`businesses.html?open=${encodeURIComponent(biz.id)}`)}">ניהול לקוחות VIP</a>
-    `));
-
-    const checkbox=document.getElementById('vipPublishBusiness');
-    const select=document.getElementById('vipAnonymousFile');
+    if(!checkbox) return;
+    checkbox.checked=enabled;
+    checkbox.disabled=noFiles;
+    if(checkbox.parentElement){
+      checkbox.parentElement.classList.toggle('is-disabled',noFiles);
+      checkbox.parentElement.title=noFiles ? 'יש להעלות תחילה תקציר אנונימי מאושר' : 'הצגה באזור לקוחות VIP';
+    }
     async function save(){
-      if(!checkbox || !select) return;
-      checkbox.disabled=true; select.disabled=true;
+      checkbox.disabled=true;
       try{
-        await adminApi('admin_publish_business',{business_id:biz.id,enabled:checkbox.checked,anonymous_file_id:select.value});
+        await adminApi('admin_publish_business',{business_id:biz.id,enabled:checkbox.checked,anonymous_file_id:chosen});
         toast(checkbox.checked ? 'העסק פורסם ללקוחות VIP' : 'העסק הוסר מאזור VIP');
       }catch(e){
         checkbox.checked=!checkbox.checked; toast(e.message,true);
-      }finally{ checkbox.disabled=noFiles; select.disabled=noFiles; }
+      }finally{ checkbox.disabled=noFiles; }
     }
     checkbox?.addEventListener('change',save);
-    select?.addEventListener('change',()=>{ if(checkbox?.checked) save(); });
   }
 
   function installLeadWrapper(){

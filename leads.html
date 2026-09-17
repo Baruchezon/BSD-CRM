@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609171316';
+    var PAGE_BUILD = '202609171336';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -253,7 +253,7 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202609171316"></script>
+<script src="js/config.js?v=202609171336"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202608251709"></script>
 <script src="js/permissions.js?v=202608251709"></script>
@@ -310,17 +310,33 @@ function openLeadFormFromDup(id){
 }
 
 function cancelLeadForm(){
-  if (new URLSearchParams(location.search).get('from') === 'leads-hub'){
-    location.href = 'leads-hub.html';
-    return;
-  }
   closeModal();
 }
 
 function closeModal(){
   document.getElementById('overlay').classList.remove('open');
   document.getElementById('modalBox').innerHTML = '';
+  if (history.state && history.state.bsdCardType === 'lead'){
+    history.replaceState({ bsdListType:'leads' }, '', location.pathname);
+  }
 }
+
+function enterLeadCardHistory(id){
+  const cardState = { bsdCardType:'lead', recordId:id || null };
+  if (history.state && history.state.bsdCardType === 'lead'){
+    history.replaceState(cardState, '', location.pathname + (id ? '?card=' + encodeURIComponent(id) : '?new=1'));
+    return;
+  }
+  history.replaceState({ bsdListType:'leads' }, '', location.pathname);
+  history.pushState(cardState, '', location.pathname + (id ? '?card=' + encodeURIComponent(id) : '?new=1'));
+}
+
+window.addEventListener('popstate', function(event){
+  const overlay = document.getElementById('overlay');
+  if (overlay && overlay.classList.contains('open') && (!event.state || event.state.bsdCardType !== 'lead')){
+    closeModal();
+  }
+});
 
 // ➕ הוסף עסק להתאמה - מתוך כרטיס קונה (סעיף ג' בהנחיית שדרוג מודול ההתאמות, 28.08.2026)
 async function openAddBizToMatchModal(buyerId){
@@ -1067,6 +1083,7 @@ function textareaRow(id,label,value,minHeight){
 
 function openLeadForm(id, forcedType, prefillData){
   const lead = id ? ALL_LEADS.find(l=>l.id===id) : null;
+  enterLeadCardHistory(id);
   const type = forcedType || (lead ? lead.type : 'buyer');
   const pf = prefillData || {};
 
@@ -1797,10 +1814,6 @@ function renderArchiveLeadsTable(){
   switchLeadTypeTab('buyer');
   if (restored){
     await maybeHandleUrlParams();
-    Promise.all([loadUsers(), loadRatingLevels(), loadMatchCounts(), loadNotesSummary('leads')])
-      .then(() => loadLeads({ skipUrlHandling:true }))
-      .then(() => { populateStatusFilter(); populateCreatedByFilter(); populateRatingFilter(); renderTable(); saveLeadsPageCache(); })
-      .catch(e => console.warn('רענון שקט של רשימת הקונים נכשל:', e));
   } else {
     await Promise.all([loadUsers(), loadRatingLevels(), loadMatchCounts(), loadNotesSummary('leads')]);
     await loadLeads();
