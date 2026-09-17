@@ -1,12 +1,18 @@
 // BSD CRM VIP UI refinements
 (() => {
   function refineVipBox(root=document){
-    const boxes = root.querySelectorAll ? root.querySelectorAll('[data-vip-crm-box]') : [];
+    const boxes = [];
+    if (root.matches && root.matches('[data-vip-crm-box]')) boxes.push(root);
+    if (root.querySelectorAll) boxes.push(...root.querySelectorAll('[data-vip-crm-box]'));
     boxes.forEach(box => {
       box.querySelectorAll('label, option, div, span').forEach(el => {
         const t = (el.textContent || '').trim();
-        if (t === 'קובץ אנונימי מאושר') el.textContent = 'הגרסה המלאה של התקציר האנונימי';
-        if (t === 'אין תקציר אנונימי מאושר') el.textContent = 'לא נמצאה גרסה מלאה של התקציר האנונימי';
+        if (t === 'קובץ אנונימי מאושר') {
+          el.textContent = 'הגרסה המלאה של התקציר האנונימי';
+        }
+        if (t === 'אין תקציר אנונימי מאושר') {
+          el.textContent = 'לא נמצאה גרסה מלאה של התקציר האנונימי';
+        }
         if (t.includes('הפרסום חסום. יש ליצור או להעלות קובץ שמוגדר anonymous_summary ברמת סודיות 1.')) {
           el.textContent = 'הפרסום חסום. יש ליצור או להעלות בלשונית מסמכים וקבצים את הגרסה המלאה של התקציר האנונימי.';
         }
@@ -30,7 +36,9 @@
       link.style.cssText = 'display:block;color:#f1d98d;text-decoration:none;padding:11px 16px;font-size:.85rem;font-weight:800;border-top:1px solid rgba(255,255,255,.08);';
       menu.insertBefore(link, menu.firstChild);
     }
-    link.textContent = '⭐ ניהול לקוחות VIP';
+    if (link.textContent !== '⭐ ניהול לקוחות VIP') {
+      link.textContent = '⭐ ניהול לקוחות VIP';
+    }
   }
 
   function run(){
@@ -42,8 +50,6 @@
           if (node.nodeType === 1) refineVipBox(node);
         });
       }
-      refineVipBox(document);
-      ensureVipAdminLink();
     });
     observer.observe(document.body, { childList:true, subtree:true });
   }

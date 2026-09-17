@@ -202,8 +202,10 @@ window.BSD_CONFIG = {
 // 17.09.2026: תיקוני מלל ותצוגה ממוקדים למודול VIP בלבד.
 (function loadVipUiFixes(){
   try {
+    const page = (location.pathname.split('/').pop() || '').toLowerCase();
+    if (page !== 'leads.html' && page !== 'businesses.html') return;
     const script = document.createElement('script');
-    script.src = 'js/vip-ui-fixes.js?v=20260917-1';
+    script.src = 'js/vip-ui-fixes.js?v=20260917-2';
     script.defer = true;
     script.dataset.bsdVipUiFixes = '1';
     document.head.appendChild(script);

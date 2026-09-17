@@ -5,11 +5,13 @@ on:
   pull_request:
     paths:
       - 'js/vip-crm-integration.js'
+      - 'js/vip-ui-fixes.js'
       - 'js/config.js'
       - 'vip-admin.html'
       - 'migrations/2026-09-17_vip_clients.sql'
       - 'supabase/functions/vip-api/**'
       - '.github/scripts/test-vip-migration.sql'
+      - '.github/scripts/test-vip-ui-fixes.mjs'
       - '.github/workflows/vip-preview-checks.yml'
   workflow_dispatch:
 
@@ -27,6 +29,10 @@ jobs:
         run: node --check js/vip-crm-integration.js
       - name: Check config JavaScript syntax
         run: node --check js/config.js
+      - name: Check VIP UI JavaScript syntax
+        run: node --check js/vip-ui-fixes.js
+      - name: Test VIP UI mutation safety
+        run: node --test .github/scripts/test-vip-ui-fixes.mjs
       - name: Verify VIP safety and management gates
         shell: bash
         run: |
