@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609171403';
+    var PAGE_BUILD = '202609171445';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -88,6 +88,20 @@
   .notes-cell{white-space:normal;word-break:break-word;max-width:420px;line-height:1.4;}
   .email-cell{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help;}
   .phone-cell{white-space:nowrap;min-width:100px;}
+  .records-table > thead > tr > th:first-child,
+  .records-table > tbody > tr > td:first-child{width:360px;min-width:360px;}
+  .record-identity{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:start;width:100%;}
+  .record-info{min-width:0;display:flex;flex-direction:column;align-items:stretch;}
+  .record-title-line{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:24px;width:100%;}
+  .record-title{min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:800;}
+  .record-number-slot{flex:0 0 132px;width:132px;}
+  .record-number-slot > span{display:block !important;width:100%;box-sizing:border-box;text-align:center;font-variant-numeric:tabular-nums;}
+  .record-sub-line{min-height:18px;line-height:18px;font-size:.75rem;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .record-meta-line{display:flex;align-items:center;gap:6px;min-height:22px;line-height:22px;flex-wrap:wrap;}
+  .record-status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 6px;width:100%;}
+  .record-status-slot{min-width:0;}
+  .record-status-slot > span,
+  .record-status-slot > select{display:block !important;width:100%;max-width:100%;box-sizing:border-box;text-align:center;overflow:hidden;text-overflow:ellipsis;}
   @media (max-width: 700px){ .phone-cell{min-width:0;} }
   .proportional-table{table-layout:fixed;min-width:1150px;}
   .proportional-table th, .proportional-table td{overflow-wrap:break-word;}
@@ -227,7 +241,7 @@
 
   <div class="table-scroll-wrap" style="position:relative;">
   <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-  <table class="proportional-table">
+  <table class="proportional-table records-table">
     <colgroup>
       <col style="width:11%;"><col style="width:8%;"><col style="width:9%;"><col style="width:7%;">
       <col style="width:8%;"><col style="width:8%;"><col style="width:8%;"><col style="width:8%;">
@@ -590,6 +604,34 @@ function matchCountBadge(leadId){
   if (!count) return '';
   return `<span onclick="event.stopPropagation();location.href='leads.html?open=${leadId}'" title="עסקים שהותאמו לקונה זה" style="cursor:pointer;font-size:.7rem;color:#3a5cad !important;font-weight:700;white-space:nowrap;background:#fff !important;border:1px solid #3a5cad;border-radius:10px;padding:1px 8px;">🔗 עסקים שהותאמו: ${count}</span>`;
 }
+function leadIdentityCell(l, personName, statusEmoji){
+  const isSeller = l.type === 'seller';
+  const title = isSeller
+    ? (l.business_name && l.business_name.trim() ? l.business_name : '(ללא שם עסק)')
+    : personName;
+  const subTitle = isSeller ? personName : '';
+  const numberBadge = isSeller ? '' : clientNumberBadge(l);
+  const releasedBadge = isGrantOnlyViewer(l)
+    ? '<span style="font-size:.68rem;background:#eef4fb;color:#1a3d8f;border-radius:8px;padding:1px 7px;font-weight:700;white-space:nowrap;">🔓 שוחרר אליי</span>'
+    : '';
+  const noteBadge = notesIconStyle(l.id)
+    ? `<span onclick="event.stopPropagation();openNotesPanel('leads','${l.id}','${esc((personName||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(l.id))}" style="cursor:pointer;font-size:.72rem;color:#1a3d8f !important;font-weight:700;white-space:nowrap;background:#fff !important;border-radius:8px;padding:1px 6px;">🔵 קיימת הערה</span>`
+    : '';
+  const rating = l.type === 'buyer' || l.type === 'partner' ? ratingBadge(l.id) : '';
+  const matches = l.type === 'buyer' ? matchCountBadge(l.id) : '';
+  return `<div class="record-info">
+    <div class="record-title-line">
+      <span class="record-title" title="${esc(title)}">${statusEmoji}${esc(title)}</span>
+      <span class="record-number-slot">${numberBadge}</span>
+    </div>
+    <div class="record-sub-line">${subTitle ? esc(subTitle) : '&nbsp;'}</div>
+    <div class="record-meta-line">${releasedBadge}${noteBadge}</div>
+    <div class="record-status-grid" onclick="event.stopPropagation()">
+      <div class="record-status-slot">${rating}</div>
+      <div class="record-status-slot">${matches}</div>
+    </div>
+  </div>`;
+}
 function userName(id){
   const u = ALL_USERS.find(x=>x.id===id);
   return u ? (u.full_name && u.full_name.trim() ? u.full_name : u.email) : '—';
@@ -802,36 +844,21 @@ function renderTable(){
       ? '<span class="badge badge-partner">שותפות/השקעה</span>'
       : '<span class="badge badge-seller">מוכר</span>';
 
-    let nameCell, cityCell;
+    let cityCell;
     if (l.type === 'seller'){
-      const bizName = l.business_name && l.business_name.trim() ? l.business_name : '(ללא שם עסק)';
-      nameCell = `<div class="primary-name">${esc(bizName)}</div><div class="sub-name">${esc(personName)}</div>`;
       cityCell = esc(l.business_city || l.city || '—');
     } else {
-      nameCell = `<div class="primary-name">${esc(personName)} ${clientNumberBadge(l)}</div>`;
       cityCell = esc(l.requested_area || l.city || '—');
-    }
-
-    if (l.type === 'buyer' || l.type === 'partner'){
-      const extras = [ratingBadge(l.id), l.type === 'buyer' ? matchCountBadge(l.id) : ''].filter(Boolean).join(' ');
-      if (extras) nameCell += `<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;" onclick="event.stopPropagation()">${extras}</div>`;
     }
 
     const agrStatus = l.agreement_status || 'אין הסכם';
     const rowCls = agrStatus === 'יש הסכם חתום' ? 'row-signed' : (agrStatus === 'נשלח הסכם לחתימה' ? 'row-sent' : 'row-none');
     const statusEmoji = rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
-    nameCell = statusEmoji + nameCell;
-    if (isGrantOnlyViewer(l)){
-      nameCell = nameCell.replace('</div>', ' <span style="font-size:.68rem;background:#eef4fb;color:#1a3d8f;border-radius:8px;padding:1px 7px;font-weight:700;white-space:nowrap;">🔓 שוחרר אליי</span></div>');
-    }
-    if (notesIconStyle(l.id)){
-      const noteDot = `<span onclick="event.stopPropagation();openNotesPanel('leads','${l.id}','${esc((personName||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(l.id))}" style="cursor:pointer;font-size:.72rem;color:#1a3d8f !important;font-weight:700;white-space:nowrap;margin-inline-start:6px;background:#fff !important;border-radius:8px;padding:1px 6px;">🔵 קיימת הערה</span>`;
-      nameCell = nameCell.replace('</div>', noteDot + '</div>');
-    }
+    const nameCell = leadIdentityCell(l, personName, statusEmoji);
 
     return `<tr class="${rowCls}" style="cursor:pointer;" onclick="openLeadForm('${l.id}')">
       <td data-label="שם / עסק">
-        <div style="display:flex;align-items:flex-start;gap:8px;">
+        <div class="record-identity">
           <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
             <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
             <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
@@ -843,7 +870,7 @@ function renderTable(){
               ${canDeleteLead(l) ? `<a href="javascript:void(0)" onclick="deleteLead('${l.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
             </div>
           </div>
-          <div>${nameCell}</div>
+          ${nameCell}
         </div>
       </td>
       <td data-label="סוג">${typeBadge}</td>
