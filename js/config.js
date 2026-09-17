@@ -13,7 +13,8 @@ window.BSD_CONFIG = {
 // מטמון מהיר בין מסכי ה-CRM באותה לשונית דפדפן. הקוד אינו עוקף RLS ואינו
 // משתף נתונים בין משתמשים: כל מפתח כולל את מזהה המשתמש, והמידע נשמר רק
 // ב-sessionStorage שנמחק עם סגירת הלשונית. המסכים מציגים מיד את העותק
-// האחרון ואז מרעננים אותו בשקט מהשרת, כך שהניווט אינו ממתין שוב לרשימות.
+// האחרון לאורך ההתחברות הנוכחית. כל מסך טוען את הרשימה פעם אחת בלבד,
+// ושינויים שנשמרים במסך מעדכנים את המטמון בלי טעינה חוזרת בכל מעבר.
 window.BSDDataCache = window.BSDDataCache || (() => {
   const PREFIX = 'bsd_crm_page_cache_v2:';
   const MAX_AGE_MS = 12 * 60 * 60 * 1000;
@@ -203,7 +204,7 @@ window.BSDDataCache = window.BSDDataCache || (() => {
     const page = (location.pathname.split('/').pop() || '').toLowerCase();
     if (page !== 'leads.html' && page !== 'businesses.html') return;
     const script = document.createElement('script');
-    script.src = 'js/vip-crm-integration.js?v=20260917-4';
+    script.src = 'js/vip-crm-integration.js?v=20260917-5';
     script.defer = true;
     script.dataset.bsdVipModule = '1';
     document.head.appendChild(script);

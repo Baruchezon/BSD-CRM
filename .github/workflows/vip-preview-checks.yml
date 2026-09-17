@@ -71,7 +71,10 @@ jobs:
           grep -q "restoreLeadsPageCache" leads.html
           grep -q "restoreMatchesPageCache" matches-workspace.html
           grep -q "biz-header-actions" businesses.html
-          grep -q "biz-vip-top" js/vip-crm-integration.js
+          grep -q "biz-vip-inline" js/vip-crm-integration.js
+          grep -q "enterBusinessCardHistory" businesses.html
+          grep -q "enterLeadCardHistory" leads.html
+          grep -q "if (!restored) await loadEverything" matches-workspace.html
       - name: Verify VIP safety and management gates
         shell: bash
         run: |
