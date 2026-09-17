@@ -837,6 +837,22 @@ async function handleAdminBusinessStatus(req: Request, body: any) {
   return reply(req, 200, { ok: true, business, publication, eligible_files: files || [] });
 }
 
+async function handleAdminBusinessPublications(req: Request) {
+  const { data, error } = await supabase
+    .from("vip_business_publications")
+    .select("business_id")
+    .eq("enabled", true);
+  if (error) return reply(req, 500, {
+    ok: false,
+    error: "vip_publications_load_failed",
+    message: error.message
+  });
+  return reply(req, 200, {
+    ok: true,
+    business_ids: (data || []).map((row: any) => row.business_id)
+  });
+}
+
 async function handleAdminPublishBusiness(req: Request, admin: any, body: any) {
   const businessId = cleanText(body.business_id, 80);
   const enabled = body.enabled === true;
@@ -888,6 +904,7 @@ Deno.serve(async (req: Request) => {
       if (action === "admin_inquiry_action") return await handleAdminInquiryAction(req, admin, body);
       if (action === "admin_account_action") return await handleAdminAccountAction(req, admin, body);
       if (action === "admin_business_status") return await handleAdminBusinessStatus(req, body);
+      if (action === "admin_business_publications") return await handleAdminBusinessPublications(req);
       if (action === "admin_publish_business") return await handleAdminPublishBusiness(req, admin, body);
       return reply(req, 400, { ok: false, error: "unknown_admin_action" });
     }

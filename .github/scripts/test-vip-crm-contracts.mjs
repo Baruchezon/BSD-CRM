@@ -29,6 +29,17 @@ test('VIP publications use anonymous files and include business images', async (
   assert.match(migration, /confidentiality_level = 1/);
 });
 
+test('business list shows the current VIP publication status', async () => {
+  const businesses = await readFile(new URL('../../businesses.html', import.meta.url), 'utf8');
+  const integration = await readFile(new URL('../../js/vip-crm-integration.js', import.meta.url), 'utf8');
+  const api = await readFile(new URL('../../supabase/functions/vip-api/index.ts', import.meta.url), 'utf8');
+  assert.match(businesses, /מופץ ללקוחות VIP/);
+  assert.match(businesses, /לא מופץ ללקוחות VIP/);
+  assert.match(businesses, /vipPublicationBadge\(b\)/);
+  assert.match(integration, /bsd:vip-publication-changed/);
+  assert.match(api, /admin_business_publications/);
+});
+
 test('VIP admin return link preserves the originating record', async () => {
   const integration = await readFile(new URL('../../js/vip-crm-integration.js', import.meta.url), 'utf8');
   const admin = await readFile(new URL('../../vip-admin.html', import.meta.url), 'utf8');
