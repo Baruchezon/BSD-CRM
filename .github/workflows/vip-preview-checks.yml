@@ -8,6 +8,7 @@ on:
       - 'vip-admin.html'
       - 'migrations/2026-09-17_vip_clients.sql'
       - 'supabase/functions/vip-api/**'
+      - '.github/scripts/test-vip-migration.sql'
       - '.github/workflows/vip-preview-checks.yml'
   workflow_dispatch:
 
@@ -59,3 +60,26 @@ jobs:
               print('Potential committed service-role secret in:', ', '.join(sorted(set(bad))))
               sys.exit(1)
           PY
+
+  database-safety-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply VIP migration to isolated PostgreSQL and test safety rules
+        run: psql -h 127.0.0.1 -U postgres -d postgres -f .github/scripts/test-vip-migration.sql
