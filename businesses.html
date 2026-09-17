@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609171403';
+    var PAGE_BUILD = '202609171412';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -368,7 +368,7 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202609171403"></script>
+<script src="js/config.js?v=202609171412"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202608251810"></script>
 <script src="js/permissions.js?v=202608251215"></script>
@@ -516,7 +516,8 @@ function saveBusinessPageCache(){
     grantCounts: GRANT_COUNTS,
     fileCounts: FILES_COUNT_BY_BIZ,
     extendedMeta: EXTENDED_SUMMARY_FILEMETA_BY_BIZ,
-    extendedSale: EXTENDED_SUMMARY_SALEFILE_BY_BIZ
+    extendedSale: EXTENDED_SUMMARY_SALEFILE_BY_BIZ,
+    vipPublications: VIP_PUBLICATION_BY_BIZ
   });
 }
 function restoreBusinessPageCache(){
@@ -533,6 +534,7 @@ function restoreBusinessPageCache(){
   FILES_COUNT_BY_BIZ = c.fileCounts || {};
   EXTENDED_SUMMARY_FILEMETA_BY_BIZ = c.extendedMeta || {};
   EXTENDED_SUMMARY_SALEFILE_BY_BIZ = c.extendedSale || {};
+  VIP_PUBLICATION_BY_BIZ = c.vipPublications || {};
   populateFilters();
   renderTable();
   return true;
@@ -555,7 +557,7 @@ async function loadBusinesses(options={}){
   // בארכיון מוצג בטאב הארכיון הנפרד, לא כאן.
   ALL_BIZ = (data || []).filter(b => !b.is_archived);
   ARCHIVED_BIZ = (data || []).filter(b => b.is_archived);
-  await Promise.all([loadGrantCounts(), loadFilesIndicator(), loadExtendedSummaryIndicator()]);
+  await Promise.all([loadGrantCounts(), loadFilesIndicator(), loadExtendedSummaryIndicator(), loadVipPublicationStatuses()]);
   populateFilters();
   renderTable();
   saveBusinessPageCache();
@@ -570,6 +572,28 @@ async function loadBusinesses(options={}){
 // business_access_grants פעילים) - לא state זמני בדפדפן.
 // ============================================================
 let GRANT_COUNTS = {};
+let VIP_PUBLICATION_BY_BIZ = {};
+
+async function loadVipPublicationStatuses(){
+  if (!CURRENT_PROFILE || !['admin','manager'].includes(CURRENT_PROFILE.role)) {
+    VIP_PUBLICATION_BY_BIZ = {};
+    return;
+  }
+  if (typeof window.BSDVIPAdminApi !== 'function') return;
+  try {
+    const result = await window.BSDVIPAdminApi('admin_business_publications');
+    VIP_PUBLICATION_BY_BIZ = {};
+    (result.business_ids || []).forEach(id => { VIP_PUBLICATION_BY_BIZ[id] = true; });
+  } catch(error) {
+    console.warn('[BSD VIP] טעינת סטטוסי פרסום לרשימת העסקים נכשלה', error);
+  }
+}
+
+function vipPublicationBadge(b){
+  return VIP_PUBLICATION_BY_BIZ[b.id]
+    ? `<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="לחץ לפרטים" style="cursor:pointer;background:#fff4c2;color:#715300;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">⭐ מופץ ללקוחות VIP</span>`
+    : `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">⚪ לא מופץ ללקוחות VIP</span>`;
+}
 // ============================================================================
 // 22.08.2026 (תיקון אחה"צ) — לפי הבהרה מפורשת: "תקציר מורחב" מזוהה אך ורק
 // לפי קובץ PDF ששמו מכיל את המילה "אנונימי" או "אנונימית" - לא לפי קטגוריה
@@ -940,7 +964,7 @@ function renderTable(){
             </div>
             ${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}
             ${(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin' && b.internal_code)?`<div class="sub-name" style="font-size:.68rem;color:#bbb;" title="מזהה טכני (מנהל בלבד)">${esc(b.internal_code)}</div>`:''}
-            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${distributionBadge(b)}${publicListingBadge(b)}${b.referred_by_broker_id ? `<span style="display:inline-flex;align-items:center;gap:3px;background:#7a3fd1;color:#fff;font-weight:800;font-size:.7rem;padding:3px 10px;border-radius:12px;white-space:nowrap;">🔵 הגיע ממתווך ${esc(BROKER_NAME_BY_ID[b.referred_by_broker_id]||'')}</span>` : ''}</div>
+            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${distributionBadge(b)}${publicListingBadge(b)}${vipPublicationBadge(b)}${b.referred_by_broker_id ? `<span style="display:inline-flex;align-items:center;gap:3px;background:#7a3fd1;color:#fff;font-weight:800;font-size:.7rem;padding:3px 10px;border-radius:12px;white-space:nowrap;">🔵 הגיע ממתווך ${esc(BROKER_NAME_BY_ID[b.referred_by_broker_id]||'')}</span>` : ''}</div>
           </div>
         </div>
       </td>
@@ -1242,6 +1266,7 @@ function bsdTabifyBizForm(biz){
         ${agreementBadge(biz.agreement_status)}
         ${distributionBadge(biz)}
         ${publicListingBadge(biz)}
+        ${vipPublicationBadge(biz)}
         <span class="biz-matches-badge" id="bizMatchesBadge_${biz.id}">⏳ טוען קונים מותאמים…</span>
       `;
       form.insertBefore(summaryStrip, anchor);
@@ -4679,6 +4704,9 @@ async function deleteBiz(id){
   if (!canViewAnonymousBusinesses(CURRENT_PROFILE)){ document.getElementById('bizTabAnon').style.display = 'none'; }
   const restored = restoreBusinessPageCache();
   if (restored){
+    await loadVipPublicationStatuses();
+    renderTable();
+    saveBusinessPageCache();
     await maybeHandleUrlParams();
   } else {
     await Promise.all([loadLookups(), loadNotesSummary('businesses')]);
@@ -4686,6 +4714,20 @@ async function deleteBiz(id){
   }
 })();
 window.addEventListener('pagehide', saveBusinessPageCache);
+window.addEventListener('bsd:vip-ready', async () => {
+  if (!CURRENT_PROFILE || !ALL_BIZ.length) return;
+  await loadVipPublicationStatuses();
+  renderTable();
+  saveBusinessPageCache();
+});
+window.addEventListener('bsd:vip-publication-changed', event => {
+  const businessId = event.detail && event.detail.businessId;
+  if (!businessId) return;
+  if (event.detail.enabled) VIP_PUBLICATION_BY_BIZ[businessId] = true;
+  else delete VIP_PUBLICATION_BY_BIZ[businessId];
+  renderTable();
+  saveBusinessPageCache();
+});
 </script>
 </body>
 </html>
