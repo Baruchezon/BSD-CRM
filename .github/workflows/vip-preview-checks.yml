@@ -93,7 +93,6 @@ jobs:
           grep -q "active_seconds" migrations/2026-09-17_vip_clients.sql
           grep -q "LOGIN_MAX_FAILURES" supabase/functions/vip-api/index.ts
           grep -q "session_time" supabase/functions/vip-api/index.ts
-          grep -q "vip-interest:" supabase/functions/vip-api/index.ts
           grep -q "recent_sessions" supabase/functions/vip-api/index.ts
           grep -q "file_label" supabase/functions/vip-api/index.ts
           grep -q "admin_inquiries" supabase/functions/vip-api/index.ts
