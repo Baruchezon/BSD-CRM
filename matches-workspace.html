@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609040431';
+    var PAGE_BUILD = '202609171316';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -27,7 +27,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script src="js/config.js"></script>
+<script src="js/config.js?v=202609171316"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/searchSelect.js?v=202608281900"></script>
@@ -541,9 +541,38 @@ function counterpartyLabelHtml(m){
   return name + code + badge;
 }
 
+function saveMatchesPageCache(){
+  if (!CURRENT_PROFILE || !window.BSDDataCache) return;
+  window.BSDDataCache.set('matches-page', CURRENT_PROFILE.id, {
+    leads: ALL_LEADS,
+    brokers: ALL_BROKERS,
+    businesses: ALL_BUSINESSES,
+    matches: ALL_MATCHES,
+    profiles: ALL_PROFILES,
+    tasks: ALL_TASKS,
+    activity: ALL_ACTIVITY
+  });
+}
+function restoreMatchesPageCache(){
+  if (!CURRENT_PROFILE || !window.BSDDataCache) return false;
+  const c = window.BSDDataCache.get('matches-page', CURRENT_PROFILE.id);
+  if (!c || !Array.isArray(c.matches)) return false;
+  ALL_LEADS = c.leads || [];
+  ALL_BROKERS = c.brokers || [];
+  ALL_BUSINESSES = c.businesses || {};
+  ALL_MATCHES = c.matches;
+  ALL_PROFILES = c.profiles || {};
+  ALL_TASKS = c.tasks || [];
+  ALL_ACTIVITY = c.activity || [];
+  buildQuickViews();
+  buildStatStrip();
+  render();
+  return true;
+}
+
 async function loadEverything(){
   const sb = window.supabaseClient;
-  const [{data: leads}, {data: brokers}, {data: businesses}, {data: matches}, {data: profiles}, {data: tasks}] = await Promise.all([
+  const results = await Promise.all([
     sb.from('leads').select('id,full_name,phone,phone2,client_number,agreement_status,created_by,handled_by,type,is_archived').eq('type','buyer'),
     sb.from('brokers').select('id,full_name,phone,email,city,looking_for,agreement_status,status,created_by,handled_by,is_archived'),
     sb.from('businesses').select('id,internal_name,business_number,field,agreement_status,created_by,handled_by,is_archived'),
@@ -551,10 +580,15 @@ async function loadEverything(){
     sb.from('profiles').select('id,full_name,role'),
     sb.from('tasks').select('id,match_id,business_id,buyer_id,title,status,due_date,assigned_to')
   ]);
+  const failed = results.find(r => r && r.error);
+  if (failed) throw failed.error;
+  const [{data: leads}, {data: brokers}, {data: businesses}, {data: matches}, {data: profiles}, {data: tasks}] = results;
   ALL_LEADS = leads || [];
   ALL_BROKERS = brokers || [];
+  ALL_BUSINESSES = {};
   (businesses||[]).forEach(b=> ALL_BUSINESSES[b.id]=b);
   ALL_MATCHES = matches || [];
+  ALL_PROFILES = {};
   (profiles||[]).forEach(p=> ALL_PROFILES[p.id]=p);
   ALL_TASKS = tasks || [];
   const matchIds = ALL_MATCHES.map(m=>m.id);
@@ -565,6 +599,7 @@ async function loadEverything(){
   buildQuickViews();
   buildStatStrip();
   render();
+  saveMatchesPageCache();
 }
 
 function matchOpenTaskCount(matchId){
@@ -1085,8 +1120,11 @@ document.getElementById('sortModeSelect').addEventListener('change', e=>{ sortMo
   if (!profile) return;
   CURRENT_PROFILE = profile;
   document.getElementById('whoAmI').textContent = `מחובר: ${profile.full_name || profile.email} (${profile.role})`;
-  loadEverything();
+  const restored = restoreMatchesPageCache();
+  if (restored) loadEverything().catch(e => console.warn('רענון שקט של מרכז ההתאמות נכשל:', e));
+  else await loadEverything();
 })();
+window.addEventListener('pagehide', saveMatchesPageCache);
 </script>
 </body>
 </html>

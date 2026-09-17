@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609060753';
+    var PAGE_BUILD = '202609171316';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -151,14 +151,36 @@
          !important רק על .biz-sticky-top, קלאס שקיים אך ורק בכרטיס העסק. */
   .modal.biz-fullpage-modal>form{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden;}
   .modal.biz-fullpage-modal>h3{display:none;} /* השם/מספר העסק עוברים לכותרת העליונה הקבועה (biz-sticky-top) */
-  .biz-sticky-top{flex:0 0 auto !important;overflow-y:visible !important;padding-bottom:0 !important;background:#fff;padding:18px 24px 0;border-bottom:1px solid #eee;border-right:4px solid transparent;}
-  .biz-sticky-top h3{margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;font-size:1.5rem;display:flex;align-items:center;flex-wrap:wrap;gap:12px;}
+  /* כותרת קומפקטית לכרטיס העסק. בעבר כל רכיב בכותרת קיבל שורה משלו
+     (שם העסק, העלאת הסכם, סטטוס וקובץ), ובמסך בגובה רגיל נצרכו יותר
+     מ-200px לפני שהגיעו לשדות. כל המידע נשאר גלוי, אבל מסודר כעת
+     בשורה גמישה אחת; רק הודעות שגיאה נפתחות לרוחב מלא כשצריך. */
+  .biz-sticky-top{flex:0 0 auto !important;overflow-y:visible !important;background:#fff;padding:9px 20px 8px !important;border-bottom:1px solid #ddd7c8;border-right:4px solid transparent;display:flex !important;align-items:center;flex-wrap:wrap;gap:7px 14px;box-sizing:border-box;}
+  .biz-sticky-top h3{margin:0;color:var(--navy);border-right:4px solid var(--gold);padding:2px 10px 2px 0;font-size:1.18rem;display:flex;align-items:center;flex-wrap:wrap;gap:8px;line-height:1.2;}
+  .biz-sticky-top>.agr-note{width:auto;box-sizing:border-box;padding:0;margin:0 !important;line-height:1.35;}
+  .biz-sticky-top>.agr-upload-row{order:3;}
+  .biz-sticky-top>.agr-upload-row .btn{padding:7px 12px;font-size:.82rem;}
+  .biz-sticky-top>#bizFormError,
+  .biz-sticky-top>#bizDupBanner{flex-basis:100%;margin:0 !important;}
+  /* פעולות הטופס נמצאות בכותרת במקום בפס תחתון קבוע. כך כל 52 הפיקסלים
+     שהוקדשו בעבר לפס שמירה נשארים לאזור העבודה, בלי לשנות את פעולת
+     submit או את כפתור הביטול. */
+  .biz-sticky-top>.biz-header-actions{position:static !important;order:3;display:flex;margin:0 !important;margin-inline-start:auto !important;padding:0 !important;min-height:0 !important;background:transparent !important;box-shadow:none !important;gap:7px;}
+  .biz-sticky-top>.biz-header-actions .btn{font-size:.88rem;padding:8px 17px;}
+  /* פרסום VIP מוצג כרצועת ניהול קצרה מעל הלשוניות. בעבר הוא הופיע בתחתית
+     התוכן ותפס גובה יקר. */
+  .biz-sticky-top>.biz-vip-top{order:4;flex:1 1 100%;display:flex;align-items:center;gap:10px 16px;flex-wrap:wrap;margin:0;padding:6px 10px;border:2px solid #d5b85c;border-radius:9px;background:linear-gradient(90deg,#fff8dd,#fffdf6);box-shadow:0 2px 8px rgba(14,27,52,.08);}
+  .biz-vip-top strong{font-size:.92rem;color:var(--navy);white-space:nowrap;}
+  .biz-vip-top label{display:flex;align-items:center;gap:7px;font-size:.83rem;font-weight:800;white-space:nowrap;}
+  .biz-vip-top select{min-width:270px;max-width:430px;flex:1;padding:6px 9px;border:1px solid #cdbb7a;border-radius:7px;font-family:inherit;background:#fff;}
+  .biz-vip-top .biz-vip-note{font-size:.72rem;color:#6f6238;line-height:1.25;flex:1 1 260px;}
+  .biz-vip-top a{font-size:.75rem;color:var(--navy);font-weight:800;white-space:nowrap;}
   /* שם העסק גדול יותר ליד הכותרת "עריכת עסק", ומספר העסק כתגית עם רקע
      שחור בולט - שניהם בכותרת הקבועה כדי שיהיו גלויים תמיד, בכל לשונית
      (לפי בקשתו 03.09.2026). */
-  .biz-name-big{font-size:1.7rem;font-weight:800;color:var(--navy);}
-  .biz-number-badge{background:#111;color:#fff;border-radius:8px;padding:4px 14px;font-size:1rem;font-weight:800;letter-spacing:.3px;}
-  .biz-sticky-top .agr-note{font-size:1rem;}
+  .biz-name-big{font-size:1.42rem;font-weight:800;color:var(--navy);}
+  .biz-number-badge{background:#111;color:#fff;border-radius:8px;padding:3px 11px;font-size:.88rem;font-weight:800;letter-spacing:.3px;}
+  .biz-sticky-top .agr-note{font-size:.88rem;}
   .biz-sticky-top.bsd-status-green{border-right-color:#1e7b34;}
   .biz-sticky-top.bsd-status-orange{border-right-color:#c89b2c;}
   .biz-sticky-top.bsd-status-red{border-right-color:#b3402c;}
@@ -172,16 +194,16 @@
      ללא תלות באורך הטקסט, ללא transform שמזיז את הכפתור (רק צבע/צל
      משתנים ב-hover/active כדי שהגובה לעולם לא יזוז אפילו בפיקסל אחד).
      טקסט ארוך נחתך ב-ellipsis בתוך רוחב מקסימלי קבוע, לא בורח ולא שובר שורה. */
-  .biz-tabbar{flex:none;display:flex;align-items:stretch;gap:8px;overflow-x:auto;overflow-y:hidden;background:#f3f1e9;border-bottom:1px solid #e5e0d3;padding:10px 20px;min-height:64px;box-sizing:border-box;}
+  .biz-tabbar{flex:none;display:flex;align-items:stretch;gap:7px;overflow-x:auto;overflow-y:hidden;background:#f3f1e9;border-bottom:1px solid #e5e0d3;padding:6px 18px;min-height:48px;box-sizing:border-box;scrollbar-width:thin;}
   /* עדכון עיצוב לפי בקשתו (03.09.2026): רקע כחול אחיד לכל כפתורי הלשוניות
      + טקסט מודגש ובולט. הלשונית הפעילה נשארת בצבע נייבי כהה יותר (var(--navy))
      כדי שעדיין אפשר להבחין בבירור איזו לשונית פתוחה - בלי זה כל הכפתורים
      היו נראים זהים ולא היה אפשר לדעת איפה נמצאים. */
-  .biz-tabbar button{box-sizing:border-box;flex:0 0 auto;display:flex;align-items:center;justify-content:center;text-align:center;height:44px;min-width:0;max-width:230px;border:1px solid #1d4d80;background:#2f6fb0;border-radius:10px;padding:0 18px;font-size:.95rem;line-height:1.15;font-weight:800;color:#fff;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:none;letter-spacing:normal;box-shadow:0 1px 3px rgba(14,27,52,.25);transition:box-shadow .12s ease,background .12s ease,color .12s ease;}
+  .biz-tabbar button{box-sizing:border-box;flex:0 0 auto;display:flex;align-items:center;justify-content:center;text-align:center;height:36px;min-width:0;max-width:230px;border:1px solid #1d4d80;background:#2f6fb0;border-radius:8px;padding:0 15px;font-size:.88rem;line-height:1.1;font-weight:800;color:#fff;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:none;letter-spacing:normal;box-shadow:0 1px 3px rgba(14,27,52,.25);transition:box-shadow .12s ease,background .12s ease,color .12s ease;}
   .biz-tabbar button:hover{background:#3a7dc4;box-shadow:0 2px 6px rgba(14,27,52,.3);}
   .biz-tabbar button:active{box-shadow:0 1px 2px rgba(14,27,52,.2) inset;}
   .biz-tabbar button.active{background:var(--navy);border-color:var(--navy);color:#fff;box-shadow:0 4px 10px rgba(14,27,52,.4);}
-  .biz-tabpanes{flex:1 1 auto;min-height:0;padding:22px 24px 40px;overflow-y:auto;font-size:1.05rem;}
+  .biz-tabpanes{flex:1 1 auto;min-height:0;padding:14px 22px 20px;overflow-y:auto;font-size:1.05rem;scrollbar-gutter:stable;}
   .biz-tabpanes .biz-tabpane{display:none;}
   .biz-tabpanes .biz-tabpane.active{display:block;}
   /* ריכוז נתונים קבוע ממש מתחת לסרגל הלשוניות (לפי בקשתו 03.09.2026) -
@@ -189,7 +211,7 @@
      בתוך form שכבר flex column - אין כאן את אותה דליפת CSS גנרית שהייתה
      על .biz-sticky-top (זו לא ילד ישיר של .modal, אלא של form), אז אין
      צורך ב-!important. גלוי בכל לשונית, לא נגלל עם התוכן. */
-  .biz-summary-strip{flex:none;display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:#f3f1e9;border-bottom:1px solid #e5e0d3;padding:10px 20px;box-sizing:border-box;}
+  .biz-summary-strip{flex:none;display:flex;flex-wrap:wrap;gap:7px;align-items:center;background:#f3f1e9;border-bottom:1px solid #e5e0d3;padding:5px 18px;min-height:31px;box-sizing:border-box;}
   .biz-summary-strip .biz-matches-badge{background:#eef1f6;color:var(--navy);border-radius:6px;padding:3px 10px;font-size:.85rem;font-weight:700;white-space:normal;}
   .biz-summary-strip .biz-matches-badge.biz-matches-empty{background:#f1f0ec;color:#888;font-weight:400;}
   /* חלוקה ברורה בין נושאים/קטגוריות (לפי בקשתו 03.09.2026): כל כותרת
@@ -204,16 +226,22 @@
   .biz-tabpanes .field select,
   .biz-tabpanes .field textarea{font-size:1.15rem;padding:12px 14px;font-weight:600;}
   .biz-tabpanes .btn{font-size:1.05rem;font-weight:700;padding:11px 20px;}
-  .modal.biz-fullpage-modal .modal-actions{flex:none;background:#fff;box-shadow:0 -4px 16px rgba(0,0,0,.12);padding:14px 24px;margin-top:0;}
-  .modal.biz-fullpage-modal .modal-actions .btn{font-size:1.05rem;padding:12px 24px;}
+  .modal.biz-fullpage-modal .modal-actions{flex:none;background:#fff;box-shadow:0 -3px 12px rgba(0,0,0,.12);padding:7px 22px;margin-top:0;min-height:52px;box-sizing:border-box;align-items:center;}
+  .modal.biz-fullpage-modal .modal-actions .btn{font-size:.95rem;padding:9px 22px;}
   @media (max-width:640px){
-    .biz-sticky-top h3{font-size:1.2rem;}
+    .biz-sticky-top{padding:8px 10px !important;gap:6px 9px;}
+    .biz-sticky-top h3{font-size:1.05rem;flex-basis:100%;}
     .biz-name-big{font-size:1.25rem;}
     .biz-number-badge{font-size:.85rem;padding:3px 10px;}
-    .biz-summary-strip{padding:8px 12px;gap:8px;font-size:.8rem;}
-    .biz-tabbar{padding:8px 10px;gap:6px;min-height:56px;}
-    .biz-tabbar button{height:40px;padding:0 14px;font-size:.85rem;max-width:170px;}
-    .biz-tabpanes{padding:16px 14px 90px;}
+    .biz-summary-strip{padding:5px 10px;gap:6px;font-size:.8rem;}
+    .biz-tabbar{padding:6px 8px;gap:5px;min-height:46px;}
+    .biz-tabbar button{height:34px;padding:0 12px;font-size:.82rem;max-width:170px;}
+    .biz-tabpanes{padding:12px 12px 70px;}
+    .modal.biz-fullpage-modal .modal-actions{padding:7px 12px;min-height:50px;}
+    .biz-sticky-top>.biz-header-actions{margin-inline-start:0 !important;}
+    .biz-sticky-top>.biz-vip-top{gap:7px;padding:6px 8px;}
+    .biz-vip-top select{min-width:0;width:100%;max-width:none;}
+    .biz-vip-top .biz-vip-note{display:none;}
     .biz-tabpanes .section-h{font-size:1.05rem;padding:8px 12px;margin:16px 0 10px;}
   }
 </style>
@@ -344,7 +372,7 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202608111530"></script>
+<script src="js/config.js?v=202609171316"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202608251810"></script>
 <script src="js/permissions.js?v=202608251215"></script>
@@ -438,27 +466,67 @@ function closeModal(){
 }
 
 async function loadLookups(){
-  const { data: sellers } = await window.supabaseClient.from('leads').select('id, full_name, phone').eq('type','seller');
-  ALL_SELLERS = sellers || [];
-  const { data: users } = await window.supabaseClient.rpc('get_active_users_basic');
-  ALL_USERS = users || [];
+  const [sellerRes, userRes, brokerRes, allBrokerRes] = await Promise.all([
+    window.supabaseClient.from('leads').select('id, full_name, phone').eq('type','seller'),
+    window.supabaseClient.rpc('get_active_users_basic'),
+    window.supabaseClient.from('brokers').select('id, full_name, first_name, last_name, agreement_status, status').eq('is_archived', false).neq('agreement_status', 'אין הסכם').neq('status', 'חסום'),
+    window.supabaseClient.from('brokers').select('id, full_name, first_name, last_name')
+  ]);
+  const sellers = sellerRes.data;
+  if (!sellerRes.error) ALL_SELLERS = sellers || [];
+  const users = userRes.data;
+  if (!userRes.error) ALL_USERS = users || [];
   // 03.09.2026 (מודול מתווכים - משוב): רשימת מתווכים לבחירת "הגיע ממתווך" -
   // לפי דרישה מפורשת, רק מתווכים עם לפחות הסכם שנשלח (לא "אין הסכם") ניתנים
   // לבחירה. לא נוגע ב-ALL_SELLERS/ALL_USERS הקיימים.
-  const { data: brokers } = await window.supabaseClient.from('brokers')
-    .select('id, full_name, first_name, last_name, agreement_status, status')
-    .eq('is_archived', false).neq('agreement_status', 'אין הסכם').neq('status', 'חסום');
-  ALL_BROKERS_FOR_REFERRAL = brokers || [];
+  const brokers = brokerRes.data;
+  if (!brokerRes.error) ALL_BROKERS_FOR_REFERRAL = brokers || [];
   // תצוגה ("הגיע ממתווך X") צריכה לעבוד גם אם המתווך המפנה כבר ארכיוני/חסום
   // מאז שהעסק נוצר - לכן מפה נפרדת ולא מסוננת, לתצוגה בלבד.
-  const { data: allBrokers } = await window.supabaseClient.from('brokers').select('id, full_name, first_name, last_name');
-  BROKER_NAME_BY_ID = {};
-  (allBrokers || []).forEach(b => { BROKER_NAME_BY_ID[b.id] = b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || 'מתווך'; });
+  const allBrokers = allBrokerRes.data;
+  if (!allBrokerRes.error){
+    BROKER_NAME_BY_ID = {};
+    (allBrokers || []).forEach(b => { BROKER_NAME_BY_ID[b.id] = b.full_name || [b.first_name,b.last_name].filter(Boolean).join(' ') || 'מתווך'; });
+  }
 }
 
 let CURRENT_PROFILE = null;
 
-async function loadBusinesses(){
+function saveBusinessPageCache(){
+  if (!CURRENT_PROFILE || !window.BSDDataCache) return;
+  window.BSDDataCache.set('businesses-page', CURRENT_PROFILE.id, {
+    businesses: ALL_BIZ,
+    archived: ARCHIVED_BIZ,
+    sellers: ALL_SELLERS,
+    brokers: ALL_BROKERS_FOR_REFERRAL,
+    brokerNames: BROKER_NAME_BY_ID,
+    users: ALL_USERS,
+    grantCounts: GRANT_COUNTS,
+    fileCounts: FILES_COUNT_BY_BIZ,
+    extendedMeta: EXTENDED_SUMMARY_FILEMETA_BY_BIZ,
+    extendedSale: EXTENDED_SUMMARY_SALEFILE_BY_BIZ
+  });
+}
+function restoreBusinessPageCache(){
+  if (!CURRENT_PROFILE || !window.BSDDataCache) return false;
+  const c = window.BSDDataCache.get('businesses-page', CURRENT_PROFILE.id);
+  if (!c || !Array.isArray(c.businesses)) return false;
+  ALL_BIZ = c.businesses;
+  ARCHIVED_BIZ = c.archived || [];
+  ALL_SELLERS = c.sellers || [];
+  ALL_BROKERS_FOR_REFERRAL = c.brokers || [];
+  BROKER_NAME_BY_ID = c.brokerNames || {};
+  ALL_USERS = c.users || [];
+  GRANT_COUNTS = c.grantCounts || {};
+  FILES_COUNT_BY_BIZ = c.fileCounts || {};
+  EXTENDED_SUMMARY_FILEMETA_BY_BIZ = c.extendedMeta || {};
+  EXTENDED_SUMMARY_SALEFILE_BY_BIZ = c.extendedSale || {};
+  populateFilters();
+  renderTable();
+  return true;
+}
+
+async function loadBusinesses(options={}){
   let q = window.supabaseClient
     .from('businesses')
     .select('*')
@@ -475,12 +543,11 @@ async function loadBusinesses(){
   // בארכיון מוצג בטאב הארכיון הנפרד, לא כאן.
   ALL_BIZ = (data || []).filter(b => !b.is_archived);
   ARCHIVED_BIZ = (data || []).filter(b => b.is_archived);
-  await loadGrantCounts();
-  await loadFilesIndicator();
-  await loadExtendedSummaryIndicator();
+  await Promise.all([loadGrantCounts(), loadFilesIndicator(), loadExtendedSummaryIndicator()]);
   populateFilters();
   renderTable();
-  await maybeHandleUrlParams();
+  saveBusinessPageCache();
+  if (!options.skipUrlHandling) await maybeHandleUrlParams();
 }
 
 // ============================================================
@@ -1169,6 +1236,14 @@ function bsdTabifyBizForm(biz){
     }
     form.insertBefore(tabpanesWrap, anchor);
     if (formGrid) formGrid.remove(); // כבר ריק - כל תוכנו הועבר ללשוניות
+
+    // השמירה והביטול זמינים תמיד בכותרת, ולכן אין צורך בפס קבוע בתחתית
+    // שגזל שטח עבודה בכל לשונית.
+    if (modalActions){
+      modalActions.classList.add('biz-header-actions');
+      modalActions.querySelectorAll('button[type="submit"]').forEach(btn => btn.setAttribute('form', form.id));
+      stickyTop.appendChild(modalActions);
+    }
 
     modal.classList.add('biz-fullpage-modal');
     overlay.classList.add('biz-fullpage');
@@ -4584,15 +4659,23 @@ async function deleteBiz(id){
 (async function init(){
   CURRENT_PROFILE = await requireAuth();
   if (!CURRENT_PROFILE) return;
-  await loadLookups();
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
   refreshNavMsgBadge();
   if (!canSendPresentations()){ const presoBtn = document.getElementById('sendPresoToolbarBtn'); if (presoBtn) presoBtn.style.display = 'none'; }
   if (!canCreateBusiness(CURRENT_PROFILE)){ const newBizBtn = document.querySelector('button[onclick="openBizForm(null)"]'); if (newBizBtn) newBizBtn.style.display = 'none'; }
   if (!canViewAnonymousBusinesses(CURRENT_PROFILE)){ document.getElementById('bizTabAnon').style.display = 'none'; }
-  await loadNotesSummary('businesses');
-  await loadBusinesses();
+  const restored = restoreBusinessPageCache();
+  if (restored){
+    await maybeHandleUrlParams();
+    Promise.all([loadLookups(), loadNotesSummary('businesses')])
+      .then(() => loadBusinesses({ skipUrlHandling:true }))
+      .catch(e => console.warn('רענון שקט של רשימת העסקים נכשל:', e));
+  } else {
+    await Promise.all([loadLookups(), loadNotesSummary('businesses')]);
+    await loadBusinesses();
+  }
 })();
+window.addEventListener('pagehide', saveBusinessPageCache);
 </script>
 </body>
 </html>
