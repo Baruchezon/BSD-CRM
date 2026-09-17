@@ -1004,7 +1004,6 @@ function renderTable(){
               <a href="javascript:void(0)" onclick="openActivityReportModal('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 הפק דוח פעילות לעסק</a>
               ${(canSendAgreement() && b.agreement_status !== 'יש הסכם חתום') ? `<a href="javascript:void(0)" onclick="sendAgreementForBiz('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
               ${canManageBiz(b) ? `<a href="javascript:void(0)" onclick="archiveBiz('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 העבר לארכיון</a>` : ''}
-              ${canManageBiz(b) ? `<a href="javascript:void(0)" onclick="deleteBiz('${b.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
             </div>
           </div>
           ${businessIdentityCell(b, statusEmoji)}
@@ -1332,7 +1331,7 @@ function bsdTabifyBizForm(biz){
 }
 
 function openBizForm(id){
-  const biz = id ? ALL_BIZ.find(b=>b.id===id) : null;
+  const biz = id ? (ALL_BIZ.find(b=>b.id===id) || ARCHIVED_BIZ.find(b=>b.id===id)) : null;
   enterBusinessCardHistory(id);
   AI_TEXT_ORIGINAL = {}; // איפוס בין פתיחות טופס שונות - כל עסק מתחיל "נקי" מבחינת שחזור AI
   AI_EDIT_PENDING = {};
@@ -1351,7 +1350,7 @@ function openBizForm(id){
           ${biz ? ` · הוזן ע"י: <b>${esc(userName(biz.created_by))}</b> בתאריך ${fmtDate(biz.created_at)}` : ''}
           ${(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin' && biz?.internal_code) ? `<div style="margin-top:4px;font-size:.68rem;color:#aaa;">מזהה טכני (מנהל בלבד): ${esc(biz.internal_code)}</div>` : ''}
         </div>
-        ${biz?.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 עסק זה נמצא בארכיון${biz.archive_reason ? ' — סיבה: '+esc(biz.archive_reason) : ''}${canRestoreBiz(biz) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${biz.id}')">↩️ שחזר מהארכיון</button>` : ''}</div>` : (biz && canManageBiz(biz) ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveBiz('${biz.id}')">📁 העבר לארכיון</button></div>` : '')}
+        ${biz?.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 עסק זה נמצא בארכיון${biz.archive_reason ? ' — סיבה: '+esc(biz.archive_reason) : ''}${canRestoreBiz(biz) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${biz.id}')">↩️ שחזר מהארכיון</button>` : ''}${canManageBiz(biz) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#a33;" onclick="deleteBiz('${biz.id}')">🗑️ מחיקה סופית</button>` : ''}</div>` : (biz && canManageBiz(biz) ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveBiz('${biz.id}')">📁 העבר לארכיון</button></div>` : '')}
         ${fieldRow('internal_name','שם העסק (פנימי)', biz?.internal_name)}
         <div class="field full" style="background:#f7f0ff;border:1px solid #e0cdfa;border-radius:8px;padding:10px 12px;">
           <label style="font-weight:700;color:#5a2f9e;">🔵 הגיע ממתווך / סוכן (אופציונלי)</label>
@@ -4238,7 +4237,7 @@ async function saveBiz(e){
     if (el){ el.textContent = msg; el.style.display = 'block'; el.scrollIntoView({behavior:'smooth', block:'nearest'}); }
     toast(msg);
   };
-  const existingBiz = ALL_BIZ.find(b => b.id === bizId);
+  const existingBiz = ALL_BIZ.find(b => b.id === bizId) || ARCHIVED_BIZ.find(b => b.id === bizId);
   const wasAnonActive = !!existingBiz?.anon_card_active;
 
   // תיקון 17.08.2026: כשל בבדיקת הכרטיס האנונימי (מידע מזהה בטעות בטקסט,
@@ -4623,7 +4622,12 @@ async function restoreBizFromArchive(id){
   const b = ARCHIVED_BIZ.find(x=>x.id===id);
   if (!canRestoreBiz(b)){ toast('שחזור מהארכיון מותר רק לאדמין או למי שהעביר את הכרטיס לארכיון'); return; }
   if (!confirm('לשחזר עסק זה מהארכיון לרשימה הרגילה?')) return;
-  const { error } = await window.supabaseClient.from('businesses').update({ is_archived: false }).eq('id', id);
+  const { error } = await window.supabaseClient.from('businesses').update({
+    is_archived: false,
+    listing_status: 'active',
+    removal_reason: null,
+    sold_to: null
+  }).eq('id', id);
   if (error){ toast('שגיאה בשחזור: ' + error.message); return; }
   toast('שוחזר מהארכיון');
   closeBizForm();
@@ -4653,7 +4657,7 @@ function renderArchiveTable(){
       <td data-label="תחום">${esc(b.field||'—')}</td>
       <td data-label="עיר">${esc(b.city||'—')}</td>
       <td data-label="מחיר מבוקש">${fmtMoney(b.asking_price)}</td>
-      <td data-label="סטטוס קודם"><span class="badge">${esc(b.status||'—')}</span></td>
+      <td data-label="סטטוס מכירה"><span class="badge">${esc(b.listing_status === 'sold' ? 'נמכר' : b.listing_status === 'removed' ? 'לא פעיל' : 'פעיל')}</span></td>
       <td data-label="הוזן ע&quot;י">${b.created_by ? esc(userName(b.created_by)) : 'לא ידוע'}</td>
       <td data-label="הועבר ע&quot;י">${b.archived_by ? esc(userName(b.archived_by)) : '—'}</td>
       <td data-label="סטטוס הסכם">${agreementBadge(b.agreement_status)}</td>
@@ -4661,8 +4665,9 @@ function renderArchiveTable(){
       <td data-label="נוצר">${fmtDate(b.created_at)}</td>
       <td data-label="תאריך העברה">${fmtDate(b.archived_at)}</td>
       <td data-label="פעולות" style="white-space:nowrap;">
-        <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="openBizForm('${b.id}')">📄 פתח כרטיס</button>
+        <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="openBizForm('${b.id}')">✏️ ערוך</button>
         ${canRestoreBiz(b) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${b.id}')">↩️ החזר לפעילים</button>` : ''}
+        ${canManageBiz(b) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;color:#a33;" onclick="deleteBiz('${b.id}')">🗑️ מחיקה סופית</button>` : ''}
         ${b.archive_reason ? `<div style="font-size:.7rem;color:#888;margin-top:2px;">סיבה: ${esc(b.archive_reason)}</div>` : ''}
       </td>
     </tr>`).join('');
@@ -4686,53 +4691,21 @@ async function bizHasAnyHistory(id){
   return { hasHistory: rows.length > 0, details: rows.map(r => `${r.table_name}: ${r.row_count}`) };
 }
 async function deleteBiz(id){
-  if (!confirm('להסיר עסק זה מהמערכת? אם אין לו היסטוריה קשורה הוא יימחק לצמיתות. אם יש לו היסטוריה (התאמות, משימות, הפצות וכו׳) הוא יועבר אוטומטית לארכיון כדי לשמר אותה.')) return;
-  // תיקון 25.08.2026: התפריט (⋮) נשאר פתוח/תקוע על המסך בזמן שהפעולה
-  // מתבצעת ברשת, ובמיוחד אם היא נכשלת (הקוד היה עושה return מוקדם
-  // בלי לסגור כלום ובלי לרענן את הטבלה). סוגרים את כל התפריטים הפתוחים
-  // מיד, לפני שמתחילים את הפעולה בכלל - לא רק אחרי הצלחה.
+  const biz = ARCHIVED_BIZ.find(b => b.id === id);
+  if (!biz || !biz.is_archived){ toast('מחיקה סופית אפשרית רק מתוך הארכיון'); return; }
+  if (!canManageBiz(biz)){ toast('אין לך הרשאה למחוק עסק זה'); return; }
+  if (!confirm('מחיקה סופית של העסק מהארכיון אינה ניתנת לביטול. להמשיך?')) return;
   document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
-
-  let hasHistory, details;
-  try {
-    ({ hasHistory, details } = await bizHasAnyHistory(id));
-  } catch (e){
-    // לא הצלחנו לבדוק היסטוריה בביטחון - עוצרים כאן ולא ממשיכים למחיקה,
-    // כדי לא לסכן מחיקה פיזית של עסק שיש לו בפועל היסטוריה.
-    toast('❌ ' + e.message + ' - הפעולה בוטלה לביטחון');
-    return;
-  }
-
-  if (!hasHistory){
-    // אין שום תלות/היסטוריה בשום טבלה קשורה - מותר למחוק פיזית.
-    const { error } = await window.supabaseClient.from('businesses').delete().eq('id', id);
-    if (error){
-      // שגיאה אמיתית מוצגת כמו שהיא - לעולם לא הודעת הצלחה מזויפת. התפריט
-      // כבר נסגר למעלה, והעסק עדיין ברשימה כרגיל (לא הוסר, כי לא נמחק בפועל).
-      toast('❌ שגיאה במחיקה: ' + error.message);
-      return;
-    }
-    toast('✅ נמחק בהצלחה');
-    await loadBusinesses();
-    return;
-  }
-
-  // קיימת היסטוריה קשורה (25.08.2026: מדיניות - לעולם לא למחוק פיזית במקרה כזה,
-  // כדי לא לאבד anon_distributions/משימות/פגישות/התאמות וכו׳). משתמשים במנגנון
-  // הארכיון הקיים כבר במערכת (is_archived/archived_at/archived_by/archive_reason)
-  // במקום ליצור מנגנון נפרד - העסק יוסתר מכל הרשימות הפעילות (loadBusinesses כבר
-  // מסנן !is_archived) אך יישאר במלואו, כולל כל הקשרים ההיסטוריים.
-  const { error } = await window.supabaseClient.from('businesses').update({
-    is_archived: true,
-    archived_at: new Date().toISOString(),
-    archived_by: CURRENT_PROFILE.id,
-    archive_reason: 'הועבר אוטומטית לארכיון בעת ניסיון מחיקה - קיימת היסטוריה קשורה (' + details.join(', ') + ')'
-  }).eq('id', id);
+  const { data, error } = await window.supabaseClient.from('businesses')
+    .delete().eq('id', id).eq('is_archived', true).select('id');
   if (error){
-    toast('❌ שגיאה בהעברה לארכיון: ' + error.message);
+    const linked = error.code === '23503' ? ' לא ניתן למחוק משום שקיימים לעסק נתונים מקושרים. אפשר להשאיר אותו בארכיון.' : ' ' + error.message;
+    toast('❌ המחיקה לא בוצעה.' + linked);
     return;
   }
-  toast('📁 לעסק זה יש היסטוריה קשורה - הועבר לארכיון (לא נמחק) כדי לשמר אותה. ניתן לשחזר מהארכיון בכל עת.');
+  if (!data || !data.length){ toast('המחיקה לא בוצעה. ניתן למחוק רק עסק שנמצא בארכיון.'); return; }
+  toast('✅ העסק נמחק לצמיתות');
+  closeBizForm();
   await loadBusinesses();
 }
 
