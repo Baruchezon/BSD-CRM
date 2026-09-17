@@ -186,7 +186,7 @@ window.BSD_CONFIG = {
       const link = document.createElement('a');
       link.href = 'vip-admin.html';
       link.dataset.vipAdminLink = '1';
-      link.textContent = '⭐ לקוחות VIP';
+      link.textContent = '⭐ ניהול לקוחות VIP';
       link.style.cssText = 'display:block;color:#f1d98d;text-decoration:none;padding:11px 16px;font-size:.85rem;font-weight:800;border-top:1px solid rgba(255,255,255,.08);';
       menu.insertBefore(link, menu.firstChild);
       return true;
@@ -197,4 +197,17 @@ window.BSD_CONFIG = {
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, {once:true});
   else install();
+})();
+
+// 17.09.2026: תיקוני מלל ותצוגה ממוקדים למודול VIP בלבד.
+(function loadVipUiFixes(){
+  try {
+    const script = document.createElement('script');
+    script.src = 'js/vip-ui-fixes.js?v=20260917-1';
+    script.defer = true;
+    script.dataset.bsdVipUiFixes = '1';
+    document.head.appendChild(script);
+  } catch(e) {
+    console.warn('[BSD VIP] UI refinements skipped', e);
+  }
 })();
