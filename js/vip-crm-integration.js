@@ -51,6 +51,11 @@
     return data;
   }
 
+  // מאפשר למסך העסקים לטעון את סטטוסי הפרסום ללקוחות VIP בקריאה מרוכזת
+  // אחת. הטוקן והרשאות המנהל נשארים בתוך אותו מנגנון מאובטח של המודול.
+  window.BSDVIPAdminApi = adminApi;
+  window.dispatchEvent(new CustomEvent('bsd:vip-ready'));
+
   function vipBox(title, body, returnTo){
     return `<section data-vip-crm-box style="grid-column:1/3;margin-top:16px;border:2px solid #d5b85c;border-radius:12px;background:linear-gradient(180deg,#fffdf6,#fff);padding:16px;box-shadow:0 4px 14px rgba(14,27,52,.07);">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
@@ -192,6 +197,9 @@
       checkbox.disabled=true;
       try{
         await adminApi('admin_publish_business',{business_id:biz.id,enabled:checkbox.checked,anonymous_file_id:chosen});
+        window.dispatchEvent(new CustomEvent('bsd:vip-publication-changed',{
+          detail:{ businessId:biz.id, enabled:checkbox.checked }
+        }));
         toast(checkbox.checked ? 'העסק פורסם ללקוחות VIP' : 'העסק הוסר מאזור VIP');
       }catch(e){
         checkbox.checked=!checkbox.checked; toast(e.message,true);
