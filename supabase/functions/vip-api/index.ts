@@ -628,14 +628,14 @@ async function handleAdminList(req: Request) {
   const buyerIds = (accounts || []).map((a: any) => a.buyer_id);
   const { data: buyers } = buyerIds.length ? await supabase
     .from("leads")
-    .select("id,full_name,phone,client_number,agreement_status")
+    .select("id,full_name,phone,email,client_number,agreement_status,agreement_sent,agreement_signed,agreement_signed_date,agreement_pdf_path")
     .in("id", buyerIds) : { data: [] as any[] };
   const buyerMap = new Map((buyers || []).map((b: any) => [b.id, b]));
 
   const accountIds = (accounts || []).map((a: any) => a.id);
   const { data: events } = accountIds.length ? await supabase
     .from("vip_activity_events")
-    .select("vip_account_id,event_type,duration_seconds,created_at,business_id,file_id")
+    .select("vip_account_id,session_id,event_type,duration_seconds,created_at,business_id,file_id")
     .in("vip_account_id", accountIds)
     .order("created_at", { ascending: false })
     .limit(3000) : { data: [] as any[] };
@@ -656,12 +656,20 @@ async function handleAdminList(req: Request) {
     .in("vip_account_id", accountIds)
     .order("created_at", { ascending: false })
     .limit(1000) : { data: [] as any[] };
-  const activityBusinessIds = [...new Set((events || []).map((e: any) => e.business_id).filter(Boolean))];
+  const activityBusinessIds = [...new Set([
+    ...(events || []).map((e: any) => e.business_id),
+    ...(inquiries || []).map((e: any) => e.business_id)
+  ].filter(Boolean))];
   const { data: activityBusinesses } = activityBusinessIds.length ? await supabase
     .from("businesses")
-    .select("id,business_number,anon_display_name,anonymous_name")
+    .select("id,business_number,internal_name,anon_display_name,anonymous_name")
     .in("id", activityBusinessIds) : { data: [] as any[] };
-  const activityBusinessMap = new Map((activityBusinesses || []).map((b: any) => [b.id, b.anon_display_name || b.anonymous_name || b.business_number || "עסק"]));
+  const activityBusinessMap = new Map((activityBusinesses || []).map((b: any) => [b.id, {
+    id: b.id,
+    business_number: b.business_number || "",
+    internal_name: b.internal_name || "",
+    admin_label: b.internal_name || b.business_number || "עסק ללא שם"
+  }]));
   const activityFileIds = [...new Set((events || []).map((e: any) => e.file_id).filter(Boolean))];
   const { data: activityFiles } = activityFileIds.length ? await supabase
     .from("business_sale_files")
@@ -704,14 +712,77 @@ async function handleAdminList(req: Request) {
       },
       recent_activity: ev.slice(0, 20).map((x: any) => ({
         ...x,
-        business_label: x.business_id ? activityBusinessMap.get(x.business_id) || null : null,
+        business: x.business_id ? activityBusinessMap.get(x.business_id) || null : null,
+        business_label: x.business_id ? activityBusinessMap.get(x.business_id)?.admin_label || null : null,
         file_label: x.file_id ? activityFileMap.get(x.file_id) || null : null
       })),
       recent_sessions: (sessionMap.get(a.id) || []).slice(0, 10),
-      recent_inquiries: (inquiryMap.get(a.id) || []).slice(0, 10)
+      recent_inquiries: (inquiryMap.get(a.id) || []).slice(0, 10).map((q: any) => ({
+        ...q,
+        business: q.business_id ? activityBusinessMap.get(q.business_id) || null : null
+      }))
     };
   });
   return reply(req, 200, { ok: true, accounts: rows });
+}
+
+async function handleAdminInquiries(req: Request) {
+  const { data: inquiries, error } = await supabase
+    .from("vip_inquiries")
+    .select("id,vip_account_id,buyer_id,business_id,name_snapshot,phone_snapshot,message,source,status,created_at,handled_at,handled_by")
+    .order("created_at", { ascending: false })
+    .limit(1000);
+  if (error) return reply(req, 500, { ok: false, error: "inquiries_load_failed", message: error.message });
+
+  const buyerIds = [...new Set((inquiries || []).map((x: any) => x.buyer_id).filter(Boolean))];
+  const businessIds = [...new Set((inquiries || []).map((x: any) => x.business_id).filter(Boolean))];
+  const handlerIds = [...new Set((inquiries || []).map((x: any) => x.handled_by).filter(Boolean))];
+  const [{ data: buyers }, { data: businesses }, { data: handlers }] = await Promise.all([
+    buyerIds.length ? supabase.from("leads").select("id,full_name,first_name,last_name,phone,email,client_number,agreement_status,agreement_sent,agreement_signed,agreement_signed_date,agreement_pdf_path,handled_by,status").in("id", buyerIds) : Promise.resolve({ data: [] as any[] }),
+    businessIds.length ? supabase.from("businesses").select("id,internal_name,business_number,owner_name,status,is_archived").in("id", businessIds) : Promise.resolve({ data: [] as any[] }),
+    handlerIds.length ? supabase.from("profiles").select("id,full_name,email").in("id", handlerIds) : Promise.resolve({ data: [] as any[] })
+  ]);
+  const buyerMap = new Map((buyers || []).map((x: any) => [x.id, x]));
+  const businessMap = new Map((businesses || []).map((x: any) => [x.id, x]));
+  const handlerMap = new Map((handlers || []).map((x: any) => [x.id, x]));
+
+  return reply(req, 200, {
+    ok: true,
+    inquiries: (inquiries || []).map((x: any) => ({
+      ...x,
+      buyer: buyerMap.get(x.buyer_id) || null,
+      business: businessMap.get(x.business_id) || null,
+      handler: x.handled_by ? handlerMap.get(x.handled_by) || null : null
+    }))
+  });
+}
+
+async function handleAdminInquiryAction(req: Request, admin: any, body: any) {
+  const inquiryId = cleanText(body.inquiry_id, 80);
+  const status = cleanText(body.status, 20);
+  if (!inquiryId || !["new", "handled", "closed"].includes(status)) {
+    return reply(req, 400, { ok: false, error: "invalid_inquiry_action" });
+  }
+  const { data: inquiry } = await supabase
+    .from("vip_inquiries")
+    .select("id,vip_account_id,buyer_id,business_id,status")
+    .eq("id", inquiryId)
+    .maybeSingle();
+  if (!inquiry) return reply(req, 404, { ok: false, error: "inquiry_not_found" });
+
+  const handled = status === "new" ? { handled_at: null, handled_by: null } : {
+    handled_at: new Date().toISOString(),
+    handled_by: admin.profile.id
+  };
+  const { error } = await supabase.from("vip_inquiries").update({ status, ...handled }).eq("id", inquiryId);
+  if (error) return reply(req, 500, { ok: false, error: "inquiry_update_failed", message: error.message });
+  await auditAdmin("vip_inquiry_status", admin.profile.id, {
+    vip_account_id: inquiry.vip_account_id,
+    buyer_id: inquiry.buyer_id,
+    business_id: inquiry.business_id,
+    details: { inquiry_id: inquiryId, from: inquiry.status, to: status }
+  });
+  return reply(req, 200, { ok: true, status });
 }
 
 async function handleAdminAccountAction(req: Request, admin: any, body: any) {
@@ -815,6 +886,8 @@ Deno.serve(async (req: Request) => {
       if ("error" in admin) return reply(req, admin.error === "forbidden" ? 403 : 401, { ok: false, error: admin.error });
       if (action === "admin_enable_buyer") return await handleAdminEnableBuyer(req, admin, body);
       if (action === "admin_list") return await handleAdminList(req);
+      if (action === "admin_inquiries") return await handleAdminInquiries(req);
+      if (action === "admin_inquiry_action") return await handleAdminInquiryAction(req, admin, body);
       if (action === "admin_account_action") return await handleAdminAccountAction(req, admin, body);
       if (action === "admin_business_status") return await handleAdminBusinessStatus(req, body);
       if (action === "admin_publish_business") return await handleAdminPublishBusiness(req, admin, body);
