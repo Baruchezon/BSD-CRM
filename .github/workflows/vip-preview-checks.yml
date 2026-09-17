@@ -2,6 +2,19 @@
 name: VIP Preview Checks
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'js/vip-crm-integration.js'
+      - 'js/vip-ui-fixes.js'
+      - 'js/config.js'
+      - 'vip-admin.html'
+      - 'migrations/2026-09-17_vip_clients.sql'
+      - 'supabase/functions/vip-api/**'
+      - '.github/scripts/test-vip-migration.sql'
+      - '.github/scripts/test-vip-ui-fixes.mjs'
+      - '.github/workflows/vip-preview-checks.yml'
   pull_request:
     paths:
       - 'js/vip-crm-integration.js'
