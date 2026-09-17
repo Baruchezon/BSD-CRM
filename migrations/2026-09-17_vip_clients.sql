@@ -36,11 +36,26 @@ create table if not exists public.vip_sessions (
   expires_at timestamptz not null,
   revoked_at timestamptz,
   user_agent text,
-  ip_hint text
+  ip_hint text,
+  active_seconds integer not null default 0 check (active_seconds between 0 and 86400)
 );
 
 create index if not exists vip_sessions_account_idx on public.vip_sessions(vip_account_id);
 create index if not exists vip_sessions_expiry_idx on public.vip_sessions(expires_at);
+
+create table if not exists public.vip_login_attempts (
+  id bigserial primary key,
+  username text not null,
+  ip_hash text not null,
+  success boolean not null default false,
+  attempted_at timestamptz not null default now()
+);
+
+create index if not exists vip_login_attempts_guard_idx
+  on public.vip_login_attempts(username, ip_hash, attempted_at desc);
+
+create index if not exists vip_login_attempts_cleanup_idx
+  on public.vip_login_attempts(attempted_at);
 
 create table if not exists public.vip_business_publications (
   business_id uuid primary key references public.businesses(id) on delete cascade,
@@ -188,6 +203,7 @@ for each row execute function public.vip_touch_updated_at();
 -- Harden direct database access. The Edge Function uses service role and bypasses RLS.
 alter table public.vip_accounts enable row level security;
 alter table public.vip_sessions enable row level security;
+alter table public.vip_login_attempts enable row level security;
 alter table public.vip_business_publications enable row level security;
 alter table public.vip_interests enable row level security;
 alter table public.vip_inquiries enable row level security;
@@ -196,6 +212,7 @@ alter table public.vip_admin_audit enable row level security;
 
 revoke all on public.vip_accounts from anon, authenticated;
 revoke all on public.vip_sessions from anon, authenticated;
+revoke all on public.vip_login_attempts from anon, authenticated;
 revoke all on public.vip_business_publications from anon, authenticated;
 revoke all on public.vip_interests from anon, authenticated;
 revoke all on public.vip_inquiries from anon, authenticated;
@@ -203,5 +220,6 @@ revoke all on public.vip_activity_events from anon, authenticated;
 revoke all on public.vip_admin_audit from anon, authenticated;
 
 comment on table public.vip_accounts is 'BSD VIP buyer accounts. Password hashes only; plaintext passwords are never stored.';
+comment on table public.vip_login_attempts is 'Rate-limit audit for VIP login. Stores username plus one-way hash of network address, never the raw address.';
 comment on table public.vip_business_publications is 'Explicit allow-list of businesses published to VIP. File must be active anonymous_summary with confidentiality_level=1.';
 comment on table public.vip_activity_events is 'Business-significant VIP events only. Never store passwords or confidential business data in metadata.';

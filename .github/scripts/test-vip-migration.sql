@@ -74,14 +74,16 @@ BEGIN
   select count(*) into rls_count
   from pg_class c join pg_namespace n on n.oid=c.relnamespace
   where n.nspname='public'
-    and c.relname in ('vip_accounts','vip_sessions','vip_business_publications','vip_interests','vip_inquiries','vip_activity_events','vip_admin_audit')
+    and c.relname in ('vip_accounts','vip_sessions','vip_login_attempts','vip_business_publications','vip_interests','vip_inquiries','vip_activity_events','vip_admin_audit')
     and c.relrowsecurity=true;
-  if rls_count <> 7 then raise exception 'RLS not enabled on every VIP table: %', rls_count; end if;
+  if rls_count <> 8 then raise exception 'RLS not enabled on every VIP table: %', rls_count; end if;
 
   select has_table_privilege('anon','public.vip_accounts','SELECT') into anon_priv;
   if anon_priv then raise exception 'anon unexpectedly has SELECT on vip_accounts'; end if;
   select has_table_privilege('authenticated','public.vip_accounts','SELECT') into anon_priv;
   if anon_priv then raise exception 'authenticated unexpectedly has SELECT on vip_accounts'; end if;
+  select has_table_privilege('anon','public.vip_login_attempts','SELECT') into anon_priv;
+  if anon_priv then raise exception 'anon unexpectedly has SELECT on vip_login_attempts'; end if;
 END $$;
 
 select 'VIP migration safety tests passed' as result;
