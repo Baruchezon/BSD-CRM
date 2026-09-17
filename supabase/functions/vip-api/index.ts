@@ -883,6 +883,106 @@ async function handleAdminPublishBusiness(req: Request, admin: any, body: any) {
   return reply(req, 200, { ok: true });
 }
 
+type RestorableDocumentType = "anonymous_summary" | "full_summary" | "market_research" | "economic_analysis";
+
+function inferLegacyDocumentType(file: any): RestorableDocumentType | null {
+  const category = String(file.category || "");
+  const name = String(file.display_name || file.original_filename || "");
+  if (category.includes("אנונימ") || name.includes("אנונימ")) return "anonymous_summary";
+  if (/חקר.*שוק/.test(name)) return "market_research";
+  if (category.includes("תקציר") || name.includes("תקציר")) return "full_summary";
+  if (name.includes("ניתוח") || name.includes("שווי")) return "economic_analysis";
+  return null;
+}
+
+function saleFileSemanticType(file: any): RestorableDocumentType | null {
+  if (file.document_type === "anonymous_summary" || file.category === "anon_presentation") return "anonymous_summary";
+  if (file.document_type === "market_research") return "market_research";
+  if (file.category === "exec_summary" && file.document_type !== "anonymous_summary") return "full_summary";
+  if (["economic_analysis", "valuation"].includes(file.category)) return "economic_analysis";
+  return null;
+}
+
+async function handleAdminRestoreLegacyFiles(req: Request, admin: any) {
+  const { data: legacyFiles, error: legacyError } = await supabase
+    .from("business_file_meta")
+    .select("id,business_id,category,display_name,original_filename,storage_path,file_type,file_size,uploaded_by,created_at")
+    .order("created_at", { ascending: false });
+  if (legacyError) return reply(req, 500, { ok: false, error: "legacy_files_read_failed", message: legacyError.message });
+
+  const { data: activeFiles, error: activeError } = await supabase
+    .from("business_sale_files")
+    .select("business_id,category,document_type")
+    .eq("status", "active");
+  if (activeError) return reply(req, 500, { ok: false, error: "sale_files_read_failed", message: activeError.message });
+
+  const existing = new Set<string>();
+  for (const file of activeFiles || []) {
+    const type = saleFileSemanticType(file);
+    if (type) existing.add(`${file.business_id}:${type}`);
+  }
+
+  const latest = new Map<string, { file: any; type: RestorableDocumentType }>();
+  for (const file of legacyFiles || []) {
+    const type = inferLegacyDocumentType(file);
+    if (!type || !file.business_id || !file.storage_path) continue;
+    const key = `${file.business_id}:${type}`;
+    if (!latest.has(key)) latest.set(key, { file, type });
+  }
+
+  const candidates = [...latest.entries()]
+    .filter(([key]) => !existing.has(key))
+    .map(([, value]) => value);
+  if (!candidates.length) return reply(req, 200, { ok: true, restored_count: 0, restored: [] });
+
+  const paths = candidates.map(({ file }) => file.storage_path);
+  const { data: signedFiles, error: storageError } = await supabase.storage
+    .from("business-files")
+    .createSignedUrls(paths, 60);
+  if (storageError) return reply(req, 500, { ok: false, error: "storage_validation_failed", message: storageError.message });
+  const existingPaths = new Set((signedFiles || []).filter((item: any) => item.signedUrl && !item.error).map((item: any) => item.path));
+
+  const rows = candidates
+    .filter(({ file }) => existingPaths.has(file.storage_path))
+    .map(({ file, type }) => ({
+      business_id: file.business_id,
+      category: type === "anonymous_summary" || type === "full_summary" ? "exec_summary" : type === "market_research" ? "other" : "economic_analysis",
+      file_name: file.display_name || file.original_filename || "מסמך משוחזר",
+      storage_path: file.storage_path,
+      file_type: file.file_type,
+      file_size: file.file_size,
+      confidentiality_level: type === "anonymous_summary" ? 1 : 2,
+      uploaded_by: file.uploaded_by,
+      status: "active",
+      created_at: file.created_at,
+      updated_at: new Date().toISOString(),
+      source: "auto_generated",
+      document_type: type === "anonymous_summary" ? "anonymous_summary" : type === "full_summary" ? "internal_full_summary" : type === "market_research" ? "market_research" : null,
+      version_number: 1
+    }));
+  if (!rows.length) return reply(req, 200, { ok: true, restored_count: 0, restored: [], skipped_missing_storage: candidates.length });
+
+  const { data: restored, error: insertError } = await supabase
+    .from("business_sale_files")
+    .insert(rows)
+    .select("id,business_id,file_name,category,document_type");
+  if (insertError) return reply(req, 409, { ok: false, error: "legacy_restore_failed", message: insertError.message });
+
+  await auditAdmin("vip_restore_legacy_files", admin.profile.id, {
+    details: {
+      restored_count: restored?.length || 0,
+      skipped_missing_storage: candidates.length - rows.length,
+      business_ids: [...new Set((restored || []).map((file: any) => file.business_id))]
+    }
+  });
+  return reply(req, 200, {
+    ok: true,
+    restored_count: restored?.length || 0,
+    restored: restored || [],
+    skipped_missing_storage: candidates.length - rows.length
+  });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(req) });
   if (req.method !== "POST") return reply(req, 405, { ok: false, error: "method_not_allowed" });
@@ -906,6 +1006,7 @@ Deno.serve(async (req: Request) => {
       if (action === "admin_business_status") return await handleAdminBusinessStatus(req, body);
       if (action === "admin_business_publications") return await handleAdminBusinessPublications(req);
       if (action === "admin_publish_business") return await handleAdminPublishBusiness(req, admin, body);
+      if (action === "admin_restore_legacy_files") return await handleAdminRestoreLegacyFiles(req, admin);
       return reply(req, 400, { ok: false, error: "unknown_admin_action" });
     }
 
