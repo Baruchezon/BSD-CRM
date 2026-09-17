@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609171439';
+    var PAGE_BUILD = '202609171500';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -91,6 +91,22 @@
   .row-actions button.act-delete{background:#ffc7c7;border-color:#e08080;}
   .empty-row td{text-align:center;color:#999;padding:30px;}
   .price{font-weight:700;color:#245c40;}
+  .records-table{table-layout:auto;}
+  .records-table > thead > tr > th:first-child,
+  .records-table > tbody > tr > td:first-child{width:400px;min-width:400px;}
+  .record-identity{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:start;width:100%;}
+  .record-info{min-width:0;display:flex;flex-direction:column;align-items:stretch;}
+  .record-title-line{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:24px;width:100%;}
+  .record-title{min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:800;}
+  .record-number-slot{flex:0 0 132px;width:132px;}
+  .record-number-slot > span{display:block !important;width:100%;box-sizing:border-box;text-align:center;font-variant-numeric:tabular-nums;}
+  .record-sub-line{min-height:18px;line-height:18px;font-size:.75rem;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .record-code-line{min-height:16px;line-height:16px;font-size:.68rem;color:#bbb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .record-meta-line{display:flex;align-items:center;gap:10px;min-height:20px;line-height:20px;flex-wrap:wrap;}
+  .record-status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 6px;margin-top:4px;width:100%;}
+  .record-status-slot{min-width:0;}
+  .record-status-slot.record-status-wide{grid-column:1 / -1;}
+  .record-status-slot > span{display:block !important;width:100%;box-sizing:border-box;text-align:center;overflow:hidden;text-overflow:ellipsis;}
 
   .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
   .overlay.open{display:flex;}
@@ -350,7 +366,7 @@
 
   <div class="table-scroll-wrap" style="position:relative;">
   <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-  <table>
+  <table class="records-table">
     <thead>
       <tr>
         <th>שם פנימי</th><th>טלפון בעלים</th><th>תחום</th><th>עיר</th><th>מחיר מבוקש</th><th>סטטוס</th><th>הוזן ע"י</th><th>מטופל ע"י</th><th>סטטוס הסכם</th><th>📋 תקצירים</th><th>📋 טופס פגישה</th><th>נוצר</th><th>עודכן</th>
@@ -722,6 +738,33 @@ function publicListingBadge(b){
     : `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">⚪ לא מופץ באתר הציבורי</span>`;
 }
 
+function businessIdentityCell(b, statusEmoji){
+  const noteBadge = notesIconStyle(b.id)
+    ? `<span onclick="event.stopPropagation();openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(b.id))}" style="cursor:pointer;font-size:.72rem;color:#1a3d8f;font-weight:700;white-space:nowrap;">🔵 קיימת הערה</span>`
+    : '';
+  const codeLine = CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin'
+    ? `<div class="record-code-line" title="מזהה טכני למנהל בלבד">${b.internal_code ? esc(b.internal_code) : '&nbsp;'}</div>`
+    : '';
+  const brokerBadge = b.referred_by_broker_id
+    ? `<div class="record-status-slot record-status-wide"><span style="background:#7a3fd1;color:#fff;font-weight:800;font-size:.7rem;padding:3px 10px;border-radius:12px;white-space:nowrap;">🔵 הגיע ממתווך ${esc(BROKER_NAME_BY_ID[b.referred_by_broker_id]||'')}</span></div>`
+    : '';
+  return `<div class="record-info">
+    <div class="record-title-line">
+      <span class="record-title" title="${esc(b.internal_name)}">${statusEmoji}${esc(b.internal_name)}</span>
+      <span class="record-number-slot">${bizNumberBadge(b)}</span>
+    </div>
+    <div class="record-sub-line">${b.owner_name ? esc(b.owner_name) : '&nbsp;'}</div>
+    ${codeLine}
+    <div class="record-meta-line">${filesIndicatorBadge(b.id)}${noteBadge}</div>
+    <div class="record-status-grid">
+      <div class="record-status-slot record-status-wide">${distributionBadge(b)}</div>
+      <div class="record-status-slot">${publicListingBadge(b)}</div>
+      <div class="record-status-slot">${vipPublicationBadge(b)}</div>
+      ${brokerBadge}
+    </div>
+  </div>`;
+}
+
 // תקציר מצב ההפצה בכרטיס העסק/ברשימה (סעיף "תצוגת אדמין" באפיון) - נגזר
 // אך ורק ממה שבפועל שמור ב-DB (distribution_status + ספירת הרשאות מפורשות
 // פעילות), לא state זמני בדפדפן.
@@ -951,7 +994,7 @@ function renderTable(){
     return `
     <tr class="${rowCls}" style="cursor:pointer;" onclick="openBizForm('${b.id}')">
       <td data-label="שם פנימי">
-        <div style="display:flex;align-items:flex-start;gap:8px;">
+        <div class="record-identity">
           <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
             <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
             <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
@@ -964,17 +1007,7 @@ function renderTable(){
               ${canManageBiz(b) ? `<a href="javascript:void(0)" onclick="deleteBiz('${b.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
             </div>
           </div>
-          <div>
-            <div class="primary-name" style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <span>${statusEmoji}${esc(b.internal_name)}</span>
-              ${bizNumberBadge(b)}
-              ${filesIndicatorBadge(b.id)}
-              ${notesIconStyle(b.id) ? `<span onclick="event.stopPropagation();openNotesPanel('businesses','${b.id}','${esc((b.internal_name||'רשומה').replace(/'/g,''))}')" title="${esc(notesTooltip(b.id))}" style="cursor:pointer;font-size:.72rem;color:#1a3d8f;font-weight:700;white-space:nowrap;">🔵 קיימת הערה</span>` : ''}
-            </div>
-            ${b.owner_name?`<div class="sub-name" style="font-size:.75rem;color:#888;">${esc(b.owner_name)}</div>`:''}
-            ${(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin' && b.internal_code)?`<div class="sub-name" style="font-size:.68rem;color:#bbb;" title="מזהה טכני (מנהל בלבד)">${esc(b.internal_code)}</div>`:''}
-            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${distributionBadge(b)}${publicListingBadge(b)}${vipPublicationBadge(b)}${b.referred_by_broker_id ? `<span style="display:inline-flex;align-items:center;gap:3px;background:#7a3fd1;color:#fff;font-weight:800;font-size:.7rem;padding:3px 10px;border-radius:12px;white-space:nowrap;">🔵 הגיע ממתווך ${esc(BROKER_NAME_BY_ID[b.referred_by_broker_id]||'')}</span>` : ''}</div>
-          </div>
+          ${businessIdentityCell(b, statusEmoji)}
         </div>
       </td>
       <td data-label="טלפון בעלים" class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;white-space:nowrap;" onclick="event.stopPropagation()"><span class="phone-cell-content">${b.owner_phone ? `<a href="tel:${esc(b.owner_phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(b.owner_phone)}</a>${waBtn(b.owner_phone)}` : '—'}${listingStateStamp(b)}</span></td>

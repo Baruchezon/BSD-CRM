@@ -40,6 +40,19 @@ test('business list shows the current VIP publication status', async () => {
   assert.match(api, /admin_business_publications/);
 });
 
+test('business and buyer identity columns use fixed aligned slots', async () => {
+  const businesses = await readFile(new URL('../../businesses.html', import.meta.url), 'utf8');
+  const leads = await readFile(new URL('../../leads.html', import.meta.url), 'utf8');
+  for (const page of [businesses, leads]) {
+    assert.match(page, /class="record-identity"/);
+    assert.match(page, /class="record-title-line"/);
+    assert.match(page, /class="record-number-slot"/);
+    assert.match(page, /record-status-grid/);
+  }
+  assert.match(businesses, /businessIdentityCell/);
+  assert.match(leads, /leadIdentityCell/);
+});
+
 test('VIP admin return link preserves the originating record', async () => {
   const integration = await readFile(new URL('../../js/vip-crm-integration.js', import.meta.url), 'utf8');
   const admin = await readFile(new URL('../../vip-admin.html', import.meta.url), 'utf8');
