@@ -1,0 +1,40 @@
+name: VIP Preview Checks
+
+on:
+  pull_request:
+    paths:
+      - 'js/vip-crm-integration.js'
+      - 'js/config.js'
+      - 'vip-admin.html'
+      - 'migrations/2026-09-17_vip_clients.sql'
+      - 'supabase/functions/vip-api/**'
+      - '.github/workflows/vip-preview-checks.yml'
+  workflow_dispatch:
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check Edge Function TypeScript
+        run: deno check supabase/functions/vip-api/index.ts
+      - name: Check CRM integration JavaScript syntax
+        run: node --check js/vip-crm-integration.js
+      - name: Check config JavaScript syntax
+        run: node --check js/config.js
+      - name: Verify VIP migration safety gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "confidentiality_level <> 1" migrations/2026-09-17_vip_clients.sql
+          grep -q "document_type, '') <> 'anonymous_summary'" migrations/2026-09-17_vip_clients.sql
+          grep -q "enable row level security" migrations/2026-09-17_vip_clients.sql
+          grep -q "revoke all on public.vip_accounts from anon, authenticated" migrations/2026-09-17_vip_clients.sql
+      - name: Ensure no service role key is committed
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -RIn --exclude='vip-preview-checks.yml' --exclude-dir='.git' -E 'service_role[[:space:]]*[:=][[:space:]]*["'"''][A-Za-z0-9._-]{20,}' js vip-admin.html supabase/functions migrations
