@@ -10,9 +10,23 @@ async function inlineScripts(file) {
 }
 
 test('VIP admin and leads hub inline scripts parse', async () => {
-  for (const file of ['vip-admin.html', 'leads-hub.html']) {
+  for (const file of ['vip-admin.html', 'leads-hub.html', 'vip-test.html']) {
     for (const source of await inlineScripts(file)) assert.doesNotThrow(() => new Function(source), file);
   }
+});
+
+test('VIP publications use anonymous files and include business images', async () => {
+  const api = await readFile(new URL('../../supabase/functions/vip-api/index.ts', import.meta.url), 'utf8');
+  const saleFiles = await readFile(new URL('../../js/saleFileModule2.js', import.meta.url), 'utf8');
+  const portal = await readFile(new URL('../../vip-test.html', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../../migrations/2026-09-17_vip_anonymous_files.sql', import.meta.url), 'utf8');
+  assert.match(api, /document_type.*anonymous_summary/s);
+  assert.match(api, /business_file_meta/);
+  assert.match(api, /imagesByBusiness/);
+  assert.match(saleFiles, /documentType === 'anonymous_summary' \? 1 : 2/);
+  assert.match(portal, /bizimages/);
+  assert.match(migration, /document_type = 'anonymous_summary'/);
+  assert.match(migration, /confidentiality_level = 1/);
 });
 
 test('VIP admin return link preserves the originating record', async () => {
