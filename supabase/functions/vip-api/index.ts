@@ -322,6 +322,50 @@ async function handleBusinesses(req: Request, auth: any) {
   const interested = new Set((interests || []).map((x: any) => x.business_id));
   const pubById = new Map((pubs || []).map((p: any) => [p.business_id, p]));
 
+  // תמונות נלקחות רק מעסקים שפורסמו במפורש ל VIP. תומכים הן בקטגוריית
+  // התמונות החדשה בתיק המכירה והן בתמונות הוותיקות שבקבצים המצורפים.
+  const [{ data: saleImages }, { data: attachedFiles }] = await Promise.all([
+    supabase.from("business_sale_files")
+      .select("id,business_id,file_name,storage_path,file_type,created_at")
+      .in("business_id", ids)
+      .eq("status", "active")
+      .eq("confidentiality_level", 1)
+      .eq("category", "business_photo")
+      .order("created_at", { ascending: false }),
+    supabase.from("business_file_meta")
+      .select("id,business_id,original_filename,display_name,storage_path,file_type,category,created_at")
+      .in("business_id", ids)
+      .order("created_at", { ascending: false })
+  ]);
+
+  const looksLikeImage = (file: any) => {
+    const type = String(file?.file_type || "").toLowerCase();
+    const name = String(file?.file_name || file?.original_filename || file?.display_name || "").toLowerCase();
+    return type.startsWith("image/") || /\.(jpe?g|png|webp|gif)$/i.test(name);
+  };
+  const imageCandidates = [
+    ...(saleImages || []).map((x: any) => ({ ...x, source: "sale_file" })),
+    ...(attachedFiles || []).filter(looksLikeImage).map((x: any) => ({
+      ...x,
+      file_name: x.display_name || x.original_filename || "תמונת עסק",
+      source: "file_meta"
+    }))
+  ];
+  const imagesByBusiness = new Map<string, any[]>();
+  for (const image of imageCandidates) {
+    const list = imagesByBusiness.get(image.business_id) || [];
+    if (list.length < 3) list.push(image);
+    imagesByBusiness.set(image.business_id, list);
+  }
+
+  await Promise.all([...imagesByBusiness.entries()].map(async ([businessId, images]) => {
+    const signed = await Promise.all(images.map(async image => {
+      const { data } = await supabase.storage.from("business-files").createSignedUrl(image.storage_path, 3600);
+      return data?.signedUrl ? { id: image.id, name: image.file_name, url: data.signedUrl } : null;
+    }));
+    imagesByBusiness.set(businessId, signed.filter(Boolean));
+  }));
+
   const safe = (businesses || []).map((b: any) => ({
     id: b.id,
     name: b.anon_display_name || b.anonymous_name || "הזדמנות עסקית",
@@ -330,6 +374,7 @@ async function handleBusinesses(req: Request, auth: any) {
     category: b.category || "",
     published_at: pubById.get(b.id)?.published_at || null,
     has_document: !!pubById.get(b.id)?.anonymous_file_id,
+    images: imagesByBusiness.get(b.id) || [],
     interested: interested.has(b.id)
   }));
   safe.sort((a: any, b: any) => String(b.published_at || "").localeCompare(String(a.published_at || "")));
