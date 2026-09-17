@@ -31,15 +31,16 @@ jobs:
           from pathlib import Path
           import re
 
-          VERSION = '2026091308'
+          VERSION = '2026091710'
 
           app = Path('app.html')
           s = app.read_text(encoding='utf-8')
           if re.search(r'href="site-admin\.html(?:\?v=\d+)?"', s):
               s = re.sub(r'href="site-admin\.html(?:\?v=\d+)?"', f'href="site-admin.html?v={VERSION}"', s, count=1)
+              s = re.sub(r'(href="site-admin\.html\?v='+VERSION+r'"[^>]*>)[^<]*(</a>)', r'\1🌐 ניהול אתר ומעקב\2', s, count=1)
           else:
               marker = '<a href="users.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👥 משתמשים</a>'
-              link = f'<a href="site-admin.html?v={VERSION}" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🌐 ניהול אתר BSD</a>'
+              link = f'<a href="site-admin.html?v={VERSION}" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🌐 ניהול אתר ומעקב</a>'
               if marker not in s:
                   raise SystemExit('navigation marker not found')
               s = s.replace(marker, marker + '\n      ' + link, 1)
