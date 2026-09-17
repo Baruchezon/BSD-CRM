@@ -364,8 +364,9 @@ async function handleInterest(req: Request, auth: any, body: any) {
       .eq("buyer_id", auth.account.buyer_id)
       .eq("business_id", businessId)
       .maybeSingle();
+    let matchId = existing?.id || null;
     if (!existing) {
-      await supabase.from("matches").insert({
+      const created = await supabase.from("matches").insert({
         buyer_id: auth.account.buyer_id,
         business_id: businessId,
         status: "מתעניין",
@@ -374,6 +375,36 @@ async function handleInterest(req: Request, auth: any, body: any) {
         disclosure_level: 1,
         last_action: "סימון מעניין אותי באזור VIP",
         last_action_at: new Date().toISOString()
+      }).select("id").single();
+      matchId = created.data?.id || null;
+    }
+
+    const { data: buyer } = await supabase
+      .from("leads")
+      .select("handled_by,created_by")
+      .eq("id", auth.account.buyer_id)
+      .maybeSingle();
+    const dedupeKey = `vip-interest:${auth.account.buyer_id}:${businessId}`;
+    const { data: existingTask } = await supabase
+      .from("tasks")
+      .select("id,status")
+      .eq("dedupe_key", dedupeKey)
+      .neq("status", "הושלמה")
+      .maybeSingle();
+    if (!existingTask) {
+      await supabase.from("tasks").insert({
+        title: "לקוח VIP סימן עסק כמעניין",
+        description: "לקוח VIP סימן את העסק כמעניין באזור הלקוחות.",
+        related_type: "buyer",
+        related_id: auth.account.buyer_id,
+        buyer_id: auth.account.buyer_id,
+        business_id: businessId,
+        match_id: matchId,
+        assigned_to: buyer?.handled_by || buyer?.created_by || null,
+        due_date: new Date().toISOString().slice(0, 10),
+        priority: "רגילה",
+        source: "vip",
+        dedupe_key: dedupeKey
       });
     }
   }
@@ -621,14 +652,22 @@ async function handleAdminList(req: Request) {
     .limit(500) : { data: [] as any[] };
   const { data: sessions } = accountIds.length ? await supabase
     .from("vip_sessions")
-    .select("vip_account_id,active_seconds")
-    .in("vip_account_id", accountIds) : { data: [] as any[] };
+    .select("id,vip_account_id,created_at,last_activity_at,expires_at,revoked_at,active_seconds")
+    .in("vip_account_id", accountIds)
+    .order("created_at", { ascending: false })
+    .limit(1000) : { data: [] as any[] };
   const activityBusinessIds = [...new Set((events || []).map((e: any) => e.business_id).filter(Boolean))];
   const { data: activityBusinesses } = activityBusinessIds.length ? await supabase
     .from("businesses")
     .select("id,business_number,anon_display_name,anonymous_name")
     .in("id", activityBusinessIds) : { data: [] as any[] };
   const activityBusinessMap = new Map((activityBusinesses || []).map((b: any) => [b.id, b.anon_display_name || b.anonymous_name || b.business_number || "עסק"]));
+  const activityFileIds = [...new Set((events || []).map((e: any) => e.file_id).filter(Boolean))];
+  const { data: activityFiles } = activityFileIds.length ? await supabase
+    .from("business_sale_files")
+    .select("id,file_name,document_type")
+    .in("id", activityFileIds) : { data: [] as any[] };
+  const activityFileMap = new Map((activityFiles || []).map((f: any) => [f.id, f.file_name || f.document_type || "מסמך אנונימי"]));
 
   const eventMap = new Map<string, any[]>();
   for (const e of events || []) {
@@ -638,7 +677,12 @@ async function handleAdminList(req: Request) {
   const interestCount = new Map<string, number>();
   for (const i of interests || []) interestCount.set(i.vip_account_id, (interestCount.get(i.vip_account_id) || 0) + 1);
   const activeSeconds = new Map<string, number>();
-  for (const sess of sessions || []) activeSeconds.set(sess.vip_account_id, (activeSeconds.get(sess.vip_account_id) || 0) + Number(sess.active_seconds || 0));
+  const sessionMap = new Map<string, any[]>();
+  for (const sess of sessions || []) {
+    activeSeconds.set(sess.vip_account_id, (activeSeconds.get(sess.vip_account_id) || 0) + Number(sess.active_seconds || 0));
+    if (!sessionMap.has(sess.vip_account_id)) sessionMap.set(sess.vip_account_id, []);
+    sessionMap.get(sess.vip_account_id)!.push(sess);
+  }
   const inquiryMap = new Map<string, any[]>();
   for (const q of inquiries || []) {
     if (!inquiryMap.has(q.vip_account_id)) inquiryMap.set(q.vip_account_id, []);
@@ -658,7 +702,12 @@ async function handleAdminList(req: Request) {
         inquiries: (inquiryMap.get(a.id) || []).length,
         active_seconds: activeSeconds.get(a.id) || 0
       },
-      recent_activity: ev.slice(0, 20).map((x: any) => ({ ...x, business_label: x.business_id ? activityBusinessMap.get(x.business_id) || null : null })),
+      recent_activity: ev.slice(0, 20).map((x: any) => ({
+        ...x,
+        business_label: x.business_id ? activityBusinessMap.get(x.business_id) || null : null,
+        file_label: x.file_id ? activityFileMap.get(x.file_id) || null : null
+      })),
+      recent_sessions: (sessionMap.get(a.id) || []).slice(0, 10),
       recent_inquiries: (inquiryMap.get(a.id) || []).slice(0, 10)
     };
   });
