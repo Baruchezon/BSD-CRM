@@ -1,5 +1,5 @@
 // BSD CRM - הגדרות חיבור ל-Supabase
-// קובץ זה בטוח לחשיפה בדפפן - אין בו סודות.
+// קובץ זה בטוח לחשיפה בדפדפן - אין בו סודות.
 // אסור אף פעם להכניס לכאן service_role key או סיסמת בסיס נתונים.
 
 window.BSD_CONFIG = {
@@ -120,14 +120,11 @@ window.BSD_CONFIG = {
         return { data:{ path }, error:null };
       }
 
-      // אם השרת החזיר 401, מרעננים token לפני מסלול הגיבוי.
       if (firstResult.status === 401){
         const refreshedToken = await getFreshAccessToken(true);
         if (refreshedToken) token = refreshedToken;
       }
 
-      // fallback דרך supabase-js. הוא משתמש בכתובת הפרויקט הרגילה ומנהל
-      // את מנגנון האימות בעצמו, ולכן הוא עוקף כשל נקודתי של ה-host הישיר.
       try {
         if (opts.onProgress) opts.onProgress(0);
         const sdkResult = await window.supabaseClient.storage
@@ -162,17 +159,42 @@ window.BSD_CONFIG = {
 })();
 
 // 17.09.2026: מודול לקוחות VIP נטען רק במסכי קונים ועסקים.
-// אין שינוי לוגיקה במסכים אחרים ואין תלות של שאר ה-CRM במודול החדש.
 (function loadVipCrmIntegration(){
   try {
     const page = (location.pathname.split('/').pop() || '').toLowerCase();
     if (page !== 'leads.html' && page !== 'businesses.html') return;
     const script = document.createElement('script');
-    script.src = 'js/vip-crm-integration.js?v=20260917-1';
+    script.src = 'js/vip-crm-integration.js?v=20260917-2';
     script.defer = true;
     script.dataset.bsdVipModule = '1';
     document.head.appendChild(script);
   } catch(e) {
     console.warn('[BSD VIP] integration loader skipped', e);
   }
+})();
+
+// 17.09.2026: קיצור דרך קבוע לניהול לקוחות VIP בתוך תפריט "כלים".
+// התפריט navToolsWrap כבר מוסתר ע"י auth.js לכל מי שאינו admin/manager,
+// לכן הקישור נחשף רק למנהלים בלי לשנות הרשאות קיימות.
+(function installVipAdminMenuLink(){
+  function install(){
+    try {
+      const toolsWrap = document.getElementById('navToolsWrap');
+      if (!toolsWrap || toolsWrap.querySelector('[data-vip-admin-link]')) return false;
+      const menu = toolsWrap.querySelector('.bsd-forms-menu');
+      if (!menu) return false;
+      const link = document.createElement('a');
+      link.href = 'vip-admin.html';
+      link.dataset.vipAdminLink = '1';
+      link.textContent = '⭐ לקוחות VIP';
+      link.style.cssText = 'display:block;color:#f1d98d;text-decoration:none;padding:11px 16px;font-size:.85rem;font-weight:800;border-top:1px solid rgba(255,255,255,.08);';
+      menu.insertBefore(link, menu.firstChild);
+      return true;
+    } catch(e){
+      console.warn('[BSD VIP] menu shortcut skipped', e);
+      return false;
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, {once:true});
+  else install();
 })();
