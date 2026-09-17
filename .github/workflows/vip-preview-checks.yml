@@ -1,4 +1,4 @@
-# VIP preview safety suite v2
+# VIP preview safety suite v3
 name: VIP Preview Checks
 
 on:
@@ -35,6 +35,11 @@ jobs:
           grep -q "document_type, '') <> 'anonymous_summary'" migrations/2026-09-17_vip_clients.sql
           grep -q "enable row level security" migrations/2026-09-17_vip_clients.sql
           grep -q "revoke all on public.vip_accounts from anon, authenticated" migrations/2026-09-17_vip_clients.sql
+          grep -q "vip_login_attempts" migrations/2026-09-17_vip_clients.sql
+          grep -q "active_seconds" migrations/2026-09-17_vip_clients.sql
+          grep -q "LOGIN_MAX_FAILURES" supabase/functions/vip-api/index.ts
+          grep -q "session_time" supabase/functions/vip-api/index.ts
+          grep -q "active_seconds" vip-admin.html
       - name: Ensure no service role key is committed
         shell: bash
         run: |
