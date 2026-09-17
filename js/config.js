@@ -1,12 +1,13 @@
 // BSD CRM - הגדרות חיבור ל-Supabase
-// קובץ זה בטוח לחשיפה בדפדפן - אין בו סודות.
+// קובץ זה בטוח לחשיפה בדפפן - אין בו סודות.
 // אסור אף פעם להכניס לכאן service_role key או סיסמת בסיס נתונים.
 
 window.BSD_CONFIG = {
   SUPABASE_URL: "https://zcdlegcvfirwzitfxjcs.supabase.co",
   SUPABASE_PUBLISHABLE_KEY: "sb_publishable_baq54BVGwvtjB8c7ZiegCQ_tAXevwfN",
   STORAGE_BUCKET: "business-files",
-  ORG_NAME: "BSD Business Brokers Israel"
+  ORG_NAME: "BSD Business Brokers Israel",
+  VIP_API_URL: "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/vip-api"
 };
 
 // 15.09.2026: רשת ביטחון ממוקדת להעלאת הסכמים חתומים.
@@ -158,4 +159,20 @@ window.BSD_CONFIG = {
   }
 
   setTimeout(install, 0);
+})();
+
+// 17.09.2026: מודול לקוחות VIP נטען רק במסכי קונים ועסקים.
+// אין שינוי לוגיקה במסכים אחרים ואין תלות של שאר ה-CRM במודול החדש.
+(function loadVipCrmIntegration(){
+  try {
+    const page = (location.pathname.split('/').pop() || '').toLowerCase();
+    if (page !== 'leads.html' && page !== 'businesses.html') return;
+    const script = document.createElement('script');
+    script.src = 'js/vip-crm-integration.js?v=20260917-1';
+    script.defer = true;
+    script.dataset.bsdVipModule = '1';
+    document.head.appendChild(script);
+  } catch(e) {
+    console.warn('[BSD VIP] integration loader skipped', e);
+  }
 })();
