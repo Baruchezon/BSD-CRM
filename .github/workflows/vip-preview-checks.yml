@@ -9,12 +9,15 @@ on:
       - 'js/vip-crm-integration.js'
       - 'js/vip-ui-fixes.js'
       - 'js/config.js'
+      - 'js/saleFileModule2.js'
       - 'businesses.html'
       - 'leads.html'
       - 'matches-workspace.html'
       - 'vip-admin.html'
+      - 'vip-test.html'
       - 'leads-hub.html'
       - 'migrations/2026-09-17_vip_clients.sql'
+      - 'migrations/2026-09-17_vip_anonymous_files.sql'
       - 'supabase/functions/vip-api/**'
       - '.github/scripts/test-vip-migration.sql'
       - '.github/scripts/test-vip-ui-fixes.mjs'
@@ -26,12 +29,15 @@ on:
       - 'js/vip-crm-integration.js'
       - 'js/vip-ui-fixes.js'
       - 'js/config.js'
+      - 'js/saleFileModule2.js'
       - 'businesses.html'
       - 'leads.html'
       - 'matches-workspace.html'
       - 'vip-admin.html'
+      - 'vip-test.html'
       - 'leads-hub.html'
       - 'migrations/2026-09-17_vip_clients.sql'
+      - 'migrations/2026-09-17_vip_anonymous_files.sql'
       - 'supabase/functions/vip-api/**'
       - '.github/scripts/test-vip-migration.sql'
       - '.github/scripts/test-vip-ui-fixes.mjs'
@@ -57,7 +63,7 @@ jobs:
       - name: Check VIP UI JavaScript syntax
         run: node --check js/vip-ui-fixes.js
       - name: Check CRM page inline JavaScript syntax
-        run: python .github/scripts/check-inline-scripts.py businesses.html leads.html matches-workspace.html
+        run: python .github/scripts/check-inline-scripts.py businesses.html leads.html matches-workspace.html vip-test.html
       - name: Test VIP UI mutation safety
         run: node --test .github/scripts/test-vip-ui-fixes.mjs
       - name: Test VIP CRM navigation and lead contracts
@@ -94,6 +100,8 @@ jobs:
           grep -q "לידים לקוחות VIP" leads-hub.html
           grep -q "active_seconds" vip-admin.html
           grep -q "שלח ב WhatsApp" vip-admin.html
+          grep -q "imagesByBusiness" supabase/functions/vip-api/index.ts
+          grep -q "documentType === 'anonymous_summary' ? 1 : 2" js/saleFileModule2.js
       - name: Ensure no service role key is committed
         shell: bash
         run: |
