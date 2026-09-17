@@ -8,7 +8,8 @@
   const START_KEY='bsd_site_session_start';
   const endpoint=window.BSD_CONFIG.SUPABASE_URL.replace(/\/$/,'')+'/rest/v1/site_analytics_events';
   const apiKey=window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY;
-  const pageStartedAt=Date.now();
+  let activeMs=0;
+  let activeSince=document.visibilityState==='visible'?Date.now():null;
 
   function uuid(){
     if(crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -46,6 +47,11 @@
     };
     fetch(endpoint,{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','apikey':apiKey,'Authorization':'Bearer '+apiKey,'Prefer':'return=minimal'},body:JSON.stringify(payload)}).catch(()=>{});
   }
+  function activeSeconds(){
+    let total=activeMs;
+    if(activeSince!==null)total+=Date.now()-activeSince;
+    return Math.max(0,total/1000);
+  }
 
   window.BSDAnalytics={
     track:function(name,metadata){send(name,{metadata:metadata||{}})},
@@ -54,6 +60,15 @@
   };
 
   send('page_view',{metadata:campaignMeta()});
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='visible'){
+      if(activeSince===null)activeSince=Date.now();
+    }else if(activeSince!==null){
+      activeMs+=Date.now()-activeSince;
+      activeSince=null;
+    }
+  });
 
   document.addEventListener('click',function(e){
     const tracked=e.target.closest('[data_track]');
@@ -85,9 +100,10 @@
   function endSession(){
     if(ended)return;
     ended=true;
+    if(activeSince!==null){activeMs+=Date.now()-activeSince;activeSince=null;}
     const now=Date.now();
     const sessionStarted=Number(sessionStorage.getItem(START_KEY)||now);
-    send('page_engagement',{duration_seconds:(now-pageStartedAt)/1000});
+    send('page_engagement',{duration_seconds:activeSeconds()});
     send('session_end',{duration_seconds:(now-sessionStarted)/1000});
   }
   window.addEventListener('pagehide',endSession);
