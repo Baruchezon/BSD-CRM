@@ -10,6 +10,45 @@ window.BSD_CONFIG = {
   VIP_API_URL: "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/vip-api"
 };
 
+// מטמון מהיר בין מסכי ה-CRM באותה לשונית דפדפן. הקוד אינו עוקף RLS ואינו
+// משתף נתונים בין משתמשים: כל מפתח כולל את מזהה המשתמש, והמידע נשמר רק
+// ב-sessionStorage שנמחק עם סגירת הלשונית. המסכים מציגים מיד את העותק
+// האחרון ואז מרעננים אותו בשקט מהשרת, כך שהניווט אינו ממתין שוב לרשימות.
+window.BSDDataCache = window.BSDDataCache || (() => {
+  const PREFIX = 'bsd_crm_page_cache_v2:';
+  const MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  function key(scope, userId){ return PREFIX + String(userId || 'anonymous') + ':' + scope; }
+  function get(scope, userId){
+    try {
+      const raw = sessionStorage.getItem(key(scope, userId));
+      if (!raw) return null;
+      const entry = JSON.parse(raw);
+      if (!entry || !entry.savedAt || Date.now() - entry.savedAt > MAX_AGE_MS){
+        sessionStorage.removeItem(key(scope, userId));
+        return null;
+      }
+      return entry.value || null;
+    } catch(e){ return null; }
+  }
+  function set(scope, userId, value){
+    try {
+      sessionStorage.setItem(key(scope, userId), JSON.stringify({ savedAt:Date.now(), value }));
+      return true;
+    } catch(e){
+      // אם מכסת האחסון מלאה, מסירים רק מטמוני BSD ישנים ומנסים פעם נוספת.
+      try {
+        Object.keys(sessionStorage).filter(k => k.startsWith(PREFIX)).forEach(k => sessionStorage.removeItem(k));
+        sessionStorage.setItem(key(scope, userId), JSON.stringify({ savedAt:Date.now(), value }));
+        return true;
+      } catch(ignore){ return false; }
+    }
+  }
+  function remove(scope, userId){
+    try { sessionStorage.removeItem(key(scope, userId)); } catch(e){}
+  }
+  return { get, set, remove };
+})();
+
 // 15.09.2026: רשת ביטחון ממוקדת להעלאת הסכמים חתומים.
 // ההעלאה המקורית ב-auth.js נשארת ללא שינוי לכל שאר קבצי המערכת.
 // רק נתיבים תחת agreements/ מקבלים מסלול עמיד יותר:
@@ -164,7 +203,7 @@ window.BSD_CONFIG = {
     const page = (location.pathname.split('/').pop() || '').toLowerCase();
     if (page !== 'leads.html' && page !== 'businesses.html') return;
     const script = document.createElement('script');
-    script.src = 'js/vip-crm-integration.js?v=20260917-2';
+    script.src = 'js/vip-crm-integration.js?v=20260917-4';
     script.defer = true;
     script.dataset.bsdVipModule = '1';
     document.head.appendChild(script);

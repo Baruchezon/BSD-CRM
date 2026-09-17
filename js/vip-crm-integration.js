@@ -59,6 +59,22 @@
       </div>${body}</section>`;
   }
 
+  // בכרטיס עסק במסך מלא אסור להוסיף את אזור VIP כילד ישיר של המודאל.
+  // ילד כזה הופך לרצועה קבועה נוספת ומכווץ את אזור העבודה של כל הלשוניות.
+  // הפרסום שייך לתוכן האנונימי ולכן נטען בתוך לשונית התקצירים ונגלל איתה.
+  function businessVipTarget(modal){
+    return modal.querySelector('.biz-sticky-top')
+      || modal.querySelector('.biz-tabpane[data-tab="summaries"]')
+      || modal.querySelector('.biz-tabpanes .biz-tabpane')
+      || modal.querySelector('#bizForm .form-grid')
+      || modal.querySelector('#bizForm')
+      || modal;
+  }
+
+  function businessVipBox(body){
+    return `<section data-vip-crm-box class="biz-vip-top">${body}</section>`;
+  }
+
   function addAdminShortcut(){
     if (document.querySelector('[data-vip-admin-shortcut]')) return;
     const toolbar = document.querySelector('.toolbar .add-btns') || document.querySelector('.toolbar');
@@ -143,11 +159,12 @@
     const profile=await getProfile();
     if(!profile || !['admin','manager'].includes(profile.role)) return;
     modal.querySelectorAll('[data-vip-crm-box]').forEach(x=>x.remove());
+    const target=businessVipTarget(modal);
 
     let status;
     try { status=await adminApi('admin_business_status',{business_id:biz.id}); }
     catch(e){
-      modal.insertAdjacentHTML('beforeend',vipBox('פרסום ללקוחות VIP',`<div style="color:#a72a2a;font-size:.85rem;">לא ניתן לטעון סטטוס פרסום: ${esc(e.message)}</div>`,`businesses.html?open=${encodeURIComponent(biz.id)}`));
+      target.insertAdjacentHTML('beforeend',businessVipBox(`<strong>⭐ פרסום ללקוחות VIP</strong><span style="color:#a72a2a;font-size:.8rem;">לא ניתן לטעון סטטוס פרסום: ${esc(e.message)}</span><a href="${vipAdminHref(`businesses.html?open=${encodeURIComponent(biz.id)}`)}">ניהול לקוחות VIP</a>`));
       return;
     }
     const files=status.eligible_files || [];
@@ -157,20 +174,13 @@
     const noFiles=!files.length;
     const options=files.map(f=>`<option value="${esc(f.id)}" ${f.id===chosen?'selected':''}>${esc(f.file_name || 'תקציר אנונימי')} ${f.version_number?`גרסה ${esc(f.version_number)}`:''}</option>`).join('');
 
-    modal.insertAdjacentHTML('beforeend',vipBox('פרסום ללקוחות VIP',`
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <label style="display:flex;align-items:center;gap:8px;font-weight:800;${noFiles?'opacity:.55':''}">
-          <input id="vipPublishBusiness" type="checkbox" ${enabled?'checked':''} ${noFiles?'disabled':''} style="width:20px;height:20px;accent-color:#d5b85c;"> פרסם ללקוחות VIP
-        </label>
-      </div>
-      <div style="margin-top:10px;">
-        <label style="display:block;font-size:.78rem;color:#666;margin-bottom:4px;">קובץ אנונימי מאושר</label>
-        <select id="vipAnonymousFile" ${noFiles?'disabled':''} style="width:100%;padding:9px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;">${options || '<option>אין תקציר אנונימי מאושר</option>'}</select>
-      </div>
-      <div style="margin-top:8px;font-size:.76rem;color:${noFiles?'#a72a2a':'#6f7787'};line-height:1.5;">
-        ${noFiles ? 'הפרסום חסום. יש ליצור או להעלות קובץ שמוגדר anonymous_summary ברמת סודיות 1.' : 'המערכת מאפשרת פרסום רק של קובץ anonymous_summary פעיל ברמת סודיות 1. קבצים פנימיים וחסויים חסומים גם בצד השרת.'}
-      </div>
-    `,`businesses.html?open=${encodeURIComponent(biz.id)}`));
+    target.insertAdjacentHTML('beforeend',businessVipBox(`
+      <strong>⭐ פרסום ללקוחות VIP</strong>
+      <label style="${noFiles?'opacity:.55':''}"><input id="vipPublishBusiness" type="checkbox" ${enabled?'checked':''} ${noFiles?'disabled':''} style="width:19px;height:19px;accent-color:#d5b85c;"> פרסם</label>
+      <label style="flex:1;min-width:320px;"><span>התקציר ללקוחות</span><select id="vipAnonymousFile" ${noFiles?'disabled':''}>${options || '<option>אין תקציר אנונימי מאושר</option>'}</select></label>
+      <span class="biz-vip-note" style="color:${noFiles?'#a72a2a':'#6f6238'};">${noFiles ? 'הפרסום חסום עד שתועלה גרסה מלאה של התקציר האנונימי.' : 'ללקוחות מוצגת רק הגרסה האנונימית שנבחרה. מסמכים פנימיים נשארים חסומים.'}</span>
+      <a href="${vipAdminHref(`businesses.html?open=${encodeURIComponent(biz.id)}`)}">ניהול לקוחות VIP</a>
+    `));
 
     const checkbox=document.getElementById('vipPublishBusiness');
     const select=document.getElementById('vipAnonymousFile');

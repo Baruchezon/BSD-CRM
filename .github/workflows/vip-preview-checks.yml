@@ -9,6 +9,9 @@ on:
       - 'js/vip-crm-integration.js'
       - 'js/vip-ui-fixes.js'
       - 'js/config.js'
+      - 'businesses.html'
+      - 'leads.html'
+      - 'matches-workspace.html'
       - 'vip-admin.html'
       - 'leads-hub.html'
       - 'migrations/2026-09-17_vip_clients.sql'
@@ -16,12 +19,16 @@ on:
       - '.github/scripts/test-vip-migration.sql'
       - '.github/scripts/test-vip-ui-fixes.mjs'
       - '.github/scripts/test-vip-crm-contracts.mjs'
+      - '.github/scripts/check-inline-scripts.py'
       - '.github/workflows/vip-preview-checks.yml'
   pull_request:
     paths:
       - 'js/vip-crm-integration.js'
       - 'js/vip-ui-fixes.js'
       - 'js/config.js'
+      - 'businesses.html'
+      - 'leads.html'
+      - 'matches-workspace.html'
       - 'vip-admin.html'
       - 'leads-hub.html'
       - 'migrations/2026-09-17_vip_clients.sql'
@@ -29,6 +36,7 @@ on:
       - '.github/scripts/test-vip-migration.sql'
       - '.github/scripts/test-vip-ui-fixes.mjs'
       - '.github/scripts/test-vip-crm-contracts.mjs'
+      - '.github/scripts/check-inline-scripts.py'
       - '.github/workflows/vip-preview-checks.yml'
   workflow_dispatch:
 
@@ -48,10 +56,22 @@ jobs:
         run: node --check js/config.js
       - name: Check VIP UI JavaScript syntax
         run: node --check js/vip-ui-fixes.js
+      - name: Check CRM page inline JavaScript syntax
+        run: python .github/scripts/check-inline-scripts.py businesses.html leads.html matches-workspace.html
       - name: Test VIP UI mutation safety
         run: node --test .github/scripts/test-vip-ui-fixes.mjs
       - name: Test VIP CRM navigation and lead contracts
         run: node --test .github/scripts/test-vip-crm-contracts.mjs
+      - name: Verify fast navigation cache and compact business header
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "window.BSDDataCache" js/config.js
+          grep -q "restoreBusinessPageCache" businesses.html
+          grep -q "restoreLeadsPageCache" leads.html
+          grep -q "restoreMatchesPageCache" matches-workspace.html
+          grep -q "biz-header-actions" businesses.html
+          grep -q "biz-vip-top" js/vip-crm-integration.js
       - name: Verify VIP safety and management gates
         shell: bash
         run: |
