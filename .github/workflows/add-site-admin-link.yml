@@ -9,6 +9,7 @@ on:
       - 'site-content-studio.html'
       - 'js/site-admin-v2.js'
       - 'js/site-admin-v3-fixes.js'
+      - 'js/site-admin-analytics-plus.js'
       - 'js/site-analytics.js'
 permissions:
   contents: write
@@ -24,6 +25,7 @@ jobs:
           node --check js/site-content-studio.js
           node --check js/site-admin-v2.js
           node --check js/site-admin-v3-fixes.js
+          node --check js/site-admin-analytics-plus.js
           node --check js/site-analytics.js
       - name: Keep site admin navigation current
         run: |
@@ -31,7 +33,7 @@ jobs:
           from pathlib import Path
           import re
 
-          VERSION = '2026091710'
+          VERSION = '2026091712'
 
           app = Path('app.html')
           s = app.read_text(encoding='utf-8')
@@ -57,6 +59,10 @@ jobs:
               v = v.replace('</body>', f'<script src="js/site-admin-v3-fixes.js?v={VERSION}"></script></body>', 1)
           else:
               v = re.sub(r'js/site-admin-v3-fixes\.js\?v=\d+', f'js/site-admin-v3-fixes.js?v={VERSION}', v)
+          if 'js/site-admin-analytics-plus.js' not in v:
+              v = v.replace('</body>', f'<script src="js/site-admin-analytics-plus.js?v={VERSION}"></script></body>', 1)
+          else:
+              v = re.sub(r'js/site-admin-analytics-plus\.js\?v=\d+', f'js/site-admin-analytics-plus.js?v={VERSION}', v)
           v3.write_text(v, encoding='utf-8')
           PY
           git config user.name "BSD Automation"
