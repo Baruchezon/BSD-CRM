@@ -8,6 +8,8 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 const SESSION_MAX_HOURS = 12;
 const SESSION_IDLE_MINUTES = 60;
+const LOGIN_WINDOW_MINUTES = 15;
+const LOGIN_MAX_FAILURES = 8;
 const PBKDF2_ITERATIONS = 210000;
 const PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789abcdefghijkmnopqrstuvwxyz";
 
@@ -49,6 +51,19 @@ function randomString(length: number, alphabet = PASSWORD_ALPHABET) {
   return out;
 }
 
+function makeTemporaryPassword() {
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lower = "abcdefghijkmnopqrstuvwxyz";
+  const digits = "23456789";
+  const chars = [randomString(1, upper), randomString(1, lower), randomString(1, digits)];
+  while (chars.length < 10) chars.push(randomString(1));
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
+}
+
 function toBase64Url(bytes: Uint8Array) {
   let s = "";
   for (const b of bytes) s += String.fromCharCode(b);
@@ -64,6 +79,12 @@ function fromBase64Url(value: string) {
 async function sha256(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return toBase64Url(new Uint8Array(digest));
+}
+
+async function clientIpHash(req: Request) {
+  const forwarded = req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
+  const raw = forwarded.split(",")[0].trim() || "unknown";
+  return sha256(raw);
 }
 
 async function hashPassword(password: string) {
@@ -130,7 +151,7 @@ async function authenticateVip(req: Request) {
   const tokenHash = await sha256(token);
   const { data: session } = await supabase
     .from("vip_sessions")
-    .select("id,vip_account_id,created_at,last_activity_at,expires_at,revoked_at")
+    .select("id,vip_account_id,created_at,last_activity_at,expires_at,revoked_at,active_seconds")
     .eq("token_hash", tokenHash)
     .maybeSingle();
   if (!session || session.revoked_at) return { error: "invalid_session" as const };
@@ -186,15 +207,36 @@ async function handleLogin(req: Request, body: any) {
   const password = String(body.password ?? "");
   if (!username || !password) return reply(req, 400, { ok: false, error: "missing_credentials" });
 
+  const ipHash = await clientIpHash(req);
+  const cutoff = new Date(Date.now() - LOGIN_WINDOW_MINUTES * 60_000).toISOString();
+  const { count: recentFailures } = await supabase
+    .from("vip_login_attempts")
+    .select("id", { count: "exact", head: true })
+    .eq("username", username)
+    .eq("ip_hash", ipHash)
+    .eq("success", false)
+    .gte("attempted_at", cutoff);
+  if ((recentFailures || 0) >= LOGIN_MAX_FAILURES) {
+    await new Promise(r => setTimeout(r, 700));
+    return reply(req, 429, { ok: false, error: "too_many_attempts", message: "בוצעו ניסיונות התחברות רבים מדי. נסה שוב מאוחר יותר או פנה ל BSD." });
+  }
+
   const { data: account } = await supabase
     .from("vip_accounts")
     .select("id,buyer_id,username,password_hash,status,must_change_password,login_count")
     .eq("username", username)
     .maybeSingle();
   if (!account || account.status !== "active" || !(await verifyPassword(password, account.password_hash))) {
+    await supabase.from("vip_login_attempts").insert({ username, ip_hash: ipHash, success: false });
     await new Promise(r => setTimeout(r, 450));
     return reply(req, 401, { ok: false, error: "invalid_credentials", message: "שם משתמש או סיסמה אינם נכונים" });
   }
+
+  await supabase.from("vip_login_attempts")
+    .delete()
+    .eq("username", username)
+    .eq("ip_hash", ipHash)
+    .eq("success", false);
 
   const rawToken = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   const tokenHash = await sha256(rawToken);
@@ -445,7 +487,7 @@ async function handleDocumentUrl(req: Request, auth: any, body: any) {
 async function handleChangePassword(req: Request, auth: any, body: any) {
   const current = String(body.current_password ?? "");
   const next = String(body.new_password ?? "");
-  if (next.length < 10 || next.length > 128) return reply(req, 400, { ok: false, error: "weak_password", message: "הסיסמה החדשה חייבת להכיל לפחות 10 תווים" });
+  if (next.length < 10 || next.length > 128 || !/[A-Za-z]/.test(next) || !/[0-9]/.test(next)) return reply(req, 400, { ok: false, error: "weak_password", message: "הסיסמה החדשה חייבת להכיל לפחות 10 תווים, אותיות ומספרים" });
   const { data: full } = await supabase.from("vip_accounts").select("password_hash").eq("id", auth.account.id).single();
   if (!full || !(await verifyPassword(current, full.password_hash))) return reply(req, 401, { ok: false, error: "wrong_current_password" });
   const passwordHash = await hashPassword(next);
@@ -453,6 +495,18 @@ async function handleChangePassword(req: Request, auth: any, body: any) {
   await supabase.from("vip_sessions").update({ revoked_at: new Date().toISOString() }).eq("vip_account_id", auth.account.id).neq("id", auth.session.id).is("revoked_at", null);
   await logVipEvent(auth.account.id, auth.session.id, "password_changed");
   return reply(req, 200, { ok: true });
+}
+
+async function handleSessionTime(req: Request, auth: any, body: any) {
+  const delta = Math.floor(Number(body.duration_seconds || 0));
+  if (!Number.isFinite(delta) || delta < 1 || delta > 300) {
+    return reply(req, 400, { ok: false, error: "invalid_duration" });
+  }
+  const current = Math.max(0, Number(auth.session.active_seconds || 0));
+  const next = Math.min(86400, current + delta);
+  const { error } = await supabase.from("vip_sessions").update({ active_seconds: next }).eq("id", auth.session.id);
+  if (error) return reply(req, 500, { ok: false, error: "session_time_failed" });
+  return reply(req, 200, { ok: true, active_seconds: next });
 }
 
 async function handleLogout(req: Request, auth: any) {
@@ -498,7 +552,7 @@ async function handleAdminEnableBuyer(req: Request, admin: any, body: any) {
   const { data: sameUsername } = await supabase.from("vip_accounts").select("id,buyer_id").eq("username", username).neq("buyer_id", buyerId).maybeSingle();
   if (sameUsername) return reply(req, 409, { ok: false, error: "username_conflict", message: "שם המשתמש שנגזר ממספר הקונה כבר קיים. לא בוצע שינוי אוטומטי." });
 
-  const temporaryPassword = randomString(10);
+  const temporaryPassword = makeTemporaryPassword();
   const passwordHash = await hashPassword(temporaryPassword);
   let account: any;
   if (existing) {
@@ -565,6 +619,16 @@ async function handleAdminList(req: Request) {
     .in("vip_account_id", accountIds)
     .order("created_at", { ascending: false })
     .limit(500) : { data: [] as any[] };
+  const { data: sessions } = accountIds.length ? await supabase
+    .from("vip_sessions")
+    .select("vip_account_id,active_seconds")
+    .in("vip_account_id", accountIds) : { data: [] as any[] };
+  const activityBusinessIds = [...new Set((events || []).map((e: any) => e.business_id).filter(Boolean))];
+  const { data: activityBusinesses } = activityBusinessIds.length ? await supabase
+    .from("businesses")
+    .select("id,business_number,anon_display_name,anonymous_name")
+    .in("id", activityBusinessIds) : { data: [] as any[] };
+  const activityBusinessMap = new Map((activityBusinesses || []).map((b: any) => [b.id, b.anon_display_name || b.anonymous_name || b.business_number || "עסק"]));
 
   const eventMap = new Map<string, any[]>();
   for (const e of events || []) {
@@ -573,6 +637,8 @@ async function handleAdminList(req: Request) {
   }
   const interestCount = new Map<string, number>();
   for (const i of interests || []) interestCount.set(i.vip_account_id, (interestCount.get(i.vip_account_id) || 0) + 1);
+  const activeSeconds = new Map<string, number>();
+  for (const sess of sessions || []) activeSeconds.set(sess.vip_account_id, (activeSeconds.get(sess.vip_account_id) || 0) + Number(sess.active_seconds || 0));
   const inquiryMap = new Map<string, any[]>();
   for (const q of inquiries || []) {
     if (!inquiryMap.has(q.vip_account_id)) inquiryMap.set(q.vip_account_id, []);
@@ -589,9 +655,10 @@ async function handleAdminList(req: Request) {
         document_views: ev.filter((x: any) => x.event_type === "document_view").length,
         document_downloads: ev.filter((x: any) => x.event_type === "document_download").length,
         interests: interestCount.get(a.id) || 0,
-        inquiries: (inquiryMap.get(a.id) || []).length
+        inquiries: (inquiryMap.get(a.id) || []).length,
+        active_seconds: activeSeconds.get(a.id) || 0
       },
-      recent_activity: ev.slice(0, 20),
+      recent_activity: ev.slice(0, 20).map((x: any) => ({ ...x, business_label: x.business_id ? activityBusinessMap.get(x.business_id) || null : null })),
       recent_inquiries: (inquiryMap.get(a.id) || []).slice(0, 10)
     };
   });
@@ -613,7 +680,7 @@ async function handleAdminAccountAction(req: Request, admin: any, body: any) {
     await supabase.from("vip_accounts").update({ status: "deleted", deleted_at: new Date().toISOString(), deleted_by: admin.profile.id }).eq("id", accountId);
     await supabase.from("vip_sessions").update({ revoked_at: new Date().toISOString() }).eq("vip_account_id", accountId).is("revoked_at", null);
   } else if (action === "reset_password") {
-    const temporaryPassword = randomString(10);
+    const temporaryPassword = makeTemporaryPassword();
     await supabase.from("vip_accounts").update({ password_hash: await hashPassword(temporaryPassword), must_change_password: true }).eq("id", accountId);
     await supabase.from("vip_sessions").update({ revoked_at: new Date().toISOString() }).eq("vip_account_id", accountId).is("revoked_at", null);
     await auditAdmin("vip_reset_password", admin.profile.id, { vip_account_id: accountId, buyer_id: account.buyer_id });
@@ -714,6 +781,7 @@ Deno.serve(async (req: Request) => {
     if (action === "inquiry") return await handleInquiry(req, auth, body);
     if (action === "document_url") return await handleDocumentUrl(req, auth, body);
     if (action === "change_password") return await handleChangePassword(req, auth, body);
+    if (action === "session_time") return await handleSessionTime(req, auth, body);
     if (action === "logout") return await handleLogout(req, auth);
     return reply(req, 400, { ok: false, error: "unknown_action" });
   } catch (error) {
