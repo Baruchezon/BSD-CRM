@@ -64,13 +64,18 @@
       </div>${body}</section>`;
   }
 
-  // בכרטיס עסק אין פאנל VIP נפרד. גם פאנל קצר גוזל גובה מאזור העבודה
-  // ומופיע באיחור אחרי תשובת השרת. תיבת הסימון משובצת בתוך שורת סטטוס
-  // ההסכם שכבר קיימת בכותרת ולכן אינה מוסיפה אפילו שורה אחת למסך.
+  function isMobileBusinessCard(){
+    return !!(window.matchMedia && window.matchMedia('(max-width: 640px)').matches);
+  }
+
+  // בדסקטופ תיבת הסימון נשארת בתוך שורת סטטוס ההסכם הקיימת.
+  // במובייל היא עוברת לשורה עצמאית בראש כרטיס העסק כדי שלא תיעלם בתוך הכותרת הצפופה.
   function businessVipTarget(modal){
+    const stickyTop=modal.querySelector('.biz-sticky-top');
+    if(isMobileBusinessCard() && stickyTop) return stickyTop;
     const notes=[...modal.querySelectorAll('.biz-sticky-top .agr-note:not(.agr-upload-row)')];
     return notes.find(note=>note.textContent.includes('סטטוס הסכם נוכחי'))
-      || modal.querySelector('.biz-sticky-top')
+      || stickyTop
       || modal.querySelector('.biz-tabpane[data-tab="summaries"]')
       || modal.querySelector('.biz-tabpanes .biz-tabpane')
       || modal.querySelector('#bizForm .form-grid')
@@ -79,6 +84,9 @@
   }
 
   function businessVipBox(body){
+    if(isMobileBusinessCard()){
+      return `<span data-vip-crm-box class="biz-vip-inline biz-vip-mobile" style="order:2;display:flex;flex:1 1 100%;width:100%;margin:2px 0 1px;padding:8px 10px;border:1px solid #d5b85c;border-radius:9px;background:#fff8dc;box-shadow:0 2px 7px rgba(14,27,52,.12);box-sizing:border-box;">${body}</span>`;
+    }
     return `<span data-vip-crm-box class="biz-vip-inline">${body}</span>`;
   }
 
@@ -169,7 +177,7 @@
     const target=businessVipTarget(modal);
     target.dataset.vipReturn=`businesses.html?open=${encodeURIComponent(biz.id)}`;
 
-    // מוכנס מיד כאלמנט קטן וקבוע כדי שלא תהיה קפיצת פריסה כשהשרת חוזר.
+    // מוכנס מיד כדי שהשליטה תהיה גלויה גם בזמן טעינת סטטוס הפרסום מהשרת.
     target.insertAdjacentHTML('beforeend',businessVipBox(`
       <label title="טוען סטטוס פרסום"><input id="vipPublishBusiness" type="checkbox" disabled> פרסום ללקוחות VIP</label>
     `));
