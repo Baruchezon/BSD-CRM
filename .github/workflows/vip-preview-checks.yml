@@ -1,4 +1,4 @@
-# VIP preview safety suite v3
+# VIP preview safety suite v4
 name: VIP Preview Checks
 
 on:
@@ -27,7 +27,7 @@ jobs:
         run: node --check js/vip-crm-integration.js
       - name: Check config JavaScript syntax
         run: node --check js/config.js
-      - name: Verify VIP migration safety gates
+      - name: Verify VIP safety and management gates
         shell: bash
         run: |
           set -euo pipefail
@@ -39,7 +39,11 @@ jobs:
           grep -q "active_seconds" migrations/2026-09-17_vip_clients.sql
           grep -q "LOGIN_MAX_FAILURES" supabase/functions/vip-api/index.ts
           grep -q "session_time" supabase/functions/vip-api/index.ts
+          grep -q "vip-interest:" supabase/functions/vip-api/index.ts
+          grep -q "recent_sessions" supabase/functions/vip-api/index.ts
+          grep -q "file_label" supabase/functions/vip-api/index.ts
           grep -q "active_seconds" vip-admin.html
+          grep -q "שלח ב WhatsApp" vip-admin.html
       - name: Ensure no service role key is committed
         shell: bash
         run: |
