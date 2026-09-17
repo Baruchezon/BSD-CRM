@@ -1,5 +1,8 @@
 \set ON_ERROR_STOP on
-create extension if not exists pgcrypto;
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+DO $$ BEGIN CREATE ROLE anon; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE ROLE authenticated; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 create table public.profiles (id uuid primary key);
 create table public.leads (id uuid primary key);
@@ -63,6 +66,7 @@ END $$;
 DO $$
 DECLARE enabled_count integer;
 DECLARE rls_count integer;
+DECLARE anon_priv boolean;
 BEGIN
   select count(*) into enabled_count from public.vip_business_publications where enabled=true;
   if enabled_count <> 1 then raise exception 'expected exactly one safe enabled publication, got %', enabled_count; end if;
@@ -73,6 +77,11 @@ BEGIN
     and c.relname in ('vip_accounts','vip_sessions','vip_business_publications','vip_interests','vip_inquiries','vip_activity_events','vip_admin_audit')
     and c.relrowsecurity=true;
   if rls_count <> 7 then raise exception 'RLS not enabled on every VIP table: %', rls_count; end if;
+
+  select has_table_privilege('anon','public.vip_accounts','SELECT') into anon_priv;
+  if anon_priv then raise exception 'anon unexpectedly has SELECT on vip_accounts'; end if;
+  select has_table_privilege('authenticated','public.vip_accounts','SELECT') into anon_priv;
+  if anon_priv then raise exception 'authenticated unexpectedly has SELECT on vip_accounts'; end if;
 END $$;
 
 select 'VIP migration safety tests passed' as result;
