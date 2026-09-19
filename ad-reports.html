@@ -274,7 +274,7 @@
   <div class="card" id="genCard" style="display:none;">
     <h2><span class="step-num">3</span>הפקת הדוחות</h2>
     <p style="font-size:13px; color:var(--muted); margin-top:0;">
-      לכל עסק שנבחר תיבנה חוברת דוח נפרדת בעיצוב BSD. לחיצה על "הדפסה / שמירה כ-PDF" תפתח את חלון ההדפסה של הדפדפן — יש לבחור שם היעד "שמור כ-PDF".
+      לכל עסק שנבחר תיבנה חוברת דוח נפרדת בעיצוב BSD. לחיצה על "הורדת PDF" תפיק את קובץ ה-PDF ותוריד אותו למכשיר — זהו אותו קובץ בדיוק שנשלח גם באימייל.
     </p>
     <button class="btn btn-gold" id="genBtn">הפק דוחות לעסקים שנבחרו</button>
     <div id="genStatus" style="font-size:12.5px; color:#a3282c; margin-top:10px; min-height:16px;"></div>
@@ -875,7 +875,7 @@ function renderResults(){
       '<div class="rmeta">כ-'+estimatePageCount(b)+' עמודים &nbsp;·&nbsp; '+b.rows.length+' רשומות</div></div>' +
       '<div class="ractions">' +
         '<button class="btn btn-ghost btn-sm" data-act="preview" data-idx="'+i+'">תצוגה מקדימה</button>' +
-        '<button class="btn btn-gold btn-sm" data-act="print" data-idx="'+i+'">הדפסה / שמירה כ-PDF</button>' +
+        '<button class="btn btn-gold btn-sm" data-act="print" data-idx="'+i+'">📄 הורדת PDF</button>' +
         '<button class="btn btn-navy btn-sm" data-act="email" data-idx="'+i+'">📧 שלח באימייל לבעל העסק</button>' +
       '</div>';
     els.resultsList.appendChild(row);
@@ -888,7 +888,7 @@ function renderResults(){
     allRow.innerHTML =
       '<div><div class="rname">כל הדוחות שנבחרו יחד</div>' +
       '<div class="rmeta">קובץ PDF אחד הכולל את כל העסקים, בזה אחר זה</div></div>' +
-      '<div class="ractions"><button class="btn btn-navy btn-sm" data-act="printAll">הדפסה / שמירה כ-PDF — הכל יחד</button></div>';
+      '<div class="ractions"><button class="btn btn-navy btn-sm" data-act="printAll">📄 הורדת PDF — הכל יחד</button></div>';
     els.resultsList.appendChild(allRow);
   }
 
@@ -925,22 +925,43 @@ function setPrintRootPages(pagesHtmlArray){
   els.printRoot.innerHTML = pagesHtmlArray.join('\n');
 }
 
-function printBusiness(g, btn){
-  withBusyButton(btn, 'מכין דוח...', () => {
-    const pages = getPages(g);
-    setPrintRootPages(pages);
-    document.title = 'דוח פרסום - ' + g.name;
-    setTimeout(() => window.print(), 50);
-  });
+// Both buttons below now download the exact same real PDF file that would be
+// emailed (built by buildPdfBlobFromPages) — there is no separate
+// browser-print-to-PDF path anymore, so there is only ever one PDF per report.
+async function printBusiness(g, btn){
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'מכין PDF להורדה...';
+  try {
+    const blob = await buildPdfBlobFromPages(getPages(g));
+    const filenameSafe = (g.name || 'business').replace(/[\\/:*?"<>|]/g,'').trim() || 'business';
+    downloadBlob(blob, 'דוח פרסום - ' + filenameSafe + '.pdf');
+  } catch (err){
+    console.error(err);
+    els.genStatus.textContent = 'אירעה שגיאה בהפקת ה-PDF: ' + err.message;
+    els.genStatus.scrollIntoView({behavior:'smooth', block:'center'});
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
 }
 
-function printAll(btn){
-  withBusyButton(btn, 'מכין את כל הדוחות...', () => {
+async function printAll(btn){
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'מכין PDF מרוכז להורדה...';
+  try {
     const all = GENERATED.reduce((arr, g) => arr.concat(getPages(g)), []);
-    setPrintRootPages(all);
-    document.title = 'דוחות פרסום - BSD';
-    setTimeout(() => window.print(), 50);
-  });
+    const blob = await buildPdfBlobFromPages(all);
+    downloadBlob(blob, 'דוחות פרסום - BSD.pdf');
+  } catch (err){
+    console.error(err);
+    els.genStatus.textContent = 'אירעה שגיאה בהפקת ה-PDF: ' + err.message;
+    els.genStatus.scrollIntoView({behavior:'smooth', block:'center'});
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
 }
 
 const previewEls = {
@@ -1112,24 +1133,51 @@ async function autoLookupOwnerEmail(name){
   }
 }
 
-async function buildPdfBlobForBusiness(g){
-  const pages = getPages(g);
-  setPrintRootPages(pages);
+// Builds one real PDF file from an array of already-rendered page elements'
+// HTML. This is now the SINGLE place that produces a PDF in this tool — both
+// the "download" button and the "send by email" button call this same
+// function, so the file you download and the file that gets emailed are
+// always the exact same PDF.
+//
+// Weight fix (19.09.2026): each page is still captured as a snapshot of the
+// on-screen layout (so the PDF looks exactly like the report), but it is now
+// saved as a compressed JPEG at a moderate resolution instead of an
+// uncompressed PNG at double resolution. A long report (many pages) used to
+// come out ~90MB this way, which made the email server crash before it could
+// even try to send it. JPEG at 0.82 quality plus a 1.5x scale keeps the
+// report fully readable and printable while shrinking the file dramatically.
+async function buildPdfBlobFromPages(pagesHtmlArray){
+  setPrintRootPages(pagesHtmlArray);
   await bsdNextPaint();
   await window.__bsdPdfLibsPromise;
   const pageEls = els.printRoot.querySelectorAll('.page');
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
   for (let i = 0; i < pageEls.length; i++){
-    const canvas = await window.html2canvas(pageEls[i], { scale:2, useCORS:true, backgroundColor:'#ffffff' });
-    const img = canvas.toDataURL('image/png');
+    const canvas = await window.html2canvas(pageEls[i], { scale:1.5, useCORS:true, backgroundColor:'#ffffff' });
+    const img = canvas.toDataURL('image/jpeg', 0.82);
     if (i > 0) pdf.addPage();
-    pdf.addImage(img, 'PNG', 0, 0, 210, 297);
+    pdf.addImage(img, 'JPEG', 0, 0, 210, 297);
   }
   els.printRoot.innerHTML = '';
   const blob = pdf.output('blob');
   if (!blob || blob.size < 500) throw new Error('קובץ ה-PDF יצא פגום');
   return blob;
+}
+
+async function buildPdfBlobForBusiness(g){
+  return buildPdfBlobFromPages(getPages(g));
+}
+
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 function blobToBase64(blob){
@@ -1177,6 +1225,14 @@ mailEls.sendBtn.addEventListener('click', async () => {
   try {
     const pdfBlob = await buildPdfBlobForBusiness(MAIL_CURRENT_G);
     const base64 = await blobToBase64(pdfBlob);
+    // Safety net matching the email server's own 15MB limit: if a report is so
+    // long the PDF is still too heavy even after compression, stop here with a
+    // clear message instead of sending an oversized request that would crash
+    // the mail server (as happened before this file-size fix, 19.09.2026).
+    const approxAttachmentBytes = Math.floor(base64.length * 0.75);
+    if (approxAttachmentBytes > 15 * 1024 * 1024){
+      throw new Error('קובץ ה-PDF של הדוח הזה יצא ' + Math.round(approxAttachmentBytes/1024/1024) + 'MB — גדול מדי לשליחה במייל. נסה לצמצם את טווח התאריכים של הדוח.');
+    }
     const { data: sessionData } = await window.supabaseClient.auth.getSession();
     const accessToken = sessionData && sessionData.session ? sessionData.session.access_token : null;
     if (!accessToken){
