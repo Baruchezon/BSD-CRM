@@ -104,6 +104,76 @@
   .section-h{grid-column:1/3;font-size:.8rem;font-weight:700;color:var(--gold);margin:10px 0 -4px;text-transform:uppercase;letter-spacing:.5px;}
   .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
   .toast{position:fixed;bottom:24px;left:24px;background:var(--navy);color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.3);}
+  /* התאמת סרגלי הפעולות של רשימת העסקים למסכי מובייל */
+  .biz-toolbar-actions{display:flex;gap:8px;align-items:stretch;}
+  .biz-section-tabs{display:flex;gap:8px;margin:0 0 12px;}
+
+  @media (max-width:640px){
+    .wrap{padding:14px 10px 48px;}
+    .biz-page-toolbar{display:block;margin-bottom:12px;}
+    .biz-page-toolbar>h2{margin-bottom:10px;}
+
+    .biz-toolbar-actions,
+    .biz-section-tabs{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:7px;
+      width:100%;
+      box-sizing:border-box;
+    }
+
+    .biz-toolbar-actions>*,
+    .biz-section-tabs>*{
+      min-width:0;
+      width:100%;
+      box-sizing:border-box;
+    }
+
+    .biz-toolbar-actions>.btn,
+    .biz-toolbar-actions>div>.btn,
+    .biz-section-tabs>.btn{
+      width:100%;
+      min-width:0;
+      min-height:42px;
+      padding:8px 7px;
+      font-size:.78rem;
+      line-height:1.2;
+      white-space:normal;
+      text-align:center;
+    }
+
+    .biz-toolbar-actions>div{
+      display:block;
+      position:relative;
+    }
+
+    .biz-toolbar-actions>:last-child:nth-child(odd),
+    .biz-section-tabs>:last-child:nth-child(odd){
+      grid-column:1 / -1;
+    }
+
+    .biz-toolbar-actions .bsd-forms-menu{
+      right:0;
+      left:auto !important;
+      min-width:min(210px,calc(100vw - 20px)) !important;
+      max-width:calc(100vw - 20px);
+      box-sizing:border-box;
+    }
+
+    .filters{
+      display:grid;
+      grid-template-columns:1fr;
+      gap:8px;
+    }
+    .filters input,
+    .filters select,
+    .filters input[type=text]{
+      width:100%;
+      min-width:0;
+      box-sizing:border-box;
+    }
+  }
+
   /* מסך מובייל: אותה בעיה שכבר תוקנה פעם ב-match-detail.html (מודאל "מרחף"
      עם ריפוד גדול מכל כיוון, כפתורי שמירה/ביטול צפים באמצע) - כאן מיושם
      אותו פתרון: מסך מלא במובייל, כפתורים מוצמדים לתחתית. */
@@ -266,9 +336,9 @@
 </div>
 
 <div class="wrap">
-  <div class="toolbar">
+  <div class="toolbar biz-page-toolbar">
     <h2>עסקים למכירה</h2>
-    <div style="display:flex;gap:8px;">
+    <div class="biz-toolbar-actions">
       <div style="position:relative;display:inline-block;">
       <button type="button" onclick="toggleFormsMenu(event)" class="btn" style="background:var(--success);color:#fff;">📋 טפסים ▾</button>
       <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
@@ -281,7 +351,7 @@
     </div>
   </div>
 
-  <div style="display:flex;gap:8px;margin:0 0 12px;">
+  <div class="biz-section-tabs">
     <button type="button" id="bizTabMine" class="btn btn-primary" onclick="switchBizTab('mine')">📋 עסקים למכירה</button>
     <button type="button" id="bizTabAnon" class="btn btn-ghost" onclick="switchBizTab('anon')">🪪 עסקים אנונימיים</button>
     <button type="button" id="bizTabRequests" class="btn btn-ghost" onclick="switchBizTab('requests')">🔓 בקשות גישה <span id="pendingReqBadge" style="display:none;background:#b3402c;color:#fff;border-radius:10px;padding:1px 7px;font-size:.7rem;margin-right:4px;"></span></button>
