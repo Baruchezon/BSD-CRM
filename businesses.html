@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609211748';
+    var PAGE_BUILD = '202609211805';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -128,8 +128,6 @@
     .wrap{padding:14px 10px 48px;}
     .biz-page-toolbar{display:block;margin-bottom:12px;}
     .biz-page-toolbar>h2{margin-bottom:10px;}
-    .biz-toolbar-forms,
-    #bizViewActiveBtn{display:none !important;}
 
     .biz-toolbar-actions,
     .biz-section-tabs{
@@ -389,13 +387,7 @@
   <div class="toolbar biz-page-toolbar">
     <h2>עסקים למכירה</h2>
     <div class="biz-toolbar-actions">
-      <div class="biz-toolbar-forms" style="position:relative;display:inline-block;">
-      <button type="button" onclick="toggleFormsMenu(event)" class="btn" style="background:var(--success);color:#fff;">📋 טפסים ▾</button>
-      <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
-      </div>
-    </div>
       <button class="btn btn-ghost" id="sendPresoToolbarBtn" onclick="openSendPresentationsModal()">📤 שלח מצגות לקונה</button>
-      <button type="button" class="btn btn-primary" id="bizViewActiveBtn" onclick="setBizViewMode('active')">📋 פעילים</button>
       <button type="button" class="btn btn-ghost" id="bizViewArchiveBtn" onclick="setBizViewMode('archive')">📁 ארכיון</button>
       <button class="btn btn-primary" onclick="openBizForm(null)">+ עסק חדש</button>
     </div>
@@ -4709,12 +4701,12 @@ async function restoreBizFromArchive(id){
 let BIZ_VIEW_MODE = 'active';
 function setBizViewMode(mode){
   BIZ_VIEW_MODE = mode;
-  const activeBtn = document.getElementById('bizViewActiveBtn'), archBtn = document.getElementById('bizViewArchiveBtn');
-  if (activeBtn && archBtn){
-    activeBtn.classList.toggle('btn-primary', mode==='active');
-    activeBtn.classList.toggle('btn-ghost', mode!=='active');
+  const archBtn = document.getElementById('bizViewArchiveBtn');
+  if (archBtn){
     archBtn.classList.toggle('btn-primary', mode==='archive');
     archBtn.classList.toggle('btn-ghost', mode!=='archive');
+    archBtn.textContent = mode==='archive' ? '↩️ חזרה' : '📁 ארכיון';
+    archBtn.onclick = function(){ setBizViewMode(mode==='archive' ? 'active' : 'archive'); };
   }
   renderTable();
 }
@@ -4738,7 +4730,7 @@ function renderArchiveTable(){
       <td data-label="תאריך העברה">${fmtDate(b.archived_at)}</td>
       <td data-label="פעולות" style="white-space:nowrap;">
         <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="openBizForm('${b.id}')">✏️ ערוך</button>
-        ${canRestoreBiz(b) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${b.id}')">↩️ החזר לפעילים</button>` : ''}
+        ${canRestoreBiz(b) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${b.id}')">↩️ שחזר מהארכיון</button>` : ''}
         ${canManageBiz(b) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;color:#a33;" onclick="deleteBiz('${b.id}')">🗑️ מחיקה סופית</button>` : ''}
         ${b.archive_reason ? `<div style="font-size:.7rem;color:#888;margin-top:2px;">סיבה: ${esc(b.archive_reason)}</div>` : ''}
       </td>
