@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609051530';
+    var PAGE_BUILD = '202609211805';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -144,7 +144,6 @@
     <div class="toolbar">
       <h2>🧑‍💼 מתווכים / סוכנים</h2>
       <div class="add-btns">
-        <button type="button" class="btn btn-primary" id="viewActiveBtn" onclick="setViewMode('active')">📋 פעילים</button>
         <button type="button" class="btn btn-ghost" id="viewArchiveBtn" onclick="setViewMode('archive')">📁 ארכיון</button>
         <button type="button" class="btn btn-broker" id="newBrokerBtn" onclick="openBrokerForm(null)">+ מתווך חדש</button>
         <a href="broker-reports.html" id="brokerReportsLink" class="btn btn-ghost" style="display:none;text-decoration:none;">📊 דוח פעילות</a>
@@ -437,8 +436,12 @@ function textareaRow(id,label,value,minHeight){
 
 async function setViewMode(mode){
   VIEW_MODE = mode;
-  document.getElementById('viewActiveBtn').className = mode==='active' ? 'btn btn-primary' : 'btn btn-ghost';
-  document.getElementById('viewArchiveBtn').className = mode==='archive' ? 'btn btn-primary' : 'btn btn-ghost';
+  const archBtn = document.getElementById('viewArchiveBtn');
+  if (archBtn){
+    archBtn.className = mode==='archive' ? 'btn btn-primary' : 'btn btn-ghost';
+    archBtn.textContent = mode==='archive' ? '↩️ חזרה' : '📁 ארכיון';
+    archBtn.onclick = function(){ setViewMode(mode==='archive' ? 'active' : 'archive'); };
+  }
   if (mode==='archive' && ARCHIVED_BROKERS.length===0){ await loadArchivedBrokers(); }
   renderTable();
 }
