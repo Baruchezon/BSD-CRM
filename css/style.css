@@ -193,12 +193,12 @@ input, select, textarea, button{
   flex:0 0 auto;
   position:relative;
   box-sizing:border-box;
-  height:40px;
-  padding:0 16px !important;
-  font-size:.86rem !important;
+  height:36px;
+  padding:0 12px !important;
+  font-size:.82rem !important;
   font-weight:700 !important;
   line-height:1;
-  border-radius:9px !important;
+  border-radius:8px !important;
   border:none !important;
   color:var(--navy) !important;
   background:#f2efe4 !important;
@@ -255,11 +255,11 @@ input, select, textarea, button{
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  height:40px;
-  padding:0 16px !important;
-  font-size:.86rem !important;
+  height:36px;
+  padding:0 12px !important;
+  font-size:.82rem !important;
   font-weight:700 !important;
-  border-radius:9px !important;
+  border-radius:8px !important;
   color:var(--navy) !important;
   background:#f2efe4 !important;
   border:none !important;
@@ -286,10 +286,22 @@ input, select, textarea, button{
   animation:bsdBtnPop .32s cubic-bezier(.34,1.56,.64,1);
 }
 
-/* כפתורי פעולה - גודל נוח ללחיצה (מינימום 44px גובה) */
-.btn, .login-card button, .period-btn{
-  min-height:44px;
+/* כפתורי פעולה קומפקטיים ואחידים בכל מסכי ה-CRM */
+.btn, .period-btn{
+  min-height:38px;
   touch-action:manipulation;
+}
+.login-card button{
+  min-height:42px;
+  touch-action:manipulation;
+}
+.toolbar .btn,
+.add-btns .btn,
+.modal-actions .btn,
+.filters .btn{
+  padding:7px 13px !important;
+  font-size:.82rem !important;
+  border-radius:9px !important;
 }
 
 /* ============================================================
@@ -307,20 +319,20 @@ button, .btn{
   box-shadow:
     0 1px 0 rgba(255,255,255,.25) inset,
     0 -2px 4px rgba(0,0,0,.12) inset,
-    0 3px 0 rgba(14,27,52,.22),
-    0 6px 14px rgba(14,27,52,.16);
+    0 2px 0 rgba(14,27,52,.20),
+    0 5px 12px rgba(14,27,52,.14);
   transform:translateY(0);
   transition:transform .16s cubic-bezier(.34,1.56,.64,1), box-shadow .16s ease, filter .16s ease;
   will-change:transform;
 }
 button:hover, .btn:hover{
-  transform:translateY(-3px);
+  transform:translateY(-1px);
   filter:brightness(1.04);
   box-shadow:
     0 1px 0 rgba(255,255,255,.3) inset,
     0 -2px 4px rgba(0,0,0,.12) inset,
-    0 5px 0 rgba(14,27,52,.22),
-    0 12px 22px rgba(14,27,52,.22);
+    0 3px 0 rgba(14,27,52,.20),
+    0 8px 16px rgba(14,27,52,.18);
 }
 button:active, .btn:active{
   transform:translateY(1px);
