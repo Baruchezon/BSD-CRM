@@ -193,7 +193,6 @@
   <div class="toolbar">
     <h2>קונים ומשקיעים</h2>
     <div class="add-btns">
-      <button type="button" class="btn btn-primary" id="leadViewActiveBtn" onclick="setLeadViewMode('active')">📋 פעילים</button>
       <button type="button" class="btn btn-ghost" id="leadViewArchiveBtn" onclick="setLeadViewMode('archive')">📁 ארכיון</button>
       <button class="btn btn-buyer" onclick="openLeadForm(null,'buyer')">+ קונה חדש</button>
       <button class="btn" style="background:#7a3fd1;color:#fff;" onclick="openLeadForm(null,'partner')">+ שותפות/השקעה</button>
@@ -1781,12 +1780,12 @@ async function deleteLead(id){
 let LEAD_VIEW_MODE = 'active';
 function setLeadViewMode(mode){
   LEAD_VIEW_MODE = mode;
-  const activeBtn = document.getElementById('leadViewActiveBtn'), archBtn = document.getElementById('leadViewArchiveBtn');
-  if (activeBtn && archBtn){
-    activeBtn.classList.toggle('btn-primary', mode==='active');
-    activeBtn.classList.toggle('btn-ghost', mode!=='active');
+  const archBtn = document.getElementById('leadViewArchiveBtn');
+  if (archBtn){
     archBtn.classList.toggle('btn-primary', mode==='archive');
     archBtn.classList.toggle('btn-ghost', mode!=='archive');
+    archBtn.textContent = mode==='archive' ? '↩️ חזרה' : '📁 ארכיון';
+    archBtn.onclick = function(){ setLeadViewMode(mode==='archive' ? 'active' : 'archive'); };
   }
   renderTable();
 }
@@ -1809,7 +1808,7 @@ function renderArchiveLeadsTable(){
       <td data-label="סיבה">${esc(l.archive_reason||'—')}</td>
       <td data-label="פעולות" style="white-space:nowrap;">
         <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="openLeadForm('${l.id}')">✏️ ערוך</button>
-        ${canRestoreLead(l) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="restoreLeadFromArchive('${l.id}')">↩️ החזר לפעילים</button>` : ''}
+        ${canRestoreLead(l) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="restoreLeadFromArchive('${l.id}')">↩️ שחזר מהארכיון</button>` : ''}
         ${canDeleteLead(l) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;color:#a33;" onclick="deleteLead('${l.id}')">🗑️ מחיקה סופית</button>` : ''}
       </td>
     </tr>`;
