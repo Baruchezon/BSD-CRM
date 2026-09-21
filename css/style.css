@@ -193,8 +193,8 @@ input, select, textarea, button{
   flex:0 0 auto;
   position:relative;
   box-sizing:border-box;
-  height:36px;
-  padding:0 12px !important;
+  height:34px;
+  padding:0 10px !important;
   font-size:.82rem !important;
   font-weight:700 !important;
   line-height:1;
@@ -288,20 +288,25 @@ input, select, textarea, button{
 
 /* כפתורי פעולה קומפקטיים ואחידים בכל מסכי ה-CRM */
 .btn, .period-btn{
-  min-height:38px;
+  min-height:36px;
   touch-action:manipulation;
 }
+.btn{
+  padding:6px 12px !important;
+  font-size:.80rem !important;
+  border-radius:8px !important;
+}
 .login-card button{
-  min-height:42px;
+  min-height:40px;
   touch-action:manipulation;
 }
 .toolbar .btn,
 .add-btns .btn,
 .modal-actions .btn,
 .filters .btn{
-  padding:7px 13px !important;
-  font-size:.82rem !important;
-  border-radius:9px !important;
+  padding:6px 11px !important;
+  font-size:.79rem !important;
+  border-radius:8px !important;
 }
 
 /* ============================================================
