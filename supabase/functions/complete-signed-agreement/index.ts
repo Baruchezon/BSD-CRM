@@ -47,6 +47,15 @@ function base64ToBytes(value: string) {
   return bytes;
 }
 
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 function safeText(value: unknown, max = 500) {
   return String(value || "").trim().slice(0, max);
 }
@@ -112,7 +121,7 @@ Deno.serve(async (req: Request) => {
   if (tableName === "leads" && !["buyer", "partner", "seller"].includes(leadType || "")) {
     return json(req, { error: "Invalid lead type", code: "invalid_lead_type" }, 400);
   }
-  if (!phone || !agreementNumber || !pdfBase64) {
+  if (!phone || !agreementNumber) {
     return json(req, { error: "Missing required agreement data", code: "missing_fields" }, 400);
   }
 
@@ -159,25 +168,41 @@ Deno.serve(async (req: Request) => {
   }
 
   let pdfBytes: Uint8Array;
-  try {
-    pdfBytes = base64ToBytes(pdfBase64);
-  } catch {
-    return json(req, { error: "Invalid PDF data", code: "invalid_pdf" }, 400);
-  }
-  if (pdfBytes.length < 100 || pdfBytes.length > 10 * 1024 * 1024) {
-    return json(req, { error: "PDF size is invalid", code: "invalid_pdf_size" }, 400);
-  }
+  let pdfForEmail: string;
+  let storagePath = record.agreement_pdf_path || `agreements/${tableName}/${recordId}.pdf`;
 
-  const storagePath = `agreements/${tableName}/${recordId}.pdf`;
-  const { error: uploadError } = await supabase.storage
-    .from(BUCKET)
-    .upload(storagePath, pdfBytes, {
-      upsert: true,
-      contentType: "application/pdf",
-      cacheControl: "no-cache",
-    });
-  if (uploadError) {
-    return json(req, { error: "PDF storage failed", detail: uploadError.message, code: "upload_failed" }, 500);
+  if (pdfBase64) {
+    try {
+      pdfBytes = base64ToBytes(pdfBase64);
+    } catch {
+      return json(req, { error: "Invalid PDF data", code: "invalid_pdf" }, 400);
+    }
+    if (pdfBytes.length < 100 || pdfBytes.length > 10 * 1024 * 1024) {
+      return json(req, { error: "PDF size is invalid", code: "invalid_pdf_size" }, 400);
+    }
+    pdfForEmail = pdfBase64.includes(",") ? pdfBase64.split(",").pop()! : pdfBase64;
+
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET)
+      .upload(storagePath, pdfBytes, {
+        upsert: true,
+        contentType: "application/pdf",
+        cacheControl: "no-cache",
+      });
+    if (uploadError) {
+      return json(req, { error: "PDF storage failed", detail: uploadError.message, code: "upload_failed" }, 500);
+    }
+  } else {
+    if (!record.agreement_pdf_path) {
+      return json(req, { error: "Missing PDF data", code: "missing_pdf" }, 400);
+    }
+    const { data: storedPdf, error: downloadError } = await supabase.storage
+      .from(BUCKET).download(record.agreement_pdf_path);
+    if (downloadError || !storedPdf) {
+      return json(req, { error: "Stored PDF could not be loaded", detail: downloadError?.message, code: "download_failed" }, 500);
+    }
+    pdfBytes = new Uint8Array(await storedPdf.arrayBuffer());
+    pdfForEmail = bytesToBase64(pdfBytes);
   }
 
   const now = new Date().toISOString();
@@ -185,7 +210,7 @@ Deno.serve(async (req: Request) => {
     agreement_status: "יש הסכם חתום",
     agreement_number: agreementNumber,
     agreement_pdf_path: storagePath,
-    agreement_pdf_uploaded_at: now,
+    agreement_pdf_uploaded_at: pdfBase64 ? now : undefined,
     agreement_email_last_error: null,
   };
 
@@ -245,7 +270,7 @@ Deno.serve(async (req: Request) => {
         subject: `הסכם חתום (${typeLabel}) – ${signerName}`,
         bodyText: lines.join("\n"),
         filename,
-        pdfBase64: pdfBase64.includes(",") ? pdfBase64.split(",").pop()! : pdfBase64,
+        pdfBase64: pdfForEmail,
         replyTo: signerEmail || undefined,
       });
       emailSent = true;
