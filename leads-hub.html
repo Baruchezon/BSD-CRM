@@ -1145,22 +1145,27 @@ async function sendAgreement(id){
   const tn = tableName();
   const r = currentRows().find(x=>x.id===id);
   if (!r){ toast('רשומה לא נמצאה'); return; }
+
+  if (r.agreement_status !== 'יש הסכם חתום'){
+    const patch = { agreement_status: 'נשלח הסכם לחתימה' };
+    if (tn === 'leads') patch.agreement_sent = true;
+    const { error } = await window.supabaseClient.from(tn).update(patch).eq('id', id);
+    if (error){ toast('שגיאה בעדכון: ' + error.message); return; }
+  }
+
   const personName = CURRENT_TAB === 'business' ? (r.owner_name || '') : (r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || '');
   const phone = CURRENT_TAB === 'business' ? r.owner_phone : r.phone;
   const bizField = CURRENT_TAB === 'business' ? (r.internal_name || '') : (CURRENT_TAB === 'seller' ? (r.business_name || '') : (r.requested_field || ''));
   const params = new URLSearchParams({
-    // סוג ההסכם שנשלח חייב לשקף את הטאב האמיתי (מוכר/קונה/שותף), לא להניח
-    // "קונה" באופן גורף לכל מה שאינו הטאב "עסקים" - זו הייתה תקלה סמויה עד
-    // עכשיו כי לא היה בכלל טאב "מוכרים" נפרד שיחשוף אותה.
     type: CURRENT_TAB === 'business' ? 'seller' : CURRENT_TAB,
-    name: personName, phone: phone || '', biz: bizField
+    recordId: id,
+    name: personName,
+    phone: phone || '',
+    biz: bizField
   });
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
 
-  const { error } = await window.supabaseClient.from(tn)
-    .update({ agreement_status: 'נשלח הסכם לחתימה' }).eq('id', id);
-  if (error){ toast('שגיאה בעדכון: ' + error.message); return; }
-  toast('נשלח הסכם — הרשומה עברה לרשימה הראשית');
+  toast(r.agreement_status === 'יש הסכם חתום' ? 'נפתח ההסכם החתום ללא שינוי סטטוס' : 'נשלח הסכם — הרשומה עברה לרשימה הראשית');
   await loadAll();
 }
 
