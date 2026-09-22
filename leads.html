@@ -1589,25 +1589,26 @@ async function saveLead(e){
 async function sendAgreementForLead(id){
   const l = ALL_LEADS.find(x=>x.id===id);
   if (!l){ toast('רשומה לא נמצאה'); return; }
+
+  if (l.agreement_status !== 'יש הסכם חתום'){
+    const { error } = await window.supabaseClient.from('leads')
+      .update({ agreement_status: 'נשלח הסכם לחתימה', agreement_sent: true }).eq('id', id);
+    if (error){ toast('שגיאה בעדכון סטטוס ההסכם: ' + error.message); return; }
+    l.agreement_status = 'נשלח הסכם לחתימה';
+    l.agreement_sent = true;
+    renderTable();
+  }
+
   const personName = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || '';
   const bizField = l.type === 'seller' ? (l.business_name || '') : (l.requested_field || '');
   const params = new URLSearchParams({
     type: l.type === 'seller' ? 'seller' : 'buyer',
+    recordId: id,
     name: personName,
     phone: l.phone || '',
     biz: bizField
   });
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
-
-  // סימון הרשומה כ"נשלח הסכם לחתימה" (אלא אם כבר חתום)
-  if (l.agreement_status !== 'יש הסכם חתום'){
-    const { error } = await window.supabaseClient.from('leads')
-      .update({ agreement_status: 'נשלח הסכם לחתימה' }).eq('id', id);
-    if (!error){
-      l.agreement_status = 'נשלח הסכם לחתימה';
-      renderTable();
-    }
-  }
 }
 
 function closeNotesPanel(){

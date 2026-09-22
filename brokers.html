@@ -394,13 +394,19 @@ async function sendAgreementForBroker(id){
   const b = ALL_BROKERS.find(x => x.id === id) || ARCHIVED_BROKERS.find(x => x.id === id);
   if (!b){ toast('מתווך לא נמצא'); return; }
   await loadAgreementDefaults();
-  // ללא שאלות כאן - סוג ההתקשרות והאחוז נקבעים במקום אחד בלבד, בממשק הכנת ההסכם עצמו
-  // (bsd-admin-prep.html), שכותב אותם בחזרה לכרטיס המתווך ברגע יצירת הקישור
+
+  if (b.agreement_status !== 'יש הסכם חתום'){
+    const { error } = await window.supabaseClient.from('brokers')
+      .update({ agreement_status: 'נשלח הסכם לחתימה' }).eq('id', id);
+    if (error){ toast('שגיאה בעדכון סטטוס ההסכם: ' + error.message); return; }
+    b.agreement_status = 'נשלח הסכם לחתימה';
+  }
+
   const existingType = b.commission_type || (b.full_handling_pct != null && b.referral_pct == null ? 'טיפול מלא' : 'הפניה');
   const existingPct = existingType === 'טיפול מלא' ? (b.full_handling_pct ?? DEFAULT_FULL_PCT) : (b.referral_pct ?? DEFAULT_REFERRAL_PCT);
-
   const params = new URLSearchParams({
     type: 'broker',
+    recordId: id,
     brokerId: id,
     name: b.full_name || `${b.first_name} ${b.last_name}`,
     phone: b.phone || '',
@@ -408,7 +414,7 @@ async function sendAgreementForBroker(id){
     pct: String(existingPct)
   });
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
-  toast('נפתח ממשק הכנת ההסכם - קבע שם את סוג ההתקשרות והאחוז ולחץ "יצירת קישור"');
+  toast('נפתח ממשק הכנת ההסכם');
 }
 
 async function logBrokerAudit(brokerId, actionType, oldValue, newValue, details){

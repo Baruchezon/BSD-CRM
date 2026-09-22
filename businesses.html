@@ -4454,23 +4454,23 @@ async function saveBiz(e){
 async function sendAgreementForBiz(id){
   const b = ALL_BIZ.find(x=>x.id===id);
   if (!b){ toast('עסק לא נמצא'); return; }
+
+  if (b.agreement_status !== 'יש הסכם חתום'){
+    const { error } = await window.supabaseClient.from('businesses')
+      .update({ agreement_status: 'נשלח הסכם לחתימה' }).eq('id', id);
+    if (error){ toast('שגיאה בעדכון סטטוס ההסכם: ' + error.message); return; }
+    b.agreement_status = 'נשלח הסכם לחתימה';
+    renderTable();
+  }
+
   const params = new URLSearchParams({
     type: 'seller',
+    recordId: id,
     name: b.owner_name || '',
     phone: b.owner_phone || '',
     biz: b.internal_name || ''
   });
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
-
-  // סימון העסק כ"נשלח הסכם לחתימה" (אלא אם כבר חתום)
-  if (b.agreement_status !== 'יש הסכם חתום'){
-    const { error } = await window.supabaseClient.from('businesses')
-      .update({ agreement_status: 'נשלח הסכם לחתימה' }).eq('id', id);
-    if (!error){
-      b.agreement_status = 'נשלח הסכם לחתימה';
-      renderTable();
-    }
-  }
 }
 
 async function openSendPresentationsModal(){
