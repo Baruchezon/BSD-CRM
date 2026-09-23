@@ -672,12 +672,7 @@ function restoreLeadsPageCache(){
 }
 
 async function loadLeads(options={}){
-  let q = window.supabaseClient
-    .from('leads')
-    .select('*')
-    .order('updated_at', { ascending: false });
-  // הסינון לפי created_by הוסר - RLS (leads_select) כבר מחזיר בשרת רק את מה שמותר.
-  const { data, error } = await q;
+  const { data, error } = await window.BSDDataCache.rows('leads', CURRENT_PROFILE.id);
   if (error){ toast('שגיאה בטעינת נתונים: ' + error.message); return; }
   // תיקון 25.08.2026 (כלל עסקי מחייב): קיום/הצגה של ליד (קונה, שותף או
   // מוכר ישן) לעולם לא מותנים בסטטוס הסכם. ליד חדש חייב להישאר ולהופיע
@@ -1834,7 +1829,7 @@ function renderArchiveLeadsTable(){
     switchLeadTypeTab('buyer');
   }
 })();
-window.addEventListener('pagehide', saveLeadsPageCache);
+
 </script>
 </body>
 </html>
