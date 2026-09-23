@@ -40,6 +40,7 @@ async function bsdLogin(email, password) {
     entity_id: userId
   });
 
+  if (window.BSDSessionCache) window.BSDSessionCache.write(data.session, profile);
   if (window.BSDDataCache) window.BSDDataCache.reset();
   return { ok: true, profile };
 }
@@ -61,6 +62,7 @@ async function bsdLogout() {
 
 async function bsdFullLogout() {
   if (window.BSDDataCache) window.BSDDataCache.reset();
+  if (window.BSDSessionCache) window.BSDSessionCache.clear();
   const user = (await window.supabaseClient.auth.getUser()).data.user;
   if (user) {
     await window.supabaseClient.from('activity_log').insert({
@@ -76,7 +78,13 @@ async function bsdFullLogout() {
 
 // שומר על כל מסך פנימי - מפנה ל-login אם אין session פעיל, ומחזיר את הפרופיל
 async function requireAuth() {
-  let { data: { session } } = await window.supabaseClient.auth.getSession();
+  let session = null;
+  try {
+    const result = window.bsdDeadline
+      ? await window.bsdDeadline(window.supabaseClient.auth.getSession(), 5000, 'בדיקת ההתחברות')
+      : await window.supabaseClient.auth.getSession();
+    session = result.data && result.data.session;
+  } catch (_) {}
 
   // On a cold app-launch (e.g. opening from an installed home-screen/desktop
   // icon), or when a page has enough inline script that it competes with the
@@ -90,25 +98,66 @@ async function requireAuth() {
   for (const delay of [200, 400, 800]) {
     if (session) break;
     await new Promise(resolve => setTimeout(resolve, delay));
-    ({ data: { session } } = await window.supabaseClient.auth.getSession());
+    try {
+      const result = await window.supabaseClient.auth.getSession();
+      session = result.data && result.data.session;
+    } catch (_) {}
   }
 
   if (!session) {
     window.location.href = 'login.html';
     return null;
   }
-  let profile, error;
-  for (const delay of [0, 500, 1000]) {
-    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
-    let profileTimer;
+  async function readProfile(timeoutMs){
     try {
-      ({ data: profile, error } = await Promise.race([
-        window.supabaseClient.from('profiles').select('*').eq('id', session.user.id).single(),
-        new Promise(resolve => { profileTimer = setTimeout(() => resolve({ data:null, error:{code:'TIMEOUT',message:'השרת לא השיב בזמן'} }), 12000); })
-      ]));
-    } finally { clearTimeout(profileTimer); }
-    // הצלחה, או שגיאה אמיתית (אין פרופיל בכלל) - אין טעם לנסות שוב
-    if (!error || (error.code && error.code !== 'PGRST116' && !/network|fetch/i.test(error.message || ''))) break;
+      const query = window.supabaseClient.from('profiles').select('*').eq('id', session.user.id).single();
+      if (window.bsdDeadline) return await window.bsdDeadline(query, timeoutMs, 'טעינת המשתמש');
+      return await query;
+    } catch (error) {
+      return { data:null, error:{ code:'NETWORK', message:error.message || 'שגיאת תקשורת' } };
+    }
+  }
+
+  async function activateProfile(profile, persistProfile = true){
+    const navFormsAll = document.getElementById('navFormsAllLink');
+    if (navFormsAll && profile.role !== 'admin' && profile.role !== 'manager') navFormsAll.style.display = 'none';
+    const navTools = document.getElementById('navToolsWrap');
+    if (navTools && profile.role !== 'admin' && profile.role !== 'manager') navTools.style.display = 'none';
+    if (persistProfile && window.BSDSessionCache) window.BSDSessionCache.write(session, profile);
+    if (window.BSDDataCache){
+      await window.BSDDataCache.activate(session, profile);
+      window.BSDDataCache.observeWrites(window.supabaseClient);
+      // Preload without blocking the authenticated page. Its own dataset joins the same pending request.
+      Promise.all([window.BSDDataCache.rows('businesses', profile.id), window.BSDDataCache.rows('leads', profile.id)])
+        .catch(error => console.warn('BSD background preload:', error.message));
+    }
+    return profile;
+  }
+
+  const cachedProfile = window.BSDSessionCache ? window.BSDSessionCache.read(session) : null;
+  if (cachedProfile){
+    await activateProfile(cachedProfile, false);
+    // The cached profile makes navigation immediate. Refresh permissions and
+    // block status in the background without holding the page hostage to the
+    // mobile network.
+    readProfile(8000).then(async result => {
+      if (result.error || !result.data) return;
+      if (result.data.status === 'blocked'){
+        if (window.BSDSessionCache) window.BSDSessionCache.clear();
+        await window.supabaseClient.auth.signOut();
+        window.location.href = 'login.html';
+        return;
+      }
+      if (window.BSDSessionCache) window.BSDSessionCache.write(session, result.data);
+    }).catch(() => {});
+    return cachedProfile;
+  }
+
+  let profile = null, error = null;
+  for (const delay of [0, 300]) {
+    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+    ({ data: profile, error } = await readProfile(5000));
+    if (!error || error.code === 'PGRST116') break;
   }
 
   if (error && error.code === 'PGRST116') {
@@ -135,33 +184,13 @@ async function requireAuth() {
     return null;
   }
   if (profile.status === 'blocked') {
+    if (window.BSDSessionCache) window.BSDSessionCache.clear();
     await window.supabaseClient.auth.signOut();
     window.location.href = 'login.html';
     return null;
   }
 
-  // Hide the "all submitted forms" item inside the 📋 טפסים dropdown for
-  // anyone who isn't admin/manager — centralized here so every page that
-  // calls requireAuth() gets this for free, instead of repeating the same
-  // check in each page's own init script.
-  const navFormsAll = document.getElementById('navFormsAllLink');
-  if (navFormsAll && profile.role !== 'admin' && profile.role !== 'manager') {
-    navFormsAll.style.display = 'none';
-  }
-
-  const navTools = document.getElementById('navToolsWrap');
-  if (navTools && profile.role !== 'admin' && profile.role !== 'manager') {
-    navTools.style.display = 'none';
-  }
-
-  if (window.BSDDataCache){
-    await window.BSDDataCache.activate(session, profile);
-    window.BSDDataCache.observeWrites(window.supabaseClient);
-    // Preload without blocking the authenticated page. Its own dataset joins the same pending request.
-    Promise.all([window.BSDDataCache.rows('businesses', profile.id), window.BSDDataCache.rows('leads', profile.id)])
-      .catch(error => console.warn('BSD background preload:', error.message));
-  }
-  return profile;
+  return activateProfile(profile);
 }
 
 // ============================================================

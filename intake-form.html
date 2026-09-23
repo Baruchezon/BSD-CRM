@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609231230';
+    var PAGE_BUILD = '202609231630';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -245,9 +245,9 @@
 
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202609231205"></script>
+<script src="js/config.js?v=202609231630"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202609231205"></script>
+<script src="js/auth.js?v=202609231630"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/dedupeCheckModule.js?v=202608311200"></script>
@@ -538,9 +538,7 @@ document.getElementById('intakeForm').addEventListener('submit', async function(
 });
 
 async function downloadIntakeForm(bizId, bizName){
-  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/intake-form.pdf`, 300);
-  if (error){ toast('שגיאה: ' + error.message); return; }
-  window.open(data.signedUrl, '_blank');
+  return window.bsdOpenPrivateFile({ bucket:BIZ_FILES_BUCKET, path:`${bizId}/intake-form.pdf`, label:'טופס הקליטה' });
 }
 
 function setVal(id, v){ const el = document.getElementById(id); if (el && (v !== null && v !== undefined)) el.value = v; }
