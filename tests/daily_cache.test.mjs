@@ -84,7 +84,7 @@ test('buyer screen never trusts an empty page snapshot and loads rows before opt
  assert.match(html,/loadLeads\(\{ forceRefresh:true, preserveExisting:restored/);
  assert.match(html,/if \(!LEADS_DATA_READY\) return;/);
  const init=html.slice(html.indexOf('(async function init(){'));
- assert.ok(init.indexOf('loadLeads({ forceRefresh:true') < init.indexOf('supplemental.catch'), 'primary buyer rows are not blocked by optional data');
+ assert.ok(init.indexOf('await loadLeads({ forceRefresh:true') < init.indexOf('Promise.allSettled([loadUsers()'), 'optional buyer requests start only after primary rows finish');
 });
 
 test('stalled browser storage cannot prevent dataset loading',async()=>{
