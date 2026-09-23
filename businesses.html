@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609231630';
+    var PAGE_BUILD = '202609231700';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -447,15 +447,15 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202609231630"></script>
+<script src="js/config.js?v=202609231700"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202609231630"></script>
+<script src="js/auth.js?v=202609231700"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608251215"></script>
 <script src="js/pdfPipeline.js?v=202608291000"></script>
-<script src="js/saleFileModule2.js?v=202609231630"></script>
+<script src="js/saleFileModule2.js?v=202609231700"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
 <script src="js/dedupeCheckModule.js?v=202608311200"></script>
@@ -608,6 +608,7 @@ function restoreBusinessPageCache(){
   if (!CURRENT_PROFILE || !window.BSDDataCache) return false;
   const c = window.BSDDataCache.get('businesses-page', CURRENT_PROFILE.id);
   if (!c || !Array.isArray(c.businesses)) return false;
+  if (c.businesses.length === 0 && (!Array.isArray(c.archived) || c.archived.length === 0)) return false;
   ALL_BIZ = c.businesses;
   ARCHIVED_BIZ = c.archived || [];
   ALL_SELLERS = c.sellers || [];
@@ -625,11 +626,13 @@ function restoreBusinessPageCache(){
 }
 
 async function loadBusinesses(options={}){
-  const { data, error } = await window.BSDDataCache.rows('businesses', CURRENT_PROFILE.id);
+  const { data, error } = await window.BSDDataCache.rows('businesses', CURRENT_PROFILE.id, { forceRefresh:!!options.forceRefresh });
   if (error){
     toast('שגיאה בטעינה: ' + error.message);
-    document.getElementById('bizBody').innerHTML = `<tr><td colspan="12" style="text-align:center;padding:24px;">לא ניתן לטעון את הנתונים כרגע. <button type="button" class="btn btn-primary" onclick="loadBusinesses()">נסה שוב</button></td></tr>`;
-    return;
+    if (!options.preserveExisting || (!ALL_BIZ.length && !ARCHIVED_BIZ.length)){
+      document.getElementById('bizBody').innerHTML = `<tr><td colspan="12" style="text-align:center;padding:24px;">לא ניתן לטעון את הנתונים כרגע. <button type="button" class="btn btn-primary" onclick="loadBusinesses({forceRefresh:true})">נסה שוב</button></td></tr>`;
+    }
+    return false;
   }
   // תיקון 25.08.2026 (כלל עסקי מחייב): קיום/הצגה של עסק לעולם לא מותנים
   // בסטטוס הסכם. עסק חדש חייב להישאר ולהופיע כאן מהרגע שנשמר, גם בלי
@@ -644,6 +647,7 @@ async function loadBusinesses(options={}){
   renderTable();
   saveBusinessPageCache();
   if (!options.skipUrlHandling) await maybeHandleUrlParams();
+  return true;
 }
 
 // ============================================================
@@ -4770,12 +4774,11 @@ async function deleteBiz(id){
   if (!canCreateBusiness(CURRENT_PROFILE)){ const newBizBtn = document.querySelector('button[onclick="openBizForm(null)"]'); if (newBizBtn) newBizBtn.style.display = 'none'; }
   if (!canViewAnonymousBusinesses(CURRENT_PROFILE)){ document.getElementById('bizTabAnon').style.display = 'none'; }
   const restored = restoreBusinessPageCache();
-  if (restored){
-    await maybeHandleUrlParams();
-  } else {
-    await Promise.all([loadLookups(), loadNotesSummary('businesses')]);
-    await loadBusinesses();
-  }
+  const supplemental = Promise.allSettled([loadLookups(), loadNotesSummary('businesses')])
+    .then(() => { populateFilters(); renderTable(); saveBusinessPageCache(); });
+  await loadBusinesses({ forceRefresh:true, preserveExisting:restored, skipUrlHandling:restored });
+  if (restored) await maybeHandleUrlParams();
+  supplemental.catch(error => console.warn('Business supplemental data:', error));
 })();
 
 window.addEventListener('bsd:vip-ready', async () => {

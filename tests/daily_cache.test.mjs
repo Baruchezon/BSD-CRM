@@ -49,6 +49,14 @@ test('simultaneous requests deduplicate and failed requests are not cached',asyn
  const e=environment();const p=e.page();await p.start();await Promise.all([p.cache.rows('businesses','u1'),p.cache.rows('businesses','u1')]);assert.equal(e.calls.length,1);
  e.setFail(true);assert.ok((await p.cache.rows('leads','u1')).error);e.setFail(false);assert.equal((await p.cache.rows('leads','u1')).data.length,1501);
 });
+test('forced refresh heals an empty or stale same-day collection',async()=>{
+ const e=environment();e.tables.leads=[];const p=e.page();await p.start();
+ assert.equal((await p.cache.rows('leads','u1')).data.length,0);
+ e.tables.leads.push({id:'recovered',type:'buyer',updated_at:'2026-09-23'});
+ assert.equal((await p.cache.rows('leads','u1')).data.length,0,'ordinary reads remain fast and use the daily cache');
+ assert.equal((await p.cache.rows('leads','u1',{forceRefresh:true})).data.length,1,'screen revalidation bypasses an empty cache');
+ assert.equal((await p.cache.rows('leads','u1')).data[0].id,'recovered','the repaired result replaces the stale cache');
+});
 test('verification reads bypass cache and deletes remove the cached row',async()=>{
  const e=environment();const p=e.page();await p.load();await p.client.from('businesses').select('*').eq('id','b1').single();assert.equal(e.calls.length,4);
  await p.client.from('businesses').delete().eq('id','b1');assert.equal((await p.cache.rows('businesses','u1')).data.length,0);assert.equal(e.calls.length,5);
@@ -61,6 +69,14 @@ test('all modified page scripts and authentication parse',()=>{
   const html=fs.readFileSync(new URL('../'+path,import.meta.url),'utf8');for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(m[1]);
  }
  new vm.Script(fs.readFileSync(new URL('../js/auth.js',import.meta.url),'utf8'));
+});
+
+test('buyer screen never trusts an empty page snapshot and loads rows before optional lookups',()=>{
+ const html=fs.readFileSync(new URL('../leads.html',import.meta.url),'utf8');
+ assert.match(html,/c\.leads\.length === 0[\s\S]*return false/);
+ assert.match(html,/loadLeads\(\{ forceRefresh:true, preserveExisting:restored/);
+ const init=html.slice(html.indexOf('(async function init(){'));
+ assert.ok(init.indexOf('loadLeads({ forceRefresh:true') < init.indexOf('supplemental.catch'), 'primary buyer rows are not blocked by optional data');
 });
 
 test('stalled browser storage cannot prevent dataset loading',async()=>{

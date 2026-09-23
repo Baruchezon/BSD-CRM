@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609231630';
+    var PAGE_BUILD = '202609231700';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -261,9 +261,9 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202609231630"></script>
+<script src="js/config.js?v=202609231700"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202609231630"></script>
+<script src="js/auth.js?v=202609231700"></script>
 <script src="js/permissions.js?v=202608251709"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/standaloneRecording.js?v=202608251709"></script>
@@ -658,6 +658,10 @@ function restoreLeadsPageCache(){
   if (!CURRENT_PROFILE || !window.BSDDataCache) return false;
   const c = window.BSDDataCache.get('leads-page', CURRENT_PROFILE.id);
   if (!c || !Array.isArray(c.leads)) return false;
+  // An empty snapshot is never authoritative. It may have been written during
+  // a short mobile authentication or RLS timing failure, so verify it from the
+  // server instead of displaying an empty list for the whole day.
+  if (c.leads.length === 0 && (!Array.isArray(c.archived) || c.archived.length === 0)) return false;
   ALL_LEADS = c.leads;
   ARCHIVED_LEADS = c.archived || [];
   ALL_USERS = c.users || [];
@@ -673,11 +677,16 @@ function restoreLeadsPageCache(){
 }
 
 async function loadLeads(options={}){
-  const { data, error } = await window.BSDDataCache.rows('leads', CURRENT_PROFILE.id);
+  const { data, error } = await window.BSDDataCache.rows('leads', CURRENT_PROFILE.id, { forceRefresh:!!options.forceRefresh });
   if (error){
     toast('שגיאה בטעינה: ' + error.message);
-    document.getElementById('leadsBody').innerHTML = `<tr><td colspan="12" style="text-align:center;padding:24px;">לא ניתן לטעון את הנתונים כרגע. <button type="button" class="btn btn-primary" onclick="loadLeads()">נסה שוב</button></td></tr>`;
-    return;
+    // If a previously verified list is already visible, keep it on screen.
+    // A temporary network problem must never replace real records with an
+    // empty/error state.
+    if (!options.preserveExisting || (!ALL_LEADS.length && !ARCHIVED_LEADS.length)){
+      document.getElementById('leadsBody').innerHTML = `<tr><td colspan="12" style="text-align:center;padding:24px;">לא ניתן לטעון את הנתונים כרגע. <button type="button" class="btn btn-primary" onclick="loadLeads({forceRefresh:true})">נסה שוב</button></td></tr>`;
+    }
+    return false;
   }
   // תיקון 25.08.2026 (כלל עסקי מחייב): קיום/הצגה של ליד (קונה, שותף או
   // מוכר ישן) לעולם לא מותנים בסטטוס הסכם. ליד חדש חייב להישאר ולהופיע
@@ -693,6 +702,7 @@ async function loadLeads(options={}){
   renderTable();
   saveLeadsPageCache();
   if (!options.skipUrlHandling) await maybeHandleUrlParams();
+  return true;
 }
 
 async function maybeHandleUrlParams(){
@@ -1832,13 +1842,15 @@ function renderArchiveLeadsTable(){
   }
   const restored = restoreLeadsPageCache();
   switchLeadTypeTab('buyer');
-  if (restored){
-    await maybeHandleUrlParams();
-  } else {
-    await Promise.all([loadUsers(), loadRatingLevels(), loadMatchCounts(), loadNotesSummary('leads')]);
-    await loadLeads();
-    switchLeadTypeTab('buyer');
-  }
+  // Buyer rows are the primary content and must never wait for optional
+  // lookups. Load or revalidate them immediately; enrich the already visible
+  // list with users, ratings, match counts and notes in the background.
+  const supplemental = Promise.allSettled([loadUsers(), loadRatingLevels(), loadMatchCounts(), loadNotesSummary('leads')])
+    .then(() => { populateCreatedByFilter(); populateRatingFilter(); renderTable(); saveLeadsPageCache(); });
+  await loadLeads({ forceRefresh:true, preserveExisting:restored, skipUrlHandling:restored });
+  switchLeadTypeTab('buyer');
+  if (restored) await maybeHandleUrlParams();
+  supplemental.catch(error => console.warn('Buyer supplemental data:', error));
 })();
 
 </script>
