@@ -378,13 +378,13 @@ async function loadAll(){
   // "סוכן" (agent) = משתמש חיצוני שמקבל שירות מהמערכת, לא איש צוות BSD - רואה רק
   // את מה שהוא עצמו הכניס. שאר התפקידים (agent_authorized/manager/admin) רואים הכל,
   // ועריכה מוגבלת בהמשך לפי canEditRecord() (אדמין/מנהל או מי שהכניס את הליד).
-  let bizQ = window.supabaseClient.from('businesses').select('*').order('updated_at', { ascending: false });
-  let leadQ = window.supabaseClient.from('leads').select('*').order('updated_at', { ascending: false });
-  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
-    bizQ = bizQ.eq('created_by', CURRENT_PROFILE.id);
-    leadQ = leadQ.eq('created_by', CURRENT_PROFILE.id);
-  }
-  const [{ data: bizData, error: bizErr }, { data: leadData, error: leadErr }] = await Promise.all([bizQ, leadQ]);
+  const [{ data: allBizData, error: bizErr }, { data: allLeadData, error: leadErr }] = await Promise.all([
+    window.BSDDataCache.rows('businesses', CURRENT_PROFILE.id),
+    window.BSDDataCache.rows('leads', CURRENT_PROFILE.id)
+  ]);
+  const ownOnly = CURRENT_PROFILE.role === 'agent';
+  const bizData = (allBizData || []).filter(r => !ownOnly || r.created_by === CURRENT_PROFILE.id);
+  const leadData = (allLeadData || []).filter(r => !ownOnly || r.created_by === CURRENT_PROFILE.id);
   if (bizErr){ toast('שגיאה בטעינת עסקים: ' + bizErr.message); }
   if (leadErr){ toast('שגיאה בטעינת לידים: ' + leadErr.message); }
 
