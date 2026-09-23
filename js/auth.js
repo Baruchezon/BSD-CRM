@@ -40,10 +40,12 @@ async function bsdLogin(email, password) {
     entity_id: userId
   });
 
+  if (window.BSDDataCache) window.BSDDataCache.reset();
   return { ok: true, profile };
 }
 
 async function bsdLogout() {
+  if (window.BSDDataCache) window.BSDDataCache.reset();
   // The everyday "sign out" button: if this device has fingerprint
   // quick-unlock enabled, the whole point is that a fingerprint scan is
   // all that's needed to get back in - a real server-side sign-out here
@@ -58,6 +60,7 @@ async function bsdLogout() {
 }
 
 async function bsdFullLogout() {
+  if (window.BSDDataCache) window.BSDDataCache.reset();
   const user = (await window.supabaseClient.auth.getUser()).data.user;
   if (user) {
     await window.supabaseClient.from('activity_log').insert({
@@ -149,6 +152,11 @@ async function requireAuth() {
     navTools.style.display = 'none';
   }
 
+  if (window.BSDDataCache){
+    await window.BSDDataCache.activate(session, profile);
+    window.BSDDataCache.observeWrites(window.supabaseClient);
+    await Promise.all([window.BSDDataCache.rows('businesses', profile.id), window.BSDDataCache.rows('leads', profile.id)]);
+  }
   return profile;
 }
 
