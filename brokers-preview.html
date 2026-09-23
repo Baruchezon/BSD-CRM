@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202609231230';
+    var PAGE_BUILD = '202609231630';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -199,9 +199,9 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202609231205"></script>
+<script src="js/config.js?v=202609231630"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202609231205"></script>
+<script src="js/auth.js?v=202609231630"></script>
 <script src="js/permissions.js?v=202608251709"></script>
 <script>
 let ALL_BROKERS = [];
@@ -297,14 +297,10 @@ async function _agreementSignedUrl(tableName, recordId, download){
   return data.signedUrl;
 }
 async function viewAgreementPdf(tableName, recordId){
-  const win = window.open('', '_blank');
-  const url = await _agreementSignedUrl(tableName, recordId, false);
-  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
+  return window.bsdOpenPrivateFile({ bucket:window.BSD_CONFIG.STORAGE_BUCKET, path:`agreements/${tableName}/${recordId}.pdf`, label:'ההסכם' });
 }
 async function downloadAgreementPdf(tableName, recordId){
-  const win = window.open('', '_blank');
-  const url = await _agreementSignedUrl(tableName, recordId, true);
-  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
+  return window.bsdOpenPrivateFile({ bucket:window.BSD_CONFIG.STORAGE_BUCKET, path:`agreements/${tableName}/${recordId}.pdf`, downloadName:true, label:'ההסכם' });
 }
 
 /* ─────────── העלאה ידנית של הסכם חתום מחוץ למערכת (05.09.2026) ───────────

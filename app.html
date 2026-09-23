@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609231230';
+    var PAGE_BUILD = '202609231630';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -240,9 +240,9 @@
   </div>
 </div>
 
-<script src="js/config.js?v=202609231205"></script>
+<script src="js/config.js?v=202609231630"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202609231205"></script>
+<script src="js/auth.js?v=202609231630"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script>
@@ -251,6 +251,8 @@ let customFrom = null, customTo = null;
 
 function drawGauge(svgId, percent, colorHex){
   const svg = document.getElementById(svgId);
+  svg.dataset.percent = String(Number(percent) || 0);
+  svg.dataset.color = colorHex;
   const r = 55, cx = 70, cy = 70;
   const circumference = 2 * Math.PI * r;
   const offset = circumference * (1 - percent/100);
@@ -384,20 +386,21 @@ async function loadGeneral(){
     const inactiveTile = document.getElementById('k_inactive')?.closest('.kpi-link');
     if (inactiveTile) inactiveTile.style.display = 'none';
   }
-  document.getElementById('k_buyers').textContent = await count('leads', q=>ownFilter(q.eq('type','buyer')));
-  document.getElementById('k_businesses').textContent = await count('businesses', q=>ownFilter(q));
-  document.getElementById('k_matches').textContent = await count('matches', q=>matchesOwnFilter(q.not('status','in','("העסקה נסגרה","העסקה נעצרה")')));
-  document.getElementById('k_activeUsers').textContent = await count('profiles', q=>q.eq('status','active'));
-  document.getElementById('k_tasks').textContent = await count('tasks', q=>tasksOwnFilter(q.eq('status','פתוחה')));
-  document.getElementById('k_awaiting').textContent = await count('matches', q=>matchesOwnFilter(q.eq('status','נשלח לקונה - ממתין לתגובה (אנונימי)')));
-  document.getElementById('k_meetingHeld').textContent = await count('matches', q=>matchesOwnFilter(q.eq('status','התקיימה פגישה')));
-  document.getElementById('k_negotiation').textContent = await count('matches', q=>matchesOwnFilter(q.eq('status','המשך מו"מ')));
-  document.getElementById('k_closed').textContent = await count('matches', q=>matchesOwnFilter(q.eq('status','העסקה נסגרה')));
-
   const thirtyDaysAgo = new Date(Date.now() - 30*24*60*60*1000).toISOString();
-  document.getElementById('k_inactive').textContent = await count('profiles', q=>
-    q.eq('status','active').or(`last_login_at.is.null,last_login_at.lt.${thirtyDaysAgo}`)
-  );
+  const values = await Promise.all([
+    count('leads', q=>ownFilter(q.eq('type','buyer'))),
+    count('businesses', q=>ownFilter(q)),
+    count('matches', q=>matchesOwnFilter(q.not('status','in','("העסקה נסגרה","העסקה נעצרה")'))),
+    count('profiles', q=>q.eq('status','active')),
+    count('tasks', q=>tasksOwnFilter(q.eq('status','פתוחה'))),
+    count('matches', q=>matchesOwnFilter(q.eq('status','נשלח לקונה - ממתין לתגובה (אנונימי)'))),
+    count('matches', q=>matchesOwnFilter(q.eq('status','התקיימה פגישה'))),
+    count('matches', q=>matchesOwnFilter(q.eq('status','המשך מו"מ'))),
+    count('matches', q=>matchesOwnFilter(q.eq('status','העסקה נסגרה'))),
+    count('profiles', q=>q.eq('status','active').or(`last_login_at.is.null,last_login_at.lt.${thirtyDaysAgo}`))
+  ]);
+  ['k_buyers','k_businesses','k_matches','k_activeUsers','k_tasks','k_awaiting','k_meetingHeld','k_negotiation','k_closed','k_inactive']
+    .forEach((id, index) => { document.getElementById(id).textContent = values[index]; });
 }
 
 async function loadPeriod(){
@@ -410,26 +413,31 @@ async function loadPeriod(){
     return q;
   }
 
-  document.getElementById('p_newBuyers').textContent = await count('leads', q=>ownFilter(applyRange(q.eq('type','buyer'))));
-  document.getElementById('p_newBusinesses').textContent = await count('businesses', q=>ownFilter(applyRange(q)));
-  document.getElementById('p_newMatches').textContent = await count('matches', q=>matchesOwnFilter(applyRange(q)));
+  const values = await Promise.all([
+    count('leads', q=>ownFilter(applyRange(q.eq('type','buyer')))),
+    count('businesses', q=>ownFilter(applyRange(q))),
+    count('matches', q=>matchesOwnFilter(applyRange(q)))
+  ]);
+  ['p_newBuyers','p_newBusinesses','p_newMatches'].forEach((id, index) => { document.getElementById(id).textContent = values[index]; });
 }
 
 async function loadGauges(){
-  const totalMatches = await count('matches', q=>matchesOwnFilter(q));
-  const closedMatches = await count('matches', q=>matchesOwnFilter(q.eq('status','העסקה נסגרה')));
+  const [totalMatches, closedMatches, totalTasks, doneTasks, totalBiz, signedBiz] = await Promise.all([
+    count('matches', q=>matchesOwnFilter(q)),
+    count('matches', q=>matchesOwnFilter(q.eq('status','העסקה נסגרה'))),
+    count('tasks', q=>tasksOwnFilter(q)),
+    count('tasks', q=>tasksOwnFilter(q.neq('status','פתוחה'))),
+    count('businesses', q=>ownFilter(q)),
+    count('businesses', q=>ownFilter(q.eq('agreement_status','יש הסכם חתום')))
+  ]);
   const closePct = totalMatches ? (closedMatches/totalMatches*100) : 0;
   drawGauge('g_close', closePct, '#3c7a5a');
   document.getElementById('g_close_sub').textContent = `${closedMatches} מתוך ${totalMatches}`;
 
-  const totalTasks = await count('tasks', q=>tasksOwnFilter(q));
-  const doneTasks = await count('tasks', q=>tasksOwnFilter(q.neq('status','פתוחה')));
   const tasksPct = totalTasks ? (doneTasks/totalTasks*100) : 0;
   drawGauge('g_tasks', tasksPct, '#c98a2b');
   document.getElementById('g_tasks_sub').textContent = `${doneTasks} מתוך ${totalTasks}`;
 
-  const totalBiz = await count('businesses', q=>ownFilter(q));
-  const signedBiz = await count('businesses', q=>ownFilter(q.eq('agreement_status','יש הסכם חתום')));
   const agreePct = totalBiz ? (signedBiz/totalBiz*100) : 0;
   drawGauge('g_agree', agreePct, '#2b6fc9');
   document.getElementById('g_agree_sub').textContent = `${signedBiz} מתוך ${totalBiz}`;
@@ -491,6 +499,37 @@ async function loadActivity(){
     const when = new Date(row.created_at).toLocaleString('he-IL');
     return `<div class="activity-row"><span class="who">${who}</span><span class="what">${what}</span><span class="when">${when}</span></div>`;
   }).join('');
+}
+
+const DASHBOARD_VALUE_IDS = [
+  'k_buyers','k_businesses','k_matches','k_activeUsers','k_tasks','k_awaiting','k_meetingHeld','k_negotiation','k_closed','k_inactive',
+  'p_newBuyers','p_newBusinesses','p_newMatches','g_close_sub','g_tasks_sub','g_agree_sub'
+];
+function saveDashboardCache(){
+  if (!CURRENT_PROFILE || !window.BSDDataCache) return;
+  const values = {};
+  DASHBOARD_VALUE_IDS.forEach(id => { const el = document.getElementById(id); if (el) values[id] = el.textContent; });
+  const gauges = {};
+  ['g_close','g_tasks','g_agree'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) gauges[id] = { percent:Number(el.dataset.percent || 0), color:el.dataset.color };
+  });
+  window.BSDDataCache.set('app-page', CURRENT_PROFILE.id, {
+    values, gauges, activityHtml:document.getElementById('activityFeed').innerHTML,
+    activityUsersHtml:document.getElementById('activityUserFilter').innerHTML,
+    currentPeriod
+  });
+}
+function restoreDashboardCache(){
+  if (!CURRENT_PROFILE || !window.BSDDataCache) return false;
+  const cached = window.BSDDataCache.get('app-page', CURRENT_PROFILE.id);
+  if (!cached || !cached.values) return false;
+  Object.entries(cached.values).forEach(([id, value]) => { const el = document.getElementById(id); if (el) el.textContent = value; });
+  Object.entries(cached.gauges || {}).forEach(([id, gauge]) => drawGauge(id, gauge.percent, gauge.color));
+  if (cached.activityHtml) document.getElementById('activityFeed').innerHTML = cached.activityHtml;
+  if (cached.activityUsersHtml) document.getElementById('activityUserFilter').innerHTML = cached.activityUsersHtml;
+  currentPeriod = cached.currentPeriod || 'week';
+  return true;
 }
 
 document.getElementById('activityRangeSeg').addEventListener('click', e=>{
@@ -1146,8 +1185,12 @@ function showNewLeadPopup(leads){
   const matchesArchiveLink = document.getElementById('navMatchesArchiveLink');
   if (matchesArchiveLink && profile.role === 'admin') matchesArchiveLink.style.display = '';
 
-  await populateActivityUserFilter(profile);
-  await Promise.all([loadGeneral(), loadPeriod(), loadGauges(), loadActivity()]);
+  const restoredDashboard = restoreDashboardCache();
+  if (!restoredDashboard){
+    await populateActivityUserFilter(profile);
+    await Promise.all([loadGeneral(), loadPeriod(), loadGauges(), loadActivity()]);
+    saveDashboardCache();
+  }
   initTasksPopupWatcher(profile);
   checkVersionNotice();
   checkNewMessagesPopup(profile);
