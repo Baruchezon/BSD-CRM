@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609231205';
+    var PAGE_BUILD = '202609231230';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -92,10 +92,11 @@
   .records-table > tbody > tr > td:first-child{width:360px;min-width:360px;}
   .record-identity{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:start;width:100%;}
   .record-info{min-width:0;display:flex;flex-direction:column;align-items:stretch;}
-  .record-title-line{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:24px;width:100%;}
-  .record-title{min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:800;}
-  .record-number-slot{flex:0 0 132px;width:132px;}
+  .record-title-line{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:4px;min-height:24px;width:100%;}
+  .record-title{display:block;min-width:0;white-space:normal;overflow:visible;overflow-wrap:anywhere;line-height:1.4;color:inherit;font-weight:800;}
+  .record-number-slot{width:max-content;max-width:100%;direction:ltr;unicode-bidi:isolate;}
   .record-number-slot > span{display:block !important;width:100%;box-sizing:border-box;text-align:center;font-variant-numeric:tabular-nums;}
+  @media(max-width:700px){.records-table > tbody > tr > td:first-child{display:block;box-sizing:border-box;}.records-table > tbody > tr > td:first-child::before{display:block;margin-bottom:6px;}.record-identity{max-width:100%;}}
   .record-sub-line{min-height:18px;line-height:18px;font-size:.75rem;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .record-meta-line{display:flex;align-items:center;gap:6px;min-height:22px;line-height:22px;flex-wrap:wrap;}
   .record-status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 6px;width:100%;}
@@ -617,7 +618,7 @@ function leadIdentityCell(l, personName, statusEmoji){
       <span class="record-title" title="${esc(title)}">${statusEmoji}${esc(title)}</span>
       <span class="record-number-slot">${numberBadge}</span>
     </div>
-    <div class="record-sub-line">${subTitle ? esc(subTitle) : '&nbsp;'}</div>
+    ${subTitle ? `<div class="record-sub-line">${esc(subTitle)}</div>` : ''}
     <div class="record-meta-line">${releasedBadge}${noteBadge}</div>
     <div class="record-status-grid" onclick="event.stopPropagation()">
       <div class="record-status-slot">${rating}</div>
@@ -1108,7 +1109,7 @@ function openLeadForm(id, forcedType, prefillData){
   const modal = document.getElementById('modalBox');
   const typeLabel = type==='buyer' ? 'קונה' : type==='partner' ? 'שותפות/השקעה' : 'מוכר';
   modal.innerHTML = `
-    <h3>${lead ? 'עריכת' : 'הוספת'} ${typeLabel}</h3>
+    <h3>${lead ? 'עריכת' : 'הוספת'} ${typeLabel}${lead ? ' · ' + esc(lead.full_name || [lead.first_name,lead.last_name].filter(Boolean).join(' ') || 'ללא שם') : ''}</h3>
     ${(lead && isGrantOnlyViewer(lead)) ? `<div style="background:#eef4fb;border:1px solid #cddcef;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#1a3d8f;margin-bottom:10px;">🔓 <b>שוחרר אליי</b> — צפייה בלבד, ללא אפשרות עריכה, מחיקה או שחרור לאחרים.</div>` : ''}
     ${lead ? agreementBanner(lead.agreement_status, lead.agreement_number, 'leads', lead.id, lead.agreement_pdf_path, lead.agreement_pdf_uploaded_at, lead.agreement_pdf_uploaded_by) : ''}
     ${lead && type === 'buyer' ? '<div id="anonReceivedBox" style="margin-bottom:10px;"></div>' : ''}
@@ -1127,7 +1128,7 @@ function openLeadForm(id, forcedType, prefillData){
         ${lead.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 רשומה זו נמצאת בארכיון${lead.archive_reason ? ' — סיבה: '+esc(lead.archive_reason) : ''}${canRestoreLead(lead) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreLeadFromArchive('${lead.id}')">↩️ שחזר מהארכיון</button>` : ''}${canDeleteLead(lead) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#a33;" onclick="deleteLead('${lead.id}')">🗑️ מחיקה סופית</button>` : ''}</div>` : (canManageLead(lead) ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveLead('${lead.id}')">📁 העבר לארכיון</button></div>` : '')}` : ''}
         <div class="field"><label>מטפל כרגע</label><select id="handled_by">${userOptions(lead?.handled_by)}</select></div>
         <div class="section-h">פרטים כלליים</div>
-        ${fieldRow('first_name','שם פרטי', lead?.first_name || pf.first_name)}
+        ${fieldRow('first_name','שם פרטי', lead?.first_name || (!lead?.last_name ? lead?.full_name : '') || pf.first_name)}
         ${fieldRow('last_name','שם משפחה', lead?.last_name || pf.last_name)}
         ${fieldRowPhone('phone','טלפון', lead?.phone || pf.phone)}
         ${fieldRowPhone('phone2','טלפון נוסף', lead?.phone2)}
