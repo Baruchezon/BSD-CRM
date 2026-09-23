@@ -127,9 +127,16 @@ async function requireAuth() {
     if (window.BSDDataCache){
       await window.BSDDataCache.activate(session, profile);
       window.BSDDataCache.observeWrites(window.supabaseClient);
-      // Preload without blocking the authenticated page. Its own dataset joins the same pending request.
-      Promise.all([window.BSDDataCache.rows('businesses', profile.id), window.BSDDataCache.rows('leads', profile.id)])
-        .catch(error => console.warn('BSD background preload:', error.message));
+      // Preload both large collections only on the dashboard. A list page
+      // loads its own primary collection first; starting businesses, buyers,
+      // notes and lookups together caused severe contention on mobile data.
+      const pageName = window.location && window.location.pathname
+        ? window.location.pathname.split('/').pop()
+        : 'app.html';
+      if (!pageName || pageName === 'app.html'){
+        Promise.all([window.BSDDataCache.rows('businesses', profile.id), window.BSDDataCache.rows('leads', profile.id)])
+          .catch(error => console.warn('BSD background preload:', error.message));
+      }
     }
     return profile;
   }
