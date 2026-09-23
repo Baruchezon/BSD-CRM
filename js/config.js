@@ -10,44 +10,173 @@ window.BSD_CONFIG = {
   VIP_API_URL: "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/vip-api"
 };
 
-// מטמון מהיר בין מסכי ה-CRM באותה לשונית דפדפן. הקוד אינו עוקף RLS ואינו
-// משתף נתונים בין משתמשים: כל מפתח כולל את מזהה המשתמש, והמידע נשמר רק
-// ב-sessionStorage שנמחק עם סגירת הלשונית. המסכים מציגים מיד את העותק
-// האחרון לאורך ההתחברות הנוכחית. כל מסך טוען את הרשימה פעם אחת בלבד,
-// ושינויים שנשמרים במסך מעדכנים את המטמון בלי טעינה חוזרת בכל מעבר.
-window.BSDDataCache = window.BSDDataCache || (() => {
-  const PREFIX = 'bsd_crm_page_cache_v2:';
-  const MAX_AGE_MS = 12 * 60 * 60 * 1000;
-  function key(scope, userId){ return PREFIX + String(userId || 'anonymous') + ':' + scope; }
-  function get(scope, userId){
-    try {
-      const raw = sessionStorage.getItem(key(scope, userId));
-      if (!raw) return null;
-      const entry = JSON.parse(raw);
-      if (!entry || !entry.savedAt || Date.now() - entry.savedAt > MAX_AGE_MS){
-        sessionStorage.removeItem(key(scope, userId));
-        return null;
-      }
-      return entry.value || null;
-    } catch(e){ return null; }
-  }
-  function set(scope, userId, value){
-    try {
-      sessionStorage.setItem(key(scope, userId), JSON.stringify({ savedAt:Date.now(), value }));
-      return true;
-    } catch(e){
-      // אם מכסת האחסון מלאה, מסירים רק מטמוני BSD ישנים ומנסים פעם נוספת.
+// Daily, authenticated-session cache shared by the business, buyer and lead screens.
+// IndexedDB avoids evicting one large list to make room for the other.
+window.BSDDataCache = (() => {
+  const DB_NAME = 'bsd-crm-daily-v1';
+  const scopes = ['businesses-page', 'leads-page', 'rows:businesses', 'rows:leads'];
+  let context = null, memory = new Map(), pending = new Map(), revisions = new Map(), dbPromise;
+  let persistence = Promise.resolve();
+  const day = () => new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Jerusalem', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date());
+  const clone = value => JSON.parse(JSON.stringify(value));
+  function database(){
+    if (!dbPromise) dbPromise = new Promise(resolve => {
       try {
-        Object.keys(sessionStorage).filter(k => k.startsWith(PREFIX)).forEach(k => sessionStorage.removeItem(k));
-        sessionStorage.setItem(key(scope, userId), JSON.stringify({ savedAt:Date.now(), value }));
-        return true;
-      } catch(ignore){ return false; }
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onupgradeneeded = () => request.result.createObjectStore('cache');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = request.onblocked = () => resolve(null);
+      } catch (_) { resolve(null); }
+    });
+    return dbPromise;
+  }
+  async function disk(op, key, value){
+    const db = await database();
+    if (!db){
+      try {
+        const k = DB_NAME + ':' + key;
+        if (op === 'get') return JSON.parse(sessionStorage.getItem(k) || 'null');
+        if (op === 'put') sessionStorage.setItem(k, JSON.stringify(value));
+        else sessionStorage.removeItem(k);
+      } catch (_) {}
+      return null;
     }
+    return new Promise(resolve => {
+      try {
+        const tx = db.transaction('cache', op === 'get' ? 'readonly' : 'readwrite');
+        const store = tx.objectStore('cache');
+        const req = op === 'get' ? store.get(key) : op === 'put' ? store.put(value, key) : store.delete(key);
+        let result = null;
+        req.onsuccess = () => { result = req.result ?? null; };
+        tx.oncomplete = () => resolve(result);
+        tx.onerror = tx.onabort = () => resolve(null);
+      } catch (_) { resolve(null); }
+    });
+  }
+  function generation(){ try { return localStorage.getItem(DB_NAME + ':generation') || '0'; } catch (_) { return '0'; } }
+  function valid(userId){ return context && context.userId === userId && context.day === day() && context.generation === generation(); }
+  async function activate(session, profile){
+    const userId = session.user.id;
+    // Namespace only: JWT decoding here is not an authentication or authorization check.
+    let sessionId = session.user.last_sign_in_at || 'session';
+    try { sessionId = JSON.parse(atob(session.access_token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).session_id || sessionId; } catch (_) {}
+    const permissions = JSON.stringify(Object.fromEntries(Object.entries(profile).filter(([k]) => k === 'role' || k === 'status' || k.startsWith('can_')).sort()));
+    const next = { userId, day:day(), generation:generation(), sessionId, permissions };
+    next.key = JSON.stringify(next);
+    if (context?.key === next.key) return;
+    context = next; memory = new Map(); pending = new Map();
+    await persistence;
+    await Promise.all(scopes.map(async scope => {
+      const entry = await disk('get', scope);
+      if (context === next && entry?.key === next.key) memory.set(scope, entry.value);
+    }));
+  }
+  function get(scope, userId){ return valid(userId) && memory.has(scope) ? clone(memory.get(scope)) : null; }
+  function set(scope, userId, value){
+    if (!valid(userId)) return false;
+    const copy = clone(value), key = context.key;
+    memory.set(scope, copy);
+    persistence = persistence.then(() => disk('put', scope, { key, value:copy }));
+    return true;
   }
   function remove(scope, userId){
-    try { sessionStorage.removeItem(key(scope, userId)); } catch(e){}
+    if (!context || context.userId !== userId) return;
+    memory.delete(scope);
+    persistence = persistence.then(() => disk('delete', scope));
   }
-  return { get, set, remove };
+  function reset(){
+    try { localStorage.setItem(DB_NAME + ':generation', Date.now() + ':' + Math.random()); } catch (_) {}
+    context = null; memory.clear(); pending.clear();
+    for (const scope of scopes) persistence = persistence.then(() => disk('delete', scope));
+  }
+  async function rows(table, userId){
+    if (!['businesses','leads'].includes(table)) throw new Error('Unsupported daily dataset');
+    if (context && !valid(userId)) {
+      const { data } = await window.supabaseClient.auth.getSession();
+      if (!data.session || data.session.user.id !== userId) return { data:null, error:{message:'נדרשת כניסה מחדש'} };
+      await activate(data.session, Object.fromEntries(JSON.parse(context.permissions)));
+    }
+    const cached = get('rows:' + table, userId);
+    if (cached) return { data:cached, error:null };
+    if (pending.has(table)) return clone(await pending.get(table));
+    const active = context, revision = revisions.get(table) || 0;
+    const request = (async () => {
+      // Paginate: a once-per-day cache must not silently retain only PostgREST's first 1000 rows.
+      const all = [];
+      for (let start = 0; ; start += 1000){
+        const result = await window.supabaseClient.from(table).select('*').order('id').range(start, start + 999);
+        if (result.error) return result;
+        all.push(...(result.data || []));
+        if ((result.data || []).length < 1000) break;
+      }
+      all.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
+      if (context === active && (revisions.get(table) || 0) === revision) set('rows:' + table, userId, all);
+      await persistence;
+      return { data:all, error:null };
+    })();
+    pending.set(table, request);
+    try { return clone(await request); } finally { if (pending.get(table) === request) pending.delete(table); }
+  }
+  async function changed(table, id, deleted){
+    if (!context) return;
+    const active = context, userId = context.userId;
+    revisions.set(table, (revisions.get(table) || 0) + 1);
+    remove('businesses-page', userId); remove('leads-page', userId);
+    // Read back just the affected row. Verification reads always go to the server.
+    if (['businesses','leads'].includes(table)){
+      const cached = get('rows:' + table, userId);
+      if (id && cached){
+        const result = deleted ? {data:null} : await window.supabaseClient.from(table).select('*').eq('id', id).maybeSingle();
+        if (context !== active) return;
+        if (!result.error){
+          const next = cached.filter(row => row.id !== id);
+          if (result.data) next.unshift(result.data);
+          set('rows:' + table, userId, next);
+        } else remove('rows:' + table, userId);
+      } else remove('rows:' + table, userId);
+    } else if (table === 'rpc'){
+      remove('rows:businesses', userId); remove('rows:leads', userId);
+    }
+    await persistence;
+  }
+  function observeWrites(client){
+    if (client.__bsdDailyObserved) return;
+    client.__bsdDailyObserved = true;
+    const originalFrom = client.from.bind(client);
+    const watched = new Set(['businesses','leads','matches','record_notes','business_file_meta','business_sale_files','business_access_grants','brokers','buyer_rating_levels']);
+    client.from = table => {
+      const state = { mutation:false, id:null, deleted:false };
+      function wrap(builder){ return new Proxy(builder, { get(target, prop){
+        if (prop === 'then') return (resolve, reject) => target.then(async result => {
+          if (state.mutation && !result.error){
+            const data = Array.isArray(result.data) ? (result.data.length === 1 ? result.data[0] : null) : result.data;
+            await changed(table, state.id || data?.id, state.deleted);
+          }
+          return result;
+        }).then(resolve, reject);
+        const member = target[prop];
+        if (typeof member !== 'function') return member;
+        return (...args) => {
+          if (['insert','upsert','update','delete'].includes(prop)){ state.mutation = true; state.deleted = prop === 'delete'; }
+          if (prop === 'eq' && args[0] === 'id') state.id = args[1];
+          const result = member.apply(target,args);
+          return result && typeof result === 'object' ? wrap(result) : result;
+        };
+      }}); }
+      const builder = originalFrom(table);
+      return watched.has(table) ? wrap(builder) : builder;
+    };
+    const rpc = client.rpc.bind(client);
+    client.rpc = (name, ...args) => {
+      const request = rpc(name, ...args);
+      if (!/^(save_|update_|delete_|restore_|archive_|assign_|convert_)/.test(name)) return request;
+      return new Proxy(request, { get(target, prop){
+        if (prop === 'then') return (resolve,reject) => target.then(async result => { if (!result.error) await changed('rpc'); return result; }).then(resolve,reject);
+        return typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop];
+      }});
+    };
+  }
+  return { activate, get, set, remove, reset, rows, observeWrites, flush:() => persistence };
 })();
 
 // 15.09.2026: רשת ביטחון ממוקדת להעלאת הסכמים חתומים.
