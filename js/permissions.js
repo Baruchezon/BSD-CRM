@@ -19,6 +19,10 @@ function bsdIsAdminOrManager(profile) {
   return !!profile && (profile.role === 'admin' || profile.role === 'manager');
 }
 
+function bsdIsViewer(profile) {
+  return !!profile && profile.role === 'viewer';
+}
+
 function bsdOwnsRecord(profile, record) {
   if (!profile || !record) return false;
   return record.created_by === profile.id || record.handled_by === profile.id;
@@ -26,18 +30,19 @@ function bsdOwnsRecord(profile, record) {
 
 // ---- עסקים ----
 function canViewBusinessFull(profile, business) {
-  if (bsdIsAdminOrManager(profile)) return true;
+  if (bsdIsAdminOrManager(profile) || bsdIsViewer(profile)) return true;
   if (bsdOwnsRecord(profile, business)) return true;
   if (business && business._hasAccessGrant) return true; // מסומן ע"י שאילתת business_access_grants
   return false;
 }
 
 function canViewAnonymousBusinesses(profile) {
-  return bsdIsAdminOrManager(profile) || !!(profile && profile.can_view_anonymous_businesses);
+  return bsdIsAdminOrManager(profile) || bsdIsViewer(profile) || !!(profile && profile.can_view_anonymous_businesses);
 }
 
 function canEditBusiness(profile, business) {
-  return canViewBusinessFull(profile, business); // שחרור מידע = צפייה בלבד, לא עריכה
+  if (bsdIsViewer(profile)) return false;
+  return canViewBusinessFull(profile, business);
 }
 
 function canCreateBusiness(profile) {
@@ -49,16 +54,18 @@ function canGenerateAnonymousCard(profile, business) {
 }
 
 function canReleaseBusinessAccess(profile, business) {
+  if (bsdIsViewer(profile)) return false;
   return canEditBusiness(profile, business); // רק מטפל/יוצר/אדמין/מנהל יכולים לשחרר
 }
 
 // ---- קונים (leads) ----
 function canViewBuyer(profile, buyer) {
-  if (bsdIsAdminOrManager(profile)) return true;
+  if (bsdIsAdminOrManager(profile) || bsdIsViewer(profile)) return true;
   return bsdOwnsRecord(profile, buyer);
 }
 
 function canEditBuyer(profile, buyer) {
+  if (bsdIsViewer(profile)) return false;
   return canViewBuyer(profile, buyer);
 }
 
@@ -68,7 +75,7 @@ function canCreateBuyer(profile) {
 
 // ---- התאמות ----
 function canViewMatch(profile, match, business, buyer) {
-  if (bsdIsAdminOrManager(profile)) return true;
+  if (bsdIsAdminOrManager(profile) || bsdIsViewer(profile)) return true;
   if (business && canViewBusinessFull(profile, business)) return true;
   if (buyer && bsdOwnsRecord(profile, buyer)) return true;
   return false;
@@ -79,6 +86,7 @@ function canViewBusinessFiles(profile, business) {
   return canViewBusinessFull(profile, business);
 }
 function canUploadBusinessFiles(profile, business) {
+  if (bsdIsViewer(profile)) return false;
   return canViewBusinessFull(profile, business);
 }
 function canDownloadBusinessFiles(profile, business) {
@@ -118,7 +126,8 @@ const BSD_ROLE_DEFAULT_PERMISSIONS = {
   admin:   { can_view_anonymous_businesses: true, can_create_businesses: true, can_create_buyers: true, can_record: true, can_use_survey: true, can_use_sale_file: true, can_send_agreement: true, can_send_presentations: true, can_view_buyer_rating: true, can_edit_buyer_rating: true },
   manager: { can_view_anonymous_businesses: true, can_create_businesses: true, can_create_buyers: true, can_record: true, can_use_survey: true, can_use_sale_file: true, can_send_agreement: true, can_send_presentations: true, can_view_buyer_rating: true, can_edit_buyer_rating: true },
   agent_authorized: { can_view_anonymous_businesses: true, can_create_businesses: true, can_create_buyers: true, can_record: true, can_use_survey: false, can_use_sale_file: false, can_send_agreement: false, can_send_presentations: false, can_view_buyer_rating: true, can_edit_buyer_rating: true },
-  agent:   { can_view_anonymous_businesses: false, can_create_businesses: false, can_create_buyers: false, can_record: false, can_use_survey: false, can_use_sale_file: false, can_send_agreement: false, can_send_presentations: false, can_view_buyer_rating: false, can_edit_buyer_rating: false }
+  agent:   { can_view_anonymous_businesses: false, can_create_businesses: false, can_create_buyers: false, can_record: false, can_use_survey: false, can_use_sale_file: false, can_send_agreement: false, can_send_presentations: false, can_view_buyer_rating: false, can_edit_buyer_rating: false },
+  viewer:  { can_view_anonymous_businesses: true, can_create_businesses: false, can_create_buyers: false, can_record: false, can_use_survey: false, can_use_sale_file: false, can_send_agreement: false, can_send_presentations: false, can_view_buyer_rating: false, can_edit_buyer_rating: false }
 };
 
 function bsdApplyRoleDefaults(role) {
