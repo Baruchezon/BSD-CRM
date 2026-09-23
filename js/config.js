@@ -10,11 +10,123 @@ window.BSD_CONFIG = {
   VIP_API_URL: "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/vip-api"
 };
 
+// A small profile cache removes the only mandatory server round-trip that used
+// to run again on every page transition.  The database remains the authority:
+// RLS still protects every read/write and the cached profile is refreshed in
+// the background.  A short stale grace period lets an already authenticated
+// user reach the CRM during a temporary mobile-network failure instead of
+// replacing the whole screen with an error page.
+window.BSDSessionCache = (() => {
+  const KEY = 'bsd-crm-profile-v2';
+  const MAX_STALE_MS = 36 * 60 * 60 * 1000;
+  function read(session){
+    if (!session || !session.user) return null;
+    try {
+      const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (!saved || saved.userId !== session.user.id || !saved.profile) return null;
+      if (Date.now() - Number(saved.savedAt || 0) > MAX_STALE_MS) return null;
+      if (saved.profile.status === 'blocked') return null;
+      return JSON.parse(JSON.stringify(saved.profile));
+    } catch (_) { return null; }
+  }
+  function write(session, profile){
+    if (!session || !session.user || !profile) return;
+    try {
+      localStorage.setItem(KEY, JSON.stringify({ userId:session.user.id, savedAt:Date.now(), profile }));
+    } catch (_) {}
+  }
+  function clear(){ try { localStorage.removeItem(KEY); } catch (_) {} }
+  return { read, write, clear };
+})();
+
+window.bsdDeadline = async function bsdDeadline(promise, timeoutMs, label){
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error((label || 'הפעולה') + ' לא הושלמה בזמן')), timeoutMs); })
+    ]);
+  } finally { clearTimeout(timer); }
+};
+
+// Private Storage files are opened through one resilient path everywhere in
+// the CRM.  It refreshes an expired session, retries once, and finally falls
+// back to an authenticated blob download.  Android uses the current tab when
+// a new tab is blocked, which fixes the common "nothing happens" PDF symptom.
+window.bsdOpenPrivateFile = async function bsdOpenPrivateFile(options){
+  const bucket = options && options.bucket;
+  const path = options && options.path;
+  const downloadName = options && options.downloadName;
+  const label = (options && options.label) || 'הקובץ';
+  if (!bucket || !path) throw new Error('חסר נתיב לקובץ');
+
+  const isAndroid = /Android/i.test(navigator.userAgent || '');
+  let target = null;
+  if (!isAndroid){
+    target = window.open('about:blank', '_blank');
+    if (target){
+      try {
+        target.document.title = 'BSD CRM';
+        target.document.body.innerHTML = '<div dir="rtl" style="font-family:Arial,sans-serif;padding:30px;text-align:center;color:#0e1b34">מכין את הקובץ...</div>';
+      } catch (_) {}
+    }
+  }
+  const notify = message => {
+    if (typeof window.toast === 'function') window.toast(message);
+  };
+
+  async function signedUrl(){
+    const download = downloadName ? { download: downloadName } : undefined;
+    const request = window.supabaseClient.storage.from(bucket).createSignedUrl(path, 30 * 60, download);
+    const result = await window.bsdDeadline(request, 10000, 'יצירת קישור מאובטח');
+    if (result.error || !result.data || !result.data.signedUrl) throw result.error || new Error('לא התקבל קישור לקובץ');
+    return result.data.signedUrl;
+  }
+
+  async function refreshSession(){
+    try { await window.bsdDeadline(window.supabaseClient.auth.refreshSession(), 8000, 'רענון ההתחברות'); }
+    catch (_) {}
+  }
+
+  let url = null, lastError = null, objectUrl = null;
+  for (let attempt = 0; attempt < 2 && !url; attempt++){
+    try { url = await signedUrl(); }
+    catch (error) {
+      lastError = error;
+      if (attempt === 0) await refreshSession();
+    }
+  }
+
+  if (!url){
+    try {
+      const result = await window.bsdDeadline(window.supabaseClient.storage.from(bucket).download(path), 30000, 'הורדת הקובץ');
+      if (result.error || !result.data) throw result.error || new Error('הקובץ לא התקבל');
+      objectUrl = URL.createObjectURL(result.data);
+      url = objectUrl;
+    } catch (error) { lastError = error; }
+  }
+
+  if (!url){
+    if (target) try { target.close(); } catch (_) {}
+    notify('שגיאה בפתיחת ' + label + ': ' + ((lastError && lastError.message) || 'שגיאת תקשורת'));
+    return false;
+  }
+
+  if (target && !target.closed){
+    try { target.location.replace(url); }
+    catch (_) { window.location.assign(url); }
+  } else {
+    window.location.assign(url);
+  }
+  if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60 * 1000);
+  return true;
+};
+
 // Daily, authenticated-session cache shared by the business, buyer and lead screens.
 // IndexedDB avoids evicting one large list to make room for the other.
 window.BSDDataCache = (() => {
   const DB_NAME = 'bsd-crm-daily-v1';
-  const scopes = ['businesses-page', 'leads-page', 'matches-page', 'rows:businesses', 'rows:leads'];
+  const scopes = ['app-page', 'businesses-page', 'leads-page', 'matches-page', 'rows:businesses', 'rows:leads'];
   let context = null, memory = new Map(), pending = new Map(), revisions = new Map(), dbPromise;
   let persistence = Promise.resolve();
   const day = () => new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Jerusalem', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date());
@@ -137,7 +249,7 @@ window.BSDDataCache = (() => {
     if (!context) return;
     const active = context, userId = context.userId;
     revisions.set(table, (revisions.get(table) || 0) + 1);
-    remove('businesses-page', userId); remove('leads-page', userId); remove('matches-page', userId);
+    remove('app-page', userId); remove('businesses-page', userId); remove('leads-page', userId); remove('matches-page', userId);
     // Read back just the affected row. Verification reads always go to the server.
     if (['businesses','leads'].includes(table)){
       const cached = get('rows:' + table, userId);
@@ -159,7 +271,7 @@ window.BSDDataCache = (() => {
     if (client.__bsdDailyObserved) return;
     client.__bsdDailyObserved = true;
     const originalFrom = client.from.bind(client);
-    const watched = new Set(['businesses','leads','matches','record_notes','business_file_meta','business_sale_files','business_access_grants','brokers','buyer_rating_levels']);
+    const watched = new Set(['businesses','leads','matches','tasks','profiles','activity_log','match_activity_log','record_notes','business_file_meta','business_sale_files','business_access_grants','brokers','buyer_rating_levels']);
     client.from = table => {
       const state = { mutation:false, id:null, deleted:false };
       function wrap(builder){ return new Proxy(builder, { get(target, prop){
