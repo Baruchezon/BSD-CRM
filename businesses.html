@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609231205';
+    var PAGE_BUILD = '202609231230';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -96,10 +96,11 @@
   .records-table > tbody > tr > td:first-child{width:400px;min-width:400px;}
   .record-identity{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:start;width:100%;}
   .record-info{min-width:0;display:flex;flex-direction:column;align-items:stretch;}
-  .record-title-line{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:24px;width:100%;}
-  .record-title{min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:800;}
-  .record-number-slot{flex:0 0 132px;width:132px;}
+  .record-title-line{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:4px;min-height:24px;width:100%;}
+  .record-title{display:block;min-width:0;white-space:normal;overflow:visible;overflow-wrap:anywhere;line-height:1.4;color:inherit;font-weight:800;}
+  .record-number-slot{width:max-content;max-width:100%;direction:ltr;unicode-bidi:isolate;}
   .record-number-slot > span{display:block !important;width:100%;box-sizing:border-box;text-align:center;font-variant-numeric:tabular-nums;}
+  @media(max-width:700px){.records-table > tbody > tr > td:first-child{display:block;box-sizing:border-box;}.records-table > tbody > tr > td:first-child::before{display:block;margin-bottom:6px;}.record-identity{max-width:100%;}}
   .record-sub-line{min-height:18px;line-height:18px;font-size:.75rem;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .record-code-line{min-height:16px;line-height:16px;font-size:.68rem;color:#bbb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .record-meta-line{display:flex;align-items:center;gap:10px;min-height:20px;line-height:20px;flex-wrap:wrap;}
