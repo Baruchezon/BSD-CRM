@@ -21,12 +21,15 @@ window.BSDDataCache = (() => {
   const clone = value => JSON.parse(JSON.stringify(value));
   function database(){
     if (!dbPromise) dbPromise = new Promise(resolve => {
+      let settled = false;
+      const finish = value => { if (settled) { if (value) value.close(); return; } settled = true; clearTimeout(timer); resolve(value); };
+      const timer = setTimeout(() => finish(null), 1000);
       try {
         const request = indexedDB.open(DB_NAME, 1);
         request.onupgradeneeded = () => request.result.createObjectStore('cache');
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = request.onblocked = () => resolve(null);
-      } catch (_) { resolve(null); }
+        request.onsuccess = () => finish(request.result);
+        request.onerror = request.onblocked = () => finish(null);
+      } catch (_) { finish(null); }
     });
     return dbPromise;
   }
@@ -42,15 +45,18 @@ window.BSDDataCache = (() => {
       return null;
     }
     return new Promise(resolve => {
+      let tx, settled = false;
+      const finish = value => { if (settled) return; settled = true; clearTimeout(timer); resolve(value); };
+      const timer = setTimeout(() => { finish(null); try { tx?.abort(); } catch (_) {} }, 1000);
       try {
-        const tx = db.transaction('cache', op === 'get' ? 'readonly' : 'readwrite');
+        tx = db.transaction('cache', op === 'get' ? 'readonly' : 'readwrite');
         const store = tx.objectStore('cache');
         const req = op === 'get' ? store.get(key) : op === 'put' ? store.put(value, key) : store.delete(key);
         let result = null;
         req.onsuccess = () => { result = req.result ?? null; };
-        tx.oncomplete = () => resolve(result);
-        tx.onerror = tx.onabort = () => resolve(null);
-      } catch (_) { resolve(null); }
+        tx.oncomplete = () => finish(result);
+        tx.onerror = tx.onabort = () => finish(null);
+      } catch (_) { finish(null); }
     });
   }
   function generation(){ try { return localStorage.getItem(DB_NAME + ':generation') || '0'; } catch (_) { return '0'; } }
@@ -89,6 +95,16 @@ window.BSDDataCache = (() => {
     context = null; memory.clear(); pending.clear();
     for (const scope of scopes) persistence = persistence.then(() => disk('delete', scope));
   }
+  async function readWithDeadline(query){
+    let timer;
+    try {
+      return await Promise.race([
+        Promise.resolve(query),
+        new Promise(resolve => { timer = setTimeout(() => resolve({ data:null, error:{message:'השרת לא השיב בזמן. אפשר לנסות שוב.'} }), 15000); })
+      ]);
+    } catch (error) { return { data:null, error:{message:error.message || 'שגיאת תקשורת'} }; }
+    finally { clearTimeout(timer); }
+  }
   async function rows(table, userId){
     if (!['businesses','leads'].includes(table)) throw new Error('Unsupported daily dataset');
     if (context && !valid(userId)) {
@@ -104,14 +120,14 @@ window.BSDDataCache = (() => {
       // Paginate: a once-per-day cache must not silently retain only PostgREST's first 1000 rows.
       const all = [];
       for (let start = 0; ; start += 1000){
-        const result = await window.supabaseClient.from(table).select('*').order('id').range(start, start + 999);
+        const result = await readWithDeadline(window.supabaseClient.from(table).select('*').order('id').range(start, start + 999));
         if (result.error) return result;
         all.push(...(result.data || []));
         if ((result.data || []).length < 1000) break;
       }
       all.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
       if (context === active && (revisions.get(table) || 0) === revision) set('rows:' + table, userId, all);
-      await persistence;
+      // Rendering must not wait for the optional disk cache to finish writing.
       return { data:all, error:null };
     })();
     pending.set(table, request);
