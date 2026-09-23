@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609231700';
+    var PAGE_BUILD = '202609231900';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -261,9 +261,9 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202609231700"></script>
+<script src="js/config.js?v=202609231900"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202609231700"></script>
+<script src="js/auth.js?v=202609231900"></script>
 <script src="js/permissions.js?v=202608251709"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/standaloneRecording.js?v=202608251709"></script>
@@ -282,6 +282,7 @@ function clientNumberBadge(l){
 }
 let ALL_USERS = [];
 let CURRENT_PROFILE = null;
+let LEADS_DATA_READY = false;
 let RATING_LEVELS = [];           // רשימת הרמות הפעילות, ממוינות לפי sort_order
 let RATING_BY_ID = {};            // id -> אובייקט הרמה
 let MATCH_COUNT_BY_BUYER = {};    // buyer_id (leads.id) -> מספר התאמות בפועל
@@ -696,6 +697,7 @@ async function loadLeads(options={}){
   // (is_archived) - ליד בארכיון מוצג בטאב הארכיון הנפרד, לא כאן.
   ALL_LEADS = (data || []).filter(l => !l.is_archived);
   ARCHIVED_LEADS = (data || []).filter(l => l.is_archived);
+  LEADS_DATA_READY = true;
   populateStatusFilter();
   populateCreatedByFilter();
   populateRatingFilter();
@@ -1846,7 +1848,13 @@ function renderArchiveLeadsTable(){
   // lookups. Load or revalidate them immediately; enrich the already visible
   // list with users, ratings, match counts and notes in the background.
   const supplemental = Promise.allSettled([loadUsers(), loadRatingLevels(), loadMatchCounts(), loadNotesSummary('leads')])
-    .then(() => { populateCreatedByFilter(); populateRatingFilter(); renderTable(); saveLeadsPageCache(); });
+    .then(() => {
+      // Optional metadata must never replace a primary loading error with a
+      // misleading empty-state message. Render it only after buyer rows have
+      // actually arrived.
+      if (!LEADS_DATA_READY) return;
+      populateCreatedByFilter(); populateRatingFilter(); renderTable(); saveLeadsPageCache();
+    });
   await loadLeads({ forceRefresh:true, preserveExisting:restored, skipUrlHandling:restored });
   switchLeadTypeTab('buyer');
   if (restored) await maybeHandleUrlParams();
