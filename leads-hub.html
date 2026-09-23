@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609211805';
+    var PAGE_BUILD = '202609231145';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -242,9 +242,9 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202608111530"></script>
+<script src="js/config.js?v=202609231145"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202608251215"></script>
+<script src="js/auth.js?v=202609231145"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script>
@@ -378,13 +378,13 @@ async function loadAll(){
   // "סוכן" (agent) = משתמש חיצוני שמקבל שירות מהמערכת, לא איש צוות BSD - רואה רק
   // את מה שהוא עצמו הכניס. שאר התפקידים (agent_authorized/manager/admin) רואים הכל,
   // ועריכה מוגבלת בהמשך לפי canEditRecord() (אדמין/מנהל או מי שהכניס את הליד).
-  let bizQ = window.supabaseClient.from('businesses').select('*').order('updated_at', { ascending: false });
-  let leadQ = window.supabaseClient.from('leads').select('*').order('updated_at', { ascending: false });
-  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
-    bizQ = bizQ.eq('created_by', CURRENT_PROFILE.id);
-    leadQ = leadQ.eq('created_by', CURRENT_PROFILE.id);
-  }
-  const [{ data: bizData, error: bizErr }, { data: leadData, error: leadErr }] = await Promise.all([bizQ, leadQ]);
+  const [{ data: allBizData, error: bizErr }, { data: allLeadData, error: leadErr }] = await Promise.all([
+    window.BSDDataCache.rows('businesses', CURRENT_PROFILE.id),
+    window.BSDDataCache.rows('leads', CURRENT_PROFILE.id)
+  ]);
+  const ownOnly = CURRENT_PROFILE.role === 'agent';
+  const bizData = (allBizData || []).filter(r => !ownOnly || r.created_by === CURRENT_PROFILE.id);
+  const leadData = (allLeadData || []).filter(r => !ownOnly || r.created_by === CURRENT_PROFILE.id);
   if (bizErr){ toast('שגיאה בטעינת עסקים: ' + bizErr.message); }
   if (leadErr){ toast('שגיאה בטעינת לידים: ' + leadErr.message); }
 
@@ -398,7 +398,8 @@ async function loadAll(){
   // סופית לעולם לא מופיע בטאבי קונים/שותפים - זו בדיוק המטרה: הוא "יושב"
   // כאן עד שמסמנים במפורש ששוחחו איתו ובוחרים לאן להעביר אותו.
   const isOpenWebsiteLead = l => l.website_intake_stage === 'new' || l.website_intake_stage === 'contacted';
-  const legacySellers = (leadData || []).filter(l => l.type === 'seller' && noAgreement(l) && !l.website_intake_stage);
+  const convertedSellerIds = new Set(ALL_BUSINESSES.filter(b => !b.is_archived && b.seller_id).map(b => b.seller_id));
+  const legacySellers = (leadData || []).filter(l => l.type === 'seller' && noAgreement(l) && !l.website_intake_stage && !convertedSellerIds.has(l.id));
   const websiteLeads = (leadData || []).filter(isOpenWebsiteLead);
   const seenIds = new Set();
   ALL_SELLERS = [...websiteLeads, ...legacySellers].filter(l => (seenIds.has(l.id) ? false : (seenIds.add(l.id), true)));
@@ -1022,7 +1023,7 @@ function renderTable(){
   const tn = tableName();
   body.innerHTML = rows.map(r => {
     const editable = canEditRecord(r.created_by);
-    const isWebsiteLead = CURRENT_TAB === 'seller' && !!r.website_intake_stage;
+    const isWebsiteLead = CURRENT_TAB === 'seller' && (!!r.website_intake_stage || r.status === 'הועבר למוכר');
     const isY2026 = CURRENT_TAB === 'y2026';
     const isAdmin = !!(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin');
     const rowClickAction = isY2026 ? `openReadOnly('${r.id}')` : (isWebsiteLead ? `openWebsiteLead('${r.id}')` : (editable ? `openEdit('${r.id}')` : `openReadOnly('${r.id}')`));
@@ -1478,8 +1479,78 @@ function renderWebsiteLeadConversationForm(r){
   }));
 }
 
+function websiteLeadTransferNotes(lead, existingNotes){
+  let notes = existingNotes || lead.notes || '';
+  const parts = [
+    lead.notes,
+    lead.phone2 ? 'טלפון נוסף: ' + lead.phone2 : null,
+    lead.role_in_business ? 'תפקיד בעסק: ' + lead.role_in_business : null,
+    lead.ownership_percent != null ? 'אחוז בעלות: ' + lead.ownership_percent : null,
+    lead.intake_conversation_summary ? 'מהות השיחה: ' + lead.intake_conversation_summary : null,
+    lead.intake_customer_wants ? 'מה הלקוח מחפש: ' + lead.intake_customer_wants : null,
+    lead.intake_important_details ? 'פרטים חשובים: ' + lead.intake_important_details : null,
+    lead.intake_conversation_notes ? 'הערות שיחה: ' + lead.intake_conversation_notes : null
+  ];
+  for (const part of parts){
+    if (part && !notes.includes(part)) notes += (notes ? '\n\n' : '') + part;
+  }
+  return notes || null;
+}
+
+async function ensureWebsiteLeadBusiness(lead){
+  const db = window.supabaseClient;
+  const linked = await db.from('businesses').select('*').eq('seller_id', lead.id).limit(2);
+  if (linked.error) throw new Error(linked.error.message);
+  if ((linked.data || []).length > 1) throw new Error('לליד מקושרים כמה עסקים. יש לבדוק את הכרטיסים הקיימים לפני ההעברה.');
+  let business = (linked.data || [])[0];
+  let expected;
+  if (!business){
+    const ownerName = lead.full_name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || null;
+    expected = {
+      // Stable ID makes retries and simultaneous submissions safe without an upsert
+      // that could overwrite an existing business. seller_id preserves the source record.
+      id: lead.id, seller_id: lead.id,
+      internal_name: lead.business_name || lead.company || (ownerName ? 'עסק של ' + ownerName : 'עסק מליד'),
+      owner_name: ownerName, owner_phone: lead.phone || null, owner_email: lead.email || null,
+      field: lead.business_field || null, city: lead.business_city || lead.city || null,
+      address: lead.business_address || lead.address || null, website: lead.website || null,
+      asking_price: lead.asking_price ?? null, sale_reason: lead.sale_reason || null,
+      id_number: lead.id_number || null, source: lead.source || null,
+      notes: websiteLeadTransferNotes(lead), status: 'חדש', listing_status: 'active',
+      agreement_status: 'אין הסכם',
+      handled_by: lead.handled_by || null, created_by: lead.created_by || CURRENT_PROFILE.id,
+      anon_card_active: false, public_listing_active: false
+    };
+    const inserted = await db.from('businesses').insert(expected).select('*').single();
+    if (inserted.error){
+      // An earlier request may have committed despite a lost response.
+      const retry = await db.from('businesses').select('*').eq('id', lead.id).maybeSingle();
+      if (retry.error || !retry.data || retry.data.seller_id !== lead.id) throw new Error(inserted.error.message);
+      business = retry.data;
+      expected = null;
+    } else business = inserted.data;
+  }
+  if (!business || business.seller_id !== lead.id || business.is_archived) throw new Error('כרטיס העסק לא זמין או נמצא בארכיון. ההעברה לא אושרה.');
+  const notes = websiteLeadTransferNotes(lead, business.notes);
+  if (notes !== business.notes){
+    const saved = await db.from('businesses').update({ notes }).eq('id', business.id);
+    if (saved.error) throw new Error(saved.error.message);
+  }
+  const checked = await db.from('businesses').select('*').eq('id', business.id).single();
+  if (checked.error || !checked.data || checked.data.is_archived || checked.data.seller_id !== lead.id || checked.data.notes !== notes){
+    throw new Error(checked.error?.message || 'כרטיס העסק לא אומת בקריאה חוזרת');
+  }
+  if (expected){
+    for (const [key, value] of Object.entries(expected)){
+      if (checked.data[key] !== value) throw new Error('נתוני כרטיס העסק לא אומתו: ' + key);
+    }
+  }
+  return checked.data;
+}
+
 async function saveWebsiteLeadTransfer(id){
   const btn = document.getElementById('wlSaveBtn');
+  if (btn.disabled) return;
   const errBox = document.getElementById('wlSaveError');
   const okBox = document.getElementById('wlSaveOk');
   errBox.style.display = 'none'; okBox.style.display = 'none';
@@ -1507,32 +1578,44 @@ async function saveWebsiteLeadTransfer(id){
   }
 
   btn.disabled = true; btn.textContent = 'שומר...';
-  const { error } = await window.supabaseClient.from('leads').update(payload).eq('id', id);
-  if (error){
-    errBox.style.display = 'block'; errBox.textContent = 'שגיאה בשמירה: ' + error.message + ' — הליד לא הועבר.';
-    btn.disabled = false; btn.textContent = '💾 שמור והעבר';
-    return;
+  let destination = null;
+  try {
+  // Read current data before copying; never use a stale list snapshot.
+  const source = await window.supabaseClient.from('leads').select('*').eq('id', id).single();
+  if (source.error || !source.data || source.data.is_archived) throw new Error(source.error?.message || 'הליד אינו זמין להעברה');
+  if (category === 'seller'){
+    destination = await ensureWebsiteLeadBusiness({ ...source.data, ...payload });
+  } else if (category === 'buyer'){
+    // Conversation fields are not rendered by the buyer card; retain them in its notes too.
+    payload.notes = websiteLeadTransferNotes({ ...source.data, ...payload });
   }
+  const { error } = await window.supabaseClient.from('leads').update(payload).eq('id', id);
+  if (error) throw new Error(error.message);
 
   // אימות אמיתי, בקריאה נפרדת, לפני כל הודעת הצלחה
-  const expected = {
-    status: payload.status, website_intake_stage: payload.website_intake_stage,
-    intake_conversation_summary: payload.intake_conversation_summary
-  };
-  if (payload.type) expected.type = payload.type;
+  const expected = { ...payload };
+  delete expected.intake_reviewed_at; // PostgreSQL may normalize timestamp formatting.
   const verify = await verifyLeadWrite(id, expected);
   if (!verify.ok){
-    errBox.style.display = 'block';
-    errBox.textContent = 'השמירה לא אושרה בבדיקה חוזרת מול השרת — לא סומן כהצלחה: ' + verify.mismatches.join(' | ');
-    btn.disabled = false; btn.textContent = '💾 שמור והעבר';
-    return;
+    throw new Error('השמירה לא אושרה בבדיקה חוזרת: ' + verify.mismatches.join(' | '));
   }
 
+  if (window.BSDDataCache && CURRENT_PROFILE){
+    window.BSDDataCache.remove('businesses-page', CURRENT_PROFILE.id);
+    window.BSDDataCache.remove('leads-page', CURRENT_PROFILE.id);
+  }
   okBox.style.display = 'block';
-  okBox.textContent = '✅ הליד נשמר בפועל במסד הנתונים ואומת בקריאה חוזרת.' + (payload.website_intake_stage ? '' : ' עבר לרשימה המתאימה.');
+  okBox.textContent = destination ? '✅ כרטיס העסק נשמר ואומת. פותח את הכרטיס.' : '✅ הליד נשמר ואומת.';
   btn.textContent = '✅ נשמר';
+  if (destination){ location.href = 'businesses.html?open=' + encodeURIComponent(destination.id); return; }
+  if (category === 'buyer'){ location.href = 'leads.html?open=' + encodeURIComponent(id); return; }
   await loadAll();
   setTimeout(() => { closeModal(); }, 900);
+  } catch (error){
+    errBox.style.display = 'block';
+    errBox.textContent = (destination ? 'כרטיס העסק קיים, אך השלמת ההעברה לא אושרה. אפשר לנסות שוב ללא יצירת כרטיס נוסף. ' : 'ההעברה לא הושלמה. ') + error.message;
+    btn.disabled = false; btn.textContent = '💾 שמור והעבר';
+  }
 }
 
 async function rejectWebsiteLead(id){
