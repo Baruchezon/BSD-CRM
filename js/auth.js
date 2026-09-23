@@ -100,11 +100,13 @@ async function requireAuth() {
   let profile, error;
   for (const delay of [0, 500, 1000]) {
     if (delay) await new Promise(resolve => setTimeout(resolve, delay));
-    ({ data: profile, error } = await window.supabaseClient
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .single());
+    let profileTimer;
+    try {
+      ({ data: profile, error } = await Promise.race([
+        window.supabaseClient.from('profiles').select('*').eq('id', session.user.id).single(),
+        new Promise(resolve => { profileTimer = setTimeout(() => resolve({ data:null, error:{code:'TIMEOUT',message:'השרת לא השיב בזמן'} }), 12000); })
+      ]));
+    } finally { clearTimeout(profileTimer); }
     // הצלחה, או שגיאה אמיתית (אין פרופיל בכלל) - אין טעם לנסות שוב
     if (!error || (error.code && error.code !== 'PGRST116' && !/network|fetch/i.test(error.message || ''))) break;
   }
@@ -155,7 +157,9 @@ async function requireAuth() {
   if (window.BSDDataCache){
     await window.BSDDataCache.activate(session, profile);
     window.BSDDataCache.observeWrites(window.supabaseClient);
-    await Promise.all([window.BSDDataCache.rows('businesses', profile.id), window.BSDDataCache.rows('leads', profile.id)]);
+    // Preload without blocking the authenticated page. Its own dataset joins the same pending request.
+    Promise.all([window.BSDDataCache.rows('businesses', profile.id), window.BSDDataCache.rows('leads', profile.id)])
+      .catch(error => console.warn('BSD background preload:', error.message));
   }
   return profile;
 }
