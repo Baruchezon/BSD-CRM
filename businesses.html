@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609231145';
+    var PAGE_BUILD = '202609231154';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -458,7 +458,7 @@
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
 <script src="js/dedupeCheckModule.js?v=202608311200"></script>
-<script src="js/archiveModule.js?v=202609021200"></script>
+<script src="js/archiveModule.js?v=20260923archive1"></script>
 <script>
 let ALL_BIZ = [];
 let ARCHIVED_BIZ = [];
@@ -4662,11 +4662,13 @@ async function archiveBiz(id){
   const b = ALL_BIZ.find(x=>x.id===id) || (await window.supabaseClient.from('businesses').select('*').eq('id', id).maybeSingle()).data;
   if (!canManageBiz(b)){ toast('אין לך הרשאה להעביר עסק זה לארכיון'); return; }
   openArchiveReasonModal('העברת "' + (b.internal_name||'העסק') + '" לארכיון', async (reason)=>{
-    const { error } = await window.supabaseClient.from('businesses').update({ is_archived: true, archive_reason: reason }).eq('id', id);
-    if (error){ toast('שגיאה בהעברה לארכיון: ' + error.message); return; }
+    const row = await updateArchiveRecord('businesses', id, true, reason);
+    ALL_BIZ = ALL_BIZ.filter(item => item.id !== id);
+    ARCHIVED_BIZ = [row, ...ARCHIVED_BIZ.filter(item => item.id !== id)];
+    closeModal();
+    saveBusinessPageCache();
+    setBizViewMode('archive');
     toast('הועבר לארכיון');
-    closeBizForm();
-    await loadBusinesses();
   });
 }
 async function restoreBizFromArchive(id){
@@ -4674,16 +4676,17 @@ async function restoreBizFromArchive(id){
   const b = ARCHIVED_BIZ.find(x=>x.id===id);
   if (!canRestoreBiz(b)){ toast('שחזור מהארכיון מותר רק לאדמין או למי שהעביר את הכרטיס לארכיון'); return; }
   if (!confirm('לשחזר עסק זה מהארכיון לרשימה הרגילה?')) return;
-  const { error } = await window.supabaseClient.from('businesses').update({
-    is_archived: false,
-    listing_status: 'active',
-    removal_reason: null,
-    sold_to: null
-  }).eq('id', id);
-  if (error){ toast('שגיאה בשחזור: ' + error.message); return; }
-  toast('שוחזר מהארכיון');
-  closeBizForm();
-  await loadBusinesses();
+  try {
+    const row = await updateArchiveRecord('businesses', id, false);
+    ARCHIVED_BIZ = ARCHIVED_BIZ.filter(item => item.id !== id);
+    ALL_BIZ = [row, ...ALL_BIZ.filter(item => item.id !== id)];
+    closeModal();
+    saveBusinessPageCache();
+    setBizViewMode('active');
+    toast('שוחזר מהארכיון');
+  } catch (error){
+    toast('שגיאה בשחזור: ' + error.message);
+  }
 }
 // מסך ארכיון אמיתי (סעיף 5 בהנחיה) - טאב נפרד עם כל השדות הנדרשים, לא alert().
 let BIZ_VIEW_MODE = 'active';
@@ -4757,7 +4760,7 @@ async function deleteBiz(id){
   }
   if (!data || !data.length){ toast('המחיקה לא בוצעה. ניתן למחוק רק עסק שנמצא בארכיון.'); return; }
   toast('✅ העסק נמחק לצמיתות');
-  closeBizForm();
+  closeModal();
   await loadBusinesses();
 }
 
