@@ -14,7 +14,7 @@ window.BSD_CONFIG = {
 // IndexedDB avoids evicting one large list to make room for the other.
 window.BSDDataCache = (() => {
   const DB_NAME = 'bsd-crm-daily-v1';
-  const scopes = ['businesses-page', 'leads-page', 'rows:businesses', 'rows:leads'];
+  const scopes = ['businesses-page', 'leads-page', 'matches-page', 'rows:businesses', 'rows:leads'];
   let context = null, memory = new Map(), pending = new Map(), revisions = new Map(), dbPromise;
   let persistence = Promise.resolve();
   const day = () => new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Jerusalem', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date());
@@ -121,7 +121,7 @@ window.BSDDataCache = (() => {
     if (!context) return;
     const active = context, userId = context.userId;
     revisions.set(table, (revisions.get(table) || 0) + 1);
-    remove('businesses-page', userId); remove('leads-page', userId);
+    remove('businesses-page', userId); remove('leads-page', userId); remove('matches-page', userId);
     // Read back just the affected row. Verification reads always go to the server.
     if (['businesses','leads'].includes(table)){
       const cached = get('rows:' + table, userId);
