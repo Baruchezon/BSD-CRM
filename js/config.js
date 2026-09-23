@@ -217,15 +217,18 @@ window.BSDDataCache = (() => {
     } catch (error) { return { data:null, error:{message:error.message || 'שגיאת תקשורת'} }; }
     finally { clearTimeout(timer); }
   }
-  async function rows(table, userId){
+  async function rows(table, userId, options={}){
     if (!['businesses','leads'].includes(table)) throw new Error('Unsupported daily dataset');
     if (context && !valid(userId)) {
       const { data } = await window.supabaseClient.auth.getSession();
       if (!data.session || data.session.user.id !== userId) return { data:null, error:{message:'נדרשת כניסה מחדש'} };
-      await activate(data.session, Object.fromEntries(JSON.parse(context.permissions)));
+      await activate(data.session, JSON.parse(context.permissions));
     }
     const cached = get('rows:' + table, userId);
-    if (cached) return { data:cached, error:null };
+    // Page snapshots are only a fast first paint. A caller can explicitly
+    // revalidate against Supabase so an empty or incomplete daily cache can
+    // never become the final answer for the rest of the day.
+    if (cached && !options.forceRefresh) return { data:cached, error:null };
     if (pending.has(table)) return clone(await pending.get(table));
     const active = context, revision = revisions.get(table) || 0;
     const request = (async () => {

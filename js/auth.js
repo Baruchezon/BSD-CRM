@@ -149,6 +149,10 @@ async function requireAuth() {
         return;
       }
       if (window.BSDSessionCache) window.BSDSessionCache.write(session, result.data);
+      // If role or permissions changed, rotate the daily cache namespace now.
+      // This prevents a stale privileged or empty dataset from surviving until
+      // the next navigation.
+      if (window.BSDDataCache) await window.BSDDataCache.activate(session, result.data);
     }).catch(() => {});
     return cachedProfile;
   }
