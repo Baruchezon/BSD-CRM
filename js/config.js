@@ -207,12 +207,12 @@ window.BSDDataCache = (() => {
     context = null; memory.clear(); pending.clear();
     for (const scope of scopes) persistence = persistence.then(() => disk('delete', scope));
   }
-  async function readWithDeadline(query){
+  async function readWithDeadline(query, timeoutMs=65000){
     let timer;
     try {
       return await Promise.race([
         Promise.resolve(query),
-        new Promise(resolve => { timer = setTimeout(() => resolve({ data:null, error:{message:'השרת לא השיב בזמן. אפשר לנסות שוב.'} }), 15000); })
+        new Promise(resolve => { timer = setTimeout(() => resolve({ data:null, error:{message:'השרת לא השיב בזמן. אפשר לנסות שוב.'} }), timeoutMs); })
       ]);
     } catch (error) { return { data:null, error:{message:error.message || 'שגיאת תקשורת'} }; }
     finally { clearTimeout(timer); }
@@ -235,6 +235,9 @@ window.BSDDataCache = (() => {
       // Paginate: a once-per-day cache must not silently retain only PostgREST's first 1000 rows.
       const all = [];
       for (let start = 0; ; start += 1000){
+        // Production mobile logs showed valid authenticated list reads taking
+        // up to 48 seconds. Do not abandon a successful request after 15
+        // seconds and turn real records into an empty table.
         const result = await readWithDeadline(window.supabaseClient.from(table).select('*').order('id').range(start, start + 999));
         if (result.error) return result;
         all.push(...(result.data || []));

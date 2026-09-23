@@ -7,7 +7,7 @@ const code=config.slice(config.indexOf('// Daily,'),config.indexOf('// 15.09.202
 function environment(useIndexedDB=true, stallStorage=false){
  const persistent=new Map(), local=new Map(), sessionStore=new Map(), calls=[];
  const storage=map=>({getItem:k=>map.get(k)||null,setItem:(k,v)=>map.set(k,String(v)),removeItem:k=>map.delete(k)});
- const clock={now:Date.parse('2026-09-23T10:00:00Z')};let fail=false, stallNetwork=false;
+ const clock={now:Date.parse('2026-09-23T10:00:00Z')};let fail=false, stallNetwork=false, networkDelay=0;
  const tables={businesses:[{id:'b1',internal_name:'Before',updated_at:'2026-09-23'}],leads:Array.from({length:1501},(_,i)=>({id:'l'+i,updated_at:'2026-09-23'}))};
  function indexedDB(){return {open(){const req={};setImmediate(()=>{req.result={transaction(){const tx={objectStore(){return {get:k=>op('get',k),put:(v,k)=>op('put',k,v),delete:k=>op('delete',k)}}};function op(type,k,v){const r={};setImmediate(()=>{if(type==='put')persistent.set(k,structuredClone(v));if(type==='delete')persistent.delete(k);r.result=type==='get'?structuredClone(persistent.get(k)):null;r.onsuccess?.();tx.oncomplete?.()});return r}return tx}};req.onsuccess()});return req}}}
  function page(){
@@ -16,7 +16,7 @@ function environment(useIndexedDB=true, stallStorage=false){
   const client={auth:{getSession:async()=>({data:{session}})},rpc(){return Promise.resolve({data:[],error:null})},from(table){
    let operation='get',values,id,start=0,end=999999;
    const q={select(){return q},order(){return q},range(a,b){start=a;end=b;return q},eq(k,v){if(k==='id')id=v;return q},update(v){operation='update';values=v;return q},insert(v){operation='insert';values=v;return q},delete(){operation='delete';return q},single(){return q},maybeSingle(){return q},then(ok,bad){return (async()=>{
-    calls.push({table,operation,id,start,end});if(stallNetwork)return new Promise(()=>{});if(fail)return {error:{message:'offline'},data:null};
+    calls.push({table,operation,id,start,end});if(stallNetwork)return new Promise(()=>{});if(networkDelay)await new Promise(resolve=>setTimeout(resolve,networkDelay));if(fail)return {error:{message:'offline'},data:null};
     if(operation==='update')Object.assign(tables[table].find(r=>r.id===id),values);
     if(operation==='insert'){tables[table].push(values);return {data:structuredClone(values),error:null}}
     if(operation==='delete')tables[table]=tables[table].filter(r=>r.id!==id);
@@ -24,13 +24,13 @@ function environment(useIndexedDB=true, stallStorage=false){
    })().then(ok,bad)}};return q;
   }};
   class ClockDate extends Date {constructor(...args){super(...(args.length?args:[clock.now]))}static now(){return clock.now}}
-  const sandbox={setTimeout:(fn,ms)=>setTimeout(fn,ms===15000?100:ms),clearTimeout,window:{supabaseClient:client},Date:ClockDate,Intl,Map,Set,Promise,Proxy,JSON,Object,Math,atob:x=>Buffer.from(x,'base64').toString(),localStorage:storage(local),sessionStorage:storage(sessionStore)};
+  const sandbox={setTimeout:(fn,ms)=>setTimeout(fn,ms>=15000?100:ms),clearTimeout,window:{supabaseClient:client},Date:ClockDate,Intl,Map,Set,Promise,Proxy,JSON,Object,Math,atob:x=>Buffer.from(x,'base64').toString(),localStorage:storage(local),sessionStorage:storage(sessionStore)};
   if(useIndexedDB)sandbox.indexedDB=stallStorage ? {open:()=>({})} : indexedDB();
   vm.createContext(sandbox);vm.runInContext(code,sandbox);const cache=sandbox.window.BSDDataCache;
   const start=async()=>{await cache.activate(session,profile);cache.observeWrites(client)};
   return {cache,client,session,profile,start,async load(){await start();return Promise.all([cache.rows('businesses',profile.id),cache.rows('leads',profile.id)])}};
  }
- return {page,clock,calls,tables,setFail:v=>fail=v,setStall:v=>stallNetwork=v};
+ return {page,clock,calls,tables,setFail:v=>fail=v,setStall:v=>stallNetwork=v,setDelay:v=>networkDelay=v};
 }
 for(const indexed of [true,false])test('daily/session persistence and selective writes '+(indexed?'IndexedDB adapter':'storage fallback'),async()=>{
  const e=environment(indexed);let p=e.page();let data=await p.load();assert.equal(data[1].data.length,1501);assert.equal(e.calls.length,3);
@@ -57,6 +57,13 @@ test('forced refresh heals an empty or stale same-day collection',async()=>{
  assert.equal((await p.cache.rows('leads','u1',{forceRefresh:true})).data.length,1,'screen revalidation bypasses an empty cache');
  assert.equal((await p.cache.rows('leads','u1')).data[0].id,'recovered','the repaired result replaces the stale cache');
 });
+test('a slow successful mobile response is retained instead of becoming an empty list',async()=>{
+ const e=environment();const p=e.page();await p.start();e.setDelay(50);
+ const result=await p.cache.rows('leads','u1',{forceRefresh:true});
+ assert.equal(result.error,null);
+ assert.equal(result.data.length,1501);
+ assert.equal((await p.cache.rows('leads','u1')).data.length,1501);
+});
 test('verification reads bypass cache and deletes remove the cached row',async()=>{
  const e=environment();const p=e.page();await p.load();await p.client.from('businesses').select('*').eq('id','b1').single();assert.equal(e.calls.length,4);
  await p.client.from('businesses').delete().eq('id','b1');assert.equal((await p.cache.rows('businesses','u1')).data.length,0);assert.equal(e.calls.length,5);
@@ -75,6 +82,7 @@ test('buyer screen never trusts an empty page snapshot and loads rows before opt
  const html=fs.readFileSync(new URL('../leads.html',import.meta.url),'utf8');
  assert.match(html,/c\.leads\.length === 0[\s\S]*return false/);
  assert.match(html,/loadLeads\(\{ forceRefresh:true, preserveExisting:restored/);
+ assert.match(html,/if \(!LEADS_DATA_READY\) return;/);
  const init=html.slice(html.indexOf('(async function init(){'));
  assert.ok(init.indexOf('loadLeads({ forceRefresh:true') < init.indexOf('supplemental.catch'), 'primary buyer rows are not blocked by optional data');
 });
