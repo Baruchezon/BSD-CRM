@@ -624,13 +624,7 @@ function restoreBusinessPageCache(){
 }
 
 async function loadBusinesses(options={}){
-  let q = window.supabaseClient
-    .from('businesses')
-    .select('*')
-    .order('updated_at', { ascending: false });
-  // הסינון לפי created_by הוסר - ה-RLS בבסיס הנתונים (has_full_business_access)
-  // כבר מחזיר בדיוק את השורות שמותר לראות לכל תפקיד, כולל גישות ששוחררו.
-  const { data, error } = await q;
+  const { data, error } = await window.BSDDataCache.rows('businesses', CURRENT_PROFILE.id);
   if (error){ toast('שגיאה בטעינה: ' + error.message); return; }
   // תיקון 25.08.2026 (כלל עסקי מחייב): קיום/הצגה של עסק לעולם לא מותנים
   // בסטטוס הסכם. עסק חדש חייב להישאר ולהופיע כאן מהרגע שנשמר, גם בלי
@@ -4777,18 +4771,15 @@ async function deleteBiz(id){
   if (!canViewAnonymousBusinesses(CURRENT_PROFILE)){ document.getElementById('bizTabAnon').style.display = 'none'; }
   const restored = restoreBusinessPageCache();
   if (restored){
-    await loadVipPublicationStatuses();
-    renderTable();
-    saveBusinessPageCache();
     await maybeHandleUrlParams();
   } else {
     await Promise.all([loadLookups(), loadNotesSummary('businesses')]);
     await loadBusinesses();
   }
 })();
-window.addEventListener('pagehide', saveBusinessPageCache);
+
 window.addEventListener('bsd:vip-ready', async () => {
-  if (!CURRENT_PROFILE || !ALL_BIZ.length) return;
+  if (!CURRENT_PROFILE || !ALL_BIZ.length || restoreBusinessPageCache()) return;
   await loadVipPublicationStatuses();
   renderTable();
   saveBusinessPageCache();
