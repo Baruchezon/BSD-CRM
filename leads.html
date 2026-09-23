@@ -271,7 +271,7 @@
 <script src="js/pdfPipeline.js?v=202608291000"></script>
 <script src="js/dedupeCheckModule.js?v=202608311200"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
-<script src="js/archiveModule.js?v=202609021200"></script>
+<script src="js/archiveModule.js?v=20260923archive1"></script>
 <script>
 let ALL_LEADS = [];
 let ARCHIVED_LEADS = [];
@@ -1732,10 +1732,13 @@ async function archiveLead(id){
   if (!canManageLead(l)){ toast('אין לך הרשאה להעביר רשומה זו לארכיון'); return; }
   const personName = l ? (l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ')) : '';
   openArchiveReasonModal('העברת "' + (personName||'הרשומה') + '" לארכיון', async (reason)=>{
-    const { error } = await window.supabaseClient.from('leads').update({ is_archived: true, archive_reason: reason }).eq('id', id);
-    if (error){ toast('שגיאה בהעברה לארכיון: ' + error.message); return; }
+    const row = await updateArchiveRecord('leads', id, true, reason);
+    ALL_LEADS = ALL_LEADS.filter(item => item.id !== id);
+    ARCHIVED_LEADS = [row, ...ARCHIVED_LEADS.filter(item => item.id !== id)];
+    closeModal();
+    saveLeadsPageCache();
+    setLeadViewMode('archive');
     toast('הועבר לארכיון');
-    await loadLeads();
   });
 }
 async function restoreLeadFromArchive(id){
@@ -1743,10 +1746,17 @@ async function restoreLeadFromArchive(id){
   const l = ARCHIVED_LEADS.find(x=>x.id===id);
   if (!canRestoreLead(l)){ toast('שחזור מהארכיון מותר רק לאדמין או למי שהעביר את הכרטיס לארכיון'); return; }
   if (!confirm('לשחזר רשומה זו מהארכיון?')) return;
-  const { error } = await window.supabaseClient.from('leads').update({ is_archived: false }).eq('id', id);
-  if (error){ toast('שגיאה בשחזור: ' + error.message); return; }
-  toast('שוחזר מהארכיון');
-  await loadLeads();
+  try {
+    const row = await updateArchiveRecord('leads', id, false);
+    ARCHIVED_LEADS = ARCHIVED_LEADS.filter(item => item.id !== id);
+    ALL_LEADS = [row, ...ALL_LEADS.filter(item => item.id !== id)];
+    closeModal();
+    saveLeadsPageCache();
+    setLeadViewMode('active');
+    toast('שוחזר מהארכיון');
+  } catch (error){
+    toast('שגיאה בשחזור: ' + error.message);
+  }
 }
 // תיקון 02.09.2026: בדיוק כמו deleteBiz בעסקים - לפני מחיקה בודקים היסטוריה
 // אמיתית (get_lead_history_summary, SECURITY DEFINER) ולעולם לא ממשיכים
