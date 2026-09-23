@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609231230';
+    var PAGE_BUILD = '202609231630';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -398,15 +398,15 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202609231205"></script>
+<script src="js/config.js?v=202609231630"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202609231205"></script>
+<script src="js/auth.js?v=202609231630"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608251215"></script>
 <script src="js/pdfPipeline.js?v=202608291000"></script>
-<script src="js/saleFileModule2.js?v=202609031930"></script>
+<script src="js/saleFileModule2.js?v=202609231630"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
 <script src="js/dedupeCheckModule.js?v=202608311200"></script>
@@ -776,14 +776,10 @@ async function _agreementSignedUrl(tableName, recordId, download){
   return data.signedUrl;
 }
 async function viewAgreementPdf(tableName, recordId){
-  const win = window.open('', '_blank');
-  const url = await _agreementSignedUrl(tableName, recordId, false);
-  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
+  return window.bsdOpenPrivateFile({ bucket:window.BSD_CONFIG.STORAGE_BUCKET, path:`agreements/${tableName}/${recordId}.pdf`, label:'ההסכם' });
 }
 async function downloadAgreementPdf(tableName, recordId){
-  const win = window.open('', '_blank');
-  const url = await _agreementSignedUrl(tableName, recordId, true);
-  if (url){ if (win) win.location.href = url; else window.open(url, '_blank'); } else if (win) win.close();
+  return window.bsdOpenPrivateFile({ bucket:window.BSD_CONFIG.STORAGE_BUCKET, path:`agreements/${tableName}/${recordId}.pdf`, downloadName:true, label:'ההסכם' });
 }
 
 /* ─────────── העלאה ידנית של הסכם חתום מחוץ למערכת (05.09.2026) ───────────
@@ -1971,19 +1967,10 @@ function renderAnonBizGrid(){
 }
 
 async function viewAnonFile(fileId, storagePath){
-  // נפתח חלון ריק מיד בלחיצה (סינכרוני) ולא אחרי await - אחרת חוסמי
-  // Pop-up (בעיקר בדפדפן מובייל) חוסמים אותו בשקט, בלי שום שגיאה נראית -
-  // בדיוק התסמין שדווח: "רואה שיש קובץ אבל לחיצה לא עושה כלום".
-  const win = window.open('', '_blank');
-  const { data, error } = await window.supabaseClient.storage.from(window.BSD_CONFIG.STORAGE_BUCKET).createSignedUrl(storagePath, 300);
-  if (error || !data){ toast('שגיאה בפתיחת הקובץ: ' + (error?.message || '')); if (win) win.close(); return; }
-  if (win) win.location.href = data.signedUrl; else window.open(data.signedUrl, '_blank');
+  return window.bsdOpenPrivateFile({ bucket:window.BSD_CONFIG.STORAGE_BUCKET, path:storagePath, label:'הקובץ' });
 }
 async function downloadAnonFile(fileId, storagePath, fileName){
-  const win = window.open('', '_blank');
-  const { data, error } = await window.supabaseClient.storage.from(window.BSD_CONFIG.STORAGE_BUCKET).createSignedUrl(storagePath, 300, { download: fileName });
-  if (error || !data){ toast('שגיאה בהורדת הקובץ: ' + (error?.message || '')); if (win) win.close(); return; }
-  if (win) win.location.href = data.signedUrl; else window.open(data.signedUrl, '_blank');
+  return window.bsdOpenPrivateFile({ bucket:window.BSD_CONFIG.STORAGE_BUCKET, path:storagePath, downloadName:fileName || true, label:'הקובץ' });
 }
 
 // שליחת קובץ אנונימי לקונה - הקונה נבחר רק מתוך הקונים של הסוכן עצמו
@@ -3350,16 +3337,12 @@ async function downloadBizFile(bizId, idx){
   // גרש/גרשיים (נפוץ בעברית), ולגרום לכשל שקט. אינדקס לא נתון לבעיה הזו.
   const f = (BIZ_FILES_CACHE[bizId] || [])[idx];
   if (!f){ toast('שגיאה: הקובץ לא נמצא (ייתכן שהרשימה התרעננה - טען מחדש ונסה שוב)'); return; }
-  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(f.storagePath, 60);
-  if (error){ toast('שגיאה: ' + error.message); return; }
   bsdLogActivity('download_file', 'businesses', bizId);
-  window.open(data.signedUrl, '_blank');
+  return window.bsdOpenPrivateFile({ bucket:BIZ_FILES_BUCKET, path:f.storagePath, label:f.displayName || 'הקובץ' });
 }
 
 async function downloadIntakeForm(bizId, bizName){
-  const { data, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(`${bizId}/intake-form.pdf`, 300);
-  if (error){ toast('שגיאה: ' + error.message); return; }
-  window.open(data.signedUrl, '_blank');
+  return window.bsdOpenPrivateFile({ bucket:BIZ_FILES_BUCKET, path:`${bizId}/intake-form.pdf`, label:'טופס הקליטה' });
 }
 
 // ============================================================================
