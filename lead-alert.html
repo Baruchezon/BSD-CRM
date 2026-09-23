@@ -7,7 +7,7 @@
 // שהתגלתה היום בדפים אחרים (PAGE_BUILD לא מתעדכן = לא נתפס דף מקאש ישן).
 (function(){
   try{
-    var PAGE_BUILD = '202609231145';
+    var PAGE_BUILD = '202609231205';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
