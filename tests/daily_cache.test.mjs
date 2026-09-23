@@ -4,10 +4,10 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 const config=fs.readFileSync(new URL('../js/config.js',import.meta.url),'utf8');
 const code=config.slice(config.indexOf('// Daily,'),config.indexOf('// 15.09.2026:'));
-function environment(useIndexedDB=true){
+function environment(useIndexedDB=true, stallStorage=false){
  const persistent=new Map(), local=new Map(), sessionStore=new Map(), calls=[];
  const storage=map=>({getItem:k=>map.get(k)||null,setItem:(k,v)=>map.set(k,String(v)),removeItem:k=>map.delete(k)});
- const clock={now:Date.parse('2026-09-23T10:00:00Z')};let fail=false;
+ const clock={now:Date.parse('2026-09-23T10:00:00Z')};let fail=false, stallNetwork=false;
  const tables={businesses:[{id:'b1',internal_name:'Before',updated_at:'2026-09-23'}],leads:Array.from({length:1501},(_,i)=>({id:'l'+i,updated_at:'2026-09-23'}))};
  function indexedDB(){return {open(){const req={};setImmediate(()=>{req.result={transaction(){const tx={objectStore(){return {get:k=>op('get',k),put:(v,k)=>op('put',k,v),delete:k=>op('delete',k)}}};function op(type,k,v){const r={};setImmediate(()=>{if(type==='put')persistent.set(k,structuredClone(v));if(type==='delete')persistent.delete(k);r.result=type==='get'?structuredClone(persistent.get(k)):null;r.onsuccess?.();tx.oncomplete?.()});return r}return tx}};req.onsuccess()});return req}}}
  function page(){
@@ -16,7 +16,7 @@ function environment(useIndexedDB=true){
   const client={auth:{getSession:async()=>({data:{session}})},rpc(){return Promise.resolve({data:[],error:null})},from(table){
    let operation='get',values,id,start=0,end=999999;
    const q={select(){return q},order(){return q},range(a,b){start=a;end=b;return q},eq(k,v){if(k==='id')id=v;return q},update(v){operation='update';values=v;return q},insert(v){operation='insert';values=v;return q},delete(){operation='delete';return q},single(){return q},maybeSingle(){return q},then(ok,bad){return (async()=>{
-    calls.push({table,operation,id,start,end});if(fail)return {error:{message:'offline'},data:null};
+    calls.push({table,operation,id,start,end});if(stallNetwork)return new Promise(()=>{});if(fail)return {error:{message:'offline'},data:null};
     if(operation==='update')Object.assign(tables[table].find(r=>r.id===id),values);
     if(operation==='insert'){tables[table].push(values);return {data:structuredClone(values),error:null}}
     if(operation==='delete')tables[table]=tables[table].filter(r=>r.id!==id);
@@ -24,13 +24,13 @@ function environment(useIndexedDB=true){
    })().then(ok,bad)}};return q;
   }};
   class ClockDate extends Date {constructor(...args){super(...(args.length?args:[clock.now]))}static now(){return clock.now}}
-  const sandbox={window:{supabaseClient:client},Date:ClockDate,Intl,Map,Set,Promise,Proxy,JSON,Object,Math,atob:x=>Buffer.from(x,'base64').toString(),localStorage:storage(local),sessionStorage:storage(sessionStore)};
-  if(useIndexedDB)sandbox.indexedDB=indexedDB();
+  const sandbox={setTimeout:(fn,ms)=>setTimeout(fn,ms===15000?100:ms),clearTimeout,window:{supabaseClient:client},Date:ClockDate,Intl,Map,Set,Promise,Proxy,JSON,Object,Math,atob:x=>Buffer.from(x,'base64').toString(),localStorage:storage(local),sessionStorage:storage(sessionStore)};
+  if(useIndexedDB)sandbox.indexedDB=stallStorage ? {open:()=>({})} : indexedDB();
   vm.createContext(sandbox);vm.runInContext(code,sandbox);const cache=sandbox.window.BSDDataCache;
   const start=async()=>{await cache.activate(session,profile);cache.observeWrites(client)};
   return {cache,client,session,profile,start,async load(){await start();return Promise.all([cache.rows('businesses',profile.id),cache.rows('leads',profile.id)])}};
  }
- return {page,clock,calls,tables,setFail:v=>fail=v};
+ return {page,clock,calls,tables,setFail:v=>fail=v,setStall:v=>stallNetwork=v};
 }
 for(const indexed of [true,false])test('daily/session persistence and selective writes '+(indexed?'IndexedDB adapter':'storage fallback'),async()=>{
  const e=environment(indexed);let p=e.page();let data=await p.load();assert.equal(data[1].data.length,1501);assert.equal(e.calls.length,3);
@@ -61,4 +61,23 @@ test('all modified page scripts and authentication parse',()=>{
   const html=fs.readFileSync(new URL('../'+path,import.meta.url),'utf8');for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(m[1]);
  }
  new vm.Script(fs.readFileSync(new URL('../js/auth.js',import.meta.url),'utf8'));
+});
+
+test('stalled browser storage cannot prevent dataset loading',async()=>{
+ const e=environment(true,true);const p=e.page();const result=await p.load();assert.equal(result[0].data.length,1);assert.equal(result[1].data.length,1501);
+});
+
+test('authentication returns without waiting for unrelated background datasets',async()=>{
+ const auth=fs.readFileSync(new URL('../js/auth.js',import.meta.url),'utf8');
+ const start=auth.indexOf('async function requireAuth()');const end=auth.indexOf('// ============================================================',start);
+ const session={user:{id:'u1'}},profile={id:'u1',role:'admin',status:'active'};
+ const query={select(){return this},eq(){return this},single(){return Promise.resolve({data:profile,error:null})}};
+ let calls=0;
+ const sandbox={setTimeout,clearTimeout,console,document:{getElementById:()=>null},window:{supabaseClient:{auth:{getSession:async()=>({data:{session}})},from:()=>query},BSDDataCache:{activate:async()=>{},observeWrites(){},rows(){calls++;return new Promise(()=>{})}}}};
+ vm.createContext(sandbox);vm.runInContext(auth.slice(start,end),sandbox);
+ let timer;try {const result=await Promise.race([sandbox.requireAuth(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('authentication is blocked by preloading')),100)})]);assert.equal(result.id,'u1');assert.equal(calls,2);}finally{clearTimeout(timer)}
+});
+
+test('stalled data request ends with an error and permits a successful retry',async()=>{
+ const e=environment();const p=e.page();await p.start();e.setStall(true);assert.ok((await p.cache.rows('businesses','u1')).error);e.setStall(false);assert.equal((await p.cache.rows('businesses','u1')).data.length,1);
 });

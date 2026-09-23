@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609231154';
+    var PAGE_BUILD = '202609231205';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -260,9 +260,9 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202609231145"></script>
+<script src="js/config.js?v=202609231205"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202609231145"></script>
+<script src="js/auth.js?v=202609231205"></script>
 <script src="js/permissions.js?v=202608251709"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/standaloneRecording.js?v=202608251709"></script>
@@ -673,7 +673,11 @@ function restoreLeadsPageCache(){
 
 async function loadLeads(options={}){
   const { data, error } = await window.BSDDataCache.rows('leads', CURRENT_PROFILE.id);
-  if (error){ toast('שגיאה בטעינת נתונים: ' + error.message); return; }
+  if (error){
+    toast('שגיאה בטעינה: ' + error.message);
+    document.getElementById('leadsBody').innerHTML = `<tr><td colspan="12" style="text-align:center;padding:24px;">לא ניתן לטעון את הנתונים כרגע. <button type="button" class="btn btn-primary" onclick="loadLeads()">נסה שוב</button></td></tr>`;
+    return;
+  }
   // תיקון 25.08.2026 (כלל עסקי מחייב): קיום/הצגה של ליד (קונה, שותף או
   // מוכר ישן) לעולם לא מותנים בסטטוס הסכם. ליד חדש חייב להישאר ולהופיע
   // כאן מהרגע שנשמר, גם בלי הסכם, גם לפני שנשלח הסכם. הסינון הקודם (רק
