@@ -15,7 +15,7 @@ function runtime(userAgent = 'Android'){
   };
   const sandbox = {
     window:{}, localStorage, navigator:{userAgent}, setTimeout, clearTimeout,
-    URL:{ createObjectURL:()=> 'blob:test', revokeObjectURL(){} }, Promise, Date, JSON, Error
+    URL:{ createObjectURL:()=> 'blob:test', revokeObjectURL(){} }, Promise, Date, JSON, Error, Map, Set
   };
   sandbox.window.location = { assign:url => { sandbox.assigned = url; } };
   vm.createContext(sandbox);
@@ -63,11 +63,58 @@ test('Android PDF opening uses the current tab and retries after a stale session
   assert.equal(sandbox.assigned, 'https://example.test/file.pdf');
 });
 
+test('a repeated view reuses the signed URL and a download does not', async () => {
+  const { sandbox } = runtime('Mozilla/5.0 Android');
+  let signed = 0;
+  sandbox.window.supabaseClient = {
+    auth:{ refreshSession:async()=>({data:{}}) },
+    storage:{ from:()=>({
+      createSignedUrl:async(_path, _ttl, options)=> {
+        signed++;
+        return { data:{ signedUrl:'https://example.test/file.pdf?n=' + signed + (options && options.download ? '&dl=1' : '') }, error:null };
+      },
+      download:async()=>({ data:null, error:new Error('unused') })
+    }) }
+  };
+  assert.equal(await sandbox.window.bsdOpenPrivateFile({ bucket:'business-files', path:'b/full.pdf', label:'PDF' }), true);
+  assert.equal(await sandbox.window.bsdOpenPrivateFile({ bucket:'business-files', path:'b/full.pdf', label:'PDF' }), true);
+  assert.equal(signed, 1, 'the second view must not sign a new URL');
+  assert.equal(sandbox.assigned, 'https://example.test/file.pdf?n=1');
+  assert.equal(await sandbox.window.bsdOpenPrivateFile({ bucket:'business-files', path:'b/full.pdf', downloadName:'full.pdf', label:'PDF' }), true);
+  assert.equal(signed, 2, 'download still requests an attachment URL');
+});
+
+test('sale-file links are signed together before a category is opened', async () => {
+  const { sandbox } = runtime();
+  let batch = null;
+  sandbox.window.supabaseClient = {
+    storage:{ from:()=>({
+      createSignedUrls:async(paths)=> {
+        batch = paths;
+        return { data:paths.map(path => ({ path, signedUrl:'https://example.test/' + path })), error:null };
+      }
+    }) }
+  };
+  await sandbox.window.bsdPrefetchPrivateFiles('business-files', ['a/full.pdf', 'a/full.pdf', 'a/econ.pdf']);
+  assert.equal(JSON.stringify(batch), JSON.stringify(['a/full.pdf', 'a/econ.pdf']));
+  assert.equal(sandbox.window.bsdPeekPrivateFileUrl('business-files', 'a/econ.pdf'), 'https://example.test/a/econ.pdf');
+  let single = 0;
+  sandbox.window.supabaseClient.storage.from = () => ({
+    createSignedUrl:async() => { single++; return { data:{ signedUrl:'https://example.test/other' }, error:null }; },
+    createSignedUrls:async() => { throw new Error('should not sign again'); }
+  });
+  assert.equal(await sandbox.window.bsdOpenPrivateFile({ bucket:'business-files', path:'a/econ.pdf', label:'PDF' }), true);
+  assert.equal(single, 0);
+  assert.equal(sandbox.assigned, 'https://example.test/a/econ.pdf');
+});
+
 test('all primary private PDF actions use the resilient opener', () => {
   const saleFiles = fs.readFileSync(new URL('../js/saleFileModule2.js', import.meta.url), 'utf8');
   const businesses = fs.readFileSync(new URL('../businesses.html', import.meta.url), 'utf8');
   assert.match(saleFiles, /viewSaleFile[\s\S]*bsdOpenPrivateFile/);
   assert.match(saleFiles, /downloadSaleFile[\s\S]*bsdOpenPrivateFile/);
+  assert.match(saleFiles, /bsdPrefetchPrivateFiles\(SALE_FILE_BUCKET/);
+  assert.match(saleFiles, /warmSaleFilePreview\(/);
   assert.match(businesses, /viewAnonFile[\s\S]*bsdOpenPrivateFile/);
   assert.match(businesses, /downloadBizFile[\s\S]*bsdOpenPrivateFile/);
 });
