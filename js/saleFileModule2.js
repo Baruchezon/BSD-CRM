@@ -138,6 +138,11 @@ async function loadSaleFileModule(bizId){
     (SF_FILES_BY_CATEGORY[bucket] = SF_FILES_BY_CATEGORY[bucket] || []).push(f);
   });
   renderSaleFileCards(bizId);
+  // Sign every file in one request while the card is open, so צפייה does not
+  // wait on createSignedUrl. Bytes are prefetched only after a category click.
+  if (window.bsdPrefetchPrivateFiles){
+    window.bsdPrefetchPrivateFiles(SALE_FILE_BUCKET, (data || []).map(f => f.storage_path)).catch(() => {});
+  }
   // רענון הסימון "מצגת אנונימית: יש/אין" ברשימה הראשית של עסקים, אם היא טעונה כרגע
   if (typeof loadAnonPresentationIndicator === 'function' && typeof renderTable === 'function'){
     loadAnonPresentationIndicator().then(renderTable).catch(()=>{});
@@ -273,6 +278,24 @@ function openSaleFileCategory(bizId, categoryKey){
       </div>
     </div>
   `;
+  warmSaleFilePreview(rows.map(r => r.latest && r.latest.storage_path).filter(Boolean).slice(0, 3));
+}
+
+function warmSaleFilePreview(paths){
+  if (!paths.length || !window.bsdPrefetchPrivateFiles) return;
+  window.bsdPrefetchPrivateFiles(SALE_FILE_BUCKET, paths).then(() => {
+    if (!window.bsdPeekPrivateFileUrl || !document.head) return;
+    document.querySelectorAll('link[data-bsd-file-prefetch]').forEach(node => node.remove());
+    paths.forEach(path => {
+      const url = window.bsdPeekPrivateFileUrl(SALE_FILE_BUCKET, path);
+      if (!url) return;
+      const link = document.createElement('link');
+      link.rel = 'prefetch';
+      link.href = url;
+      link.setAttribute('data-bsd-file-prefetch', '1');
+      document.head.appendChild(link);
+    });
+  }).catch(() => {});
 }
 
 function sfFileRow(f, canManage, bizId, categoryKey){

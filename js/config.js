@@ -53,6 +53,52 @@ window.bsdDeadline = async function bsdDeadline(promise, timeoutMs, label){
 // the CRM.  It refreshes an expired session, retries once, and finally falls
 // back to an authenticated blob download.  Android uses the current tab when
 // a new tab is blocked, which fixes the common "nothing happens" PDF symptom.
+// Signed URLs are reused for 25 minutes. Smart CDN caches each exact token,
+// so a brand-new URL on every click always misses and re-downloads the PDF.
+const BSD_PRIVATE_FILE_URL_TTL_MS = 25 * 60 * 1000;
+const bsdPrivateFileUrls = new Map();
+function bsdPrivateFileKey(bucket, path, downloadName){
+  return bucket + '\n' + path + '\n' + (downloadName ? 'dl:' + String(downloadName) : 'inline');
+}
+function bsdRememberPrivateFileUrl(bucket, path, downloadName, url){
+  if (!bucket || !path || !url || String(url).indexOf('blob:') === 0) return;
+  bsdPrivateFileUrls.set(bsdPrivateFileKey(bucket, path, downloadName), {
+    url: url,
+    expiresAt: Date.now() + BSD_PRIVATE_FILE_URL_TTL_MS
+  });
+}
+function bsdCachedPrivateFileUrl(bucket, path, downloadName){
+  const key = bsdPrivateFileKey(bucket, path, downloadName);
+  const hit = bsdPrivateFileUrls.get(key);
+  if (!hit) return null;
+  if (hit.expiresAt <= Date.now()){ bsdPrivateFileUrls.delete(key); return null; }
+  return hit.url;
+}
+window.bsdPeekPrivateFileUrl = function bsdPeekPrivateFileUrl(bucket, path){
+  return bsdCachedPrivateFileUrl(bucket, path, false);
+};
+window.bsdPrefetchPrivateFiles = async function bsdPrefetchPrivateFiles(bucket, paths){
+  const pending = [...new Set((paths || []).filter(Boolean))].filter(path => !bsdCachedPrivateFileUrl(bucket, path, false));
+  if (!bucket || !pending.length || !window.supabaseClient) return;
+  const storage = window.supabaseClient.storage.from(bucket);
+  try {
+    if (typeof storage.createSignedUrls === 'function'){
+      const result = await window.bsdDeadline(storage.createSignedUrls(pending, 30 * 60), 10000, 'הכנת קישורים');
+      if (!result.error && Array.isArray(result.data)){
+        result.data.forEach((item, index) => {
+          if (item && item.signedUrl && !item.error) bsdRememberPrivateFileUrl(bucket, pending[index], false, item.signedUrl);
+        });
+        return;
+      }
+    }
+  } catch (_) {}
+  await Promise.all(pending.map(async path => {
+    try {
+      const result = await window.supabaseClient.storage.from(bucket).createSignedUrl(path, 30 * 60);
+      if (result && result.data && result.data.signedUrl && !result.error) bsdRememberPrivateFileUrl(bucket, path, false, result.data.signedUrl);
+    } catch (_) {}
+  }));
+};
 window.bsdOpenPrivateFile = async function bsdOpenPrivateFile(options){
   const bucket = options && options.bucket;
   const path = options && options.path;
@@ -74,6 +120,19 @@ window.bsdOpenPrivateFile = async function bsdOpenPrivateFile(options){
   const notify = message => {
     if (typeof window.toast === 'function') window.toast(message);
   };
+  const show = url => {
+    if (target && !target.closed){
+      try { target.location.replace(url); }
+      catch (_) { window.location.assign(url); }
+    } else {
+      window.location.assign(url);
+    }
+  };
+  const cachedUrl = bsdCachedPrivateFileUrl(bucket, path, downloadName);
+  if (cachedUrl){
+    show(cachedUrl);
+    return true;
+  }
 
   async function signedUrl(){
     const download = downloadName ? { download: downloadName } : undefined;
@@ -112,12 +171,8 @@ window.bsdOpenPrivateFile = async function bsdOpenPrivateFile(options){
     return false;
   }
 
-  if (target && !target.closed){
-    try { target.location.replace(url); }
-    catch (_) { window.location.assign(url); }
-  } else {
-    window.location.assign(url);
-  }
+  if (!objectUrl) bsdRememberPrivateFileUrl(bucket, path, downloadName, url);
+  show(url);
   if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60 * 1000);
   return true;
 };
