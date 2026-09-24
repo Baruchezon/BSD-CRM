@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609231915';
+    var PAGE_BUILD = '202609241200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -447,15 +447,15 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202609231915"></script>
+<script src="js/config.js?v=202609241200"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202609231915"></script>
+<script src="js/auth.js?v=202609241200"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/standaloneRecording.js?v=202608251215"></script>
 <script src="js/pdfPipeline.js?v=202608291000"></script>
-<script src="js/saleFileModule2.js?v=202609231915"></script>
+<script src="js/saleFileModule2.js?v=202609241200"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
 <script src="js/dedupeCheckModule.js?v=202608311200"></script>
@@ -626,15 +626,7 @@ function restoreBusinessPageCache(){
   return true;
 }
 
-async function loadBusinesses(options={}){
-  const { data, error } = await window.BSDDataCache.rows('businesses', CURRENT_PROFILE.id, { forceRefresh:!!options.forceRefresh });
-  if (error){
-    toast('שגיאה בטעינה: ' + error.message);
-    if (!options.preserveExisting || (!ALL_BIZ.length && !ARCHIVED_BIZ.length)){
-      document.getElementById('bizBody').innerHTML = `<tr><td colspan="12" style="text-align:center;padding:24px;">לא ניתן לטעון את הנתונים כרגע. <button type="button" class="btn btn-primary" onclick="loadBusinesses({forceRefresh:true})">נסה שוב</button></td></tr>`;
-    }
-    return false;
-  }
+function paintBusinessRows(data){
   // תיקון 25.08.2026 (כלל עסקי מחייב): קיום/הצגה של עסק לעולם לא מותנים
   // בסטטוס הסכם. עסק חדש חייב להישאר ולהופיע כאן מהרגע שנשמר, גם בלי
   // הסכם, גם לפני שנשלח הסכם. הסינון הקודם (רק "נשלח הסכם"/"יש הסכם
@@ -644,12 +636,51 @@ async function loadBusinesses(options={}){
   ALL_BIZ = (data || []).filter(b => !b.is_archived);
   ARCHIVED_BIZ = (data || []).filter(b => b.is_archived);
   BUSINESSES_DATA_READY = true;
-  await Promise.all([loadGrantCounts(), loadFilesIndicator(), loadExtendedSummaryIndicator(), loadVipPublicationStatuses()]);
   populateFilters();
   renderTable();
+}
+
+async function loadBusinesses(options={}){
+  const userId = CURRENT_PROFILE.id;
+  const refresh = window.BSDDataCache.shouldRevalidateList('businesses', userId, options);
+  // A stale daily cache is enough to show the table. The network read below
+  // replaces it; file badges are not part of this wait.
+  if (refresh && !ALL_BIZ.length && !ARCHIVED_BIZ.length){
+    const cached = window.BSDDataCache.get('rows:businesses', userId);
+    if (cached && cached.length) paintBusinessRows(cached);
+  }
+  const { data, error } = await window.BSDDataCache.rows('businesses', userId, { forceRefresh:refresh });
+  if (error){
+    toast('שגיאה בטעינה: ' + error.message);
+    if (!ALL_BIZ.length && !ARCHIVED_BIZ.length){
+      document.getElementById('bizBody').innerHTML = `<tr><td colspan="12" style="text-align:center;padding:24px;">לא ניתן לטעון את הנתונים כרגע. <button type="button" class="btn btn-primary" onclick="loadBusinesses({forceRefresh:true})">נסה שוב</button></td></tr>`;
+    }
+    return false;
+  }
+  paintBusinessRows(data);
   saveBusinessPageCache();
+  scheduleBusinessIndicators();
   if (!options.skipUrlHandling) await maybeHandleUrlParams();
   return true;
+}
+
+// Grants, attached-file counts, extended summaries and VIP badges are list
+// decorations. They must not hold back the first paint of the rows.
+let businessIndicatorGen = 0;
+function scheduleBusinessIndicators(){
+  const gen = ++businessIndicatorGen;
+  Promise.allSettled([
+    loadGrantCounts(gen),
+    loadFilesIndicator(gen),
+    loadExtendedSummaryIndicator(gen),
+    loadVipPublicationStatuses(gen)
+  ]).then(() => {
+    if (gen !== businessIndicatorGen || !BUSINESSES_DATA_READY) return;
+    if (typeof renderTable === 'function' && document.getElementById('bizBody')){
+      renderTable();
+      saveBusinessPageCache();
+    }
+  }).catch(error => console.warn('Business list indicators:', error));
 }
 
 // ============================================================
@@ -662,14 +693,15 @@ async function loadBusinesses(options={}){
 let GRANT_COUNTS = {};
 let VIP_PUBLICATION_BY_BIZ = {};
 
-async function loadVipPublicationStatuses(){
+async function loadVipPublicationStatuses(gen){
   if (!CURRENT_PROFILE || !['admin','manager'].includes(CURRENT_PROFILE.role)) {
-    VIP_PUBLICATION_BY_BIZ = {};
+    if (gen == null || gen === businessIndicatorGen) VIP_PUBLICATION_BY_BIZ = {};
     return;
   }
   if (typeof window.BSDVIPAdminApi !== 'function') return;
   try {
     const result = await window.BSDVIPAdminApi('admin_business_publications');
+    if (gen != null && gen !== businessIndicatorGen) return;
     VIP_PUBLICATION_BY_BIZ = {};
     (result.business_ids || []).forEach(id => { VIP_PUBLICATION_BY_BIZ[id] = true; });
   } catch(error) {
@@ -703,22 +735,31 @@ function isAnonExtendedPdfRow(storagePath, displayName, originalFilename){
 }
 let EXTENDED_SUMMARY_FILEMETA_BY_BIZ = {}; // business_id -> true (PDF ששמו מכיל אנונימי/אנונימית, מ-business_file_meta)
 let EXTENDED_SUMMARY_SALEFILE_BY_BIZ = {}; // business_id -> true (business_sale_files.category='anon_presentation', הסלוט הישן - נשאר כמקור נוסף, לא נגעתי בו)
-async function loadExtendedSummaryIndicator(){
-  EXTENDED_SUMMARY_FILEMETA_BY_BIZ = {};
-  EXTENDED_SUMMARY_SALEFILE_BY_BIZ = {};
+async function loadExtendedSummaryIndicator(gen){
   const ids = ALL_BIZ.map(b => b.id);
-  if (!ids.length) return;
+  if (!ids.length){
+    if (gen == null || gen === businessIndicatorGen){
+      EXTENDED_SUMMARY_FILEMETA_BY_BIZ = {};
+      EXTENDED_SUMMARY_SALEFILE_BY_BIZ = {};
+    }
+    return;
+  }
   const [metaRes, saleRes] = await Promise.all([
     window.supabaseClient.from('business_file_meta').select('business_id, storage_path, display_name, original_filename').in('business_id', ids),
     window.supabaseClient.from('business_sale_files').select('business_id').eq('category', 'anon_presentation').eq('status', 'active').in('business_id', ids),
   ]);
+  if (gen != null && gen !== businessIndicatorGen) return;
+  const metaByBiz = {};
+  const saleByBiz = {};
   if (metaRes.error) console.warn('טעינת תקציר מורחב (קבצים מצורפים) נכשלה:', metaRes.error.message);
-  (metaRes.data || []).forEach(f => {
+  else (metaRes.data || []).forEach(f => {
     if (!isAnonExtendedPdfRow(f.storage_path, f.display_name, f.original_filename)) return;
-    EXTENDED_SUMMARY_FILEMETA_BY_BIZ[f.business_id] = true;
+    metaByBiz[f.business_id] = true;
   });
   if (saleRes.error) console.warn('טעינת תקציר מורחב (תיק מכירה) נכשלה:', saleRes.error.message);
-  (saleRes.data || []).forEach(f => { EXTENDED_SUMMARY_SALEFILE_BY_BIZ[f.business_id] = true; });
+  else (saleRes.data || []).forEach(f => { saleByBiz[f.business_id] = true; });
+  if (!metaRes.error) EXTENDED_SUMMARY_FILEMETA_BY_BIZ = metaByBiz;
+  if (!saleRes.error) EXTENDED_SUMMARY_SALEFILE_BY_BIZ = saleByBiz;
 }
 function hasExtendedSummary(bizId){
   return !!EXTENDED_SUMMARY_FILEMETA_BY_BIZ[bizId] || !!EXTENDED_SUMMARY_SALEFILE_BY_BIZ[bizId];
@@ -734,22 +775,44 @@ function extendedSummaryBadge(bizId){
     ? `<span onclick="event.stopPropagation();openBizForm('${bizId}')" title="נמצא קובץ PDF ששמו מכיל 'אנונימי'/'אנונימית' - לחץ לצפייה/הורדה/הפצה" style="cursor:pointer;background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">✓ יש תקציר אנונימי מורחב</span>`
     : `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">○ אין תקציר מורחב</span>`;
 }
-// מספר קבצים בפועל לכל עסק - מבוסס אך ורק על אזור "קבצים מצורפים" המאוחד
-// (אותו מקור אמת בדיוק כמו loadBizFiles בכרטיס העסק: Storage.list() מסונן
-// לרשומות עם id בלבד, כי תיקיות משנה כמו sale-file/ מוחזרות בלי id ולא
-// נספרות כקובץ). כך המספר ברשימה תמיד תואם בדיוק את מה שמוצג בפועל בכרטיס.
+// מספר הקבצים המצורפים ברשימה. כרטיס העסק עדיין קורא את Storage כשנפתח;
+// הרשימה סופרת את אותם קבצי שורש מ-business_file_meta (שורה אחת לכל קובץ
+// שהועלה או שהושלם בפתיחת כרטיס) כדי לא לבצע storage.list לכל עסק.
 let FILES_COUNT_BY_BIZ = {};
-async function loadFilesIndicator(){
-  FILES_COUNT_BY_BIZ = {};
-  // תיקיית שורש ה-bucket - כל תיקייה בשם business_id שמכילה משהו מופיעה כאן
-  // בקריאה אחת בלבד, כדי לדעת מראש לאילו עסקים בכלל שווה לבדוק (ולא לבצע
-  // storage.list נפרד לכל עסק ברשימה, כולל כאלה בלי שום קובץ).
-  const { data: rootFolders } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).list('', { limit: 1000 });
-  const bizIdsWithAnyFolder = (rootFolders || []).filter(f => !f.id).map(f => f.name); // תיקיות מוחזרות בלי id, קבצים בודדים עם id
-  await Promise.all(bizIdsWithAnyFolder.map(async bizId => {
-    const { data: rows } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).list(bizId);
-    FILES_COUNT_BY_BIZ[bizId] = (rows || []).filter(f => f && f.id !== null).length;
-  }));
+function isRootAttachmentPath(businessId, storagePath){
+  const prefix = businessId + '/';
+  if (!storagePath || storagePath.indexOf(prefix) !== 0) return false;
+  return storagePath.slice(prefix.length).indexOf('/') === -1;
+}
+async function loadFilesIndicator(gen){
+  const ids = ALL_BIZ.map(b => b.id);
+  if (!ids.length){
+    if (gen == null || gen === businessIndicatorGen) FILES_COUNT_BY_BIZ = {};
+    return;
+  }
+  const counts = {};
+  for (let i = 0; i < ids.length; i += 100){
+    const chunk = ids.slice(i, i + 100);
+    for (let start = 0; ; start += 1000){
+      const { data, error } = await window.supabaseClient
+        .from('business_file_meta')
+        .select('business_id, storage_path')
+        .in('business_id', chunk)
+        .range(start, start + 999);
+      if (gen != null && gen !== businessIndicatorGen) return;
+      if (error){
+        console.warn('טעינת חיווי קבצים נכשלה:', error.message);
+        return;
+      }
+      (data || []).forEach(row => {
+        if (!isRootAttachmentPath(row.business_id, row.storage_path)) return;
+        counts[row.business_id] = (counts[row.business_id] || 0) + 1;
+      });
+      if ((data || []).length < 1000) break;
+    }
+  }
+  if (gen != null && gen !== businessIndicatorGen) return;
+  FILES_COUNT_BY_BIZ = counts;
 }
 function filesIndicatorBadge(bizId){
   const count = FILES_COUNT_BY_BIZ[bizId] || 0;
@@ -773,14 +836,19 @@ function refreshAnonFileIndicatorForBiz(bizId, files){
     renderTable();
   }
 }
-async function loadGrantCounts(){
+async function loadGrantCounts(gen){
   const ids = ALL_BIZ.map(b => b.id);
-  if (!ids.length){ GRANT_COUNTS = {}; return; }
+  if (!ids.length){
+    if (gen == null || gen === businessIndicatorGen) GRANT_COUNTS = {};
+    return;
+  }
   const { data, error } = await window.supabaseClient
     .from('business_access_grants').select('business_id').eq('active', true).in('business_id', ids);
-  GRANT_COUNTS = {};
-  if (error || !data) return;
-  data.forEach(g => { GRANT_COUNTS[g.business_id] = (GRANT_COUNTS[g.business_id] || 0) + 1; });
+  if (gen != null && gen !== businessIndicatorGen) return;
+  if (error) return;
+  const counts = {};
+  (data || []).forEach(g => { counts[g.business_id] = (counts[g.business_id] || 0) + 1; });
+  GRANT_COUNTS = counts;
 }
 function agreementListBadge(status){
   return status === 'יש הסכם חתום'
@@ -4776,7 +4844,7 @@ async function deleteBiz(id){
   if (!canCreateBusiness(CURRENT_PROFILE)){ const newBizBtn = document.querySelector('button[onclick="openBizForm(null)"]'); if (newBizBtn) newBizBtn.style.display = 'none'; }
   if (!canViewAnonymousBusinesses(CURRENT_PROFILE)){ document.getElementById('bizTabAnon').style.display = 'none'; }
   const restored = restoreBusinessPageCache();
-  const loaded = await loadBusinesses({ forceRefresh:true, preserveExisting:restored, skipUrlHandling:restored });
+  const loaded = await loadBusinesses({ revalidate:true, preserveExisting:restored, skipUrlHandling:restored });
   if (restored) await maybeHandleUrlParams();
   if (!loaded) return;
   Promise.allSettled([loadLookups(), loadNotesSummary('businesses')])

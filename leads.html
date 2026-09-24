@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609231915';
+    var PAGE_BUILD = '202609241200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -261,9 +261,9 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202609231915"></script>
+<script src="js/config.js?v=202609241200"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202609231915"></script>
+<script src="js/auth.js?v=202609241200"></script>
 <script src="js/permissions.js?v=202608251709"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script src="js/standaloneRecording.js?v=202608251709"></script>
@@ -677,18 +677,7 @@ function restoreLeadsPageCache(){
   return true;
 }
 
-async function loadLeads(options={}){
-  const { data, error } = await window.BSDDataCache.rows('leads', CURRENT_PROFILE.id, { forceRefresh:!!options.forceRefresh });
-  if (error){
-    toast('שגיאה בטעינה: ' + error.message);
-    // If a previously verified list is already visible, keep it on screen.
-    // A temporary network problem must never replace real records with an
-    // empty/error state.
-    if (!options.preserveExisting || (!ALL_LEADS.length && !ARCHIVED_LEADS.length)){
-      document.getElementById('leadsBody').innerHTML = `<tr><td colspan="12" style="text-align:center;padding:24px;">לא ניתן לטעון את הנתונים כרגע. <button type="button" class="btn btn-primary" onclick="loadLeads({forceRefresh:true})">נסה שוב</button></td></tr>`;
-    }
-    return false;
-  }
+function paintLeadRows(data){
   // תיקון 25.08.2026 (כלל עסקי מחייב): קיום/הצגה של ליד (קונה, שותף או
   // מוכר ישן) לעולם לא מותנים בסטטוס הסכם. ליד חדש חייב להישאר ולהופיע
   // כאן מהרגע שנשמר, גם בלי הסכם, גם לפני שנשלח הסכם. הסינון הקודם (רק
@@ -702,6 +691,27 @@ async function loadLeads(options={}){
   populateCreatedByFilter();
   populateRatingFilter();
   renderTable();
+}
+
+async function loadLeads(options={}){
+  const userId = CURRENT_PROFILE.id;
+  const refresh = window.BSDDataCache.shouldRevalidateList('leads', userId, options);
+  if (refresh && !ALL_LEADS.length && !ARCHIVED_LEADS.length){
+    const cached = window.BSDDataCache.get('rows:leads', userId);
+    if (cached && cached.length) paintLeadRows(cached);
+  }
+  const { data, error } = await window.BSDDataCache.rows('leads', userId, { forceRefresh:refresh });
+  if (error){
+    toast('שגיאה בטעינה: ' + error.message);
+    // If a previously verified list is already visible, keep it on screen.
+    // A temporary network problem must never replace real records with an
+    // empty/error state.
+    if (!ALL_LEADS.length && !ARCHIVED_LEADS.length){
+      document.getElementById('leadsBody').innerHTML = `<tr><td colspan="12" style="text-align:center;padding:24px;">לא ניתן לטעון את הנתונים כרגע. <button type="button" class="btn btn-primary" onclick="loadLeads({forceRefresh:true})">נסה שוב</button></td></tr>`;
+    }
+    return false;
+  }
+  paintLeadRows(data);
   saveLeadsPageCache();
   if (!options.skipUrlHandling) await maybeHandleUrlParams();
   return true;
@@ -1847,8 +1857,9 @@ function renderArchiveLeadsTable(){
   // Buyer rows are the primary content. Do not even start optional requests
   // until they arrive: production Android logs showed simultaneous notes,
   // ratings and list calls turning a small authenticated read into a 48 second
-  // wait on mobile data.
-  const loaded = await loadLeads({ forceRefresh:true, preserveExisting:restored, skipUrlHandling:restored });
+  // wait on mobile data. revalidate skips the network while the row cache is
+  // inside its short TTL; a stale cache is painted before that read returns.
+  const loaded = await loadLeads({ revalidate:true, preserveExisting:restored, skipUrlHandling:restored });
   switchLeadTypeTab('buyer');
   if (restored) await maybeHandleUrlParams();
   if (!loaded) return;
