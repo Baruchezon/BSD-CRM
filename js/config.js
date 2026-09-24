@@ -53,6 +53,52 @@ window.bsdDeadline = async function bsdDeadline(promise, timeoutMs, label){
 // the CRM.  It refreshes an expired session, retries once, and finally falls
 // back to an authenticated blob download.  Android uses the current tab when
 // a new tab is blocked, which fixes the common "nothing happens" PDF symptom.
+// Signed URLs are reused for 25 minutes. Smart CDN caches each exact token,
+// so a brand-new URL on every click always misses and re-downloads the PDF.
+const BSD_PRIVATE_FILE_URL_TTL_MS = 25 * 60 * 1000;
+const bsdPrivateFileUrls = new Map();
+function bsdPrivateFileKey(bucket, path, downloadName){
+  return bucket + '\n' + path + '\n' + (downloadName ? 'dl:' + String(downloadName) : 'inline');
+}
+function bsdRememberPrivateFileUrl(bucket, path, downloadName, url){
+  if (!bucket || !path || !url || String(url).indexOf('blob:') === 0) return;
+  bsdPrivateFileUrls.set(bsdPrivateFileKey(bucket, path, downloadName), {
+    url: url,
+    expiresAt: Date.now() + BSD_PRIVATE_FILE_URL_TTL_MS
+  });
+}
+function bsdCachedPrivateFileUrl(bucket, path, downloadName){
+  const key = bsdPrivateFileKey(bucket, path, downloadName);
+  const hit = bsdPrivateFileUrls.get(key);
+  if (!hit) return null;
+  if (hit.expiresAt <= Date.now()){ bsdPrivateFileUrls.delete(key); return null; }
+  return hit.url;
+}
+window.bsdPeekPrivateFileUrl = function bsdPeekPrivateFileUrl(bucket, path){
+  return bsdCachedPrivateFileUrl(bucket, path, false);
+};
+window.bsdPrefetchPrivateFiles = async function bsdPrefetchPrivateFiles(bucket, paths){
+  const pending = [...new Set((paths || []).filter(Boolean))].filter(path => !bsdCachedPrivateFileUrl(bucket, path, false));
+  if (!bucket || !pending.length || !window.supabaseClient) return;
+  const storage = window.supabaseClient.storage.from(bucket);
+  try {
+    if (typeof storage.createSignedUrls === 'function'){
+      const result = await window.bsdDeadline(storage.createSignedUrls(pending, 30 * 60), 10000, 'הכנת קישורים');
+      if (!result.error && Array.isArray(result.data)){
+        result.data.forEach((item, index) => {
+          if (item && item.signedUrl && !item.error) bsdRememberPrivateFileUrl(bucket, pending[index], false, item.signedUrl);
+        });
+        return;
+      }
+    }
+  } catch (_) {}
+  await Promise.all(pending.map(async path => {
+    try {
+      const result = await window.supabaseClient.storage.from(bucket).createSignedUrl(path, 30 * 60);
+      if (result && result.data && result.data.signedUrl && !result.error) bsdRememberPrivateFileUrl(bucket, path, false, result.data.signedUrl);
+    } catch (_) {}
+  }));
+};
 window.bsdOpenPrivateFile = async function bsdOpenPrivateFile(options){
   const bucket = options && options.bucket;
   const path = options && options.path;
@@ -74,6 +120,19 @@ window.bsdOpenPrivateFile = async function bsdOpenPrivateFile(options){
   const notify = message => {
     if (typeof window.toast === 'function') window.toast(message);
   };
+  const show = url => {
+    if (target && !target.closed){
+      try { target.location.replace(url); }
+      catch (_) { window.location.assign(url); }
+    } else {
+      window.location.assign(url);
+    }
+  };
+  const cachedUrl = bsdCachedPrivateFileUrl(bucket, path, downloadName);
+  if (cachedUrl){
+    show(cachedUrl);
+    return true;
+  }
 
   async function signedUrl(){
     const download = downloadName ? { download: downloadName } : undefined;
@@ -112,12 +171,8 @@ window.bsdOpenPrivateFile = async function bsdOpenPrivateFile(options){
     return false;
   }
 
-  if (target && !target.closed){
-    try { target.location.replace(url); }
-    catch (_) { window.location.assign(url); }
-  } else {
-    window.location.assign(url);
-  }
+  if (!objectUrl) bsdRememberPrivateFileUrl(bucket, path, downloadName, url);
+  show(url);
   if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60 * 1000);
   return true;
 };
@@ -127,7 +182,10 @@ window.bsdOpenPrivateFile = async function bsdOpenPrivateFile(options){
 window.BSDDataCache = (() => {
   const DB_NAME = 'bsd-crm-daily-v1';
   const scopes = ['app-page', 'businesses-page', 'leads-page', 'matches-page', 'rows:businesses', 'rows:leads'];
-  let context = null, memory = new Map(), pending = new Map(), revisions = new Map(), dbPromise;
+  // Repeat visits inside this window reuse the daily row cache. Edits still
+  // update that cache immediately; a later visit revalidates in the background.
+  const LIST_REVALIDATE_MS = 60 * 1000;
+  let context = null, memory = new Map(), pending = new Map(), revisions = new Map(), fetchedAt = new Map(), dbPromise;
   let persistence = Promise.resolve();
   const day = () => new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Jerusalem', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date());
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -182,11 +240,14 @@ window.BSDDataCache = (() => {
     const next = { userId, day:day(), generation:generation(), sessionId, permissions };
     next.key = JSON.stringify(next);
     if (context?.key === next.key) return;
-    context = next; memory = new Map(); pending = new Map();
+    context = next; memory = new Map(); pending = new Map(); fetchedAt = new Map();
     await persistence;
     await Promise.all(scopes.map(async scope => {
       const entry = await disk('get', scope);
-      if (context === next && entry?.key === next.key) memory.set(scope, entry.value);
+      if (context === next && entry?.key === next.key) {
+        memory.set(scope, entry.value);
+        if (typeof entry.fetchedAt === 'number') fetchedAt.set(scope, entry.fetchedAt);
+      }
     }));
   }
   function get(scope, userId){ return valid(userId) && memory.has(scope) ? clone(memory.get(scope)) : null; }
@@ -194,17 +255,20 @@ window.BSDDataCache = (() => {
     if (!valid(userId)) return false;
     const copy = clone(value), key = context.key;
     memory.set(scope, copy);
-    persistence = persistence.then(() => disk('put', scope, { key, value:copy }));
+    const record = { key, value:copy };
+    if (typeof fetchedAt.get(scope) === 'number') record.fetchedAt = fetchedAt.get(scope);
+    persistence = persistence.then(() => disk('put', scope, record));
     return true;
   }
   function remove(scope, userId){
     if (!context || context.userId !== userId) return;
     memory.delete(scope);
+    fetchedAt.delete(scope);
     persistence = persistence.then(() => disk('delete', scope));
   }
   function reset(){
     try { localStorage.setItem(DB_NAME + ':generation', Date.now() + ':' + Math.random()); } catch (_) {}
-    context = null; memory.clear(); pending.clear();
+    context = null; memory.clear(); pending.clear(); fetchedAt.clear();
     for (const scope of scopes) persistence = persistence.then(() => disk('delete', scope));
   }
   async function readWithDeadline(query, timeoutMs=65000){
@@ -227,7 +291,8 @@ window.BSDDataCache = (() => {
     const cached = get('rows:' + table, userId);
     // Page snapshots are only a fast first paint. A caller can explicitly
     // revalidate against Supabase so an empty or incomplete daily cache can
-    // never become the final answer for the rest of the day.
+    // never become the final answer for the rest of the day. List screens
+    // skip that read while listFresh() is still true.
     if (cached && !options.forceRefresh) return { data:cached, error:null };
     if (pending.has(table)) return clone(await pending.get(table));
     const active = context, revision = revisions.get(table) || 0;
@@ -244,12 +309,28 @@ window.BSDDataCache = (() => {
         if ((result.data || []).length < 1000) break;
       }
       all.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
-      if (context === active && (revisions.get(table) || 0) === revision) set('rows:' + table, userId, all);
+      if (context === active && (revisions.get(table) || 0) === revision) {
+        fetchedAt.set('rows:' + table, Date.now());
+        set('rows:' + table, userId, all);
+      }
       // Rendering must not wait for the optional disk cache to finish writing.
       return { data:all, error:null };
     })();
     pending.set(table, request);
     try { return clone(await request); } finally { if (pending.get(table) === request) pending.delete(table); }
+  }
+  function listFresh(table, userId, maxAgeMs){
+    if (!['businesses','leads'].includes(table) || !Array.isArray(get('rows:' + table, userId))) return false;
+    const at = fetchedAt.get('rows:' + table);
+    if (typeof at !== 'number') return false;
+    const limit = typeof maxAgeMs === 'number' ? maxAgeMs : LIST_REVALIDATE_MS;
+    return Date.now() - at < limit;
+  }
+  function shouldRevalidateList(table, userId, options){
+    options = options || {};
+    if (options.forceRefresh) return true;
+    if (!options.revalidate) return false;
+    return !listFresh(table, userId, options.maxAgeMs);
   }
   async function changed(table, id, deleted){
     if (!context) return;
@@ -310,7 +391,7 @@ window.BSDDataCache = (() => {
       }});
     };
   }
-  return { activate, get, set, remove, reset, rows, observeWrites, flush:() => persistence };
+  return { activate, get, set, remove, reset, rows, listFresh, shouldRevalidateList, observeWrites, flush:() => persistence };
 })();
 
 // 15.09.2026: רשת ביטחון ממוקדת להעלאת הסכמים חתומים.
