@@ -81,10 +81,40 @@ test('all modified page scripts and authentication parse',()=>{
 test('buyer screen never trusts an empty page snapshot and loads rows before optional lookups',()=>{
  const html=fs.readFileSync(new URL('../leads.html',import.meta.url),'utf8');
  assert.match(html,/c\.leads\.length === 0[\s\S]*return false/);
- assert.match(html,/loadLeads\(\{ forceRefresh:true, preserveExisting:restored/);
+ assert.match(html,/loadLeads\(\{ revalidate:true, preserveExisting:restored/);
  assert.match(html,/if \(!LEADS_DATA_READY\) return;/);
  const init=html.slice(html.indexOf('(async function init(){'));
- assert.ok(init.indexOf('await loadLeads({ forceRefresh:true') < init.indexOf('Promise.allSettled([loadUsers()'), 'optional buyer requests start only after primary rows finish');
+ assert.ok(init.indexOf('await loadLeads({ revalidate:true') < init.indexOf('Promise.allSettled([loadUsers()'), 'optional buyer requests start only after primary rows finish');
+ const load=html.slice(html.indexOf('async function loadLeads'), html.indexOf('async function maybeHandleUrlParams'));
+ assert.ok(load.indexOf('paintLeadRows(cached)') < load.indexOf('forceRefresh:refresh'), 'stale buyer rows paint before the revalidation request');
+});
+
+test('business list paints rows before indicators and counts files from metadata',()=>{
+ const html=fs.readFileSync(new URL('../businesses.html',import.meta.url),'utf8');
+ const load=html.slice(html.indexOf('async function loadBusinesses'), html.indexOf('let businessIndicatorGen'));
+ assert.ok(load.indexOf('paintBusinessRows(data)') < load.indexOf('scheduleBusinessIndicators()'), 'rows render before indicator requests start');
+ assert.doesNotMatch(load, /await Promise\.all\(\[loadGrantCounts/);
+ assert.match(html, /loadBusinesses\(\{ revalidate:true, preserveExisting:restored/);
+ const files=html.slice(html.indexOf('async function loadFilesIndicator'), html.indexOf('function filesIndicatorBadge'));
+ assert.match(files, /business_file_meta/);
+ assert.doesNotMatch(files, /\.storage\.from\(BIZ_FILES_BUCKET\)\.list/);
+ assert.match(html, /scheduleBusinessIndicators\(\)/);
+});
+
+test('list freshness expires without making an ordinary read hit the network',async()=>{
+ const e=environment();const p=e.page();await p.start();
+ await p.cache.rows('businesses','u1');
+ assert.equal(p.cache.listFresh('businesses','u1'),true);
+ assert.equal(p.cache.shouldRevalidateList('businesses','u1',{revalidate:true}),false);
+ assert.equal(p.cache.shouldRevalidateList('businesses','u1',{forceRefresh:true}),true,'explicit retry still bypasses the TTL');
+ e.clock.now+=60000;
+ assert.equal(p.cache.listFresh('businesses','u1'),false);
+ assert.equal(p.cache.shouldRevalidateList('businesses','u1',{revalidate:true}),true);
+ await p.cache.flush();
+ const next=e.page();await next.start();
+ assert.equal(next.cache.listFresh('businesses','u1'),false,'freshness survives a new page');
+ assert.equal((await next.cache.rows('businesses','u1')).data.length,1);
+ assert.equal(e.calls.length,1,'a stale cache is still served until the screen asks to revalidate');
 });
 
 test('stalled browser storage cannot prevent dataset loading',async()=>{
