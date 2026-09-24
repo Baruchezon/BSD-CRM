@@ -127,7 +127,10 @@ window.bsdOpenPrivateFile = async function bsdOpenPrivateFile(options){
 window.BSDDataCache = (() => {
   const DB_NAME = 'bsd-crm-daily-v1';
   const scopes = ['app-page', 'businesses-page', 'leads-page', 'matches-page', 'rows:businesses', 'rows:leads'];
-  let context = null, memory = new Map(), pending = new Map(), revisions = new Map(), dbPromise;
+  // Repeat visits inside this window reuse the daily row cache. Edits still
+  // update that cache immediately; a later visit revalidates in the background.
+  const LIST_REVALIDATE_MS = 60 * 1000;
+  let context = null, memory = new Map(), pending = new Map(), revisions = new Map(), fetchedAt = new Map(), dbPromise;
   let persistence = Promise.resolve();
   const day = () => new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Jerusalem', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date());
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -182,11 +185,14 @@ window.BSDDataCache = (() => {
     const next = { userId, day:day(), generation:generation(), sessionId, permissions };
     next.key = JSON.stringify(next);
     if (context?.key === next.key) return;
-    context = next; memory = new Map(); pending = new Map();
+    context = next; memory = new Map(); pending = new Map(); fetchedAt = new Map();
     await persistence;
     await Promise.all(scopes.map(async scope => {
       const entry = await disk('get', scope);
-      if (context === next && entry?.key === next.key) memory.set(scope, entry.value);
+      if (context === next && entry?.key === next.key) {
+        memory.set(scope, entry.value);
+        if (typeof entry.fetchedAt === 'number') fetchedAt.set(scope, entry.fetchedAt);
+      }
     }));
   }
   function get(scope, userId){ return valid(userId) && memory.has(scope) ? clone(memory.get(scope)) : null; }
@@ -194,17 +200,20 @@ window.BSDDataCache = (() => {
     if (!valid(userId)) return false;
     const copy = clone(value), key = context.key;
     memory.set(scope, copy);
-    persistence = persistence.then(() => disk('put', scope, { key, value:copy }));
+    const record = { key, value:copy };
+    if (typeof fetchedAt.get(scope) === 'number') record.fetchedAt = fetchedAt.get(scope);
+    persistence = persistence.then(() => disk('put', scope, record));
     return true;
   }
   function remove(scope, userId){
     if (!context || context.userId !== userId) return;
     memory.delete(scope);
+    fetchedAt.delete(scope);
     persistence = persistence.then(() => disk('delete', scope));
   }
   function reset(){
     try { localStorage.setItem(DB_NAME + ':generation', Date.now() + ':' + Math.random()); } catch (_) {}
-    context = null; memory.clear(); pending.clear();
+    context = null; memory.clear(); pending.clear(); fetchedAt.clear();
     for (const scope of scopes) persistence = persistence.then(() => disk('delete', scope));
   }
   async function readWithDeadline(query, timeoutMs=65000){
@@ -227,7 +236,8 @@ window.BSDDataCache = (() => {
     const cached = get('rows:' + table, userId);
     // Page snapshots are only a fast first paint. A caller can explicitly
     // revalidate against Supabase so an empty or incomplete daily cache can
-    // never become the final answer for the rest of the day.
+    // never become the final answer for the rest of the day. List screens
+    // skip that read while listFresh() is still true.
     if (cached && !options.forceRefresh) return { data:cached, error:null };
     if (pending.has(table)) return clone(await pending.get(table));
     const active = context, revision = revisions.get(table) || 0;
@@ -244,12 +254,28 @@ window.BSDDataCache = (() => {
         if ((result.data || []).length < 1000) break;
       }
       all.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
-      if (context === active && (revisions.get(table) || 0) === revision) set('rows:' + table, userId, all);
+      if (context === active && (revisions.get(table) || 0) === revision) {
+        fetchedAt.set('rows:' + table, Date.now());
+        set('rows:' + table, userId, all);
+      }
       // Rendering must not wait for the optional disk cache to finish writing.
       return { data:all, error:null };
     })();
     pending.set(table, request);
     try { return clone(await request); } finally { if (pending.get(table) === request) pending.delete(table); }
+  }
+  function listFresh(table, userId, maxAgeMs){
+    if (!['businesses','leads'].includes(table) || !Array.isArray(get('rows:' + table, userId))) return false;
+    const at = fetchedAt.get('rows:' + table);
+    if (typeof at !== 'number') return false;
+    const limit = typeof maxAgeMs === 'number' ? maxAgeMs : LIST_REVALIDATE_MS;
+    return Date.now() - at < limit;
+  }
+  function shouldRevalidateList(table, userId, options){
+    options = options || {};
+    if (options.forceRefresh) return true;
+    if (!options.revalidate) return false;
+    return !listFresh(table, userId, options.maxAgeMs);
   }
   async function changed(table, id, deleted){
     if (!context) return;
@@ -310,7 +336,7 @@ window.BSDDataCache = (() => {
       }});
     };
   }
-  return { activate, get, set, remove, reset, rows, observeWrites, flush:() => persistence };
+  return { activate, get, set, remove, reset, rows, listFresh, shouldRevalidateList, observeWrites, flush:() => persistence };
 })();
 
 // 15.09.2026: רשת ביטחון ממוקדת להעלאת הסכמים חתומים.
