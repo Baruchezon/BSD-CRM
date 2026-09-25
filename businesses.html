@@ -1509,6 +1509,9 @@ function openBizForm(id){
           <div id="suggestAnonNameStatus" style="font-size:.72rem;color:#999;margin-top:3px;min-height:1.1em;"></div>
         </div>
         ${fieldRow('website','אתר אינטרנט', biz?.website, 'text')}
+        <div class="field full"><label>תיקיית העסק בגוגל דרייב</label>
+          <input type="url" id="drive_folder_url" value="${esc(biz?.drive_folder_url)}" placeholder="https://drive.google.com/drive/folders/…">
+          <small>ההפקה תבדוק את כל התיקיות שבתוכה, כולל דוחות.</small></div>
 
         <div class="section-h">פרטי בעל העסק</div>
         ${fieldRow('owner_name','שם הבעלים', biz?.owner_name)}
@@ -2826,6 +2829,12 @@ async function generateAndSaveSummaryPdf(bizId, documentType, statusElId){
       if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ אין עדיין תקציר אנונימי שמור ומאושר - צור ואשר אותו למעלה תחילה ("🔄 צור תקציר אנונימי").'; }
       return;
     }
+    if (biz.financial_year && biz.annual_revenue && !text.includes(String(biz.financial_year))){
+      const message = 'התקציר האנונימי לא עודכן לאחר קבלת הדוחות הכספיים. יש ליצור ולאשר אותו מחדש לפני הפקת PDF.';
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ ' + message; }
+      toast(message);
+      return;
+    }
     // רשת ביטחון נוספת (לא מחליפה את הבדיקה השרתית האמיתית ב-confirm):
     // בדיקה מקומית שאף אחד מהמזהים האמיתיים של העסק לא מופיע בטקסט,
     // ליתר ביטחון לפני שממירים אותו ל-PDF.
@@ -2847,9 +2856,21 @@ async function generateAndSaveSummaryPdf(bizId, documentType, statusElId){
       if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ אין עדיין תקציר עסקי מלא - צור אותו למעלה תחילה ("🔄 צור תקציר עסקי מלא").'; }
       return;
     }
+    // Do not publish an old summary when the card has a verified annual figure
+    // that the summary never mentions (the Azrad failure mode).
+    if (biz.annual_revenue && !text.replace(/[,\s]/g, '').includes(String(biz.annual_revenue).replace(/[,\s]/g, ''))){
+      const message = 'התקציר המלא לא כולל את המחזור השנתי שבכרטיס העסק. יש ליצור תקציר מעודכן ולבדוק את הדוחות לפני הפקת PDF.';
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ ' + message; }
+      toast(message);
+      return;
+    }
   }
   if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = '📄 מפיק PDF... (עשוי לקחת כמה שניות)'; }
   try {
+    // Every issue of a PDF repeats the full source inventory. Any unreadable
+    // file blocks issuance; a stale text field cannot silently bypass Drive.
+    const reviewed = await invokeBusinessSummaryFn({ business_id: bizId, mode: 'internal_full', action: 'review' });
+    if (!reviewed?.sources?.length) throw new Error('לא אומתו מסמכי העסק בגוגל דרייב.');
     const bodyEl = document.createElement('div');
     bodyEl.style.cssText = 'font-size:13px;line-height:1.9;white-space:pre-wrap;';
     bodyEl.textContent = text;
@@ -4310,6 +4331,7 @@ async function saveBiz(e){
     internal_name: g('internal_name'),
     anonymous_name: g('anonymous_name'),
     website: normalizeWebsite(g('website')),
+    drive_folder_url: g('drive_folder_url').trim() || null,
     short_description: g('short_description'),
     owner_name: g('owner_name'), owner_phone: g('owner_phone'), owner_email: g('owner_email'),
     id_number: g('id_number'),

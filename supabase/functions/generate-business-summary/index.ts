@@ -23,6 +23,7 @@
 //   supabase.functions.invoke('generate-business-summary', { body: { business_id, mode, action:'confirm', text } })
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { reviewBusinessSources } from '../_shared/business-sources.ts';
 
 function cleanEnv(v: string | undefined): string { return (v || '').trim(); }
 
@@ -76,9 +77,10 @@ function buildFactsBlock(biz: Record<string, unknown>): string {
   push('כתובת', biz.address);
   push('אתר', biz.website);
   push('שנות פעילות', biz.years_active);
-  push('מחזור שנתי משוער', biz.annual_revenue);
-  push('רווח תפעולי משוער', biz.operating_profit);
-  push('רווח נקי משוער', biz.net_profit);
+  const year = biz.financial_year ? ` לשנת ${biz.financial_year}` : ' משוער, שנת דיווח לא צוינה';
+  push(`מחזור שנתי${year}`, biz.annual_revenue);
+  push(`רווח תפעולי${year}`, biz.operating_profit);
+  push(`רווח נקי${year}`, biz.net_profit);
   push('מספר עובדים', biz.employees_count);
   push('מחיר מבוקש', biz.asking_price);
   push('סיבת מכירה', biz.sale_reason);
@@ -86,9 +88,9 @@ function buildFactsBlock(biz: Record<string, unknown>): string {
   return lines.join('\n');
 }
 
-async function generateSummary(biz: Record<string, unknown>, mode: Mode): Promise<{ summary_text: string | null; insufficient_info: boolean }> {
+async function generateSummary(biz: Record<string, unknown>, mode: Mode, sourceContext: string): Promise<{ summary_text: string | null; insufficient_info: boolean }> {
   const factsBlock = buildFactsBlock(biz);
-  const freeText = [biz.short_description, biz.notes].filter(Boolean).join('\n---\n');
+  const freeText = [biz.short_description, biz.notes, biz.record_notes, biz.sale_reason].filter(Boolean).join('\n---\n');
 
   if (!factsBlock.trim() && !freeText.trim()) {
     return { summary_text: null, insufficient_info: true };
@@ -102,6 +104,7 @@ async function generateSummary(biz: Record<string, unknown>, mode: Mode): Promis
 
 כללים מחייבים:
 1. השתמש רק בנתונים שסופקו לך למטה. אסור להמציא נתון שלא קיים - אם משהו חסר, פשוט השמט אותו, אל תנחש ואל תמלא בערך גנרי.
+1א. השתמש בדוחות הכספיים כמקור לנתונים כספיים. ציין שנה, תקופה, האם מבוקר או זמני וסכום מדויק. סמן סתירות בין מקורות. אין לקרוא לרווח נקי EBITDA ואין להציג דוח ביניים כשנה מלאה.
 2. ${modeInstructions}
 3. מותר להעתיק/לנסח מחדש בחופשיות מתוך התיאור/ההערות הקיימים - זה לא מסמך אנונימי ואין כאן שום מגבלת חשיפת פרטים מזהים.
 4. אם אין כלל מספיק מידע לכתוב תקציר משמעותי - סמן insufficient_info=true והשאר summary_text ריק.
@@ -109,14 +112,14 @@ async function generateSummary(biz: Record<string, unknown>, mode: Mode): Promis
 
 חובה להשתמש בכלי submit_business_summary כדי להחזיר את התשובה.`;
 
-  const userPrompt = `נתונים מובנים קיימים בכרטיס העסק:\n${factsBlock || '(אין נתונים מובנים)'}\n\nטקסט חופשי קיים (תיאור קצר קיים / הערות חופשיות):\n"""\n${freeText || '(אין)'}\n"""`;
+  const userPrompt = `נתונים מובנים קיימים בכרטיס העסק:\n${factsBlock || '(אין נתונים מובנים)'}\n\nטקסט חופשי קיים (תיאור קצר קיים / הערות חופשיות):\n"""\n${freeText || '(אין)'}\n"""\n\nמסמכי העסק שנקראו בשלמותם כולל המקור ושנת הדיווח:\n${sourceContext}`;
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-5',
-      max_tokens: mode === 'short' ? 400 : 1400,
+      max_tokens: mode === 'short' ? 600 : 2200,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       tools: [SUMMARY_TOOL],
@@ -166,6 +169,15 @@ Deno.serve(async (req: Request) => {
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', userData.user.id).maybeSingle();
     if (!profile) return jsonResponse({ error: 'פרופיל משתמש לא נמצא' }, 403);
 
+    if (body.action === 'review') {
+      if (!['admin', 'manager'].includes(profile.role)) return jsonResponse({ error: 'סקירת מסמכי העסק זמינה רק למנהל' }, 403);
+      const { data: notes, error: notesErr } = await supabase.from('record_notes').select('note_text,created_at')
+        .eq('table_name', 'businesses').eq('record_id', business_id).order('created_at');
+      if (notesErr) throw notesErr;
+      const sources = await reviewBusinessSources({ ...biz, record_notes: (notes || []).map(n => n.note_text).join('\n') }, ANTHROPIC_API_KEY);
+      return jsonResponse({ sources: sources.files.map(f => ({ name: f.name, url: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view` })) });
+    }
+
     if (body.action === 'confirm') {
       const finalText = typeof body.text === 'string' ? body.text.trim() || null : null;
       if (mode === 'short') {
@@ -186,9 +198,16 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ text: finalText });
     }
 
-    const generated = await generateSummary(biz, mode as Mode);
+    if (!['admin', 'manager'].includes(profile.role)) return jsonResponse({ error: 'מסמכי העסק והדוחות הכספיים זמינים רק למנהל' }, 403);
+    const { data: notes, error: notesErr } = await supabase.from('record_notes').select('note_text,created_at')
+      .eq('table_name', 'businesses').eq('record_id', business_id).order('created_at');
+    if (notesErr) throw notesErr;
+    const reviewedBiz = { ...biz, record_notes: (notes || []).map(n => `${n.created_at}: ${n.note_text}`).join('\n') };
+    const sources = await reviewBusinessSources(reviewedBiz, ANTHROPIC_API_KEY);
+    const generated = await generateSummary(reviewedBiz, mode as Mode, sources.context);
     return jsonResponse({
       text: generated.summary_text,
+      sources: sources.files.map(f => ({ name: f.name, url: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view` })),
       warnings: generated.insufficient_info ? ['אין מספיק מידע כדי לכתוב תקציר אמין - הוסף פרטים לעסק ונסה שוב'] : [],
     });
   } catch (e) {
