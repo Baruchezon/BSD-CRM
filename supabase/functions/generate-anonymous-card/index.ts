@@ -30,6 +30,7 @@
 //   supabase.functions.invoke('generate-anonymous-card', { body: { business_id, action: 'confirm', anon_display_name, anon_summary } })
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { reviewBusinessSources } from '../_shared/business-sources.ts';
 
 function cleanEnv(v: string | undefined): string {
   return (v || '').trim();
@@ -113,11 +114,11 @@ function buildFallbackDisplayName(biz: Record<string, unknown>): string | null {
 }
 
 // ---------- שלב 1: יצירת התקציר (Claude כותב מחדש, לא מעתיק) ----------
-async function generateSummary(biz: Record<string, unknown>): Promise<{ anon_display_name: string | null; anon_summary: string | null; ai_flagged_concerns: string[] }> {
-  const sourceText = [biz.short_description, biz.notes, biz.anon_card_show_reason ? biz.sale_reason : null]
+async function generateSummary(biz: Record<string, unknown>, sourceContext: string): Promise<{ anon_display_name: string | null; anon_summary: string | null; ai_flagged_concerns: string[] }> {
+  const sourceText = [biz.short_description, biz.notes, biz.record_notes, biz.anon_card_show_reason ? biz.sale_reason : null]
     .filter(Boolean).join('\n---\n');
 
-  if (!sourceText.trim()) {
+  if (!sourceText.trim() && !sourceContext.trim()) {
     // אין בכלל טקסט חופשי לתמצת (ואין טעם לקרוא ל-AI על ריק, סעיף 4) - אבל
     // עדיין אפשר וצריך לתת שם תצוגה גנרי לפי תחום/קטגוריה אם הם קיימים.
     return { anon_display_name: buildFallbackDisplayName(biz), anon_summary: null, ai_flagged_concerns: [] };
@@ -131,6 +132,7 @@ async function generateSummary(biz: Record<string, unknown>): Promise<{ anon_dis
 3. anon_display_name: ביטוי גנרי קצר לפי תחום הפעילות בלבד, למשל "עסק בתחום המזון" - לא שם אמיתי ולא תיאור ייחודי מדי.
 4. region: אזור כללי בלבד (למשל "אזור המרכז"), לעולם לא כתובת מדויקת.
 5. key_facts: רק עובדות שבאמת קיימות בנתונים שסופקו לך למטה (מחזור/רווחיות/עובדים/וותק/לקוחות/נכסים/פוטנציאל צמיחה) - אל תמציא נתון שלא סופק, ואל תכלול נתון אם הוא עלול לבדו לזהות את העסק.
+5א. כל מספר כספי חייב להתייחס לשנת הדיווח ולתקופה המדויקת. הפרד בין דוח מבוקר לדוח זמני. אל תציג רווח נקי בתור EBITDA ואל תהפוך תקופת ביניים לשנה מלאה.
 6. אם אין מספיק מידע אמין לשדה מסוים - החזר null עבורו (או מערך ריק ל-key_facts), אל תמציא.
 7. בסוף, בדוק את מה שכתבת בעצמך פעם נוספת - אם יש ולו חשד קל להפרת אחד הכללים, רשום זאת ב-ai_flagged_concerns ואל תכלול את הפרט הבעייתי בתשובה עצמה.
 
@@ -151,7 +153,7 @@ ${factsAvailable.length ? factsAvailable.join('\n') : '(אין נתונים כמ
 טקסט מקור (תיאור/הערות/סיבת מכירה - לשימושך הפנימי בלבד, אסור להעתיק ממנו):
 """
 ${sourceText}
-"""`;
+"""\n\nחומר מקור חסוי שנסרק מתיקיית העסק, לקריאה בלבד, אסור להעתיק ממנו מזהים או שמות:\n${sourceContext}`;
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -162,7 +164,7 @@ ${sourceText}
     },
     body: JSON.stringify({
       model: 'claude-sonnet-5',
-      max_tokens: 900,
+      max_tokens: 1500,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       tools: [ANON_CARD_TOOL],
@@ -287,7 +289,12 @@ Deno.serve(async (req: Request) => {
     // שלב הטיוטה: תמיד מחזיר את מה ש-Claude כתב לתצוגה מקדימה - לעולם לא
     // שומר ולעולם לא חוסם, גם אם יש חששות (הם מוצגים לאדמין כדי שיוכל
     // לתקן ידנית בתצוגה המקדימה; החסימה האמיתית היא בשלב האישור למעלה).
-    const generated = await generateSummary(biz);
+    const { data: notes, error: notesErr } = await supabase.from('record_notes').select('note_text,created_at')
+      .eq('table_name', 'businesses').eq('record_id', business_id).order('created_at');
+    if (notesErr) throw notesErr;
+    const reviewedBiz = { ...biz, record_notes: (notes || []).map(n => `${n.created_at}: ${n.note_text}`).join('\n') };
+    const sources = await reviewBusinessSources(reviewedBiz, ANTHROPIC_API_KEY);
+    const generated = await generateSummary(reviewedBiz, sources.context);
     const scanTarget = [generated.anon_display_name, generated.anon_summary].filter(Boolean).join(' ');
     const localHits = localSafetyScan(scanTarget, biz);
     const allConcerns = [...generated.ai_flagged_concerns, ...localHits];
@@ -295,6 +302,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({
       anon_display_name: generated.anon_display_name,
       anon_summary: generated.anon_summary,
+      sources: sources.files.map(f => ({ name: f.name })),
       concerns: allConcerns,
       warnings: generated.anon_summary ? [] : ['אין מספיק מידע כדי לכתוב תקציר אמין - הוסף תיאור/הערות לעסק ונסה שוב'],
     });
