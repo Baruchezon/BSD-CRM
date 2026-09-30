@@ -809,6 +809,7 @@ function renderTable(){
   const activeBuyerLevel = RATING_LEVELS.find(r => r.level_key === 'active_buyer');
 
   let rows = ALL_LEADS.filter(l=>{
+    if (l.website_intake_stage === 'new' || l.website_intake_stage === 'contacted' || l.website_intake_stage === 'training') return false;
     if (type !== 'all' && l.type !== type) return false;
     if (status !== 'all' && l.status !== status) return false;
     if (agreement !== 'all' && (l.agreement_status || 'אין הסכם') !== agreement) return false;
@@ -1859,6 +1860,7 @@ function renderArchiveLeadsTable(){
   // ratings and list calls turning a small authenticated read into a 48 second
   // wait on mobile data. revalidate skips the network while the row cache is
   // inside its short TTL; a stale cache is painted before that read returns.
+  if (new URLSearchParams(location.search).get('view') === 'archive') LEAD_VIEW_MODE = 'archive';
   const loaded = await loadLeads({ revalidate:true, preserveExisting:restored, skipUrlHandling:restored });
   switchLeadTypeTab('buyer');
   if (restored) await maybeHandleUrlParams();

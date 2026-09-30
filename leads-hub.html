@@ -137,15 +137,16 @@
 
 <div class="wrap">
   <div class="toolbar">
-    <h2>לידים <span style="font-size:.8rem;color:#8a8578;font-weight:400;">— רשומות שטרם נשלח אליהן הסכם</span></h2>
+    <h2>לידים <span style="font-size:.8rem;color:#8a8578;font-weight:400;">פניות הממתינות לטיפול ולניתוב</span></h2>
+    <a class="btn btn-ghost" href="leads.html?view=archive">📁 ארכיון</a>
     <button class="btn btn-navy" onclick="openAddChoice()">+ הוספת ליד</button>
   </div>
 
   <div class="lead-tabs">
-    <button type="button" class="lead-tab active" data-tab="business" onclick="switchTab('business')">עסקים <span class="count" id="countBusiness">0</span></button>
+    <button type="button" class="lead-tab active" data-tab="manual" onclick="switchTab('manual')">לידים ידניים <span class="count" id="countBusiness">0</span></button>
     <button type="button" class="lead-tab" data-tab="seller" onclick="switchTab('seller')">לידים מהאתר <span class="count" id="countSeller">0</span></button>
-    <button type="button" class="lead-tab" data-tab="buyer" onclick="switchTab('buyer')">קונים <span class="count" id="countBuyer">0</span></button>
-    <button type="button" class="lead-tab" data-tab="partner" onclick="switchTab('partner')">שותפות/השקעה <span class="count" id="countPartner">0</span></button>
+    <button type="button" class="lead-tab" style="display:none" data-tab="buyer" onclick="switchTab('buyer')">קונים <span class="count" id="countBuyer">0</span></button>
+    <button type="button" class="lead-tab" style="display:none" data-tab="partner" onclick="switchTab('partner')">שותפות/השקעה <span class="count" id="countPartner">0</span></button>
     <button type="button" class="lead-tab" data-tab="vip" onclick="switchTab('vip')">לידים לקוחות VIP <span class="count" id="countVip">0</span></button>
     <button type="button" class="lead-tab" data-tab="y2026" onclick="switchTab('y2026')">לידים 2026 <span class="count" id="countY2026">0</span></button>
   </div>
@@ -246,6 +247,8 @@
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
 <script src="js/permissions.js?v=202608251215"></script>
+<script src="js/archiveModule.js?v=20260930"></script>
+<script src="js/leadLifecycle.js?v=20260930"></script>
 <script src="js/push.js?v=202608122320"></script>
 <script>
 let ALL_BUSINESSES = [];
@@ -265,7 +268,8 @@ let ALL_USERS = [];
 let CURRENT_PROFILE = null;
 let RATING_LEVELS = [];
 let RATING_BY_ID = {};
-let CURRENT_TAB = 'business';
+let CURRENT_TAB = 'manual';
+let ALL_MANUAL = [];
 const VIP_API = (window.BSD_CONFIG && window.BSD_CONFIG.VIP_API_URL) || 'https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/vip-api';
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -379,8 +383,8 @@ async function loadAll(){
   // את מה שהוא עצמו הכניס. שאר התפקידים (agent_authorized/manager/admin) רואים הכל,
   // ועריכה מוגבלת בהמשך לפי canEditRecord() (אדמין/מנהל או מי שהכניס את הליד).
   const [{ data: allBizData, error: bizErr }, { data: allLeadData, error: leadErr }] = await Promise.all([
-    window.BSDDataCache.rows('businesses', CURRENT_PROFILE.id),
-    window.BSDDataCache.rows('leads', CURRENT_PROFILE.id)
+    window.BSDDataCache.rows('businesses', CURRENT_PROFILE.id, { forceRefresh:true }),
+    window.BSDDataCache.rows('leads', CURRENT_PROFILE.id, { forceRefresh:true })
   ]);
   const ownOnly = CURRENT_PROFILE.role === 'agent';
   const bizData = (allBizData || []).filter(r => !ownOnly || r.created_by === CURRENT_PROFILE.id);
@@ -390,25 +394,16 @@ async function loadAll(){
 
   ALL_BUSINESSES = bizData || [];
 
-  const noAgreement = r => !r.agreement_status || r.agreement_status === 'אין הסכם';
-  // "לידים מהאתר" (טאב seller, ראו rename למעלה): כל ליד שהאוטומציה קלטה
-  // ועדיין לא סווג/הועבר סופית (website_intake_stage != null) - בלי קשר
-  // ל-type הזמני שלו - בתוספת מוכרים-בלי-הסכם "ישנים" (מהזנה ידנית, לפני
-  // האוטומציה), כדי לא לאבד גישה לרשומות קיימות. ליד מהאתר שעדיין לא סווג
-  // סופית לעולם לא מופיע בטאבי קונים/שותפים - זו בדיוק המטרה: הוא "יושב"
-  // כאן עד שמסמנים במפורש ששוחחו איתו ובוחרים לאן להעביר אותו.
-  const isOpenWebsiteLead = l => l.website_intake_stage === 'new' || l.website_intake_stage === 'contacted';
-  const convertedSellerIds = new Set(ALL_BUSINESSES.filter(b => !b.is_archived && b.seller_id).map(b => b.seller_id));
-  const legacySellers = (leadData || []).filter(l => l.type === 'seller' && noAgreement(l) && !l.website_intake_stage && !convertedSellerIds.has(l.id));
-  const websiteLeads = (leadData || []).filter(isOpenWebsiteLead);
-  const seenIds = new Set();
-  ALL_SELLERS = [...websiteLeads, ...legacySellers].filter(l => (seenIds.has(l.id) ? false : (seenIds.add(l.id), true)));
-  ALL_BUYERS = (leadData || []).filter(l => l.type === 'buyer' && noAgreement(l) && !isOpenWebsiteLead(l));
-  ALL_PARTNERS = (leadData || []).filter(l => l.type === 'partner' && noAgreement(l) && !isOpenWebsiteLead(l));
+  // Existing businesses and buyers are destinations, never pending leads.
+  const pending = BSDLeadLifecycle.pending(leadData || [], ALL_BUSINESSES);
+  ALL_MANUAL = pending.filter(l => !BSDLeadLifecycle.isWebsite(l));
+  ALL_SELLERS = pending.filter(BSDLeadLifecycle.isWebsite);
+  ALL_BUYERS = [];
+  ALL_PARTNERS = [];
 
   const Y2026_START = new Date('2026-01-01T00:00:00');
   const leads2026Raw = (leadData || [])
-    .filter(l => l.created_at && new Date(l.created_at) >= Y2026_START)
+    .filter(l => pending.some(p => p.id === l.id) && l.created_at && new Date(l.created_at) >= Y2026_START)
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
   // "הסתרה" מרשימת 2026 - טבלה נפרדת לגמרי (leads_2026_hidden), RLS אדמין
@@ -433,7 +428,7 @@ async function loadAll(){
     const { data } = await window.supabaseClient.from('leads_2026_review').select('*').order('received_at', { ascending: false, nullsFirst: false });
     reviewRows = data || [];
   } catch (e) { reviewRows = []; }
-  Y2026_REVIEW_ROWS = reviewRows.filter(r => !r.is_hidden);
+  Y2026_REVIEW_ROWS = reviewRows.filter(r => !r.is_hidden && !(r.review_status === 'הועבר' && r.transferred_to_id));
   Y2026_REVIEW_HIDDEN_ROWS = reviewRows.filter(r => r.is_hidden);
 
   ALL_VIP_INQUIRIES = [];
@@ -444,7 +439,7 @@ async function loadAll(){
     } catch (e) { toast('שגיאה בטעינת לידי VIP: ' + e.message); }
   }
 
-  document.getElementById('countBusiness').textContent = ALL_BUSINESSES.length;
+  document.getElementById('countBusiness').textContent = ALL_MANUAL.length;
   document.getElementById('countSeller').textContent = ALL_SELLERS.length;
   document.getElementById('countBuyer').textContent = ALL_BUYERS.length;
   document.getElementById('countPartner').textContent = ALL_PARTNERS.length;
@@ -749,7 +744,7 @@ async function openY2026ReviewDetail(id){
         <button onclick="markY2026ReviewChecked('${r.id}')" style="background:#fff;border:1px solid #2f8f4e;color:#2f8f4e;padding:8px 14px;border-radius:8px;font-family:inherit;cursor:pointer;">✓ סמן כנבדק</button>
         ${matches.length === 0 ? `<button onclick="transferY2026Review('${r.id}')" style="background:#2b5fa3;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">${normalizeClassification(r.classification) === 'מתעניין בקורס' ? '➡️ העבר למתעניינים בקורס' : '➡️ העבר לרשומה פעילה'}</button>` : ''}
         ${isAdmin ? `<button onclick="closeModal();hideFromY2026ReviewConfirm('${r.id}')" style="background:#b00020;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">🗑️ הסר מרשימת 2026 בלבד</button>` : ''}
-        ${isAdmin && !isExistingBuyerOrBusiness(matches) ? `<button onclick="closeModal();hardDeleteY2026ReviewConfirm('${r.id}')" style="background:#fff;border:1px solid #7a0016;color:#7a0016;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">🗑️ מחק לצמיתות מ"לידים 2026"</button>` : ''}`}
+        ${isAdmin && r.is_hidden && !isExistingBuyerOrBusiness(matches) ? `<button onclick="closeModal();hardDeleteY2026ReviewConfirm('${r.id}')" style="background:#fff;border:1px solid #7a0016;color:#7a0016;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">🗑️ מחק לצמיתות מ"לידים 2026"</button>` : ''}`}
     </div>
   `;
   document.getElementById('overlay').classList.add('open');
@@ -805,7 +800,7 @@ async function transferY2026Review(id){
     // בדיקת כפילות חיה ממש לפני ההעברה (לא רק מהמטמון של find_2026_review_matches)
     const dup = await checkExistingTrainingLead(r.phone, r.email);
     if (dup){
-      toast(`המתעניין כבר קיים במודול ההכשרות (${(dup.first_name || '') + ' ' + (dup.last_name || '')}) - לא נוצרה כפילות.`);
+      await markY2026ReviewTransferred(id, 'training_leads', dup.id);
       return;
     }
     const { data, error } = await window.supabaseClient.from('training_leads').insert({
@@ -822,15 +817,37 @@ async function transferY2026Review(id){
     return;
   }
 
-  let type = 'buyer';
-  if (cls === 'מוכר עסק') type = 'seller';
-  else if (cls === 'קונה עסק') type = 'buyer';
-  const params = new URLSearchParams({
-    new: '1', type,
-    pf_first_name: first, pf_last_name: last, pf_phone: r.phone || '', pf_email: r.email || '', pf_notes: notes
-  });
-  window.open('leads.html?' + params.toString(), '_blank');
-  await markY2026ReviewTransferred(id, type, null);
+  // Persist and verify the destination before marking the review as transferred.
+  try {
+    const type = cls === 'מוכר עסק' ? 'seller' : 'buyer';
+    const existing = await window.supabaseClient.from('leads').select('*').eq('id', id).maybeSingle();
+    if (existing.error) throw new Error(existing.error.message);
+    let lead = existing.data;
+    if (!lead){
+      const inserted = await window.supabaseClient.from('leads').insert({
+        id, type, first_name:first, last_name:last, full_name:r.full_name || 'ליד ללא שם',
+        phone:r.phone || null, email:r.email || null, notes,
+        source:'לידים 2026', website_intake_stage:type === 'seller' ? 'contacted' : null,
+        created_by:CURRENT_PROFILE.id
+      }).select('*').single();
+      if (inserted.error) throw new Error(inserted.error.message);
+      lead = inserted.data;
+    }
+    if (!lead || lead.is_archived) throw new Error('כרטיס היעד לא זמין או נמצא בארכיון');
+    let target = lead, targetTable = 'leads';
+    if (type === 'seller'){
+      target = await ensureWebsiteLeadBusiness(lead);
+      targetTable = 'businesses';
+      const saved = await window.supabaseClient.from('leads').update({
+        website_intake_stage:null, status:'הועבר למוכר'
+      }).eq('id', lead.id).select('id').single();
+      if (saved.error || !saved.data) throw new Error(saved.error?.message || 'ההעברה לא אושרה');
+    }
+    const checked = await window.supabaseClient.from(targetTable).select('id').eq('id',target.id).single();
+    if (checked.error || !checked.data) throw new Error('לא ניתן לאמת את כרטיס היעד');
+    await markY2026ReviewTransferred(id, targetTable, target.id);
+  } catch(error) { toast('ההעברה לא הושלמה: ' + error.message); }
+
 }
 async function markY2026ReviewTransferred(id, toTable, toId){
   const { error } = await window.supabaseClient.from('leads_2026_review').update({
@@ -898,12 +915,15 @@ function hardDeleteY2026ReviewConfirm(id){
   document.body.appendChild(overlay);
 }
 async function hardDeleteY2026ReviewDo(id){
+  const archived = Y2026_REVIEW_HIDDEN_ROWS.find(x => x.id === id && x.is_hidden);
+  if (!archived){ toast('מחיקה סופית אפשרית רק מתוך הארכיון'); return; }
   // בדיקה חיה ממש לפני המחיקה (לא מהמטמון) - הגנה כפולה מעבר להסתרת הכפתור
   const r = Y2026_REVIEW_ROWS.find(x => x.id === id) || Y2026_REVIEW_HIDDEN_ROWS.find(x => x.id === id);
   if (r){
     try {
       const { data, error } = await window.supabaseClient.rpc('find_2026_review_matches', { p_phone: r.phone || null, p_email: r.email || null });
-      const liveMatches = error ? [] : (data || []);
+      if (error) throw new Error(error.message);
+      const liveMatches = data || [];
       if (isExistingBuyerOrBusiness(liveMatches)){
         const ov = document.getElementById('hardDeleteY2026ReviewOverlay'); if (ov) ov.remove();
         toast('לא ניתן למחוק לצמיתות - נמצאה התאמה קיימת כקונה או כעסק במערכת. ניתן להשתמש ב"הסר מרשימת 2026 בלבד" במקום.');
@@ -915,7 +935,7 @@ async function hardDeleteY2026ReviewDo(id){
       return;
     }
   }
-  const { error } = await window.supabaseClient.from('leads_2026_review').delete().eq('id', id);
+  const { error } = await window.supabaseClient.from('leads_2026_review').delete().eq('id', id).eq('is_hidden', true);
   const ov = document.getElementById('hardDeleteY2026ReviewOverlay'); if (ov) ov.remove();
   if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
   toast('הרשומה נמחקה לצמיתות מ"לידים 2026" בלבד. שום רשומה אחרת במערכת לא נגעה.');
@@ -947,7 +967,7 @@ async function openHiddenY2026ReviewPanel(){
 }
 
 function currentRows(){
-  if (CURRENT_TAB === 'business') return ALL_BUSINESSES;
+  if (CURRENT_TAB === 'manual') return ALL_MANUAL;
   if (CURRENT_TAB === 'seller') return ALL_SELLERS;
   if (CURRENT_TAB === 'buyer') return ALL_BUYERS;
   if (CURRENT_TAB === 'y2026') return ALL_LEADS_2026;
@@ -1023,7 +1043,7 @@ function renderTable(){
   const tn = tableName();
   body.innerHTML = rows.map(r => {
     const editable = canEditRecord(r.created_by);
-    const isWebsiteLead = CURRENT_TAB === 'seller' && (!!r.website_intake_stage || r.status === 'הועבר למוכר');
+    const isWebsiteLead = CURRENT_TAB === 'seller' || CURRENT_TAB === 'manual';
     const isY2026 = CURRENT_TAB === 'y2026';
     const isAdmin = !!(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin');
     const rowClickAction = isY2026 ? `openReadOnly('${r.id}')` : (isWebsiteLead ? `openWebsiteLead('${r.id}')` : (editable ? `openEdit('${r.id}')` : `openReadOnly('${r.id}')`));
@@ -1040,7 +1060,7 @@ function renderTable(){
                 : `<a href="javascript:void(0)" onclick="openReadOnly('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ צפייה (ליד של ${esc(userName(r.created_by))})</a>`)}
               <a href="javascript:void(0)" onclick="openNotesPanel('${tn}','${r.id}','${esc((r.internal_name||r.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(r.id))}</a>
               ${(editable && canSendAgreement() && !isWebsiteLead) ? `<a href="javascript:void(0)" onclick="sendAgreement('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
-              ${editable ? `<a href="javascript:void(0)" onclick="deleteRecord('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ מחק</a>` : ''}
+              ${editable ? `<a href="javascript:void(0)" onclick="deleteRecord('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 העבר לארכיון</a>` : ''}
     `;
     return `
     <tr style="cursor:pointer;" onclick="${rowClickAction}">
@@ -1127,19 +1147,44 @@ function openReadOnly(id){
 }
 
 function openAddChoice(){
-  const modal = document.getElementById('modalBox');
-  modal.innerHTML = `
-    <h3>הוספת ליד</h3>
-    <div class="choice-btns">
-      <button type="button" onclick="location.href='businesses.html?new=1&from=leads-hub'">🏢 עסק</button>
-      <button type="button" onclick="location.href='leads.html?new=1&type=buyer&from=leads-hub'">🧍 קונה</button>
-      <button type="button" onclick="location.href='leads.html?new=1&type=partner&from=leads-hub'">🤝 שותפות/השקעה</button>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
-    </div>
-  `;
+  document.getElementById('modalBox').innerHTML = `
+    <h3>הוספת ליד ידני</h3>
+    <form onsubmit="event.preventDefault();saveManualLead()">
+      <div class="field"><label>שם מלא</label><input id="manualName" required maxlength="200"></div>
+      <div class="field"><label>טלפון</label><input id="manualPhone" type="tel" dir="ltr" required></div>
+      <div class="field"><label>אימייל</label><input id="manualEmail" type="email" dir="ltr"></div>
+      <div class="field"><label>תוכן הפנייה</label><textarea id="manualNotes" rows="4"></textarea></div>
+      <div id="manualError" role="alert" style="color:#a02c1d"></div>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button id="manualSave" class="btn btn-navy" type="submit">שמור ליד</button></div>
+    </form>`;
   document.getElementById('overlay').classList.add('open');
+}
+async function saveManualLead(){
+  const btn = document.getElementById('manualSave');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const name = document.getElementById('manualName').value.trim();
+    const phone = document.getElementById('manualPhone').value.trim();
+    if (!name || !phone) throw new Error('יש למלא שם וטלפון');
+    const { data, error } = await window.supabaseClient.from('leads').insert({
+      type:'buyer', full_name:name, phone,
+      email:document.getElementById('manualEmail').value.trim() || null,
+      notes:document.getElementById('manualNotes').value.trim() || null,
+      source:'הזנה ידנית', website_intake_stage:'new', status:'חדש',
+      created_by:CURRENT_PROFILE.id
+    }).select('id,website_intake_stage').single();
+    if (error) throw new Error(error.message);
+    if (!data || data.website_intake_stage !== 'new') throw new Error('שמירת הליד לא אושרה');
+    closeModal();
+    CURRENT_TAB = 'manual';
+    await loadAll();
+    switchTab('manual');
+    toast('הליד נשמר וממתין לטיפול');
+  } catch(e) {
+    document.getElementById('manualError').textContent = e.message;
+  } finally { btn.disabled = false; }
 }
 
 async function sendAgreement(id){
@@ -1171,12 +1216,14 @@ async function sendAgreement(id){
 }
 
 async function deleteRecord(id){
-  if (!confirm('למחוק את הרשומה?')) return;
-  const tn = tableName();
-  const { error } = await window.supabaseClient.from(tn).delete().eq('id', id);
-  if (error){ toast('אין הרשאה למחוק, או שגיאה: ' + error.message); return; }
-  toast('נמחק בהצלחה');
-  await loadAll();
+  const row = currentRows().find(r => r.id === id);
+  if (!row || !canEditRecord(row.created_by)) return;
+  openArchiveReasonModal('העברת ליד לארכיון', async reason => {
+    await updateArchiveRecord('leads', id, true, reason);
+    closeModal();
+    await loadAll();
+    toast('הליד הועבר לארכיון וכל המידע נשמר');
+  });
 }
 
 let NOTES_SUMMARY = {};
@@ -1378,8 +1425,9 @@ async function verifyLeadWrite(id, expectedFields){
 }
 
 function openWebsiteLead(id){
-  const r = ALL_SELLERS.find(x => x.id === id);
+  const r = [...ALL_MANUAL, ...ALL_SELLERS].find(x => x.id === id);
   if (!r){ toast('הליד לא נמצא'); return; }
+  if (!canEditRecord(r.created_by)){ openReadOnly(id); return; }
   if (r.website_intake_stage === 'new') renderWebsiteLeadIntro(r);
   else renderWebsiteLeadConversationForm(r);
 }
@@ -1388,7 +1436,7 @@ function renderWebsiteLeadIntro(r){
   const personName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || 'שם לא זוהה';
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
-    <h3>🌐 ליד חדש מהאתר</h3>
+    <h3>ליד חדש</h3>
     <div style="background:#fff3d6;border:1px solid #e8cf8a;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a6d1f;margin-bottom:14px;">
       ${esc(r.website_purpose_guess || 'טרם דיברו עם הלקוח.')} — הסיווג להלן הוא ניחוש בלבד, לא סופי.
     </div>
@@ -1401,7 +1449,7 @@ function renderWebsiteLeadIntro(r){
     </div>
     <div id="wlIntroError" style="display:none;background:#fdeceb;border:1px solid #e4b3ac;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#a02c1d;margin-top:10px;"></div>
     <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" onclick="rejectWebsiteLead('${r.id}')" style="color:#a02c1d;">🗑️ דחה ומחק</button>
+      <button type="button" class="btn btn-ghost" onclick="rejectWebsiteLead('${r.id}')" style="color:#a02c1d;">📁 העבר לארכיון</button>
       <button type="button" class="btn btn-ghost" onclick="closeModal()">סגירה</button>
       <button type="button" class="btn btn-navy" id="wlTalkedBtn" onclick="markContactedAndContinue('${r.id}')">💬 שוחחתי עם הלקוח</button>
     </div>
@@ -1619,13 +1667,7 @@ async function saveWebsiteLeadTransfer(id){
 }
 
 async function rejectWebsiteLead(id){
-  if (!confirm('למחוק את הליד הזה לגמרי? הפעולה אינה הפיכה.')) return;
-  await window.supabaseClient.from('tasks').delete().eq('related_type', 'lead').eq('related_id', id);
-  const { error } = await window.supabaseClient.from('leads').delete().eq('id', id);
-  if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
-  toast('הליד נמחק');
-  closeModal();
-  await loadAll();
+  return deleteRecord(id);
 }
 
 (async function init(){
