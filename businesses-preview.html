@@ -1,5 +1,5 @@
-Warning: truncated output (original token count: 77302)
-Total output lines: 4606
+Warning: truncated output (original token count: 77849)
+Total output lines: 4640
 
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -401,7 +401,7 @@ Total output lines: 4606
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=20260930archive1"></script>
+<script src="js/config.js?v=202609241310"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
 <script src="js/permissions.js?v=202608251215"></script>
@@ -412,8 +412,8 @@ Total output lines: 4606
 <script src="js/saleFileModule2.js?v=202609241310"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
-<script src="js/dedupeCheckModule.js?v=20260930dup1"></script>
-<script src="js/archiveModule.js?v=20260930delete1"></script>
+<script src="js/dedupeCheckModule.js?v=202608311200"></script>
+<script src="js/archiveModule.js?v=202609021200"></script>
 <script>
 let ALL_BIZ = [];
 let ARCHIVED_BIZ = [];
@@ -553,38 +553,8 @@ async function loadBusinesses(){
 // business_access_grants פעילים) - לא state זמני בדפדפן.
 // ============================================================
 let GRANT_COUNTS = {};
-// ========================================================================…57302 tokens truncated…⚠️ ' + (data && data.notes_to_user ? data.notes_to_user : 'אין מספיק תוכן בשדה כדי לשפר את הניסוח באופן משמעותי - הוסף פרטים ונסה שוב.'); }
-      return;
-    }
-    if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = ''; }
-    openAiTextPreview(fieldId, sourceText, data.improved_text, isAnonymous, data.notes_to_user || null);
-  } catch (e){
-    bsdSetButtonLoading(btn, false);
-    const msg = e && e.message ? e.message : String(e);
-    if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '❌ ' + msg; }
-    toast('❌ ' + msg);
-  }
-}
-
-function closeAiTextPreview(){
-  const el = document.getElementById('aiTextOverlay');
-  if (el) el.remove();
-}
-
-// שלב 2: תצוגה מקדימה - טקסט מקורי + נוסח מוצע (ניתן לעריכה ידנית) + 3
-// כפתורים: אישור והחלפה / נסה ניסוח נוסף / ביטול. שום דבר לא נשמר כאן.
-function openAiTextPreview(fieldId, originalText, proposedText, isAnonymous, noteToUser){
-  closeAiTextPreview();
-  const overlay = document.createElement('div');
-  overlay.id = 'aiTextOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:99;padding:40px 20px;';
-  const noteHtml = noteToUser
-    ? `<div style="background:#fff8e6;border:1px solid #e0c880;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.8rem;color:#7a5a10;">ℹ️ ${esc(noteToUser)}</div>`
-    : '';
-  overlay.innerHTML = `
-    <div style="background:#fff;border-radius:14px;max-width:680px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
-      <h3 style="margin:0 0 4px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">תצוגה מקדימה - ${esc(aiFieldLabel(fieldId))} (AI)</h3>
-      <div style="font-size:.78rem;color:#999;margin-bottom:12px;">זו טיוטה בלבד - שום דבר לא נשמר עדיין. ניתן לערוך את הנוסח המוצע למטה לפני האישור.${isAnonymous ? ' (העסק מסומן כאנונימי - הנוסח המוצע נמנע מפרטים מזהים.)' : ''}</div>
+// ============================================================================
+//…57849 tokens truncated…נוסח המוצע נמנע מפרטים מזהים.)' : ''}</div>
       ${noteHtml}
       <label style="display:block;font-size:.78rem;color:#665;">הטקסט המקורי</label>
       <textarea readonly style="width:100%;padding:8px 10px;border:1px solid #e3e0d5;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;background:#f7f5ef;color:#665;min-height:80px;margin-bottom:12px;">${esc(originalText)}</textarea>
@@ -1181,20 +1151,54 @@ async function bizHasAnyHistory(id){
   return { hasHistory: rows.length > 0, details: rows.map(r => `${r.table_name}: ${r.row_count}`) };
 }
 async function deleteBiz(id){
-  const biz = ARCHIVED_BIZ.find(b => b.id === id);
-  if (!biz || !biz.is_archived){ toast('מחיקה סופית אפשרית רק מתוך הארכיון'); return; }
-  if (!canManageBiz(biz)){ toast('אין לך הרשאה למחוק עסק זה'); return; }
+  if (!confirm('להסיר עסק זה מהמערכת? אם אין לו היסטוריה קשורה הוא יימחק לצמיתות. אם יש לו היסטוריה (התאמות, משימות, הפצות וכו׳) הוא יועבר אוטומטית לארכיון כדי לשמר אותה.')) return;
+  // תיקון 25.08.2026: התפריט (⋮) נשאר פתוח/תקוע על המסך בזמן שהפעולה
+  // מתבצעת ברשת, ובמיוחד אם היא נכשלת (הקוד היה עושה return מוקדם
+  // בלי לסגור כלום ובלי לרענן את הטבלה). סוגרים את כל התפריטים הפתוחים
+  // מיד, לפני שמתחילים את הפעולה בכלל - לא רק אחרי הצלחה.
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
+
+  let hasHistory, details;
   try {
-    if (!await deleteArchivedRecord('businesses', id)) return;
-  } catch (error){ toast('❌ המחיקה לא בוצעה: ' + error.message); return; }
-  const verification = await window.supabaseClient.from('businesses').select('id').eq('id', id).maybeSingle();
-  if (verification.error || verification.data){ toast('לא ניתן לאמת את המחיקה מול השרת. רענן את הרשימה לפני ניסיון נוסף.'); await loadBusinesses({forceRefresh:true}); return; }
-  ALL_BIZ = ALL_BIZ.filter(b => b.id !== id);
-  ARCHIVED_BIZ = ARCHIVED_BIZ.filter(b => b.id !== id);
-  renderTable(); saveBusinessPageCache();
-  toast('✅ העסק נמחק לצמיתות');
-  closeModal();
-  await loadBusinesses({forceRefresh:true});
+    ({ hasHistory, details } = await bizHasAnyHistory(id));
+  } catch (e){
+    // לא הצלחנו לבדוק היסטוריה בביטחון - עוצרים כאן ולא ממשיכים למחיקה,
+    // כדי לא לסכן מחיקה פיזית של עסק שיש לו בפועל היסטוריה.
+    toast('❌ ' + e.message + ' - הפעולה בוטלה לביטחון');
+    return;
+  }
+
+  if (!hasHistory){
+    // אין שום תלות/היסטוריה בשום טבלה קשורה - מותר למחוק פיזית.
+    const { error } = await window.supabaseClient.from('businesses').delete().eq('id', id);
+    if (error){
+      // שגיאה אמיתית מוצגת כמו שהיא - לעולם לא הודעת הצלחה מזויפת. התפריט
+      // כבר נסגר למעלה, והעסק עדיין ברשימה כרגיל (לא הוסר, כי לא נמחק בפועל).
+      toast('❌ שגיאה במחיקה: ' + error.message);
+      return;
+    }
+    toast('✅ נמחק בהצלחה');
+    await loadBusinesses();
+    return;
+  }
+
+  // קיימת היסטוריה קשורה (25.08.2026: מדיניות - לעולם לא למחוק פיזית במקרה כזה,
+  // כדי לא לאבד anon_distributions/משימות/פגישות/התאמות וכו׳). משתמשים במנגנון
+  // הארכיון הקיים כבר במערכת (is_archived/archived_at/archived_by/archive_reason)
+  // במקום ליצור מנגנון נפרד - העסק יוסתר מכל הרשימות הפעילות (loadBusinesses כבר
+  // מסנן !is_archived) אך יישאר במלואו, כולל כל הקשרים ההיסטוריים.
+  const { error } = await window.supabaseClient.from('businesses').update({
+    is_archived: true,
+    archived_at: new Date().toISOString(),
+    archived_by: CURRENT_PROFILE.id,
+    archive_reason: 'הועבר אוטומטית לארכיון בעת ניסיון מחיקה - קיימת היסטוריה קשורה (' + details.join(', ') + ')'
+  }).eq('id', id);
+  if (error){
+    toast('❌ שגיאה בהעברה לארכיון: ' + error.message);
+    return;
+  }
+  toast('📁 לעסק זה יש היסטוריה קשורה - הועבר לארכיון (לא נמחק) כדי לשמר אותה. ניתן לשחזר מהארכיון בכל עת.');
+  await loadBusinesses();
 }
 
 (async function init(){
