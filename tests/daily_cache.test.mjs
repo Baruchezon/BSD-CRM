@@ -16,11 +16,12 @@ function environment(useIndexedDB=true, stallStorage=false){
   const client={auth:{getSession:async()=>({data:{session}})},rpc(){return Promise.resolve({data:[],error:null})},from(table){
    let operation='get',values,id,start=0,end=999999;
    const q={select(){return q},order(){return q},range(a,b){start=a;end=b;return q},eq(k,v){if(k==='id')id=v;return q},update(v){operation='update';values=v;return q},insert(v){operation='insert';values=v;return q},delete(){operation='delete';return q},single(){return q},maybeSingle(){return q},then(ok,bad){return (async()=>{
+    const snapshot=operation==='get'?structuredClone(id?tables[table].find(r=>r.id===id)||null:tables[table].slice(start,end+1)):null;
     calls.push({table,operation,id,start,end});if(stallNetwork)return new Promise(()=>{});if(networkDelay)await new Promise(resolve=>setTimeout(resolve,networkDelay));if(fail)return {error:{message:'offline'},data:null};
     if(operation==='update')Object.assign(tables[table].find(r=>r.id===id),values);
     if(operation==='insert'){tables[table].push(values);return {data:structuredClone(values),error:null}}
     if(operation==='delete')tables[table]=tables[table].filter(r=>r.id!==id);
-    return {data:structuredClone(id?tables[table].find(r=>r.id===id)||null:tables[table].slice(start,end+1)),error:null};
+    return {data:operation==='get'?snapshot:structuredClone(id?tables[table].find(r=>r.id===id)||null:tables[table].slice(start,end+1)),error:null};
    })().then(ok,bad)}};return q;
   }};
   class ClockDate extends Date {constructor(...args){super(...(args.length?args:[clock.now]))}static now(){return clock.now}}
@@ -134,4 +135,13 @@ test('authentication returns without waiting for unrelated background datasets',
 
 test('stalled data request ends with an error and permits a successful retry',async()=>{
  const e=environment();const p=e.page();await p.start();e.setStall(true);assert.ok((await p.cache.rows('businesses','u1')).error);e.setStall(false);assert.equal((await p.cache.rows('businesses','u1')).data.length,1);
+});
+
+test('a list started before deletion cannot restore the removed row',async()=>{
+ const e=environment();const p=e.page();await p.load();e.setDelay(50);
+ const stale=p.cache.rows('businesses','u1',{forceRefresh:true});
+ await new Promise(resolve=>setTimeout(resolve,5));e.setDelay(0);
+ await p.client.from('businesses').delete().eq('id','b1');
+ assert.equal((await stale).data.length,0);
+ assert.equal((await p.cache.rows('businesses','u1')).data.length,0);
 });
