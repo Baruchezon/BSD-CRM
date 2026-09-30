@@ -49,7 +49,9 @@ function bsdShowDupConfirmDialog(options){
   const matches = options.matches || [];
   const strong = matches.filter(m => bsdDupIsStrong(m.match_level));
   const list = (strong.length ? strong : matches).slice(0, 5);
-  const canOverride = window.CURRENT_PROFILE && ['admin', 'manager'].includes(window.CURRENT_PROFILE.role) && strong.length > 0;
+  // Top-level let bindings are not properties of window.
+  const profile = options.profile || (typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE : window.CURRENT_PROFILE);
+  const canOverride = !!profile && ['admin', 'manager'].includes(profile.role);
 
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:center;justify-content:center;z-index:600;padding:20px;';
@@ -71,12 +73,12 @@ function bsdShowDupConfirmDialog(options){
       <div id="bsdDupList">${rowsHtml}</div>
       ${canOverride ? `
         <div style="margin-top:14px;border-top:1px solid #eee;padding-top:12px;">
-          <label style="font-size:.78rem;color:#777;">אישור חריגה (מנהל/מנג'ר בלבד) - נדרש נימוק קצר:</label>
+          <label style="font-size:.78rem;color:#777;">המשך יצירת כרטיס נוסף עם אותם פרטים. ניתן להוסיף הערה:</label>
           <input type="text" id="bsdDupOverrideReason" placeholder="לדוגמה: שני עסקים שונים עם אותו טלפון" style="width:100%;margin-top:4px;padding:8px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;">
         </div>` : ''}
       <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;flex-wrap:wrap;">
-        <button type="button" class="btn btn-ghost" id="bsdDupCancelBtn">ביטול - חזרה לעריכה</button>
-        ${canOverride ? `<button type="button" class="btn btn-ghost" style="color:#a33;" id="bsdDupOverrideBtn">צור בכל זאת (חריגה מבוקרת)</button>` : ''}
+        <button type="button" class="btn btn-ghost" id="bsdDupCancelBtn">חזרה לעריכה</button>
+        ${canOverride ? `<button type="button" class="btn btn-ghost" style="color:#a33;" id="bsdDupOverrideBtn">המשך בכל זאת</button>` : ''}
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -97,12 +99,7 @@ function bsdShowDupConfirmDialog(options){
     if (overrideBtn){
       overrideBtn.addEventListener('click', () => {
         const reasonEl = overlay.querySelector('#bsdDupOverrideReason');
-        const reason = reasonEl ? reasonEl.value.trim() : '';
-        if (!reason){
-          reasonEl.style.borderColor = '#c00';
-          reasonEl.focus();
-          return;
-        }
+        const reason = (reasonEl ? reasonEl.value.trim() : '') || 'המשתמש אישר יצירת כרטיס נוסף לאחר התראת כפילות';
         overlay.remove();
         resolve({ action: 'override', reason });
       });

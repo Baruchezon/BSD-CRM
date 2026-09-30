@@ -313,6 +313,12 @@ window.BSDDataCache = (() => {
         fetchedAt.set('rows:' + table, Date.now());
         set('rows:' + table, userId, all);
       }
+      // A pre-write response cannot paint rows that were deleted meanwhile.
+      if (context === active && (revisions.get(table) || 0) !== revision){
+        const current = get('rows:' + table, userId);
+        if (current) return { data:current, error:null };
+        return rows(table, userId, { forceRefresh:true });
+      }
       // Rendering must not wait for the optional disk cache to finish writing.
       return { data:all, error:null };
     })();
@@ -336,6 +342,8 @@ window.BSDDataCache = (() => {
     if (!context) return;
     const active = context, userId = context.userId;
     revisions.set(table, (revisions.get(table) || 0) + 1);
+    // A list started before this write must never repopulate the deleted row.
+    pending.delete(table);
     remove('app-page', userId); remove('businesses-page', userId); remove('leads-page', userId); remove('matches-page', userId);
     // Read back just the affected row. Verification reads always go to the server.
     if (['businesses','leads'].includes(table)){

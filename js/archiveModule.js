@@ -107,3 +107,33 @@ function openArchiveReasonModal(title, onConfirm){
   };
   select.focus();
 }
+
+// The server previews dependencies and performs the confirmed operation atomically.
+async function deleteArchivedRecord(table, id){
+  const preview = await window.supabaseClient.rpc('delete_archived_crm_record', {
+    p_table:table, p_id:id, p_confirm:false
+  });
+  if (preview.error) throw new Error(preview.error.message);
+  const links = preview.data?.linked || {};
+  let message = 'מחיקה סופית מהארכיון אינה ניתנת לביטול. להמשיך?';
+  if (Object.values(links).some(count => Number(count) > 0)){
+    message = table === 'leads'
+      ? 'מחיקה סופית של הכרטיס. כרטיסי עסקים ומשימות יישמרו ללא הקישור לאיש הקשר. ההתאמות ורשומות ההפצה המשויכות יימחקו. עותק היסטוריית ההתאמות יישמר ביומן הביקורת.'
+      : 'מחיקה סופית של העסק ושל נתוני ההתאמות והקבצים המשויכים אליו. משימות ותיעוד מסמכים יישמרו ללא הקישור לעסק.';
+    if (Number(links.vip_accounts) > 0 || Number(links.vip_inquiries) > 0) message += ' חשבון VIP והפניות שלו יימחקו והגישה שלו תופסק.';
+    message += ' הפעולה אינה ניתנת לביטול. להמשיך?';
+  }
+  if (!confirm(message)) return false;
+  const result = await window.supabaseClient.rpc('delete_archived_crm_record', {
+    p_table:table, p_id:id, p_confirm:true
+  });
+  if (result.error) throw new Error(result.error.message);
+  if (result.data?.deleted !== true || result.data.id !== id) throw new Error('המחיקה לא אושרה בשרת');
+  // Invalidate both collections: seller links and VIP/match decorations may change.
+  if (window.BSDDataCache && typeof CURRENT_PROFILE !== 'undefined'){
+    for (const scope of ['rows:businesses','rows:leads','businesses-page','leads-page','app-page','matches-page']){
+      window.BSDDataCache.remove(scope, CURRENT_PROFILE.id);
+    }
+  }
+  return true;
+}
