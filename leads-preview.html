@@ -1,5 +1,5 @@
-Warning: truncated output (original token count: 28718)
-Total output lines: 1760
+Warning: truncated output (original token count: 28828)
+Total output lines: 1769
 
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -253,7 +253,7 @@ Total output lines: 1760
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=20260930archive1"></script>
+<script src="js/config.js?v=202609241310"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
 <script src="js/permissions.js?v=202608251709"></script>
@@ -262,9 +262,9 @@ Total output lines: 1760
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/searchSelect.js?v=202608281530"></script>
 <script src="js/pdfPipeline.js?v=202608291000"></script>
-<script src="js/dedupeCheckModule.js?v=20260930dup1"></script>
+<script src="js/dedupeCheckModule.js?v=202608311200"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
-<script src="js/archiveModule.js?v=20260930delete1"></script>
+<script src="js/archiveModule.js?v=202609021200"></script>
 <script>
 let ALL_LEADS = [];
 let ARCHIVED_LEADS = [];
@@ -582,11 +582,8 @@ function creatorColor(id){
   const u = ALL_USERS.find(x=>x.id===id);
   if (!u) return null;
   if (u.role === 'agent') return '#e6c200'; // צהוב זוהר - סוכן
-  if (u.role === 'agent_authorized') return '#2ecc40'; // ירוק זוהר - סוכן מור…8718 tokens truncated…ing({recordId:'${lead ? lead.id : 'new-' + Date.now()}', label:'${esc((lead?.full_name || 'רשומה חדשה').replace(/'/g,''))}', textareaId:'notes', currentProfile:CURRENT_PROFILE})">🎙️ הקלט הערות</button>
-        </div>
-        ${textareaRow('notes','הערות', lead?.notes || pf.notes, 180)}
-        ${(lead && !isGrantOnlyViewer(lead)) ? `
-        <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;">
+  if (u.role === 'agent_authorized') return '#2ecc40'; // ירוק זוהר - סוכן מורשה
+  …8828 tokens truncated…ntent:space-between;">
           <span>📲 WhatsApp</span>
           <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;color:#128C4A;" onclick="waOpenSendModal({entityType:'lead', entityId:'${lead.id}', phone:'${esc(lead.phone||'')}', recipientName:'${esc((lead.full_name||'').replace(/'/g,''))}', templateKey:'${type}', ctx:{firstName:'${esc((lead.first_name||'').replace(/'/g,''))}', area:'${esc((lead.requested_area||'').replace(/'/g,''))}', businessName:'${esc((lead.business_name||'').replace(/'/g,''))}'}, onLogged: () => waRenderHistory('lead','${lead.id}','leadWaHistoryBox')})">שלח WhatsApp</button>
         </div>
@@ -1159,21 +1156,30 @@ async function leadHasAnyHistory(id){
   return { hasHistory: rows.length > 0, details: rows.map(r => `${r.table_name}: ${r.row_count}`) };
 }
 async function deleteLead(id){
-  const lead = ARCHIVED_LEADS.find(l => l.id === id);
-  if (!lead || !lead.is_archived){ toast('מחיקה סופית אפשרית רק מתוך הארכיון'); return; }
-  if (!canDeleteLead(lead)){ toast('אין לך הרשאה למחוק רשומה זו'); return; }
+  if (!confirm('להסיר רשומה זו מהמערכת? אם אין לה היסטוריה קשורה היא תימחק לצמיתות. אם יש לה היסטוריה (התאמות, משימות, הסכמים וכו׳) היא תועבר אוטומטית לארכיון כדי לשמר אותה.')) return;
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
+  let hasHistory, details;
   try {
-    if (!await deleteArchivedRecord('leads', id)) return;
-  } catch (error){ toast('❌ המחיקה לא בוצעה: ' + error.message); return; }
-  const verification = await window.supabaseClient.from('leads').select('id').eq('id', id).maybeSingle();
-  if (verification.error || verification.data){ toast('לא ניתן לאמת את המחיקה מול השרת. רענן את הרשימה לפני ניסיון נוסף.'); await loadLeads({forceRefresh:true}); return; }
-  ALL_LEADS = ALL_LEADS.filter(l => l.id !== id);
-  ARCHIVED_LEADS = ARCHIVED_LEADS.filter(l => l.id !== id);
-  renderTable(); saveLeadsPageCache();
-  bsdLogActivity('delete', 'leads', id);
-  toast('✅ הקונה נמחק לצמיתות');
-  closeModal();
-  await loadLeads({forceRefresh:true});
+    ({ hasHistory, details } = await leadHasAnyHistory(id));
+  } catch (e){
+    toast('❌ ' + e.message + ' - הפעולה בוטלה לביטחון');
+    return;
+  }
+  if (!hasHistory){
+    const { error } = await window.supabaseClient.from('leads').delete().eq('id', id);
+    if (error){ toast('❌ שגיאה במחיקה: ' + error.message); return; }
+    bsdLogActivity('delete', 'leads', id);
+    toast('✅ נמחק בהצלחה');
+    await loadLeads();
+    return;
+  }
+  const { error } = await window.supabaseClient.from('leads').update({
+    is_archived: true,
+    archive_reason: 'הועבר אוטומטית לארכיון בעת ניסיון מחיקה - קיימת היסטוריה קשורה (' + details.join(', ') + ')'
+  }).eq('id', id);
+  if (error){ toast('❌ שגיאה בהעברה לארכיון: ' + error.message); return; }
+  toast('📁 לרשומה זו יש היסטוריה קשורה - הועברה לארכיון (לא נמחקה) כדי לשמר אותה. ניתן לשחזר מהארכיון בכל עת.');
+  await loadLeads();
 }
 // מסך ארכיון אמיתי (סעיף 5 בהנחיה) - טאב נפרד עם כל השדות הנדרשים.
 let LEAD_VIEW_MODE = 'active';
