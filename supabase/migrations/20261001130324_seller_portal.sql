@@ -1,11 +1,11 @@
 -- Additive only. Apply to isolated staging first. No production execution.
 begin;
 create table public.seller_portal_accounts (
- id uuid primary key default gen_random_uuid(), business_id uuid not null unique references public.businesses(id),
+ id uuid primary key default gen_random_uuid(), business_id uuid unique references public.businesses(id) on delete set null,
  username text not null unique check(username ~ '^[1-9][0-9]{4}$'), password_hash text not null,
  status text not null default 'active' check(status in ('active','blocked','archived')),
  must_change_password boolean not null default true, temporary_expires_at timestamptz,
- client_update text, client_updated_at timestamptz, created_by uuid references public.profiles(id), created_at timestamptz not null default now()
+ client_update text, client_updated_at timestamptz, created_by uuid references public.profiles(id) on delete set null, created_at timestamptz not null default now()
 );
 create table public.seller_portal_sessions (
  id uuid primary key default gen_random_uuid(), account_id uuid not null references public.seller_portal_accounts(id),
@@ -14,7 +14,7 @@ create table public.seller_portal_sessions (
 );
 create table public.seller_portal_events (
  id uuid primary key default gen_random_uuid(), account_id uuid references public.seller_portal_accounts(id),
- event_type text not null, meta_file_id uuid references public.business_file_meta(id), file_id uuid references public.business_sale_files(id), actor_id uuid references public.profiles(id), created_at timestamptz not null default now()
+ event_type text not null, meta_file_id uuid references public.business_file_meta(id) on delete set null, file_id uuid references public.business_sale_files(id) on delete set null, actor_id uuid references public.profiles(id) on delete set null, created_at timestamptz not null default now()
 );
 create index seller_portal_events_account_time on public.seller_portal_events(account_id,created_at);
 create table public.seller_portal_requests (
@@ -24,9 +24,9 @@ create table public.seller_portal_requests (
 );
 create table public.seller_portal_rate_limits (key_hash text primary key, window_start timestamptz not null default now(), attempts integer not null default 0);
 create table public.seller_portal_match_permissions (
- match_id uuid primary key references public.matches(id), visible boolean not null default false,
+ match_id uuid primary key references public.matches(id) on delete cascade, visible boolean not null default false,
  disclose_identity boolean not null default false, client_status text not null,
- approved_by uuid not null references public.profiles(id), approved_at timestamptz not null default now()
+ approved_by uuid references public.profiles(id) on delete set null, approved_at timestamptz not null default now()
 );
 alter table public.business_file_meta add column portal_visible boolean not null default false;
 alter table public.business_file_meta add column portal_kind text not null default 'document';
@@ -69,6 +69,12 @@ create schema if not exists seller_portal_private;
 revoke all on schema seller_portal_private from public,anon,authenticated;
 create function seller_portal_private.archive_gate() returns trigger language plpgsql security definer set search_path='' as $$
 begin
+ if TG_OP='DELETE' then
+ update public.seller_portal_accounts set status='blocked' where business_id=old.id;
+ update public.seller_portal_sessions set revoked_at=now() where account_id in (select id from public.seller_portal_accounts where business_id=old.id) and revoked_at is null;
+ insert into public.seller_portal_events(account_id,event_type) select id,'business_deleted_access_revoked' from public.seller_portal_accounts where business_id=old.id;
+ return old;
+ end if;
  if new.is_archived then
  update public.seller_portal_accounts set status='archived' where business_id=new.id;
  elsif new.agreement_status is distinct from 'יש הסכם חתום' then
@@ -81,6 +87,7 @@ begin
  return new;
 end $$;
 revoke all on function seller_portal_private.archive_gate() from public,anon,authenticated;
+create trigger seller_portal_delete_gate before delete on public.businesses for each row execute function seller_portal_private.archive_gate();
 create trigger seller_portal_archive_gate after update of is_archived,agreement_status on public.businesses for each row execute function seller_portal_private.archive_gate();
 -- Existing CRM RLS remains unchanged. Agents cannot set portal visibility by REST.
 create function public.seller_portal_file_approval_gate() returns trigger language plpgsql security invoker set search_path='' as $$

@@ -29,7 +29,7 @@ The seller portal is entirely separate from buyer VIP accounts.
 ## Security
 
 Five-digit random usernames with unique database constraint. Five-character temporary passwords as requested, one-time display, 24-hour expiry, mandatory replacement with at least ten characters before data access. PBKDF2-SHA256 600,000 iterations with per-password random salt. No reversible password storage.
-Sessions: random 48-character opaque token; only SHA256 stored; browser sessionStorage; 8-hour absolute expiry and 30-minute idle expiry checked server-side; reset/block/archive revokes sessions.
+Sessions: random 48-character opaque token; only SHA256 stored; browser sessionStorage; 8-hour absolute expiry and 30-minute idle expiry checked server-side; reset/block/archive revokes sessions. Existing business deletion remains possible: portal accounts and activity history are retained with a null business reference and blocked access; no new foreign key restricts the existing business deletion flow.
 Independent atomic per-IP and per-username limits. Unknown usernames get a uniform error and password hash verification cost. Recovery responses do not disclose account existence.
 Every PDF request rechecks account, session, business, visibility, active file state, business ownership, path namespace and actual PDF signature. No storage signed URL is exposed to the seller; original bytes pass through the authenticated API.
 All six portal tables have RLS and no anon/authenticated grants. Only the dedicated API accesses them with service_role. Secrets stay in environment variables. The archive security-definer trigger resides in an unexposed private schema with execute revoked.

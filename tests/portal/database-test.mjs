@@ -32,4 +32,8 @@ await blocked(`insert into business_sale_files(id,business_id,portal_visible) va
 await db.exec('reset role');
 const result=(await db.query("select relname,relrowsecurity from pg_class where relname like 'seller_portal_%' and relkind='r'")).rows;
 assert.equal(result.length,6);assert.ok(result.every(r=>r.relrowsecurity));
+await db.exec(`delete from businesses where id='11111111-1111-1111-1111-111111111111'`);
+assert.equal((await db.query('select business_id,status from seller_portal_accounts')).rows[0].business_id,null);
+assert.equal((await db.query('select status from seller_portal_accounts')).rows[0].status,'blocked');
+assert.ok((await db.query('select count(*) n from seller_portal_events')).rows[0].n>0);
 console.log('PASS: migration, agreement gate, archive revocation, restore stays blocked, uniqueness, atomic rate limits, RLS, no direct API access, manager file approval');await db.close();
