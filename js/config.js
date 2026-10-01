@@ -9,6 +9,18 @@ window.BSD_CONFIG = {
   ORG_NAME: "BSD Business Brokers Israel",
   VIP_API_URL: "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/vip-api"
 };
+// Preview only: configure the isolated portal API explicitly before enabling it.
+window.BSD_CONFIG.SELLER_PORTAL_API_URL = '';
+
+(function sellerPortalMenu(){
+  function install(){
+    const menu=document.querySelector('#navToolsWrap .bsd-forms-menu');
+    if(!menu||menu.querySelector('[data-seller-portal]'))return;
+    const a=document.createElement('a');a.href='portal-admin.html';a.textContent='ניהול פורטל לקוחות';a.dataset.sellerPortal='1';
+    a.style.cssText='display:block;color:#f1d98d;text-decoration:none;padding:11px 16px;font-weight:700;';menu.appendChild(a);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
+})();
 
 // A small profile cache removes the only mandatory server round-trip that used
 // to run again on every page transition.  The database remains the authority:

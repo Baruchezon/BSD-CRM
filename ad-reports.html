@@ -339,6 +339,7 @@
 <script src="js/config.js"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/pdfPipeline.js"></script>
+<script src="js/portal-ad-reports.js"></script>
 <script>
 /* ==================== APP LOGIC ==================== */
 
@@ -876,6 +877,7 @@ function renderResults(){
       '<div class="ractions">' +
         '<button class="btn btn-ghost btn-sm" data-act="preview" data-idx="'+i+'">תצוגה מקדימה</button>' +
         '<button class="btn btn-gold btn-sm" data-act="print" data-idx="'+i+'">📄 הורדת PDF</button>' +
+        '<label style="display:inline-flex;gap:6px;align-items:center;font-size:.8rem;"><input type="checkbox" data-portal-report="'+i+'">הצג באזור האישי של הלקוח</label>' +
         '<button class="btn btn-navy btn-sm" data-act="email" data-idx="'+i+'">📧 שלח באימייל לבעל העסק</button>' +
       '</div>';
     els.resultsList.appendChild(row);
@@ -934,6 +936,10 @@ async function printBusiness(g, btn){
   btn.textContent = 'מכין PDF להורדה...';
   try {
     const blob = await buildPdfBlobFromPages(getPages(g));
+    const portalCheckbox = document.querySelector('[data-portal-report="'+GENERATED.indexOf(g)+'"]');
+    if (portalCheckbox && portalCheckbox.checked) {
+      await saveAdReportToSellerPortal(g, blob);
+    }
     const filenameSafe = (g.name || 'business').replace(/[\\/:*?"<>|]/g,'').trim() || 'business';
     downloadBlob(blob, 'דוח פרסום - ' + filenameSafe + '.pdf');
   } catch (err){
@@ -1224,6 +1230,8 @@ mailEls.sendBtn.addEventListener('click', async () => {
   mailEls.sendStatus.textContent = 'מייצר PDF ושולח...';
   try {
     const pdfBlob = await buildPdfBlobForBusiness(MAIL_CURRENT_G);
+    const portalCheckbox = document.querySelector('[data-portal-report="'+GENERATED.indexOf(MAIL_CURRENT_G)+'"]');
+    if (portalCheckbox && portalCheckbox.checked) await saveAdReportToSellerPortal(MAIL_CURRENT_G, pdfBlob);
     const base64 = await blobToBase64(pdfBlob);
     // Safety net matching the email server's own 15MB limit: if a report is so
     // long the PDF is still too heavy even after compression, stop here with a

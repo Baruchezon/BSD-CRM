@@ -1,0 +1,25 @@
+name: Seller Portal Preview Checks
+on:
+  pull_request:
+    paths: ['portal/**','portal-admin.html','js/portal-*.js','js/config.js','businesses.html','ad-reports.html','supabase/functions/seller-portal-api/**','supabase/migrations/*seller_portal.sql','tests/portal/**']
+  push:
+    branches: ['codex/seller-portal-20261001']
+  workflow_dispatch:
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: bash tests/portal/run-checks.sh
+      - run: deno check supabase/functions/seller-portal-api/index.ts
+      - run: deno test tests/portal/security_test.ts tests/portal/handler_test.ts
+      - run: npm ci --prefix tests/portal
+      - run: node tests/portal/database-test.mjs
+      - run: npx --prefix tests/portal playwright install --with-deps chromium
+      - run: node tests/portal/browser-check.mjs

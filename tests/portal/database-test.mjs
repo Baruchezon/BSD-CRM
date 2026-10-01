@@ -1,0 +1,35 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFile} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const db=new PGlite();
+await db.exec(`create role anon; create role authenticated; create role service_role; create schema auth; create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+create table profiles(id uuid primary key,role text,status text);
+create table businesses(id uuid primary key,is_archived boolean not null default false,agreement_status text);
+create table business_sale_files(id uuid primary key,business_id uuid references businesses(id),file_type text,storage_path text,status text,deleted_at timestamptz);
+create table business_file_meta(id uuid primary key,business_id uuid references businesses(id));
+create table matches(id uuid primary key,business_id uuid references businesses(id));
+grant select on profiles to authenticated;grant all on business_sale_files to authenticated;
+insert into businesses values('11111111-1111-1111-1111-111111111111',false,'יש הסכם חתום'),('22222222-2222-2222-2222-222222222222',false,'אין הסכם');`);
+await db.exec(await readFile(new URL('../../supabase/migrations/20261001130324_seller_portal.sql',import.meta.url),'utf8'));
+const blocked=async sql=>{await assert.rejects(()=>db.exec(sql));};
+await blocked(`insert into seller_portal_accounts(business_id,username,password_hash) values('22222222-2222-2222-2222-222222222222','34567','hash')`);
+await db.exec(`insert into seller_portal_accounts(id,business_id,username,password_hash) values('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','11111111-1111-1111-1111-111111111111','34567','hash');insert into seller_portal_sessions(account_id,token_hash,expires_at) values('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','token',now()+interval '1 hour');`);
+await blocked(`insert into seller_portal_accounts(business_id,username,password_hash) values('11111111-1111-1111-1111-111111111111','34567','hash')`);
+await db.exec(`update businesses set is_archived=true where id='11111111-1111-1111-1111-111111111111'`);
+assert.equal((await db.query('select status from seller_portal_accounts')).rows[0].status,'archived');
+assert.ok((await db.query('select revoked_at from seller_portal_sessions')).rows[0].revoked_at);
+await db.exec(`update businesses set is_archived=false where id='11111111-1111-1111-1111-111111111111'`);
+assert.equal((await db.query('select status from seller_portal_accounts')).rows[0].status,'archived');
+await db.exec(`update seller_portal_accounts set status='active';update businesses set agreement_status='אין הסכם' where id='11111111-1111-1111-1111-111111111111'`);
+assert.equal((await db.query('select status from seller_portal_accounts')).rows[0].status,'blocked');
+for(let i=0;i<8;i++)assert.equal((await db.query("select seller_portal_take_attempt('key',8) allowed")).rows[0].allowed,true);
+assert.equal((await db.query("select seller_portal_take_attempt('key',8) allowed")).rows[0].allowed,false);
+for(const role of ['anon','authenticated']){
+ await db.exec(`set role ${role}`);await blocked('select * from seller_portal_accounts');await blocked('select * from seller_portal_sessions');await blocked("select seller_portal_take_attempt('key',8)");await db.exec('reset role');
+}
+await db.exec(`set role authenticated`);
+await blocked(`insert into business_sale_files(id,business_id,portal_visible) values('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','11111111-1111-1111-1111-111111111111',true)`);
+await db.exec('reset role');
+const result=(await db.query("select relname,relrowsecurity from pg_class where relname like 'seller_portal_%' and relkind='r'")).rows;
+assert.equal(result.length,6);assert.ok(result.every(r=>r.relrowsecurity));
+console.log('PASS: migration, agreement gate, archive revocation, restore stays blocked, uniqueness, atomic rate limits, RLS, no direct API access, manager file approval');await db.close();

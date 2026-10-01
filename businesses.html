@@ -1476,6 +1476,7 @@ function openBizForm(id){
   modal.innerHTML = `
     <h3>${biz ? 'עריכת עסק' : 'עסק חדש'}${biz?.internal_name ? ` <span class="biz-name-big">${esc(biz.internal_name)}</span>` : ''}${biz?.business_number ? ` <span class="biz-number-badge">${esc(biz.business_number)}</span>` : ''}</h3>
     ${biz ? agreementBanner(biz.agreement_status, biz.agreement_number, 'businesses', biz.id, biz.agreement_pdf_path, biz.agreement_pdf_uploaded_at, biz.agreement_pdf_uploaded_by) : ''}
+    ${biz && CURRENT_PROFILE && ['admin','manager'].includes(CURRENT_PROFILE.role) ? `<section style="padding:10px 14px;margin:10px 0;border:1px solid #d3b46b;border-radius:9px;background:#fffdf6;"><strong>אזור אישי ללקוח</strong> <a class="btn btn-ghost" href="portal-admin.html?business_id=${encodeURIComponent(biz.id)}">ניהול משתמש, מסמכים ועדכונים</a>${biz.agreement_status!=='יש הסכם חתום'||biz.is_archived?'<small>פתיחת גישה אפשרית רק לעסק פעיל בעל הסכם חתום</small>':''}</section>` : ''}
     <div id="bizFormError" style="display:none;background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.85rem;color:#8a2c1f;"></div>
     ${!biz ? '<div id="bizDupBanner" style="display:none;"></div>' : ''}
     <form id="bizForm">
