@@ -647,10 +647,13 @@ async function runAiMatchSuggestions(){
   btn.disabled = true;
   btn.textContent = '⏳ מפיק הצעות...';
   try {
+    // 02.10.2026: הפונקציה דורשת עכשיו משתמש מחובר - שולחים את טוקן ה-session ולא את המפתח הציבורי
+    const { data: { session } } = await window.supabaseClient.auth.getSession();
     const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/match-suggestions-report', {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer ' + window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY,
+        'Authorization': 'Bearer ' + (session?.access_token || ''),
+        'apikey': window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ send_email: false })
@@ -673,10 +676,13 @@ async function emailAiMatchSuggestions(){
   const btn = document.getElementById('aiMailBtn');
   if (btn){ btn.disabled = true; btn.textContent = 'שולח...'; }
   try {
+    // 02.10.2026: הפונקציה דורשת עכשיו משתמש מחובר - שולחים את טוקן ה-session ולא את המפתח הציבורי
+    const { data: { session } } = await window.supabaseClient.auth.getSession();
     const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/match-suggestions-report', {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer ' + window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY,
+        'Authorization': 'Bearer ' + (session?.access_token || ''),
+        'apikey': window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ send_email: true })

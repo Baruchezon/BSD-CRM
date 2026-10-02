@@ -11,30 +11,31 @@ import { parseSite123Body, classifyPurpose, findDuplicate, isSite123LeadEmail, l
 
 // ---------- דגימות אמיתיות - תבנית ישנה (עד סביבות 19-22.08.2026) ----------
 
-const REAL_BUYER_EMAIL_OLD = `| |\n\n| |\n\n| |\n\n| |\n| |\n\n| BSD-Business Brokers ISRAEL |\n\n| שלום, קיבלת הודעה חדשה! שם ושם משפחה: שי צור כתובת מגורים, עיר: חיפה טלפון: 0525245601 כתובת הדואר האלקטרוני שלך: shaytzur@gmail.com מטרת הפנייה: לקנות עסק, הודעה (מומלץ לרשום כמה מילים): שכיר. מעונין לבדוק אפשרות רכישת עסק רווחי בבעלות פסיבית. שדה תאריך: 19/08/2026 |\n\n| |\n\n| |\n\n| |\n| הצג הודעה[](https://app.site123.com/versions/2/wizard/messages/contact/index.php?w\uFFFD5409&id\u0011553327) |\n\n| BSD-Business Brokers ISRAEL © 2026 |`;
+const REAL_BUYER_EMAIL_OLD = `| |\n\n| |\n\n| |\n\n| |\n| |\n\n| BSD-Business Brokers ISRAEL |\n\n| שלום, קיבלת הודעה חדשה! שם ושם משפחה: ישראל ישראלי כתובת מגורים, עיר: חיפה טלפון: 0501234567 כתובת הדואר האלקטרוני שלך: buyer.example@example.com מטרת הפנייה: לקנות עסק, הודעה (מומלץ לרשום כמה מילים): שכיר. מעונין לבדוק אפשרות רכישת עסק רווחי בבעלות פסיבית. שדה תאריך: 19/08/2026 |\n\n| |\n\n| |\n\n| |\n| הצג הודעה[](https://app.site123.com/versions/2/wizard/messages/contact/index.php?w\uFFFD5409&id\u0011553327) |\n\n| BSD-Business Brokers ISRAEL © 2026 |`;
 
-const REAL_SELLER_EMAIL_OLD_EMPTY_DATE = `| BSD-Business Brokers ISRAEL |\n\n| שלום, קיבלת הודעה חדשה! שם ושם משפחה: תמי מינטוס כתובת מגורים, עיר: סביון טלפון: 0522514738 כתובת הדואר האלקטרוני שלך: tami@mintus.co.il מטרת הפנייה: למכור עסק, הודעה (מומלץ לרשום כמה מילים): מייצגת את אחי שמעוניין למכור את העסק שלו שדה תאריך: |\n\n| הצג הודעה[](https://app.site123.com/versions/2/wizard/messages/contact/index.php?w\uFFFD5409&id\u0011418081) |\n\n| BSD-Business Brokers ISRAEL © 2026 |`;
+const REAL_SELLER_EMAIL_OLD_EMPTY_DATE = `| BSD-Business Brokers ISRAEL |\n\n| שלום, קיבלת הודעה חדשה! שם ושם משפחה: רונית כהן כתובת מגורים, עיר: סביון טלפון: 0527654321 כתובת הדואר האלקטרוני שלך: seller.example@example.com מטרת הפנייה: למכור עסק, הודעה (מומלץ לרשום כמה מילים): מייצגת את אחי שמעוניין למכור את העסק שלו שדה תאריך: |\n\n| הצג הודעה[](https://app.site123.com/versions/2/wizard/messages/contact/index.php?w\uFFFD5409&id\u0011418081) |\n\n| BSD-Business Brokers ISRAEL © 2026 |`;
 
-const REAL_COURSE_SIGNUP_OLD_EMPTY_MSG_AND_DATE = `| BSD-Business Brokers ISRAEL |\n\n| שלום, קיבלת הודעה חדשה! שם ושם משפחה: דניאל דעוס כתובת מגורים, עיר: הר המור 72 ראש העין טלפון: 0542641999 כתובת הדואר האלקטרוני שלך: danieldais45@gmail.com מטרת הפנייה: רישום לקורס, הודעה (מומלץ לרשום כמה מילים): שדה תאריך: |\n\n| הצג הודעה[](https://app.site123.com/versions/2/wizard/messages/contact/index.php?w\uFFFD5409&id\u0011480630) |\n\n| BSD-Business Brokers ISRAEL © 2026 |`;
+const REAL_COURSE_SIGNUP_OLD_EMPTY_MSG_AND_DATE = `| BSD-Business Brokers ISRAEL |\n\n| שלום, קיבלת הודעה חדשה! שם ושם משפחה: יוסי לוי כתובת מגורים, עיר: רחוב הדוגמה 1 עיר דוגמה טלפון: 0549990000 כתובת הדואר האלקטרוני שלך: course.example@example.com מטרת הפנייה: רישום לקורס, הודעה (מומלץ לרשום כמה מילים): שדה תאריך: |\n\n| הצג הודעה[](https://app.site123.com/versions/2/wizard/messages/contact/index.php?w\uFFFD5409&id\u0011480630) |\n\n| BSD-Business Brokers ISRAEL © 2026 |`;
 
 const REAL_CONTENT_READY_NOTIFICATION = `| [](https://www.site123.com) |\n\n| היי, אנו שמחים להודיע לך שהתוכן שיצרת לנושא הבא: איך לבחור מתווך עסקים מקצועי בישראל, 20 קריטריונים, סימני אזהרה, ולמה לבחור BSD זמין כעת ומוכן לשימוש! אתה יכול להשתמש בקישור למטה כדי לראות את זה. |\n\n| צפה בתוכן[](https://app.site123.com/versions/2/wizard/dashboard.php?w\uFFFD5409) |\n\n| www.site123.com[](https://www.site123.com) | info@site123.com[](info@site123.com) SITE123 © 2026 South Sepulveda Boulevard 8939, 90045, Los Angeles, United States |`;
 
 // ---------- דגימות אמיתיות - תבנית חדשה (מ-23.08.2026 בערך ואילך, אומת מול מיילים חיים) ----------
 
-const REAL_SELLER_EMAIL_NEW = `BSD-Business Brokers ISRAEL\n\nשלום,\n\nקיבלת הודעה חדשה!\n\nשם ושם משפחה: דוד בושדיד\nכתובת , עיר : בית דגן\nטלפון: 053-4248089\nכתובת הדואר האלקטרוני שלך: z039524488@gmail.com\nהודעה (נשמח לפרטי הפנייה): נשמח לדבר\nקבוצת תיבות סימון: עסק למכירה,\n\n\n\n\n\nהצג הודעה\n[https://app.site123.com/versions/2/wizard/messages/contact/index.php?w=815409&id=10508976]\n\nBSD-Business Brokers ISRAEL © 2026`;
+const REAL_SELLER_EMAIL_NEW = `BSD-Business Brokers ISRAEL\n\nשלום,\n\nקיבלת הודעה חדשה!\n\nשם ושם משפחה: משה דוגמה\nכתובת , עיר : בית דגן\nטלפון: 053-0000001\nכתובת הדואר האלקטרוני שלך: seller2.example@example.com\nהודעה (נשמח לפרטי הפנייה): נשמח לדבר\nקבוצת תיבות סימון: עסק למכירה,\n\n\n\n\n\nהצג הודעה\n[https://app.site123.com/versions/2/wizard/messages/contact/index.php?w=815409&id=10508976]\n\nBSD-Business Brokers ISRAEL © 2026`;
 
-const REAL_MULTI_SELECT_WITH_COURSE_NEW = `BSD-Business Brokers ISRAEL\n\nשלום,\n\nקיבלת הודעה חדשה!\n\nשם ושם משפחה: חנן פילוסוף\nכתובת , עיר : רמת גן\nטלפון: 0539672478\nכתובת הדואר האלקטרוני שלך: hnanfor@gmail.com\nהודעה (נשמח לפרטי הפנייה): דיברתי עם ברוך מעונין לקבל פרטים\nקבוצת תיבות סימון: עסק למכירה, רישום לקורס, ייעוץ / שאלה,\n\n\n\n\n\nהצג הודעה\n[https://app.site123.com/versions/2/wizard/messages/contact/index.php?w=815409&id=10495436]\n\nBSD-Business Brokers ISRAEL © 2026`;
+const REAL_MULTI_SELECT_WITH_COURSE_NEW = `BSD-Business Brokers ISRAEL\n\nשלום,\n\nקיבלת הודעה חדשה!\n\nשם ושם משפחה: אבי דוגמה\nכתובת , עיר : רמת גן\nטלפון: 0530000002\nכתובת הדואר האלקטרוני שלך: multi.example@example.com\nהודעה (נשמח לפרטי הפנייה): דיברתי עם ברוך מעונין לקבל פרטים\nקבוצת תיבות סימון: עסק למכירה, רישום לקורס, ייעוץ / שאלה,\n\n\n\n\n\nהצג הודעה\n[https://app.site123.com/versions/2/wizard/messages/contact/index.php?w=815409&id=10495436]\n\nBSD-Business Brokers ISRAEL © 2026`;
 
 const REAL_ORDER_CONFIRMATION_NOT_A_LEAD = `SITE123\n\nשלום Baruch,\n\nהתשלום עבור הזמנה מספר 106936347 אושר.\n\nתודה שבחרת ב-SITE123!`;
 
+// NOTE 02.10.2026: fixture personal data replaced with fictitious values (privacy).
 // ---------- 1. ליד חדש של קונה (תבנית ישנה) ----------
 Deno.test('parses a real buyer lead email correctly (old template)', () => {
   const p = parseSite123Body(REAL_BUYER_EMAIL_OLD);
   assertEquals(p.recognizedTemplate, true);
-  assertEquals(p.fullName, 'שי צור');
+  assertEquals(p.fullName, 'ישראל ישראלי');
   assertEquals(p.city, 'חיפה');
-  assertEquals(p.phone, '0525245601');
-  assertEquals(p.email, 'shaytzur@gmail.com');
+  assertEquals(p.phone, '0501234567');
+  assertEquals(p.email, 'buyer.example@example.com');
   assertEquals(p.checkboxes, ['לקנות עסק']);
   assertEquals(p.message, 'שכיר. מעונין לבדוק אפשרות רכישת עסק רווחי בבעלות פסיבית.');
 
@@ -47,10 +48,10 @@ Deno.test('parses a real buyer lead email correctly (old template)', () => {
 // ---------- 2. ליד חדש של מוכר (תבנית ישנה, שדה תאריך ריק לא שובר את הפרסינג) ----------
 Deno.test('parses a real seller lead email, tolerates empty trailing date field (old template)', () => {
   const p = parseSite123Body(REAL_SELLER_EMAIL_OLD_EMPTY_DATE);
-  assertEquals(p.fullName, 'תמי מינטוס');
+  assertEquals(p.fullName, 'רונית כהן');
   assertEquals(p.city, 'סביון');
-  assertEquals(p.phone, '0522514738');
-  assertEquals(p.email, 'tami@mintus.co.il');
+  assertEquals(p.phone, '0527654321');
+  assertEquals(p.email, 'seller.example@example.com');
   assertEquals(p.checkboxes, ['למכור עסק']);
   assertEquals(p.message, 'מייצגת את אחי שמעוניין למכור את העסק שלו');
 
@@ -63,9 +64,9 @@ Deno.test('parses a real seller lead email, tolerates empty trailing date field 
 // ---------- 3. פנייה לקורס (תבנית ישנה) - מסווגת כ"מתעניין בקורס", לא "דורש בדיקה" ולא "קונה" ----------
 Deno.test('course signup (old template) classifies as training, never guessed as buyer', () => {
   const p = parseSite123Body(REAL_COURSE_SIGNUP_OLD_EMPTY_MSG_AND_DATE);
-  assertEquals(p.fullName, 'דניאל דעוס');
-  assertEquals(p.phone, '0542641999');
-  assertEquals(p.email, 'danieldais45@gmail.com');
+  assertEquals(p.fullName, 'יוסי לוי');
+  assertEquals(p.phone, '0549990000');
+  assertEquals(p.email, 'course.example@example.com');
   assertEquals(p.checkboxes, ['רישום לקורס']);
   assertEquals(p.message, '');
 
@@ -83,18 +84,18 @@ Deno.test('free-text message with punctuation is captured in full', () => {
 // ---------- 5/6. אדם קיים במערכת + שני מיילים מאותו אדם -> לא נוצר כרטיס כפול ----------
 Deno.test('duplicate detection: exact phone match on an existing lead is found, no double record', () => {
   const candidates = [
-    { id: 'lead-1', phone: '052-524-5601', phone2: null, email: 'old@example.com', updated_at: '2026-01-01T00:00:00Z' },
+    { id: 'lead-1', phone: '050-123-4567', phone2: null, email: 'old@example.com', updated_at: '2026-01-01T00:00:00Z' },
     { id: 'lead-2', phone: '0500000000', phone2: null, email: 'someoneelse@example.com', updated_at: '2026-01-02T00:00:00Z' }
   ];
-  const dup = findDuplicate('0525245601', 'shaytzur@gmail.com', candidates);
+  const dup = findDuplicate('0501234567', 'buyer.example@example.com', candidates);
   assertEquals(dup?.id, 'lead-1');
 });
 
 Deno.test('duplicate detection: matches by email even if phone format differs completely (+972 vs 05x)', () => {
   const candidates = [
-    { id: 'lead-9', phone: '+972-52-524-5601', phone2: null, email: 'shaytzur@gmail.com', updated_at: '2026-01-01T00:00:00Z' }
+    { id: 'lead-9', phone: '+972-50-123-4567', phone2: null, email: 'buyer.example@example.com', updated_at: '2026-01-01T00:00:00Z' }
   ];
-  const dup = findDuplicate('0525245601', 'shaytzur@gmail.com', candidates);
+  const dup = findDuplicate('0501234567', 'buyer.example@example.com', candidates);
   assertEquals(dup?.id, 'lead-9');
 });
 
@@ -102,16 +103,16 @@ Deno.test('duplicate detection: no match when phone AND email are both genuinely
   const candidates = [
     { id: 'lead-3', phone: '0501111111', phone2: null, email: 'unrelated@example.com', updated_at: '2026-01-01T00:00:00Z' }
   ];
-  const dup = findDuplicate('0525245601', 'shaytzur@gmail.com', candidates);
+  const dup = findDuplicate('0501234567', 'buyer.example@example.com', candidates);
   assertEquals(dup, null);
 });
 
 Deno.test('duplicate detection: when several distinct leads genuinely match, picks the most recently updated one (never invents a merge choice)', () => {
   const candidates = [
-    { id: 'old', phone: '0525245601', phone2: null, email: null, updated_at: '2020-01-01T00:00:00Z' },
-    { id: 'new', phone: '0525245601', phone2: null, email: null, updated_at: '2026-08-01T00:00:00Z' }
+    { id: 'old', phone: '0501234567', phone2: null, email: null, updated_at: '2020-01-01T00:00:00Z' },
+    { id: 'new', phone: '0501234567', phone2: null, email: null, updated_at: '2026-08-01T00:00:00Z' }
   ];
-  const dup = findDuplicate('0525245601', '', candidates);
+  const dup = findDuplicate('0501234567', '', candidates);
   assertEquals(dup?.id, 'new');
 });
 
@@ -139,10 +140,10 @@ Deno.test('a real lead email is correctly accepted', () => {
 Deno.test('parses a real seller lead email correctly (new checkbox-based template)', () => {
   const p = parseSite123Body(REAL_SELLER_EMAIL_NEW);
   assertEquals(p.recognizedTemplate, true);
-  assertEquals(p.fullName, 'דוד בושדיד');
+  assertEquals(p.fullName, 'משה דוגמה');
   assertEquals(p.city, 'בית דגן');
-  assertEquals(p.phone, '053-4248089');
-  assertEquals(p.email, 'z039524488@gmail.com');
+  assertEquals(p.phone, '053-0000001');
+  assertEquals(p.email, 'seller2.example@example.com');
   assertEquals(p.message, 'נשמח לדבר');
   assertEquals(p.checkboxes, ['עסק למכירה']);
 
@@ -154,7 +155,7 @@ Deno.test('parses a real seller lead email correctly (new checkbox-based templat
 // ---------- 9. תבנית חדשה: כמה תיבות סומנו בו-זמנית, כולל קורס - קורס גובר, שאר הבחירות נשמרות ----------
 Deno.test('new template: multiple checkboxes selected at once (business-sale + course + question) - course wins classification, ALL checkboxes preserved verbatim', () => {
   const p = parseSite123Body(REAL_MULTI_SELECT_WITH_COURSE_NEW);
-  assertEquals(p.fullName, 'חנן פילוסוף');
+  assertEquals(p.fullName, 'אבי דוגמה');
   assertEquals(p.city, 'רמת גן');
   assertEquals(p.checkboxes, ['עסק למכירה', 'רישום לקורס', 'ייעוץ / שאלה']);
 
@@ -202,9 +203,9 @@ Deno.test('investor checkbox/message classifies as partner', () => {
 
 // ---------- עזר: last9Digits מנרמל פורמטים שונים לאותה תוצאה ----------
 Deno.test('last9Digits normalizes different Israeli phone formats to the same value', () => {
-  const forms = ['0525245601', '052-524-5601', '+972525245601', '972-52-524-5601', '(052) 524-5601'];
+  const forms = ['0501234567', '050-123-4567', '+972501234567', '972-50-123-4567', '(050) 123-4567'];
   const normalized = forms.map(last9Digits);
-  for (const n of normalized) assertEquals(n, '525245601');
+  for (const n of normalized) assertEquals(n, '501234567');
 });
 
 // ============================================================================
