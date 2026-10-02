@@ -1055,7 +1055,7 @@ function renderTable(){
               <a href="javascript:void(0)" onclick="openNotesPanel('${tn}','${r.id}','${esc((r.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(r.id))}</a>
               ${isAdmin ? `<a href="javascript:void(0)" onclick="hideFromY2026Confirm('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ הסר מרשימת 2026 בלבד</a>` : ''}
     ` : `
-              ${isWebsiteLead ? `<a href="javascript:void(0)" onclick="openWebsiteLead('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">💬 שוחחתי עם הלקוח</a>` : (editable
+              ${isWebsiteLead ? `<a href="javascript:void(0)" onclick="openWebsiteLead('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">📋 פתח כרטיס ליד</a>` : (editable
                 ? `<a href="javascript:void(0)" onclick="openEdit('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>`
                 : `<a href="javascript:void(0)" onclick="openReadOnly('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ צפייה (ליד של ${esc(userName(r.created_by))})</a>`)}
               <a href="javascript:void(0)" onclick="openNotesPanel('${tn}','${r.id}','${esc((r.internal_name||r.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(r.id))}</a>
@@ -1428,8 +1428,7 @@ function openWebsiteLead(id){
   const r = [...ALL_MANUAL, ...ALL_SELLERS].find(x => x.id === id);
   if (!r){ toast('הליד לא נמצא'); return; }
   if (!canEditRecord(r.created_by)){ openReadOnly(id); return; }
-  if (r.website_intake_stage === 'new') renderWebsiteLeadIntro(r);
-  else renderWebsiteLeadConversationForm(r);
+  renderWebsiteLeadConversationForm(r);
 }
 
 function renderWebsiteLeadIntro(r){
@@ -1485,46 +1484,85 @@ async function markContactedAndContinue(id){
 
 function renderWebsiteLeadConversationForm(r){
   const personName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || 'שם לא זוהה';
-  const isTraining = r.website_intake_stage === 'training';
   const modal = document.getElementById('modalBox');
+  modal.style.maxWidth = '760px';
   modal.innerHTML = `
-    <h3>📝 תיעוד שיחה — ${esc(personName)}</h3>
-    <div style="font-size:.75rem;color:#999;margin-bottom:14px;">${r.phone ? '📞 ' + esc(r.phone) + ' ' : ''}${r.email ? '· ✉️ ' + esc(r.email) : ''}</div>
+    <h3>כרטיס ליד — ${esc(personName)}</h3>
+    <div style="font-size:.76rem;color:#777;margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;">
+      <span>מקור: <b>${esc(r.source || 'לא ידוע')}</b></span>
+      <span>נקלט: <b>${fmtDateTime(r.created_at)}</b></span>
+      <span>סטטוס: <b>${esc(r.status || 'חדש')}</b></span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;">
+      <div>
+        <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">שם מלא</label>
+        <input id="wlName" value="${esc(personName)}" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;">
+      </div>
+      <div>
+        <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">טלפון</label>
+        <input id="wlPhone" value="${esc(r.phone || '')}" dir="ltr" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;">
+      </div>
+      <div>
+        <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">אימייל</label>
+        <input id="wlEmail" value="${esc(r.email || '')}" dir="ltr" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;">
+      </div>
+      <div>
+        <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">עיר</label>
+        <input id="wlCity" value="${esc(r.city || '')}" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;">
+      </div>
+      <div>
+        <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">שם העסק</label>
+        <input id="wlBusinessName" value="${esc(r.business_name || '')}" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;">
+      </div>
+      <div>
+        <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">תחום העסק או תחום מבוקש</label>
+        <input id="wlBusinessField" value="${esc(r.business_field || r.requested_field || '')}" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;">
+      </div>
+      <div style="grid-column:1/-1;">
+        <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">עיר העסק או אזור מבוקש</label>
+        <input id="wlBusinessCity" value="${esc(r.business_city || r.requested_area || '')}" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;">
+      </div>
+    </div>
+
+    <div style="height:1px;background:#eee6d4;margin:16px 0;"></div>
 
     <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">מהות השיחה</label>
-    <textarea id="wlSummary" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_conversation_summary || '')}</textarea>
+    <textarea id="wlSummary" rows="3" placeholder="מה נאמר בשיחה, מה מטרת הפנייה ומה חשוב לזכור" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_conversation_summary || '')}</textarea>
 
     <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">מה הלקוח מחפש</label>
     <textarea id="wlWants" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_customer_wants || '')}</textarea>
 
-    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">פרטים חשובים שעלו בשיחה</label>
+    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">פרטים חשובים</label>
     <textarea id="wlDetails" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_important_details || '')}</textarea>
 
-    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">הערות</label>
-    <textarea id="wlNotes" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:14px;resize:vertical;">${esc(r.intake_conversation_notes || '')}</textarea>
+    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">הערות שיחה</label>
+    <textarea id="wlNotes" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_conversation_notes || '')}</textarea>
 
-    <div style="font-size:.85rem;font-weight:700;color:var(--navy);margin-bottom:8px;">לאן להעביר את הליד?</div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;">
-      <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;"><input type="radio" name="wlCat" value="seller"> 🏢 מוכר עסק</label>
-      <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;"><input type="radio" name="wlCat" value="buyer"> 🧍 קונה או משקיע</label>
-      <label id="wlInvestorWrap" style="display:none;align-items:center;gap:8px;font-size:.82rem;color:#665;margin-inline-start:26px;"><input type="checkbox" id="wlInvestorFlag"> מדובר במשקיע (לא רק קונה)</label>
-      <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;"><input type="radio" name="wlCat" value="training"> 🎓 מתעניין בהכשרה</label>
-      <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;"><input type="radio" name="wlCat" value="" checked> ⏳ להשאיר כליד להמשך טיפול (לא לסווג עדיין)</label>
+    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">הערות כלליות בליד</label>
+    <textarea id="wlGeneralNotes" rows="3" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:14px;resize:vertical;">${esc(r.notes || '')}</textarea>
+
+    <div style="background:#f7f5ee;border:1px solid #e4dece;border-radius:10px;padding:12px;margin-bottom:10px;">
+      <label style="display:block;font-size:.8rem;color:#665;margin-bottom:6px;font-weight:700;">יעד לשמירה והעברה</label>
+      <select id="wlTransferTarget" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:9px 10px;font-family:inherit;font-size:.88rem;background:#fff;">
+        <option value="">בחר יעד</option>
+        <option value="seller">עסקים למכירה</option>
+        <option value="buyer">קונים</option>
+      </select>
+      <div style="font-size:.75rem;color:#777;margin-top:6px;">שמירה רגילה משאירה את הכרטיס ברשימת הלידים. שמירה והעברה יוצרת או מעדכנת את היעד ורק לאחר אימות מוציאה את הליד מרשימת ההמתנה.</div>
     </div>
 
     <div id="wlSaveError" style="display:none;background:#fdeceb;border:1px solid #e4b3ac;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#a02c1d;margin-top:8px;"></div>
     <div id="wlSaveOk" style="display:none;background:#e8f5ec;border:1px solid #b7ddc3;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#245c40;margin-top:8px;font-weight:700;"></div>
 
-    <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" onclick="closeModal()">סגירה</button>
-      <button type="button" class="btn btn-navy" id="wlSaveBtn" onclick="saveWebsiteLeadTransfer('${r.id}')">💾 שמור והעבר</button>
+    <div class="modal-actions" style="flex-wrap:wrap;">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+      <button type="button" class="btn btn-ghost" onclick="deleteRecord('${r.id}')" style="color:#a02c1d;">העבר לארכיון</button>
+      <button type="button" class="btn btn-ghost" id="wlSaveOnlyBtn" onclick="saveLeadOnly('${r.id}')">שמור בלידים</button>
+      <button type="button" class="btn btn-navy" id="wlSaveBtn" onclick="saveWebsiteLeadTransfer('${r.id}')">שמור והעבר</button>
     </div>
   `;
   document.getElementById('overlay').classList.add('open');
-  document.querySelectorAll('input[name="wlCat"]').forEach(el => el.addEventListener('change', () => {
-    const checked = document.querySelector('input[name="wlCat"]:checked');
-    document.getElementById('wlInvestorWrap').style.display = (checked && checked.value === 'buyer') ? 'flex' : 'none';
-  }));
 }
 
 function websiteLeadTransferNotes(lead, existingNotes){
@@ -1596,17 +1634,20 @@ async function ensureWebsiteLeadBusiness(lead){
   return checked.data;
 }
 
-async function saveWebsiteLeadTransfer(id){
-  const btn = document.getElementById('wlSaveBtn');
-  if (btn.disabled) return;
-  const errBox = document.getElementById('wlSaveError');
-  const okBox = document.getElementById('wlSaveOk');
-  errBox.style.display = 'none'; okBox.style.display = 'none';
-
-  const category = (document.querySelector('input[name="wlCat"]:checked') || {}).value || '';
-  const isInvestor = document.getElementById('wlInvestorFlag') && document.getElementById('wlInvestorFlag').checked;
-
-  const payload = {
+function readLeadCardPayload(){
+  const fullName = document.getElementById('wlName').value.trim();
+  const phone = document.getElementById('wlPhone').value.trim();
+  if (!fullName) throw new Error('יש למלא שם מלא');
+  if (!phone) throw new Error('יש למלא טלפון');
+  return {
+    full_name: fullName,
+    phone,
+    email: document.getElementById('wlEmail').value.trim() || null,
+    city: document.getElementById('wlCity').value.trim() || null,
+    business_name: document.getElementById('wlBusinessName').value.trim() || null,
+    business_field: document.getElementById('wlBusinessField').value.trim() || null,
+    business_city: document.getElementById('wlBusinessCity').value.trim() || null,
+    notes: document.getElementById('wlGeneralNotes').value.trim() || null,
     intake_conversation_summary: document.getElementById('wlSummary').value.trim() || null,
     intake_customer_wants: document.getElementById('wlWants').value.trim() || null,
     intake_important_details: document.getElementById('wlDetails').value.trim() || null,
@@ -1614,55 +1655,104 @@ async function saveWebsiteLeadTransfer(id){
     intake_reviewed_at: new Date().toISOString(),
     intake_reviewed_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null
   };
+}
 
-  if (category === 'seller'){
-    payload.type = 'seller'; payload.status = 'הועבר למוכר'; payload.website_intake_stage = null;
-  } else if (category === 'buyer'){
-    payload.type = isInvestor ? 'partner' : 'buyer'; payload.status = 'הועבר לקונה או משקיע'; payload.website_intake_stage = null;
-  } else if (category === 'training'){
-    payload.status = 'הועבר להכשרה'; payload.website_intake_stage = 'training';
-  } else {
-    payload.status = 'שוחחתי, ממתין לסיווג'; payload.website_intake_stage = 'contacted';
-  }
+function setLeadCardBusy(busy, primaryText){
+  const saveOnly = document.getElementById('wlSaveOnlyBtn');
+  const transfer = document.getElementById('wlSaveBtn');
+  const target = document.getElementById('wlTransferTarget');
+  if (saveOnly) saveOnly.disabled = busy;
+  if (transfer){ transfer.disabled = busy; if (primaryText) transfer.textContent = primaryText; }
+  if (target) target.disabled = busy;
+}
 
-  btn.disabled = true; btn.textContent = 'שומר...';
-  let destination = null;
+async function saveLeadOnly(id){
+  const errBox = document.getElementById('wlSaveError');
+  const okBox = document.getElementById('wlSaveOk');
+  errBox.style.display = 'none'; okBox.style.display = 'none';
   try {
-  // Read current data before copying; never use a stale list snapshot.
-  const source = await window.supabaseClient.from('leads').select('*').eq('id', id).single();
-  if (source.error || !source.data || source.data.is_archived) throw new Error(source.error?.message || 'הליד אינו זמין להעברה');
-  if (category === 'seller'){
-    destination = await ensureWebsiteLeadBusiness({ ...source.data, ...payload });
-  } else if (category === 'buyer'){
-    // Conversation fields are not rendered by the buyer card; retain them in its notes too.
-    payload.notes = websiteLeadTransferNotes({ ...source.data, ...payload });
-  }
-  const { error } = await window.supabaseClient.from('leads').update(payload).eq('id', id);
-  if (error) throw new Error(error.message);
-
-  // אימות אמיתי, בקריאה נפרדת, לפני כל הודעת הצלחה
-  const expected = { ...payload };
-  delete expected.intake_reviewed_at; // PostgreSQL may normalize timestamp formatting.
-  const verify = await verifyLeadWrite(id, expected);
-  if (!verify.ok){
-    throw new Error('השמירה לא אושרה בבדיקה חוזרת: ' + verify.mismatches.join(' | '));
-  }
-
-  if (window.BSDDataCache && CURRENT_PROFILE){
-    window.BSDDataCache.remove('businesses-page', CURRENT_PROFILE.id);
-    window.BSDDataCache.remove('leads-page', CURRENT_PROFILE.id);
-  }
-  okBox.style.display = 'block';
-  okBox.textContent = destination ? '✅ כרטיס העסק נשמר ואומת. פותח את הכרטיס.' : '✅ הליד נשמר ואומת.';
-  btn.textContent = '✅ נשמר';
-  if (destination){ location.href = 'businesses.html?open=' + encodeURIComponent(destination.id); return; }
-  if (category === 'buyer'){ location.href = 'leads.html?open=' + encodeURIComponent(id); return; }
-  await loadAll();
-  setTimeout(() => { closeModal(); }, 900);
+    const source = await window.supabaseClient.from('leads').select('*').eq('id', id).single();
+    if (source.error || !source.data || source.data.is_archived) throw new Error(source.error?.message || 'הליד אינו זמין לשמירה');
+    const payload = readLeadCardPayload();
+    payload.status = 'בטיפול';
+    payload.website_intake_stage = 'contacted';
+    setLeadCardBusy(true, 'שומר...');
+    const saved = await window.supabaseClient.from('leads').update(payload).eq('id', id);
+    if (saved.error) throw new Error(saved.error.message);
+    const expected = { ...payload };
+    delete expected.intake_reviewed_at;
+    const verify = await verifyLeadWrite(id, expected);
+    if (!verify.ok) throw new Error('השמירה לא אושרה בבדיקה חוזרת: ' + verify.mismatches.join(' | '));
+    if (window.BSDDataCache && CURRENT_PROFILE) window.BSDDataCache.remove('leads-page', CURRENT_PROFILE.id);
+    okBox.style.display = 'block';
+    okBox.textContent = 'הכרטיס נשמר בלידים.';
+    await loadAll();
+    setTimeout(() => closeModal(), 650);
   } catch (error){
     errBox.style.display = 'block';
-    errBox.textContent = (destination ? 'כרטיס העסק קיים, אך השלמת ההעברה לא אושרה. אפשר לנסות שוב ללא יצירת כרטיס נוסף. ' : 'ההעברה לא הושלמה. ') + error.message;
-    btn.disabled = false; btn.textContent = '💾 שמור והעבר';
+    errBox.textContent = 'השמירה לא הושלמה. ' + error.message;
+  } finally {
+    setLeadCardBusy(false, 'שמור והעבר');
+  }
+}
+
+async function saveWebsiteLeadTransfer(id){
+  const btn = document.getElementById('wlSaveBtn');
+  if (btn && btn.disabled) return;
+  const errBox = document.getElementById('wlSaveError');
+  const okBox = document.getElementById('wlSaveOk');
+  errBox.style.display = 'none'; okBox.style.display = 'none';
+
+  const category = (document.getElementById('wlTransferTarget') || {}).value || '';
+  if (!category){
+    errBox.style.display = 'block';
+    errBox.textContent = 'יש לבחור אם להעביר לעסקים למכירה או לקונים.';
+    return;
+  }
+
+  setLeadCardBusy(true, 'שומר ומעביר...');
+  let destination = null;
+  try {
+    const source = await window.supabaseClient.from('leads').select('*').eq('id', id).single();
+    if (source.error || !source.data || source.data.is_archived) throw new Error(source.error?.message || 'הליד אינו זמין להעברה');
+
+    const payload = readLeadCardPayload();
+
+    if (category === 'seller'){
+      payload.type = 'seller';
+      payload.status = 'הועבר למוכר';
+      payload.website_intake_stage = null;
+      destination = await ensureWebsiteLeadBusiness({ ...source.data, ...payload });
+    } else {
+      payload.type = 'buyer';
+      payload.status = 'הועבר לקונה';
+      payload.website_intake_stage = null;
+      payload.requested_field = source.data.requested_field || payload.business_field || null;
+      payload.requested_area = source.data.requested_area || payload.business_city || payload.city || null;
+      payload.notes = websiteLeadTransferNotes({ ...source.data, ...payload });
+    }
+
+    const { error } = await window.supabaseClient.from('leads').update(payload).eq('id', id);
+    if (error) throw new Error(error.message);
+
+    const expected = { ...payload };
+    delete expected.intake_reviewed_at;
+    const verify = await verifyLeadWrite(id, expected);
+    if (!verify.ok) throw new Error('השמירה לא אושרה בבדיקה חוזרת: ' + verify.mismatches.join(' | '));
+
+    if (window.BSDDataCache && CURRENT_PROFILE){
+      window.BSDDataCache.remove('businesses-page', CURRENT_PROFILE.id);
+      window.BSDDataCache.remove('leads-page', CURRENT_PROFILE.id);
+    }
+
+    okBox.style.display = 'block';
+    okBox.textContent = category === 'seller' ? 'הכרטיס נשמר והועבר לעסקים למכירה.' : 'הכרטיס נשמר והועבר לקונים.';
+    if (destination){ location.href = 'businesses.html?open=' + encodeURIComponent(destination.id); return; }
+    location.href = 'leads.html?open=' + encodeURIComponent(id);
+  } catch (error){
+    errBox.style.display = 'block';
+    errBox.textContent = (destination ? 'כרטיס העסק קיים, אך השלמת ההעברה לא אושרה. אפשר לנסות שוב בלי ליצור כרטיס נוסף. ' : 'ההעברה לא הושלמה. ') + error.message;
+    setLeadCardBusy(false, 'שמור והעבר');
   }
 }
 
