@@ -9,8 +9,8 @@ window.BSD_CONFIG = {
   ORG_NAME: "BSD Business Brokers Israel",
   VIP_API_URL: "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/vip-api"
 };
-// Preview only: configure the isolated portal API explicitly before enabling it.
-window.BSD_CONFIG.SELLER_PORTAL_API_URL = '';
+// Seller portal API (production). Admin actions require an active admin/manager CRM session.
+window.BSD_CONFIG.SELLER_PORTAL_API_URL = 'https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/seller-portal-api';
 
 (function sellerPortalMenu(){
   // UI only: the link is shown to active admin/manager profiles. The seller

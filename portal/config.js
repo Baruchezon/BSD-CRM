@@ -1,3 +1,3 @@
-// Fail closed until an isolated staging API is explicitly configured.
-// Never put the production API here for a preview build.
-window.SELLER_PORTAL_CONFIG = { apiUrl: '' };
+// Production seller portal API (Supabase Edge Function seller-portal-api).
+// The API enforces sessions, the signed-agreement gate and per-business scope.
+window.SELLER_PORTAL_CONFIG = { apiUrl: 'https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/seller-portal-api' };
