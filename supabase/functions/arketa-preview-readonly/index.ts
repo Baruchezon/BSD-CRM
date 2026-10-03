@@ -1,6 +1,6 @@
 // Dedicated server-to-server read-only source. No database or storage writes.
 const BUSINESS_ID = "a2eaafcf-b900-4c10-a5b8-fb175d0d417c";
-const SOURCE_TOKEN_HASH = "51ca5067c3d0bba461e55b5ce5b9e8a4cd5903e68c9508720954374d0f67f704";
+const SOURCE_TOKEN_HASH = "414552dfa018628ff2cf9ab0751fe498739b94d9caaa2590f1beb4f10f98992e";
 const PROJECT_URL = "https://zcdlegcvfirwzitfxjcs.supabase.co";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ALLOWED_TYPES = new Set(["anonymous_summary","internal_full_summary","economic_analysis","market_research"]);
@@ -61,3 +61,4 @@ if(typeof Deno!=="undefined"){
  const serviceKey=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||secrets.default;
  Deno.serve(createSourceHandler({serviceKey}));
 }
+
