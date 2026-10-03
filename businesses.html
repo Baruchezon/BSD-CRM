@@ -460,6 +460,8 @@
 <script src="js/waSendModule.js?v=202608300456"></script>
 <script src="js/dedupeCheckModule.js?v=20260930dup1"></script>
 <script src="js/archiveModule.js?v=20260930delete1"></script>
+<script src="js/portal-invite.js"></script>
+<script src="js/portal-business-card.js"></script>
 <script>
 let ALL_BIZ = [];
 let ARCHIVED_BIZ = [];
@@ -1324,7 +1326,7 @@ function bsdTabifyBizForm(biz){
       {id:'meetings',  label:'פגישות',                   match:t=>/טופס פגישה ראשונה|הקלטות ותמלולים/.test(t)},
       {id:'summaries', label:'תקצירים אנונימיים והפצה',   match:t=>/כרטיס אנונימי|תקציר עסקי פנימי מלא/.test(t)},
       {id:'files',     label:'מסמכים וקבצים',             match:t=>/תיק מכירה|קבצים מצורפים/.test(t)},
-      {id:'access',    label:'הרשאות והפצה',              match:t=>/הפצה והרשאות/.test(t)},
+      {id:'access',    label:'הרשאות והפצה',              match:t=>/הפצה והרשאות|כניסה לפורטל/.test(t)},
     ];
     const FALLBACK_ID = 'other', FALLBACK_LABEL = 'נוסף';
 
@@ -1476,6 +1478,7 @@ function openBizForm(id){
   modal.innerHTML = `
     <h3>${biz ? 'עריכת עסק' : 'עסק חדש'}${biz?.internal_name ? ` <span class="biz-name-big">${esc(biz.internal_name)}</span>` : ''}${biz?.business_number ? ` <span class="biz-number-badge">${esc(biz.business_number)}</span>` : ''}</h3>
     ${biz ? agreementBanner(biz.agreement_status, biz.agreement_number, 'businesses', biz.id, biz.agreement_pdf_path, biz.agreement_pdf_uploaded_at, biz.agreement_pdf_uploaded_by) : ''}
+
     <div id="bizFormError" style="display:none;background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:.85rem;color:#8a2c1f;"></div>
     ${!biz ? '<div id="bizDupBanner" style="display:none;"></div>' : ''}
     <form id="bizForm">
@@ -1759,6 +1762,7 @@ function openBizForm(id){
       <div class="field full" style="color:#999;font-size:.8rem;">שמור את העסק תחילה, ואז תוכל לצרף קבצים בעריכה.</div>
       `}
 
+      ${CURRENT_PROFILE && ['admin','manager'].includes(CURRENT_PROFILE.role) ? BSDSellerPortal.markup(biz) : ''}
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="cancelBizForm()">ביטול</button>
         <button type="submit" class="btn btn-primary">שמירה</button>
@@ -1772,6 +1776,7 @@ function openBizForm(id){
   document.getElementById('overlay').scrollTop = 0;
   document.getElementById('bizForm').dataset.bizId = biz ? biz.id : '';
   document.getElementById('bizForm').addEventListener('submit', saveBiz);
+  if (window.BSDSellerPortal) BSDSellerPortal.mount(biz);
   // בדיקת כפילות בזמן הקלדה - רק בפתיחת עסק חדש (לא בעריכת עסק קיים)
   if (!biz){
     const dupCheck = bsdDupDebounce(async () => {
@@ -4462,6 +4467,7 @@ async function saveBiz(e){
 
   let error;
   let savedBizId = bizId || null;
+  const portalRequested = !bizId && !!document.getElementById('sellerPortalEnabled')?.checked;
   if (bizId){
     ({ error } = await window.supabaseClient.from('businesses').update(payload).eq('id', bizId));
     if (!error) bsdLogActivity('update', 'businesses', bizId);
@@ -4511,6 +4517,10 @@ async function saveBiz(e){
   }
   closeModal();
   await loadBusinesses();
+  if (portalRequested && savedBizId){
+    try { await BSDSellerPortal.afterSave(savedBizId, true); }
+    catch (error) { toast('העסק נשמר. חשבון הפורטל לא נוצר: ' + error.message); }
+  }
   } finally {
     bsdSetButtonLoading(submitBtn, false);
   }
@@ -4870,3 +4880,4 @@ window.addEventListener('bsd:vip-publication-changed', event => {
 </script>
 </body>
 </html>
+

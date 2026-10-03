@@ -9,6 +9,27 @@ window.BSD_CONFIG = {
   ORG_NAME: "BSD Business Brokers Israel",
   VIP_API_URL: "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/vip-api"
 };
+// Seller portal API (production). Admin actions require an active admin/manager CRM session.
+window.BSD_CONFIG.SELLER_PORTAL_API_URL = 'https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/seller-portal-api';
+
+(function sellerPortalMenu(){
+  // UI only: the link is shown to active admin/manager profiles. The seller
+  // portal API enforces the same rule server-side on every admin_* action.
+  function allowed(){
+    try{const saved=JSON.parse(localStorage.getItem('bsd-crm-profile-v2')||'null');const p=saved&&saved.profile;return !!p&&p.status==='active'&&(p.role==='admin'||p.role==='manager');}catch(_){return false;}
+  }
+  function install(){
+    const menu=document.querySelector('#navToolsWrap .bsd-forms-menu');
+    if(!menu)return;
+    let a=menu.querySelector('[data-seller-portal]');
+    if(!allowed()){if(a)a.remove();return;}
+    if(a)return;
+    a=document.createElement('a');a.href='portal-admin.html';a.textContent='ניהול הפורטל';a.dataset.sellerPortal='1';
+    a.style.cssText='display:block;color:#f1d98d;text-decoration:none;padding:11px 16px;font-weight:700;';menu.appendChild(a);
+  }
+  window.BSDSellerPortalMenuRefresh=install;
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
+})();
 
 // A small profile cache removes the only mandatory server round-trip that used
 // to run again on every page transition.  The database remains the authority:
@@ -35,8 +56,8 @@ window.BSDSessionCache = (() => {
       localStorage.setItem(KEY, JSON.stringify({ userId:session.user.id, savedAt:Date.now(), profile }));
     } catch (_) {}
   }
-  function clear(){ try { localStorage.removeItem(KEY); } catch (_) {} }
-  return { read, write, clear };
+  function clear(){ try { localStorage.removeItem(KEY); } catch (_) {} if (window.BSDSellerPortalMenuRefresh) window.BSDSellerPortalMenuRefresh(); }
+  return { read, write: function(session, profile){ write(session, profile); if (window.BSDSellerPortalMenuRefresh) window.BSDSellerPortalMenuRefresh(); }, clear };
 })();
 
 window.bsdDeadline = async function bsdDeadline(promise, timeoutMs, label){
@@ -606,3 +627,4 @@ window.BSDDataCache = (() => {
     console.warn('[BSD VIP] UI refinements skipped', e);
   }
 })();
+

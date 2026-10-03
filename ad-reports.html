@@ -339,6 +339,7 @@
 <script src="js/config.js"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/pdfPipeline.js"></script>
+<script src="js/portal-ad-reports.js"></script>
 <script>
 /* ==================== APP LOGIC ==================== */
 
@@ -876,6 +877,8 @@ function renderResults(){
       '<div class="ractions">' +
         '<button class="btn btn-ghost btn-sm" data-act="preview" data-idx="'+i+'">תצוגה מקדימה</button>' +
         '<button class="btn btn-gold btn-sm" data-act="print" data-idx="'+i+'">📄 הורדת PDF</button>' +
+        '<select data-portal-business="'+i+'" aria-label="בחירת עסק לפרסום הדוח בפורטל" style="max-width:240px"><option value="">טוען עסקים</option></select>' +
+        '<button class="btn btn-navy btn-sm" data-act="portal" data-idx="'+i+'">פרסום בפורטל העסק שנבחר</button>' +
         '<button class="btn btn-navy btn-sm" data-act="email" data-idx="'+i+'">📧 שלח באימייל לבעל העסק</button>' +
       '</div>';
     els.resultsList.appendChild(row);
@@ -892,12 +895,14 @@ function renderResults(){
     els.resultsList.appendChild(allRow);
   }
 
+  populateAdReportPortalPickers();
   els.resultsList.querySelectorAll('button').forEach(btn => {
     btn.addEventListener('click', () => {
       const act = btn.dataset.act;
       if (act === 'preview') openPreview(GENERATED[parseInt(btn.dataset.idx)], btn);
       else if (act === 'print') printBusiness(GENERATED[parseInt(btn.dataset.idx)], btn);
       else if (act === 'printAll') printAll(btn);
+      else if (act === 'portal') publishReportToPortal(GENERATED[parseInt(btn.dataset.idx)], btn);
       else if (act === 'email') openMailModal(GENERATED[parseInt(btn.dataset.idx)]);
     });
   });
@@ -933,7 +938,8 @@ async function printBusiness(g, btn){
   btn.disabled = true;
   btn.textContent = 'מכין PDF להורדה...';
   try {
-    const blob = await buildPdfBlobFromPages(getPages(g));
+    const blob = await getAdReportPdf(g);
+
     const filenameSafe = (g.name || 'business').replace(/[\\/:*?"<>|]/g,'').trim() || 'business';
     downloadBlob(blob, 'דוח פרסום - ' + filenameSafe + '.pdf');
   } catch (err){
@@ -944,6 +950,17 @@ async function printBusiness(g, btn){
     btn.disabled = false;
     btn.textContent = orig;
   }
+}
+
+async function publishReportToPortal(g, btn){
+  const original=btn.textContent;btn.disabled=true;btn.textContent='מפרסם את הדוח...';
+  try {
+    const selected=document.querySelector('[data-portal-business="'+GENERATED.indexOf(g)+'"]');
+    if (!selected?.value) throw Error('יש לבחור את העסק שאליו שייך הדוח');
+    await saveAdReportToSellerPortal(g, await getAdReportPdf(g), selected.value);
+    els.genStatus.textContent='הדוח פורסם בפורטל של העסק שנבחר בלבד';
+  } catch(error) { els.genStatus.textContent=error.message; }
+  finally { btn.disabled=false;btn.textContent=original; }
 }
 
 async function printAll(btn){
@@ -1166,7 +1183,7 @@ async function buildPdfBlobFromPages(pagesHtmlArray){
 }
 
 async function buildPdfBlobForBusiness(g){
-  return buildPdfBlobFromPages(getPages(g));
+  return getAdReportPdf(g);
 }
 
 function downloadBlob(blob, filename){
@@ -1224,6 +1241,7 @@ mailEls.sendBtn.addEventListener('click', async () => {
   mailEls.sendStatus.textContent = 'מייצר PDF ושולח...';
   try {
     const pdfBlob = await buildPdfBlobForBusiness(MAIL_CURRENT_G);
+
     const base64 = await blobToBase64(pdfBlob);
     // Safety net matching the email server's own 15MB limit: if a report is so
     // long the PDF is still too heavy even after compression, stop here with a
@@ -1277,3 +1295,4 @@ tryAutoLoadSavedFile();
 </script>
 </body>
 </html>
+
