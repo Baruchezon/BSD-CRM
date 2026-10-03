@@ -16,3 +16,29 @@ Deno.test('dashboard includes no private paths, hashes, buyer contacts or unappr
 Deno.test('login has generic errors and rate limiting across unknown user attempts',async()=>{const f=await fixture();const wrong=await f.request('login',{username:'23456',password:'wrong'});const missing=await f.request('login',{username:'99999',password:'wrong'});assert(JSON.stringify(await wrong.json())===JSON.stringify(await missing.json()));for(let i=0;i<7;i++)await f.request('login',{username:'99999',password:'wrong'});assert((await f.request('login',{username:'99999',password:'wrong'})).status===429);});
 Deno.test('first login must change password before retrieving business information',async()=>{const f=await fixture();f.tables.seller_portal_accounts[0].must_change_password=true;assert((await f.request('dashboard')).status===403);assert((await f.request('change_password',{password:'abc'})).status===400);assert((await f.request('change_password',{password:'SafePassword234!'})).status===200);assert((await f.request('dashboard')).status===200);});
 Deno.test('disallowed origin never gets authenticated response',async()=>{const f=await fixture();assert((await f.request('dashboard',{}, {origin:'https://evil.test'})).status===403);});
+
+
+Deno.test('portal deletion revokes access and preserves business documents',async()=>{
+ const f=await fixture();const count=f.tables.business_sale_files.length;
+ assert((await f.request('admin_delete',{business_id:biz},{authorization:'Bearer admin'})).status===200);
+ assert(f.tables.seller_portal_accounts[0].status==='deleted');assert(f.tables.seller_portal_sessions[0].revoked_at);
+ assert(f.tables.business_sale_files.length===count&&f.tables.businesses.length===1);
+ assert((await f.request('dashboard')).status===401);
+ assert((await f.request('admin_status',{business_id:biz,status:'active'},{authorization:'Bearer admin'})).status===409);
+ const restored=await f.request('admin_credentials',{business_id:biz},{authorization:'Bearer admin'});assert(restored.status===200);
+ assert(f.tables.seller_portal_accounts[0].status==='active');assert(f.tables.business_sale_files.length===count);
+});
+Deno.test('newest created document is selected before approvals and duplicate attachments',async()=>{
+ const f=await fixture();const old=f.tables.business_sale_files[0];old.created_at='2026-01-01T00:00:00Z';old.document_type='internal_full_summary';old.portal_kind='document';
+ const latest={...old,id:'77777777-7777-4777-8777-777777777777',created_at:'2026-10-03T00:00:00Z',version_number:1};old.version_number=99;
+ f.tables.business_sale_files.push(latest);f.tables.business_file_meta=[{...old,id:'88888888-8888-4888-8888-888888888888',created_at:'2026-12-01T00:00:00Z',display_name:'duplicate.pdf'}];
+ let d=await (await f.request('dashboard')).json();assert(d.files.length===1&&d.files[0].id===latest.id);
+ assert((await f.request('file',{file_id:old.id,mode:'view'})).status===404);
+ latest.portal_visible=false;d=await (await f.request('dashboard')).json();assert(d.files.length===0);
+});
+Deno.test('activity requires a valid seller and a bounded known page',async()=>{
+ const f=await fixture();assert((await f.request('activity',{page:'documents',kind:'heartbeat',seconds:30})).status===200);
+ assert((await f.request('activity',{page:'private',kind:'heartbeat',seconds:30})).status===400);
+ assert((await f.request('activity',{page:'home',kind:'heartbeat',seconds:1000})).status===400);
+ assert((await f.request('activity',{page:'home',kind:'page_view',seconds:0},{'x-seller-token':''})).status===401);
+});

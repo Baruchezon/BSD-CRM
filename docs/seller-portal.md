@@ -1,6 +1,6 @@
 # BSD seller portal
 
-Status: implementation branch only. Production untouched. Backend not deployed.
+Status: expanded implementation branch. The public website and CRM releases remain unmerged. An approved Arketa-only read-only gateway and private preview are live; the full seller API and portal migration are not deployed.
 
 ## Verified mapping
 
@@ -44,3 +44,16 @@ The public site should remain unmodified until the isolated preview and explicit
 ## Rollback
 
 Revert frontend/API release first; keep portal tables and history for a forward repair. Do not DROP tables or remove visibility columns during an emergency rollback. Existing CRM workflows continue independently. Database changes are additive, but require the predeployment backup and staging validation before application.
+
+
+## Expanded requirements on 2026-10-03
+
+The approved welcome thanks the owner for cooperation and emphasizes patience, precision and personal accompaniment. The website entry is named כניסת בעלי עסקים, uses a distinct teal button, and remains visible on mobile while the other navigation uses the existing menu. Shared CSS and the generator compress the desktop header into one row; generated HTML uses a new stylesheet URL.
+
+Existing business cards have an opt-in checkbox, generated credentials, a WhatsApp composer with a warm message, blocking, password reset, and portal-only deletion. New-business activation runs after successful business save and requires an active signed business. Deletion invalidates credentials and sessions, retains an audit account marked deleted, and never removes business records, documents, or storage objects. Recreating the portal explicitly assigns new credentials.
+
+Activity recording accepts only five portal areas and bounded durations. Visible recent interaction triggers a heartbeat; the database locks the session and caps reported time to elapsed server time to prevent duplicate counting across tabs. Management includes filtered activity, pages and original document names, measured duration, and CSV export. No keystroke contents are collected.
+
+Facebook report rows offer a CRM business selector and a separate publication button. Download and email do not publish. Publication checks admin access to the exact selected business, verifies a portal account and the original PDF, asks the manager to confirm the target, uploads only that per-business PDF, and binds metadata and storage to the selected business ID. Combined multi-business reports cannot be published through this path. On insertion failure the uploaded object is removed. Download/email/publication reuse the same PDF Blob. No real advertising report was published; Baruch asked to test this later.
+
+The expanded handler, security and migration tests run offline. The private preview exposes the new business controls and measured activity for Arketa only. Browser viewport/device testing of the expanded layout still needs completion. Production activation requires validated staging, a backup/restore plan, configured API URL and Baruch's explicit approval; never merge an API-blank frontend release.

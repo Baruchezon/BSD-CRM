@@ -1,6 +1,7 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=v=>v?new Date(v).toLocaleDateString('he-IL',{timeZone:'Asia/Jerusalem'}):'';
+let activePage='home',activityStamp=Date.now(),lastInteraction=Date.now(),activityQueue=Promise.resolve();
 let token=sessionStorage.getItem('bsd-seller-token')||'',data=null,pdfUrl=null,idleTimer;
 const status=message=>{$('status').textContent=message;};
 const errors={invalid_credentials:'שם המשתמש או הסיסמה אינם תקינים',try_later:'בוצעו ניסיונות רבים. אפשר לנסות שוב בעוד 15 דקות',unauthorized:'הכניסה פגה. יש להתחבר מחדש',strong_password_required:'יש לבחור סיסמה עם לפחות 10 תווים, אותיות ומספרים',temporarily_unavailable:'השירות אינו זמין כרגע. אפשר לנסות שוב בהמשך'};
@@ -13,14 +14,16 @@ async function api(action,payload={},file=false){
 }
 function reset(){document.body.classList.add('is-login');token='';data=null;clearTimeout(idleTimer);sessionStorage.removeItem('bsd-seller-token');$('loginPage').hidden=false;$('dashboard').hidden=true;$('logout').hidden=true;$('dialog').close();closePdf();}
 function armIdle(){if(token){clearTimeout(idleTimer);idleTimer=setTimeout(()=>{api('logout').catch(()=>{});reset();status('הכניסה הסתיימה לאחר 30 דקות ללא פעילות');},30*60000);}}
-['pointerdown','keydown'].forEach(event=>document.addEventListener(event,armIdle,{passive:true}));
+['pointerdown','keydown','scroll'].forEach(event=>document.addEventListener(event,()=>{lastInteraction=Date.now();armIdle();},{passive:true}));
+function activity(kind='heartbeat'){const now=Date.now(),seconds=Math.min(90,Math.floor((now-activityStamp)/1000));if(kind==='heartbeat')activityStamp=now;if(!token||!data||document.hidden||now-lastInteraction>90000)return;const measuredToken=token,payload={kind,page:activePage,seconds:kind==='page_view'?0:seconds};activityQueue=activityQueue.then(async()=>{if(token===measuredToken)try{await api('activity',payload);}catch{}});}
+setInterval(()=>activity(),30000);document.addEventListener('visibilitychange',()=>{activityStamp=Date.now();});
 function closePdf(){if(pdfUrl){URL.revokeObjectURL(pdfUrl);pdfUrl=null;}}
 function modal(html,pdf=false){closePdf();$('dialog').classList.toggle('pdf-dialog',pdf);$('dialogBody').innerHTML=html;$('dialog').showModal();}
 $('closeDialog').onclick=()=>$('dialog').close();$('dialog').addEventListener('close',()=>{closePdf();$('dialogBody').innerHTML='';});
 $('showPassword').onclick=()=>{const input=$('loginForm').elements.password;const show=input.type==='password';input.type=show?'text':'password';$('showPassword').textContent=show?'הסתר':'הצג';$('showPassword').setAttribute('aria-label',show?'הסתרת סיסמה':'הצגת סיסמה');};
 function changePassword(){modal('<h2>בחירת סיסמה אישית</h2><p>לשמירה על המידע העסקי שלך, יש להחליף את הסיסמה הזמנית בכניסה הראשונה.</p><form id="passwordForm"><label>סיסמה חדשה<input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required></label><p class="muted">לפחות 10 תווים הכוללים אותיות ומספרים</p><button class="primary wide">שמירת הסיסמה</button></form>');$('passwordForm').onsubmit=async e=>{e.preventDefault();try{await api('change_password',{password:e.target.elements.password.value});$('dialog').close();await load();}catch(err){status(err.message);}};}
 $('loginForm').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button[type=submit]');button.disabled=true;status('');try{const d=await api('login',{username:e.target.elements.username.value,password:e.target.elements.password.value});token=d.token;sessionStorage.setItem('bsd-seller-token',token);e.target.elements.password.value='';armIdle();if(d.must_change_password)changePassword();else await load();}catch(err){status(err.message);}finally{button.disabled=false;}};
-function selectTab(tab){document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==tab);document.querySelectorAll('.sidebar [data-tab]').forEach(x=>x.classList.toggle('selected',x.dataset.tab===tab));window.scrollTo({top:0,behavior:'smooth'});}
+function selectTab(tab){if(activePage!==tab)activity();activePage=tab;activity('page_view');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==tab);document.querySelectorAll('.sidebar [data-tab]').forEach(x=>x.classList.toggle('selected',x.dataset.tab===tab));window.scrollTo({top:0,behavior:'smooth'});}
 const emptyDoc='מסמכים שאושרו להצגה על ידי צוות BSD יופיעו כאן.';
 const emptyReport='דוחות פעילות שיעודכנו על ידי צוות BSD יופיעו כאן. למידע על פעילות השיווק, ניתן לפנות אלינו.';
 const emptyMatch='עדיין אין התאמות שאושרו להצגה באזור האישי. צוות BSD זמין לעדכון ולשאלות.';
@@ -32,3 +35,4 @@ document.addEventListener('click',e=>{const tab=e.target.closest('[data-tab]');i
 $('logout').onclick=async()=>{try{await api('logout');}catch{}reset();status('יצאת מהאזור האישי');};$('refresh').onclick=load;
 if(token)load();
 })();
+

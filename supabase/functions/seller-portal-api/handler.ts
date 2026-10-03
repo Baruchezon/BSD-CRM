@@ -1,3 +1,4 @@
+import {latestFiles} from './latest-files.ts';
 import {digest,randomText,temporaryPassword,hashPassword,verifyPassword,sessionAllowed,fileAllowed} from './security.ts';
 type Options={origins:string[];portalUrl:string;phone:string;ipSalt:string};
 const text=(v:unknown,n=1000)=>String(v??'').trim().slice(0,n);
@@ -7,7 +8,7 @@ export function createHandler(db:any,opts:Options){
  const query=async(q:any)=>{const r=await q;if(r.error)throw new Error('database_error');return r.data;};
  const event=async(account_id:string,event_type:string,file_id:string|null=null,actor_id:string|null=null,meta_file_id:string|null=null)=>query(db.from('seller_portal_events').insert({account_id,event_type,file_id,actor_id,meta_file_id}));
  const normalize=(f:any,source='sale')=>source==='sale'?{...f,file_source:source}:{...f,file_source:source,file_name:f.display_name||f.original_filename,status:'active',deleted_at:null,document_type:f.category,portal_kind:'document'};
- const allFiles=async(id:string)=>{const sale=await query(db.from('business_sale_files').select('*').eq('business_id',id).eq('status','active').is('deleted_at',null));const attachment=await query(db.from('business_file_meta').select('*').eq('business_id',id));return [...sale.map((f:any)=>normalize(f)),...attachment.map((f:any)=>normalize(f,'attachment'))];};
+ const allFiles=async(id:string)=>{const registered=await query(db.from('business_sale_files').select('*').eq('business_id',id));const sale=registered.filter((f:any)=>f.status==='active'&&!f.deleted_at);const attachment=await query(db.from('business_file_meta').select('*').eq('business_id',id));const paths=new Set(registered.map((f:any)=>f.storage_path));return [...sale.map((f:any)=>normalize(f)),...attachment.filter((f:any)=>!paths.has(f.storage_path)).map((f:any)=>normalize(f,'attachment'))];};
  return async(req:Request):Promise<Response>=>{
   const origin=req.headers.get('origin')||'';
   const headers:Record<string,string>={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Vary':'Origin','X-Content-Type-Options':'nosniff','Access-Control-Allow-Headers':'content-type,authorization,x-seller-token,apikey','Access-Control-Allow-Methods':'POST, OPTIONS'};
@@ -53,9 +54,9 @@ export function createHandler(db:any,opts:Options){
      const end=text(b.to,40)||new Date().toISOString();
      if(!Number.isFinite(Date.parse(start))||!Number.isFinite(Date.parse(end)))return reply(400,{error:'invalid_request'});
      const lastLogins=await query(db.from('seller_portal_events').select('account_id,created_at').eq('event_type','login').order('created_at',{ascending:false}).limit(10000));
-     const events=await query(db.from('seller_portal_events').select('id,account_id,event_type,file_id,created_at').gte('created_at',start).lte('created_at',end).order('created_at',{ascending:false}).limit(10000));
+     const events=await query(db.from('seller_portal_events').select('id,account_id,event_type,file_id,meta_file_id,session_id,page,duration_seconds,created_at').gte('created_at',start).lte('created_at',end).order('created_at',{ascending:false}).limit(10000));
      const requests=await query(db.from('seller_portal_requests').select('*').order('created_at',{ascending:false}).limit(200));
-     return reply(200,{ok:true,accounts,businesses,events,requests,last_logins:lastLogins,events_truncated:events.length===10000,portal_url:opts.portalUrl});
+     return reply(200,{ok:true,accounts,businesses,events,requests,last_logins:lastLogins,events_truncated:events.length===10000,activity_files:await query(db.from('business_sale_files').select('id,file_name').in('id',events.map((e:any)=>e.file_id).filter(Boolean))),activity_attachments:await query(db.from('business_file_meta').select('id,display_name,original_filename').in('id',events.map((e:any)=>e.meta_file_id).filter(Boolean))),portal_url:opts.portalUrl});
     }
     if(action==='admin_request'){
      if(!uuid(b.request_id))return reply(400,{error:'invalid_request'});
@@ -77,7 +78,14 @@ export function createHandler(db:any,opts:Options){
      if(business.is_archived||business.agreement_status!=='יש הסכם חתום')return reply(409,{error:'signed_agreement_required'});
      const password=temporaryPassword(),password_hash=await hashPassword(password),temporary_expires_at=new Date(Date.now()+86400000).toISOString();
      if(a){
-      await query(db.from('seller_portal_accounts').update({password_hash,must_change_password:true,temporary_expires_at}).eq('id',a.id));
+      const restore=a.status==='deleted';
+      let saved=false;
+      for(let i=0;i<(restore?20:1);i++){
+       const username=restore?randomText(1,'123456789')+randomText(4,'0123456789'):a.username;
+       const result=await db.from('seller_portal_accounts').update({password_hash,must_change_password:true,temporary_expires_at,...(restore?{status:'active',username}:{})}).eq('id',a.id);
+       if(!result.error){a.username=username;saved=true;break;}if(result.error.code!=='23505')throw Error('database_error');
+      }
+      if(!saved)throw Error('username_capacity');
       await query(db.from('seller_portal_sessions').update({revoked_at:new Date().toISOString()}).eq('account_id',a.id));
      }else{
       for(let i=0;i<20;i++){
@@ -91,7 +99,11 @@ export function createHandler(db:any,opts:Options){
      return reply(200,{ok:true,username:a.username,temporary_password:password,portal_url:opts.portalUrl,phone:business.owner_phone,name:business.owner_name});
     }
     if(!a)return reply(409,{error:'account_required'});
-    if(action==='admin_status'){
+    if(action==='admin_delete'){
+     await query(db.from('seller_portal_accounts').update({status:'deleted',password_hash:await hashPassword(randomText(48)),must_change_password:true,temporary_expires_at:null,client_update:null,client_updated_at:null}).eq('id',a.id));
+     await query(db.from('seller_portal_sessions').update({revoked_at:new Date().toISOString()}).eq('account_id',a.id));
+    }else if(action==='admin_status'){
+     if(a.status==='deleted')return reply(409,{error:'account_required'});
      if(!['active','blocked'].includes(b.status))return reply(400,{error:'invalid_request'});
      if(b.status==='active'&&(business.is_archived||business.agreement_status!=='יש הסכם חתום'))return reply(409,{error:'signed_agreement_required'});
      await query(db.from('seller_portal_accounts').update({status:b.status}).eq('id',a.id));
@@ -129,8 +141,12 @@ export function createHandler(db:any,opts:Options){
     await event(a.id,'password_changed');return reply(200,{ok:true});
    }
    if(a.must_change_password)return reply(403,{error:'password_change_required'});
+   if(action==='activity'){
+    if(!['home','documents','matches','reports','business'].includes(b.page)||!['page_view','heartbeat'].includes(b.kind)||!Number.isInteger(b.seconds)||b.seconds<0||b.seconds>90)return reply(400,{error:'invalid_request'});
+    await query(db.rpc('seller_portal_record_activity',{p_session:s.id,p_account:a.id,p_page:b.page,p_seconds:b.seconds,p_kind:b.kind}));return reply(200,{ok:true});
+   }
    if(action==='dashboard'){
-    const files=(await allFiles(business.id)).sort((a:any,b:any)=>Date.parse(b.created_at)-Date.parse(a.created_at));
+    const files=latestFiles(await allFiles(business.id));
     const matches=await query(db.from('matches').select('id,buyer_id,created_at').eq('business_id',business.id).eq('counterparty_type','buyer'));
     const permissions=matches.length?await query(db.from('seller_portal_match_permissions').select('*').eq('visible',true).in('match_id',matches.map((m:any)=>m.id))):[];
     const safeMatches=[];
@@ -145,7 +161,7 @@ export function createHandler(db:any,opts:Options){
    if(action==='file'){
     if(!uuid(b.file_id)||!['view','download'].includes(b.mode))return reply(404,{error:'not_found'});
     const raw=await query(db.from(b.file_source==='attachment'?'business_file_meta':'business_sale_files').select('*').eq('id',b.file_id).eq('business_id',business.id).maybeSingle());const f=raw?normalize(raw,b.file_source==='attachment'?'attachment':'sale'):null;
-    if(!fileAllowed(f,business.id))return reply(404,{error:'not_found'});
+    if(!fileAllowed(f,business.id)||!latestFiles(await allFiles(business.id)).some((latest:any)=>latest.id===f.id&&latest.file_source===f.file_source))return reply(404,{error:'not_found'});
     // Stream original PDF through authenticated API. Never expose a bearer storage URL.
     const r=await db.storage.from('business-files').download(f.storage_path);if(r.error||!r.data)return reply(404,{error:'not_found'});
     const bytes=await r.data.arrayBuffer();if(new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')return reply(422,{error:'invalid_pdf'});
@@ -160,3 +176,4 @@ export function createHandler(db:any,opts:Options){
   }catch{return reply(503,{error:'temporarily_unavailable'});}
  };
 }
+

@@ -15,9 +15,19 @@ const blocked=async sql=>{await assert.rejects(()=>db.exec(sql));};
 await blocked(`insert into seller_portal_accounts(business_id,username,password_hash) values('22222222-2222-2222-2222-222222222222','34567','hash')`);
 await db.exec(`insert into seller_portal_accounts(id,business_id,username,password_hash) values('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','11111111-1111-1111-1111-111111111111','34567','hash');insert into seller_portal_sessions(account_id,token_hash,expires_at) values('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','token',now()+interval '1 hour');`);
 await blocked(`insert into seller_portal_accounts(business_id,username,password_hash) values('11111111-1111-1111-1111-111111111111','34567','hash')`);
+const activitySession=(await db.query('select id from seller_portal_sessions')).rows[0].id;
+await db.exec(`update seller_portal_sessions set last_activity_measure_at=clock_timestamp()-interval '35 seconds'`);
+const delta=(await db.query(`select seller_portal_record_activity('${activitySession}','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','documents',90,'heartbeat') n`)).rows[0].n;
+assert.ok(delta>=35&&delta<=36);
+const repeated=(await db.query(`select seller_portal_record_activity('${activitySession}','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','documents',90,'heartbeat') n`)).rows[0].n;
+assert.equal(repeated,0);
+assert.equal((await db.query('select active_seconds from seller_portal_sessions')).rows[0].active_seconds,delta);
+await blocked(`select seller_portal_record_activity('${activitySession}','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','unknown',10,'heartbeat')`);
+
 await db.exec(`update businesses set is_archived=true where id='11111111-1111-1111-1111-111111111111'`);
 assert.equal((await db.query('select status from seller_portal_accounts')).rows[0].status,'archived');
 assert.ok((await db.query('select revoked_at from seller_portal_sessions')).rows[0].revoked_at);
+await blocked(`select seller_portal_record_activity('${activitySession}','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','home',10,'heartbeat')`);
 await db.exec(`update businesses set is_archived=false where id='11111111-1111-1111-1111-111111111111'`);
 assert.equal((await db.query('select status from seller_portal_accounts')).rows[0].status,'archived');
 await db.exec(`update seller_portal_accounts set status='active';update businesses set agreement_status='אין הסכם' where id='11111111-1111-1111-1111-111111111111'`);
@@ -37,3 +47,4 @@ assert.equal((await db.query('select business_id,status from seller_portal_accou
 assert.equal((await db.query('select status from seller_portal_accounts')).rows[0].status,'blocked');
 assert.ok((await db.query('select count(*) n from seller_portal_events')).rows[0].n>0);
 console.log('PASS: migration, agreement gate, archive revocation, restore stays blocked, uniqueness, atomic rate limits, RLS, no direct API access, manager file approval');await db.close();
+
