@@ -1,4 +1,7 @@
-// Choose the newest active record of each semantic document type, before visibility checks.
+// Choose the newest record of each semantic document type AMONG the files that
+// already passed the approval/visibility check. Callers must filter with
+// fileAllowed() first, so an approved older version is still shown when a newer
+// version exists that the manager has not approved yet.
 // Anonymous and full summaries share a category but are separate types.
 export function latestFiles(files:any[]){
  const sorted=[...files].sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||String(b.id).localeCompare(String(a.id)));

@@ -1,6 +1,9 @@
 import {latestFiles} from './latest-files.ts';
-import {digest,randomText,temporaryPassword,hashPassword,verifyPassword,sessionAllowed,fileAllowed} from './security.ts';
-type Options={origins:string[];portalUrl:string;phone:string;ipSalt:string};
+import {digest,randomText,activationToken,validActivationToken,PENDING_ACTIVATION,strongPassword,hashPassword,verifyPassword,usableHash,sessionAllowed,fileAllowed,clientIp} from './security.ts';
+type Options={origins:string[];portalUrl:string;phone:string;ipSalt:string;ipHeader?:string;activationHours?:number;pruneRate?:number};
+// Rate limit ceilings per 15 minutes. Global ceilings bound abuse even if a
+// caller can rotate or spoof its address.
+const LIMITS={loginIp:30,loginUser:8,loginGlobalFailures:300,recoveryIp:5,recoveryGlobal:100,activateIp:20,activateGlobal:200};
 const text=(v:unknown,n=1000)=>String(v??'').trim().slice(0,n);
 const uuid=(v:unknown)=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v));
 export function createHandler(db:any,opts:Options){
@@ -21,22 +24,39 @@ export function createHandler(db:any,opts:Options){
    const raw=await req.text();if(raw.length>16000)return reply(413,{error:'too_large'});
    let b:any;try{b=JSON.parse(raw);}catch{return reply(400,{error:'invalid_request'});}
    const action=text(b.action,40);
-   const ip=req.headers.get('cf-connecting-ip')||req.headers.get('x-forwarded-for')?.split(',')[0]||'unknown';
+   const ip=clientIp(req,opts.ipHeader??'cf-connecting-ip');
    const attempt=async(scope:string,max:number)=>query(db.rpc('seller_portal_take_attempt',{p_key:await digest(opts.ipSalt+scope),p_max:max}));
+   const exceeded=async(scope:string,max:number)=>query(db.rpc('seller_portal_attempts_exceeded',{p_key:await digest(opts.ipSalt+scope),p_max:max}));
+   // On-write housekeeping: occasionally prune expired rate-limit, session and activity rows.
+   const prune=async()=>{if(Math.random()<(opts.pruneRate??0.02)){try{await query(db.rpc('seller_portal_prune'));}catch{}}};
+   if(action==='activate'){
+    if(!await attempt('activate:ip:'+ip,LIMITS.activateIp)||!await attempt('activate:global',LIMITS.activateGlobal))return reply(429,{error:'try_later'});
+    const password=text(b.password,128);
+    if(!validActivationToken(b.token))return reply(400,{error:'invalid_or_expired_link'});
+    if(!strongPassword(password))return reply(400,{error:'strong_password_required'});
+    const token=randomText(48),expires_at=new Date(Date.now()+8*3600000).toISOString();
+    const rows=await query(db.rpc('seller_portal_activate',{p_token_hash:await digest(b.token),p_password_hash:await hashPassword(password),p_session_hash:await digest(token),p_session_expires:expires_at}));
+    const row=Array.isArray(rows)?rows[0]:rows;
+    if(!row?.account_id)return reply(400,{error:'invalid_or_expired_link'});
+    return reply(200,{ok:true,token,username:row.username,must_change_password:false,expires_at});
+   }
    if(action==='login'||action==='recovery'){
-    if(!await attempt(action+':ip:'+ip,action==='login'?30:5))return reply(429,{error:'try_later'});
+    await prune();
+    if(!await attempt(action+':ip:'+ip,action==='login'?LIMITS.loginIp:LIMITS.recoveryIp))return reply(429,{error:'try_later'});
     if(action==='recovery'){
+     if(!await attempt('recovery:global',LIMITS.recoveryGlobal))return reply(429,{error:'try_later'});
      if(!['username','password'].includes(b.kind)||!text(b.name,100)||!text(b.business,160)||!/^\+?[0-9 ()]{7,25}$/.test(text(b.phone,25)))return reply(400,{error:'invalid_request'});
      await query(db.from('seller_portal_requests').insert({kind:b.kind,requester_name:text(b.name,100),business_name:text(b.business,160),phone:text(b.phone,25),message:text(b.message,2000)}));
      return reply(200,{ok:true,message:'הבקשה התקבלה ותועבר לצוות BSD'});
     }
     const username=text(b.username,5),password=text(b.password,128);
-    if(!await attempt('login:username:'+username,8))return reply(429,{error:'try_later'});
-    const a=await query(db.from('seller_portal_accounts').select('*').eq('username',username).maybeSingle());
-    // Same expensive hash path for unknown users. No account-existence errors.
-    const dummy=await dummyHash;const valid=await verifyPassword(password,a?.password_hash||dummy);
+    if(!await attempt('login:username:'+username,LIMITS.loginUser))return reply(429,{error:'try_later'});
+    if(await exceeded('login:global_failures',LIMITS.loginGlobalFailures))return reply(429,{error:'try_later'});
+    const a=/^[1-9][0-9]{4}$/.test(username)?await query(db.from('seller_portal_accounts').select('*').eq('username',username).maybeSingle()):null;
+    // Same expensive hash path for unknown users and accounts still awaiting activation.
+    const dummy=await dummyHash;const stored=usableHash(a?.password_hash)?a.password_hash:dummy;const valid=await verifyPassword(password,stored)&&stored!==dummy;
     const business=a?await query(db.from('businesses').select('id,is_archived,agreement_status').eq('id',a.business_id).maybeSingle()):null;
-    if(!valid||!a||a.status!=='active'||!business||business.is_archived||business.agreement_status!=='יש הסכם חתום'||(a.must_change_password&&(!Number.isFinite(Date.parse(a.temporary_expires_at))||Date.parse(a.temporary_expires_at)<=Date.now())))return reply(401,{error:'invalid_credentials'});
+    if(!valid||!a||a.status!=='active'||!business||business.is_archived||business.agreement_status!=='יש הסכם חתום'||(a.must_change_password&&(!Number.isFinite(Date.parse(a.temporary_expires_at))||Date.parse(a.temporary_expires_at)<=Date.now()))){if(!valid)await attempt('login:global_failures',1000000);return reply(401,{error:'invalid_credentials'});}
     const token=randomText(48),expires_at=new Date(Date.now()+8*3600000).toISOString();
     await query(db.from('seller_portal_sessions').insert({account_id:a.id,token_hash:await digest(token),expires_at}));
     await event(a.id,'login');return reply(200,{ok:true,token,must_change_password:a.must_change_password,expires_at});
@@ -75,32 +95,37 @@ export function createHandler(db:any,opts:Options){
      return reply(200,{ok:true,account:a,business,files,matches,permissions});
     }
     if(action==='admin_credentials'){
+     // One-time activation link instead of a temporary password in a wa.me URL.
+     // The link secret is single use, short lived and stored only as SHA-256.
      if(business.is_archived||business.agreement_status!=='יש הסכם חתום')return reply(409,{error:'signed_agreement_required'});
-     const password=temporaryPassword(),password_hash=await hashPassword(password),temporary_expires_at=new Date(Date.now()+86400000).toISOString();
+     const secret=activationToken(),activation_token_hash=await digest(secret),activation_expires_at=new Date(Date.now()+(opts.activationHours??24)*3600000).toISOString();
+     const pending={password_hash:PENDING_ACTIVATION,must_change_password:true,temporary_expires_at:activation_expires_at,activation_token_hash,activation_expires_at};
      if(a){
       const restore=a.status==='deleted';
       let saved=false;
       for(let i=0;i<(restore?20:1);i++){
        const username=restore?randomText(1,'123456789')+randomText(4,'0123456789'):a.username;
-       const result=await db.from('seller_portal_accounts').update({password_hash,must_change_password:true,temporary_expires_at,...(restore?{status:'active',username}:{})}).eq('id',a.id);
+       const result=await db.from('seller_portal_accounts').update({...pending,...(restore?{status:'active',username}:{})}).eq('id',a.id);
        if(!result.error){a.username=username;saved=true;break;}if(result.error.code!=='23505')throw Error('database_error');
       }
       if(!saved)throw Error('username_capacity');
-      await query(db.from('seller_portal_sessions').update({revoked_at:new Date().toISOString()}).eq('account_id',a.id));
+      await query(db.from('seller_portal_sessions').update({revoked_at:new Date().toISOString()}).eq('account_id',a.id).is('revoked_at',null));
      }else{
       for(let i=0;i<20;i++){
        const username=randomText(1,'123456789')+randomText(4,'0123456789');
-       const r=await db.from('seller_portal_accounts').insert({business_id:business.id,username,password_hash,temporary_expires_at,created_by:p.id}).select('id,username').single();
+       const r=await db.from('seller_portal_accounts').insert({business_id:business.id,username,status:'active',...pending,created_by:p.id}).select('id,username').single();
        if(!r.error){a=r.data;break;} if(r.error.code!=='23505')throw new Error('database_error');
       }
       if(!a)throw new Error('username_capacity');
      }
      await event(a.id,'credentials_reset',null,p.id);
-     return reply(200,{ok:true,username:a.username,temporary_password:password,portal_url:opts.portalUrl,phone:business.owner_phone,name:business.owner_name});
+     const activation_url=opts.portalUrl.replace(/#.*$/,'')+'#activate='+secret;
+     const contact=await query(db.from('businesses').select('owner_email').eq('id',business.id).maybeSingle());
+     return reply(200,{ok:true,username:a.username,activation_url,activation_expires_at,portal_url:opts.portalUrl,phone:business.owner_phone,email:contact?.owner_email||'',name:business.owner_name,contact_phone:opts.phone});
     }
     if(!a)return reply(409,{error:'account_required'});
     if(action==='admin_delete'){
-     await query(db.from('seller_portal_accounts').update({status:'deleted',password_hash:await hashPassword(randomText(48)),must_change_password:true,temporary_expires_at:null,client_update:null,client_updated_at:null}).eq('id',a.id));
+     await query(db.from('seller_portal_accounts').update({status:'deleted',password_hash:PENDING_ACTIVATION,must_change_password:true,temporary_expires_at:null,activation_token_hash:null,activation_expires_at:null,client_update:null,client_updated_at:null}).eq('id',a.id));
      await query(db.from('seller_portal_sessions').update({revoked_at:new Date().toISOString()}).eq('account_id',a.id));
     }else if(action==='admin_status'){
      if(a.status==='deleted')return reply(409,{error:'account_required'});
@@ -117,6 +142,7 @@ export function createHandler(db:any,opts:Options){
      if(!f||!fileAllowed({...f,portal_visible:true},business.id))return reply(404,{error:'not_found'});
      await query(db.from(table).update({portal_visible:b.visible}).eq('id',f.id).eq('business_id',business.id));
     }else if(action==='admin_match'){
+     if(!uuid(b.match_id))return reply(400,{error:'invalid_request'});
      const m=await query(db.from('matches').select('id,counterparty_type').eq('id',b.match_id).eq('business_id',business.id).maybeSingle());
      if(!m||m.counterparty_type!=='buyer'||!text(b.client_status,120)||typeof b.visible!=='boolean'||typeof b.disclose_identity!=='boolean')return reply(400,{error:'invalid_request'});
      await query(db.from('seller_portal_match_permissions').upsert({match_id:m.id,visible:b.visible,disclose_identity:b.disclose_identity,client_status:text(b.client_status,120),approved_by:p.id,approved_at:new Date().toISOString()}));
@@ -135,7 +161,7 @@ export function createHandler(db:any,opts:Options){
    }
    if(action==='change_password'){
     const password=text(b.password,128);
-    if(password.length<10||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password))return reply(400,{error:'strong_password_required'});
+    if(!strongPassword(password))return reply(400,{error:'strong_password_required'});
     await query(db.from('seller_portal_accounts').update({password_hash:await hashPassword(password),must_change_password:false,temporary_expires_at:null}).eq('id',a.id));
     await query(db.from('seller_portal_sessions').update({revoked_at:new Date().toISOString()}).eq('account_id',a.id).neq('id',s.id));
     await event(a.id,'password_changed');return reply(200,{ok:true});
@@ -146,7 +172,7 @@ export function createHandler(db:any,opts:Options){
     await query(db.rpc('seller_portal_record_activity',{p_session:s.id,p_account:a.id,p_page:b.page,p_seconds:b.seconds,p_kind:b.kind}));return reply(200,{ok:true});
    }
    if(action==='dashboard'){
-    const files=latestFiles(await allFiles(business.id));
+    const files=latestFiles((await allFiles(business.id)).filter((f:any)=>fileAllowed(f,business.id)));
     const matches=await query(db.from('matches').select('id,buyer_id,created_at').eq('business_id',business.id).eq('counterparty_type','buyer'));
     const permissions=matches.length?await query(db.from('seller_portal_match_permissions').select('*').eq('visible',true).in('match_id',matches.map((m:any)=>m.id))):[];
     const safeMatches=[];
@@ -161,7 +187,7 @@ export function createHandler(db:any,opts:Options){
    if(action==='file'){
     if(!uuid(b.file_id)||!['view','download'].includes(b.mode))return reply(404,{error:'not_found'});
     const raw=await query(db.from(b.file_source==='attachment'?'business_file_meta':'business_sale_files').select('*').eq('id',b.file_id).eq('business_id',business.id).maybeSingle());const f=raw?normalize(raw,b.file_source==='attachment'?'attachment':'sale'):null;
-    if(!fileAllowed(f,business.id)||!latestFiles(await allFiles(business.id)).some((latest:any)=>latest.id===f.id&&latest.file_source===f.file_source))return reply(404,{error:'not_found'});
+    if(!fileAllowed(f,business.id)||!latestFiles((await allFiles(business.id)).filter((x:any)=>fileAllowed(x,business.id))).some((latest:any)=>latest.id===f.id&&latest.file_source===f.file_source))return reply(404,{error:'not_found'});
     // Stream original PDF through authenticated API. Never expose a bearer storage URL.
     const r=await db.storage.from('business-files').download(f.storage_path);if(r.error||!r.data)return reply(404,{error:'not_found'});
     const bytes=await r.data.arrayBuffer();if(new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')return reply(422,{error:'invalid_pdf'});

@@ -1,6 +1,6 @@
 # BSD seller portal
 
-Status: expanded implementation branch. The public website and CRM releases remain unmerged. An approved Arketa-only read-only gateway and private preview are live; the full seller API and portal migration are not deployed.
+Status: hardening branch (03.10.2026). Nothing is merged or deployed. The full seller API and both portal migrations are not applied to production. The earlier single-business read-only preview source was removed from this branch; never add real client names, IDs or documents to this public repository (use fictional fixtures only).
 
 ## Verified mapping
 
@@ -28,9 +28,9 @@ The seller portal is entirely separate from buyer VIP accounts.
 
 ## Security
 
-Five-digit random usernames with unique database constraint. Five-character temporary passwords as requested, one-time display, 24-hour expiry, mandatory replacement with at least ten characters before data access. PBKDF2-SHA256 600,000 iterations with per-password random salt. No reversible password storage.
+Five-digit random usernames with unique database constraint. No temporary password is generated or sent: the manager creates a one-time activation link (43-character random secret in the URL fragment, only its SHA-256 stored, 24-hour expiry by default via SELLER_PORTAL_ACTIVATION_HOURS, consumed atomically in the same UPDATE that stores the password, and invalidated by any newer link). The seller chooses a password of at least ten characters with letters and digits. PBKDF2-SHA256 600,000 iterations with per-password random salt; the hash stores its iteration count so cost can be tuned (measured about 0.1 s per hash locally, Supabase limit is 2 s CPU per request).
 Sessions: random 48-character opaque token; only SHA256 stored; browser sessionStorage; 8-hour absolute expiry and 30-minute idle expiry checked server-side; reset/block/archive revokes sessions. Existing business deletion remains possible: portal accounts and activity history are retained with a null business reference and blocked access; no new foreign key restricts the existing business deletion flow.
-Independent atomic per-IP and per-username limits. Unknown usernames get a uniform error and password hash verification cost. Recovery responses do not disclose account existence.
+Independent atomic per-address (30/15 min), per-username (8/15 min) and global failed-login (300/15 min) limits; activation and recovery have per-address and global limits. The address comes from SELLER_PORTAL_IP_HEADER (default cf-connecting-ip, set by the gateway) or the right-most X-Forwarded-For element, never the caller-controlled left-most one. Unknown usernames get a uniform error and password hash verification cost. Recovery responses do not disclose account existence.
 Every PDF request rechecks account, session, business, visibility, active file state, business ownership, path namespace and actual PDF signature. No storage signed URL is exposed to the seller; original bytes pass through the authenticated API.
 All six portal tables have RLS and no anon/authenticated grants. Only the dedicated API accesses them with service_role. Secrets stay in environment variables. The archive security-definer trigger resides in an unexposed private schema with execute revoked.
 Only active CRM admin/manager users manage portal. Existing CRM RLS untouched; an extra trigger denies file visibility changes by agents. Audit entries do not retain passwords or message text.
@@ -56,4 +56,15 @@ Activity recording accepts only five portal areas and bounded durations. Visible
 
 Facebook report rows offer a CRM business selector and a separate publication button. Download and email do not publish. Publication checks admin access to the exact selected business, verifies a portal account and the original PDF, asks the manager to confirm the target, uploads only that per-business PDF, and binds metadata and storage to the selected business ID. Combined multi-business reports cannot be published through this path. On insertion failure the uploaded object is removed. Download/email/publication reuse the same PDF Blob. No real advertising report was published; Baruch asked to test this later.
 
-The expanded handler, security and migration tests run offline. The private preview exposes the new business controls and measured activity for Arketa only. Browser viewport/device testing of the expanded layout still needs completion. Production activation requires validated staging, a backup/restore plan, configured API URL and Baruch's explicit approval; never merge an API-blank frontend release.
+The expanded handler, security and migration tests run offline. Browser viewport/device testing of the expanded layout still needs completion. Production activation requires validated staging, a backup/restore plan, configured API URL and Baruch's explicit approval; never merge an API-blank frontend release.
+
+
+## Hardening on 2026-10-03
+
+- One-time activation link replaces the temporary password in the WhatsApp/email message (js/portal-invite.js builds one shared text that guides the seller to the website button «פורטל בעלי עסקים» and includes the direct link). The CRM only opens wa.me/mailto for the manager to send; nothing is sent automatically.
+- Migration 20261003170000_seller_portal_hardening.sql: activation columns, seller_portal_activate (single use), seller_portal_attempts_exceeded (global ceiling), seller_portal_prune (rate limits after 1 day, sessions 90 days after expiry/revocation, heartbeat/page_view events after 400 days, stale activation hashes) called on about 2% of logins; events keep their audit rows (session FK on delete set null).
+- The seller sees the latest APPROVED file of each type: approval is checked before choosing the newest.
+- Content-Security-Policy meta on portal/index.html and portal-admin.html. When hosting on the public site, the worker header CSP must allow the same API origin in connect-src.
+- The «ניהול הפורטל» menu link is rendered only for active admin/manager profiles and portal-admin.html shows «אין הרשאה» to others; the API still enforces this on every admin_* action.
+- Show-password eye toggle on the login form.
+- Verified on a local isolated stack (PostgreSQL 17 + PostgREST + the real seller-portal-api code, fictional data). Hosted Supabase staging was not available (branching requires the Pro plan).

@@ -3,7 +3,7 @@ on:
   pull_request:
     paths: ['portal/**','portal-admin.html','js/portal-*.js','js/config.js','businesses.html','ad-reports.html','supabase/functions/seller-portal-api/**','supabase/migrations/*seller_portal.sql','tests/portal/**']
   push:
-    branches: ['codex/seller-portal-20261001']
+    branches: ['codex/seller-portal-20261001','eldad/seller-portal-hardening-20261003']
   workflow_dispatch:
 jobs:
   checks:
