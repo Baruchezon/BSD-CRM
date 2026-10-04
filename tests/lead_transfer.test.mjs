@@ -14,9 +14,9 @@ const LEAD_ID = 'lead-1';
 //  - BEFORE INSERT dedupe on businesses (error BSD01 for an active card with the same owner phone)
 function harness({category='seller', leadType='buyer', clientNumber='BSD-C-2610-1166', agreementStatus='אין הסכם', migrated=false,
   failInsert=false, failUpdate=false, lostInsert=false, rejectRead=false, failAgreementMark=false, popupBlocked=false,
-  businesses=[], otherLeads=[], rpcFails=false, canSend=true, role='admin'}={}) {
+  businesses=[], otherLeads=[], rpcFails=false, canSend=true, role='admin', recordNotes=[], failNotesCopy=false}={}) {
   const lead = {id:LEAD_ID,type:leadType,client_number:clientNumber,full_name:'Test Owner',phone:'050-0000000',email:'test@example.test',business_name:'Test Shop',business_city:'Test City',business_field:'Retail',asking_price:0,notes:'Original inquiry',created_by:'user-1',website_intake_stage:'contacted',status:'בטיפול',agreement_status:agreementStatus,agreement_sent:agreementStatus!=='אין הסכם',is_archived:false,source:'הזנה ידנית'};
-  const tables={leads:[lead,...otherLeads.map(x=>({...x}))],businesses:businesses.map(x=>({...x}))};
+  const tables={leads:[lead,...otherLeads.map(x=>({...x}))],businesses:businesses.map(x=>({...x})),record_notes:recordNotes.map(x=>({...x}))};
   const events=[]; const removed=[]; const windows=[];
   let leadWrites=0, seq=2000;
   const digits9=p=>String(p||'').replace(/\D/g,'').slice(-9);
@@ -27,11 +27,16 @@ function harness({category='seller', leadType='buyer', clientNumber='BSD-C-2610-
       return Promise.resolve({data:null,error:{message:'unknown rpc'}});
     },
     from(table){let action='select',values,filters=[],returning=false;const q={
-    select(){returning=true;return q},eq(k,v){filters.push(r=>r[k]===v);return q},is(k,v){filters.push(r=>(r[k]??null)===v);return q},in(k,list){filters.push(r=>list.includes(r[k]));return q},limit(){return q},
+    select(){returning=true;return q},eq(k,v){filters.push(r=>r[k]===v);return q},is(k,v){filters.push(r=>(r[k]??null)===v);return q},in(k,list){filters.push(r=>list.includes(r[k]));return q},limit(){return q},order(){return q},
     insert(v){action='insert';values=v;return q},update(v){action='update';values=v;return q},
     single(){return run(true)},maybeSingle(){return run(true)},then(ok,bad){return run(false).then(ok,bad)}
   };async function run(single){
     events.push(table+':'+action);
+    if(action==='insert'&&table==='record_notes'){
+      if(failNotesCopy)return {error:{message:'notes insert denied'}};
+      for(const v of (Array.isArray(values)?values:[values])){if(v.author_id!=='user-1')return {error:{message:'RLS: author_id must be auth.uid()'}};tables.record_notes.push({...v});}
+      return {data:null};
+    }
     if(action==='insert'){
       if(failInsert)return {error:{message:'insert denied'}};
       if(tables[table].some(r=>r.id===values.id))return {error:{message:'duplicate key'}};
@@ -217,8 +222,71 @@ test('buyer duplicate check is a warning only: if it cannot run, the transfer pr
 test('all inline scripts parse',()=>{
  for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
-test('lead card offers buyer/seller choice and the send-agreement button only to users who may send agreements',()=>{
+test('lead card: «סוג הליד» preselected from the lead, buttons «שמור» and primary «שמור והעבר»; agreement button optional and only for permitted users',()=>{
  const card=html.slice(html.indexOf('function renderWebsiteLeadConversationForm('),html.indexOf('function wlAutoGrow('));
- assert.match(card,/<option value="buyer">/);assert.match(card,/<option value="seller">/);
- assert.match(card,/canSendAgreement\(\) \? `<button[^`]*id="wlAgreementBtn"[^`]*sendAgreement:true/);
+ assert.match(card,/<option value="buyer" \$\{leadCardTypeValue\(r\) === 'buyer' \? 'selected' : ''\}>קונה<\/option>/);
+ assert.match(card,/<option value="seller" \$\{leadCardTypeValue\(r\) === 'seller' \? 'selected' : ''\}>מוכר<\/option>/);
+ assert.match(card,/id="wlSaveOnlyBtn" onclick="saveLeadOnly\('\$\{r\.id\}'\)">שמור<\/button>/);
+ assert.match(card,/class="btn btn-navy" id="wlSaveBtn" onclick="saveWebsiteLeadTransfer\('\$\{r\.id\}'\)">שמור והעבר<\/button>/);
+ assert.doesNotMatch(card,/שמור בלידים/);
+ // primary button is the last action; the agreement button is secondary (ghost) and separate
+ const actions=card.slice(card.indexOf('<div class="modal-actions"'));
+ assert.ok(actions.indexOf('id="wlSaveBtn"')>actions.indexOf('id="wlSaveOnlyBtn"')&&actions.indexOf('id="wlSaveOnlyBtn"')>actions.indexOf('id="wlAgreementBtn"'));
+ assert.match(card,/canSendAgreement\(\) \? `<button type="button" class="btn btn-ghost" id="wlAgreementBtn"[^`]*sendAgreement:true/);
+ const h=harness();vm.runInContext(html.slice(html.indexOf('function leadCardTypeValue('),html.indexOf('function wlAutoGrow(')),h.ctx);
+ assert.equal(h.ctx.leadCardTypeValue({type:'seller'}),'seller');assert.equal(h.ctx.leadCardTypeValue({type:'buyer'}),'buyer');
+ assert.equal(h.ctx.leadCardTypeValue({type:'partner'}),'buyer');assert.equal(h.ctx.leadCardTypeValue({}),'');
+});
+
+test('«שמור»: saves every field and the chosen type, lead stays in «לידים», nothing created',async()=>{
+ const h=harness({category:'seller',leadType:'buyer'});
+ h.fields.wlNotes.value='הערת דנה המזכירה: מחקר';
+ await h.ctx.saveLeadOnly(h.lead.id);
+ assert.equal(h.lead.intake_conversation_notes,'הערת דנה המזכירה: מחקר');assert.equal(h.lead.intake_conversation_summary,'Summary');
+ assert.equal(h.lead.type,'seller');assert.equal(h.lead.status,'בטיפול');assert.equal(h.lead.website_intake_stage,'contacted');
+ assert.deepEqual(h.pending(),[h.lead.id]);assert.equal(h.tables.businesses.length,0);assert.equal(h.ctx.location.href,'');
+ assert.equal(h.fields.wlSaveError.style.display||'none','none');assert.match(h.fields.wlSaveOk.textContent,/נשאר ברשימת הלידים/);
+ // a buyer-type lead saved as buyer keeps its type
+ const b=harness({category:'buyer',leadType:'buyer'});await b.ctx.saveLeadOnly(b.lead.id);assert.equal(b.lead.type,'buyer');assert.deepEqual(b.pending(),[b.lead.id]);
+});
+
+test('«שמור והעבר» seller: one business with all lead info and every note (card fields + note history), lead leaves «לידים», nothing sent',async()=>{
+ const notes=[{table_name:'leads',record_id:LEAD_ID,note_text:'שיחה ראשונה',created_at:'2026-10-04T10:00:00Z'},{table_name:'leads',record_id:LEAD_ID,note_text:'לחזור מחר',created_at:'2026-10-04T11:00:00Z'},{table_name:'leads',record_id:'other',note_text:'לא שלו'}];
+ const h=harness({category:'seller',recordNotes:notes});
+ h.fields.wlNotes.value='הערת דנה המזכירה: מחקר';
+ await h.run();
+ assert.equal(h.tables.businesses.length,1);const b=h.tables.businesses[0];
+ assert.equal(b.seller_id,h.lead.id);assert.equal(b.owner_name,'Test Owner');assert.equal(b.owner_phone,'050-0000000');assert.equal(b.owner_email,'test@example.test');
+ assert.equal(b.internal_name,'Test Shop');assert.equal(b.field,'Retail');assert.equal(b.city,'Test City');assert.equal(b.agreement_status,'אין הסכם');
+ for(const t of ['Original inquiry','מהות השיחה: Summary','מה הלקוח מחפש: Wants','פרטים חשובים: Details','הערות שיחה: הערת דנה המזכירה: מחקר'])assert.ok(b.notes.includes(t),t);
+ const copied=h.tables.record_notes.filter(n=>n.table_name==='businesses'&&n.record_id===b.id).map(n=>n.note_text);
+ assert.deepEqual(copied,['[מהליד] שיחה ראשונה','[מהליד] לחזור מחר']);
+ assert.deepEqual(h.pending(),[]);assert.equal(h.lead.type,'seller');assert.equal(h.lead.website_intake_stage,null);
+ assert.match(h.ctx.location.href,/businesses\.html\?open=/);assert.equal(h.windows.length,0);
+ // retry never doubles the copied notes
+ h.lead.website_intake_stage='contacted';await h.run();
+ assert.equal(h.tables.businesses.length,1);assert.equal(h.tables.record_notes.filter(n=>n.table_name==='businesses').length,2);
+});
+
+test('«שמור והעבר» seller: if copying the note history fails the transfer still completes and says so',async()=>{
+ const h=harness({category:'seller',recordNotes:[{table_name:'leads',record_id:LEAD_ID,note_text:'x'}],failNotesCopy:true});
+ await h.run();
+ assert.deepEqual(h.pending(),[]);assert.equal(h.tables.businesses.length,1);
+ assert.match(h.fields.wlSaveOk.textContent,/הערות הליד לא הועתקו/);assert.match(h.ctx.location.href,/businesses/);
+});
+
+test('«שמור והעבר» buyer: same card becomes the buyer with a client number, keeps every note, leaves «לידים», no agreement',async()=>{
+ const h=harness({category:'buyer',leadType:'seller',clientNumber:null,migrated:true});
+ h.fields.wlNotes.value='הערת דנה המזכירה: מחקר';
+ await h.run();
+ assert.equal(h.tables.leads.length,1);assert.equal(h.tables.businesses.length,0);
+ assert.equal(h.lead.type,'buyer');assert.ok(h.lead.client_number);assert.equal(h.lead.website_intake_stage,null);
+ assert.equal(h.lead.intake_conversation_notes,'הערת דנה המזכירה: מחקר');assert.ok(h.lead.notes.includes('הערות שיחה: הערת דנה המזכירה: מחקר'));
+ assert.equal(h.lead.agreement_status,'אין הסכם');assert.equal(h.windows.length,0);
+ assert.deepEqual(h.pending(),[]);assert.match(h.ctx.location.href,/leads\.html\?open=/);
+});
+
+test('manual «ליד חדש» form lets you set the type (קונה default, or מוכר)',()=>{
+ assert.match(html,/<select id="manualType"><option value="buyer">קונה<\/option><option value="seller">מוכר<\/option><\/select>/);
+ assert.match(html,/type:\(document\.getElementById\('manualType'\) \|\| \{\}\)\.value === 'seller' \? 'seller' : 'buyer'/);
 });
