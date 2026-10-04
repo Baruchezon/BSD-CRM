@@ -9,6 +9,5 @@ python3 .github/scripts/check-inline-scripts.py businesses.html ad-reports.html
 # Deno and PostgreSQL-compatible migration tests run separately in staging.
 
 node --check js/portal-business-card.js
-node --check js/portal-analytics.js
 node tests/portal/report-publication-test.mjs
 

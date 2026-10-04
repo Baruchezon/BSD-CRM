@@ -66,9 +66,19 @@ await db.exec(`select seller_portal_prune()`);
 assert.equal((await db.query(`select count(*)::int n from seller_portal_rate_limits where key_hash='old-key'`)).rows[0].n,0,'old rate-limit rows pruned');
 assert.equal((await db.query(`select count(*)::int n from seller_portal_sessions where id='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'`)).rows[0].n,0,'old sessions pruned');
 assert.ok((await db.query(`select count(*)::int n from seller_portal_events where event_type='login' and session_id is null`)).rows[0].n>=1,'audit events kept after session pruning');
+// v2 (04.10.2026): extra files table + extra_file_id tracking.
+await db.exec(await readFile(new URL('../../supabase/migrations/20261004032704_seller_portal_v2_extra_files.sql',import.meta.url),'utf8'));
+await db.exec(`insert into seller_portal_files(id,business_id,storage_path,file_name,mime_type,size_bytes,status) values('cccccccc-cccc-cccc-cccc-cccccccccccc','11111111-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111/seller-portal-extra/cccccccc-cccc-cccc-cccc-cccccccccccc.jpg','photo.jpg','image/jpeg',10,'active');
+insert into seller_portal_events(account_id,event_type,extra_file_id) values('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','document_download','cccccccc-cccc-cccc-cccc-cccccccccccc');`);
+await blocked(`insert into seller_portal_files(business_id,storage_path,file_name,mime_type,status) values('11111111-1111-1111-1111-111111111111','p','x','image/png','bogus')`);
+await blocked(`insert into seller_portal_files(business_id,storage_path,file_name,mime_type,size_bytes) values('11111111-1111-1111-1111-111111111111','p2','x','image/png',30000000)`);
+for(const role of ['anon','authenticated']){await db.exec(`set role ${role}`);await blocked('select * from seller_portal_files');await db.exec('reset role');}
+assert.equal((await db.query("select count(*)::int n from pg_class where relname like 'seller_portal_%' and relkind='r' and relrowsecurity")).rows[0].n,7);
 await db.exec(`delete from businesses where id='11111111-1111-1111-1111-111111111111'`);
 assert.equal((await db.query('select business_id,status from seller_portal_accounts')).rows[0].business_id,null);
 assert.equal((await db.query('select status from seller_portal_accounts')).rows[0].status,'blocked');
 assert.ok((await db.query('select count(*) n from seller_portal_events')).rows[0].n>0);
-console.log('PASS: migration, hardening (single-use activation, expiry, signed-agreement gate, global ceiling, pruning keeps audit), agreement gate, archive revocation, restore stays blocked, uniqueness, atomic rate limits, RLS, no direct API access, manager file approval');await db.close();
+assert.equal((await db.query('select count(*)::int n from seller_portal_files')).rows[0].n,0,'extra files follow the business delete');
+assert.equal((await db.query("select count(*)::int n from seller_portal_events where event_type='document_download' and extra_file_id is null")).rows[0].n,1,'download audit kept after delete');
+console.log('PASS: migration, hardening (single-use activation, expiry, signed-agreement gate, global ceiling, pruning keeps audit), agreement gate, archive revocation, restore stays blocked, uniqueness, atomic rate limits, RLS, no direct API access, manager file approval, v2 extra files (RLS, checks, cascade, audit kept)');await db.close();
 

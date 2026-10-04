@@ -58,6 +58,42 @@ export function fileAllowed(f: any, businessId: string): boolean {
     && typeof f.storage_path==='string' && f.storage_path.startsWith(businessId+'/')
     && !f.storage_path.split('/').some((s: string)=>s==='..'||s==='.') && !f.storage_path.includes('\\');
 }
+// Portal v2 (04.10.2026): one-click account opening. The CRM receives this
+// random password exactly once (to build the WhatsApp text); only its PBKDF2
+// hash is stored. 10 characters from a 55-symbol alphabet without look-alike
+// characters (~58 bits), always with letters and at least two digits.
+export function generatePassword(length = 10): string {
+  for (;;) {
+    const p = randomText(length);
+    if ((p.match(/[0-9]/g) || []).length >= 2 && (p.match(/[A-Za-z]/g) || []).length >= 4 && strongPassword(p)) return p;
+  }
+}
+// A storage object belongs to the business only under "{businessId}/", with
+// no empty, "." or ".." segments and no backslashes.
+export function pathAllowed(path: unknown, businessId: unknown): boolean {
+  return typeof path === 'string' && typeof businessId === 'string' && businessId.length > 0
+    && path.startsWith(businessId + '/') && !path.includes('\\')
+    && !path.split('/').some((s: string) => s === '' || s === '.' || s === '..');
+}
+// Extra files uploaded by BSD to a business portal. Allow-list by extension;
+// the stored and served Content-Type always comes from this table, never from
+// the uploader. HTML, SVG, XML and scripts are deliberately absent.
+const EXTRA_TYPES: Record<string, string> = {
+  pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic',
+  doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  txt: 'text/plain', csv: 'text/csv', mp4: 'video/mp4', mov: 'video/quicktime', zip: 'application/zip'
+};
+export const EXTRA_MAX_BYTES = 20 * 1024 * 1024;
+export function extraFileType(name: unknown): {ext: string; mime: string} | null {
+  const m = /\.([A-Za-z0-9]{1,5})$/.exec(String(name ?? '').trim());
+  const ext = m ? m[1].toLowerCase() : '';
+  return ext && Object.hasOwn(EXTRA_TYPES, ext) ? {ext, mime: EXTRA_TYPES[ext]} : null;
+}
+export function safeFileName(name: unknown): string {
+  return String(name ?? '').replace(/[\u0000-\u001f\u007f<>:"/\\|?*]/g, '_').trim().slice(0, 200) || 'file';
+}
 // Client address for rate limiting. Never trust the left-most X-Forwarded-For
 // element (caller controlled). Prefer the header configured for the gateway,
 // otherwise the right-most X-Forwarded-For element appended by the proxy.
