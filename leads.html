@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610041200';
+    var PAGE_BUILD = '202610041530';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1551,6 +1551,13 @@ async function saveLead(e){
 
   let error;
   if (leadId){
+    // A card that is still waiting in «לידים» (e.g. opened from the duplicate
+    // warning «פתח כרטיס קיים») and is saved here as a buyer/partner is now a
+    // buyer: take it out of the leads inbox so it shows in this list instead of
+    // staying hidden and inviting a second, duplicate card.
+    const current = ALL_LEADS.find(l => l.id === leadId);
+    const inInbox = current && (current.website_intake_stage === 'new' || current.website_intake_stage === 'contacted');
+    if (inInbox && (type === 'buyer' || type === 'partner')) payload.website_intake_stage = null;
     ({ error } = await window.supabaseClient.from('leads').update(payload).eq('id', leadId));
     if (!error) bsdLogActivity('update', 'leads', leadId);
   } else {

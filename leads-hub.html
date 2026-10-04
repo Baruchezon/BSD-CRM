@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610041200';
+    var PAGE_BUILD = '202610041530';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1565,13 +1565,13 @@ function renderWebsiteLeadConversationForm(r){
     <textarea id="wlGeneralNotes" class="wl-note" rows="3" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:14px;resize:vertical;">${esc(r.notes || '')}</textarea>
 
     <div class="wl-block" style="background:#f7f5ee;border:1px solid #e4dece;border-radius:10px;padding:12px;margin-bottom:10px;">
-      <label style="display:block;font-size:.8rem;color:#665;margin-bottom:6px;font-weight:700;">יעד לשמירה והעברה</label>
+      <label for="wlTransferTarget" style="display:block;font-size:.8rem;color:#665;margin-bottom:6px;font-weight:700;">קונה או מוכר? (יעד ההעברה וסוג ההסכם)</label>
       <select id="wlTransferTarget" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:9px 10px;font-family:inherit;font-size:.88rem;background:#fff;">
-        <option value="">בחר יעד</option>
-        <option value="seller">עסקים למכירה</option>
-        <option value="buyer">קונים</option>
+        <option value="">בחר קונה או מוכר</option>
+        <option value="buyer">קונה: עובר לרשימת הקונים (הסכם קונה)</option>
+        <option value="seller">מוכר: עובר לעסקים למכירה (הסכם מוכר)</option>
       </select>
-      <div style="font-size:.75rem;color:#777;margin-top:6px;">שמירה רגילה משאירה את הכרטיס ברשימת הלידים. שמירה והעברה יוצרת או מעדכנת את היעד ורק לאחר אימות מוציאה את הליד מרשימת ההמתנה.</div>
+      <div style="font-size:.75rem;color:#777;margin-top:6px;">«שמור והעבר» מעביר את הכרטיס לקונים או לעסקים למכירה ומוציא אותו מרשימת הלידים. «שלח הסכם והעבר» עושה את אותו הדבר ופותח את טופס ההסכם המתאים. ההסכם יוצא ללקוח רק כשתשלח אותו מתוך הטופס. «שמור בלידים» משאיר את הכרטיס כאן.</div>
     </div>
 
     <div class="wl-block" id="wlSaveError" style="display:none;background:#fdeceb;border:1px solid #e4b3ac;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#a02c1d;margin-top:8px;"></div>
@@ -1582,6 +1582,7 @@ function renderWebsiteLeadConversationForm(r){
       <button type="button" class="btn btn-ghost" onclick="deleteRecord('${r.id}')" style="color:#a02c1d;">העבר לארכיון</button>
       <button type="button" class="btn btn-ghost" id="wlSaveOnlyBtn" onclick="saveLeadOnly('${r.id}')">שמור בלידים</button>
       <button type="button" class="btn btn-navy" id="wlSaveBtn" onclick="saveWebsiteLeadTransfer('${r.id}')">שמור והעבר</button>
+      ${canSendAgreement() ? `<button type="button" class="btn" id="wlAgreementBtn" style="background:var(--gold,#c9a227);color:#1c2333;" onclick="saveWebsiteLeadTransfer('${r.id}', { sendAgreement:true })">📄 שלח הסכם והעבר</button>` : ''}
     </div>
   `;
   document.getElementById('overlay').classList.add('open');
@@ -1663,13 +1664,56 @@ function websiteLeadTransferNotes(lead, existingNotes){
   return notes || null;
 }
 
-async function ensureWebsiteLeadBusiness(lead){
+// A transfer that needs Baruch's decision (the same person/business already has
+// a card) stops before anything is written and offers the choices in the card.
+class LeadTransferChoice extends Error {
+  constructor(message, choices){ super(message); this.name = 'LeadTransferChoice'; this.choices = choices || []; }
+}
+function leadCardIsManager(){
+  return !!(CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager'));
+}
+
+// The server blocks a second active business with the same owner phone (or the
+// same name + owner) with error BSD01 - the "already exists" message. Instead of
+// a dead end, offer: link this lead to that card, open it, or (admin/manager)
+// create a separate card on purpose.
+async function businessDuplicateChoice(lead, error){
+  let match = null;
+  try { match = JSON.parse(error.details || 'null'); } catch(e){ match = null; }
+  let current = null;
+  if (match && match.id){
+    const r = await window.supabaseClient.from('businesses')
+      .select('id,seller_id,is_archived,internal_name,business_number,owner_name').eq('id', match.id).maybeSingle();
+    if (!r.error) current = r.data;
+  }
+  const info = current || match || {};
+  const label = [info.internal_name || 'עסק ללא שם', info.business_number, info.owner_name].filter(Boolean).join(' · ');
+  const choices = [];
+  if (current && !current.is_archived && !current.seller_id){
+    choices.push({ label:'קשר את הליד לכרטיס הקיים והעבר', retry:{ linkBusinessId: current.id } });
+  }
+  if (info.id) choices.push({ label:'פתח את כרטיס העסק הקיים', href:'businesses.html?open=' + encodeURIComponent(info.id) });
+  if (leadCardIsManager()) choices.push({ label:'צור כרטיס עסק נפרד בכל זאת', retry:{ allowSeparateBusiness:true } });
+  return new LeadTransferChoice('בעסקים למכירה כבר יש כרטיס עם אותם פרטים: ' + label + '. שום דבר לא נשמר עדיין. מה לעשות?', choices);
+}
+
+async function ensureWebsiteLeadBusiness(lead, opts){
+  opts = opts || {};
   const db = window.supabaseClient;
   const linked = await db.from('businesses').select('*').eq('seller_id', lead.id).limit(2);
   if (linked.error) throw new Error(linked.error.message);
   if ((linked.data || []).length > 1) throw new Error('לליד מקושרים כמה עסקים. יש לבדוק את הכרטיסים הקיימים לפני ההעברה.');
   let business = (linked.data || [])[0];
   let expected;
+  if (!business && opts.linkBusinessId){
+    // Attach the lead to the existing card instead of creating a duplicate.
+    // Only an active card that is not linked to any lead can be claimed.
+    const claimed = await db.from('businesses').update({ seller_id: lead.id })
+      .eq('id', opts.linkBusinessId).is('seller_id', null).eq('is_archived', false).select('*');
+    if (claimed.error) throw new Error(claimed.error.message);
+    if (!claimed.data || claimed.data.length !== 1) throw new Error('לא ניתן לקשר את הליד לכרטיס העסק הקיים (ייתכן שהוא כבר מקושר לליד אחר או הועבר לארכיון).');
+    business = claimed.data[0];
+  }
   if (!business){
     const ownerName = lead.full_name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || null;
     expected = {
@@ -1687,8 +1731,11 @@ async function ensureWebsiteLeadBusiness(lead){
       handled_by: lead.handled_by || null, created_by: lead.created_by || CURRENT_PROFILE.id,
       anon_card_active: false, public_listing_active: false
     };
+    // Admin/manager explicitly chose a separate card; the server re-checks the role.
+    if (opts.allowSeparateBusiness) expected.dedupe_override_reason = 'כרטיס ליד: נבחר במפורש כרטיס עסק נפרד לבעלים שכבר יש לו כרטיס';
     const inserted = await db.from('businesses').insert(expected).select('*').single();
     if (inserted.error){
+      if (inserted.error.code === 'BSD01') throw await businessDuplicateChoice(lead, inserted.error);
       // An earlier request may have committed despite a lost response.
       const retry = await db.from('businesses').select('*').eq('id', lead.id).maybeSingle();
       if (retry.error || !retry.data || retry.data.seller_id !== lead.id) throw new Error(inserted.error.message);
@@ -1712,6 +1759,32 @@ async function ensureWebsiteLeadBusiness(lead){
     }
   }
   return checked.data;
+}
+
+// The lead row itself becomes the buyer card, so the only real duplicate is
+// another active buyer/partner card for the same phone or ID number. That is a
+// warning with a choice, never a silent duplicate and never a dead end.
+async function existingBuyerDuplicates(lead){
+  const db = window.supabaseClient;
+  const rpc = await db.rpc('bsd_check_lead_duplicate', {
+    p_full_name: lead.full_name || null, p_phone: lead.phone || null,
+    p_id_number: lead.id_number || null, p_exclude_id: lead.id
+  });
+  if (rpc.error || !Array.isArray(rpc.data)) return [];
+  const ids = rpc.data.filter(m => (m.match_level === 'phone' || m.match_level === 'id_number') && !m.is_archived).map(m => m.id);
+  if (!ids.length) return [];
+  const rows = await db.from('leads').select('id,type,full_name,first_name,last_name,client_number,website_intake_stage,is_archived').in('id', ids);
+  if (rows.error) return [];
+  return (rows.data || []).filter(l => !l.is_archived && (l.type === 'buyer' || l.type === 'partner') && !BSDLeadLifecycle.open(l));
+}
+function buyerDuplicateChoice(dups){
+  const first = dups[0];
+  const name = first.full_name || [first.first_name, first.last_name].filter(Boolean).join(' ') || 'קונה';
+  const label = [name, first.client_number].filter(Boolean).join(' · ') + (dups.length > 1 ? ' (ועוד ' + (dups.length - 1) + ')' : '');
+  return new LeadTransferChoice('ברשימת הקונים כבר יש כרטיס עם אותו טלפון: ' + label + '. שום דבר לא נשמר עדיין. מה לעשות?', [
+    { label:'פתח את הקונה הקיים', href:'leads.html?open=' + encodeURIComponent(first.id) },
+    { label:'העבר בכל זאת', retry:{ allowDuplicateBuyer:true } }
+  ]);
 }
 
 function readLeadCardPayload(){
@@ -1740,9 +1813,11 @@ function readLeadCardPayload(){
 function setLeadCardBusy(busy, primaryText){
   const saveOnly = document.getElementById('wlSaveOnlyBtn');
   const transfer = document.getElementById('wlSaveBtn');
+  const agreement = document.getElementById('wlAgreementBtn');
   const target = document.getElementById('wlTransferTarget');
   if (saveOnly) saveOnly.disabled = busy;
   if (transfer){ transfer.disabled = busy; if (primaryText) transfer.textContent = primaryText; }
+  if (agreement) agreement.disabled = busy;
   if (target) target.disabled = busy;
 }
 
@@ -1776,7 +1851,69 @@ async function saveLeadOnly(id){
   }
 }
 
-async function saveWebsiteLeadTransfer(id){
+// Same agreement form the buyers / businesses screens open («📄 שלח הסכם»).
+// Nothing is sent from the CRM: the form only prepares the link, and it reaches
+// the client only when it is sent from the form itself.
+const LEAD_CARD_AGREEMENT_PREP_URL = 'https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html';
+function leadCardAgreementUrl(category, recordId, info){
+  const params = new URLSearchParams({
+    type: category === 'seller' ? 'seller' : 'buyer',
+    recordId: recordId,
+    name: info.name || '',
+    phone: info.phone || '',
+    biz: info.biz || ''
+  });
+  return LEAD_CARD_AGREEMENT_PREP_URL + '?' + params.toString();
+}
+// Opened synchronously inside the click: after the saves below a browser would
+// treat a new tab as an unrequested popup and block it.
+function openAgreementTabPlaceholder(){
+  let w = null;
+  try { w = window.open('', '_blank'); } catch(e){ w = null; }
+  if (!w) return null;
+  try {
+    w.opener = null;
+    w.document.title = 'טופס הסכם';
+    w.document.body.innerHTML = '<p dir="rtl" style="font-family:Arial,sans-serif;padding:24px;font-size:16px;">מעביר את הליד ופותח את טופס ההסכם...</p>';
+  } catch(e){}
+  return w;
+}
+function leadCardLink(text, href, newTab){
+  const a = document.createElement('a');
+  a.textContent = text; a.href = href;
+  a.className = 'btn btn-ghost';
+  a.style.cssText = 'display:inline-block;padding:6px 12px;font-size:.78rem;text-decoration:none;margin:8px 0 0 8px;';
+  if (newTab){ a.target = '_blank'; a.rel = 'noopener'; }
+  return a;
+}
+function renderLeadTransferChoice(errBox, id, opts, choice){
+  errBox.style.display = 'block';
+  errBox.textContent = choice.message;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;';
+  for (const c of choice.choices){
+    if (c.href){ row.appendChild(leadCardLink(c.label, c.href, false)); continue; }
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn-ghost';
+    b.style.cssText = 'padding:6px 12px;font-size:.78rem;';
+    b.textContent = c.label;
+    b.addEventListener('click', () => saveWebsiteLeadTransfer(id, Object.assign({}, opts, c.retry)));
+    row.appendChild(b);
+  }
+  errBox.appendChild(row);
+}
+function leadTransferErrorText(error){
+  const msg = (error && error.message) || String(error);
+  if (/client_number_required_if_active/.test(msg)){
+    return 'לכרטיס הזה עדיין אין מספר לקוח, ולכן מסד הנתונים חסם את ההעברה לקונים. נדרש עדכון קטן במסד הנתונים (מספור לקוחות בהעברה). הליד נשאר ברשימת הלידים ושום דבר לא השתנה.';
+  }
+  return msg;
+}
+
+async function saveWebsiteLeadTransfer(id, opts){
+  opts = opts || {};
+  const sendAgreement = !!opts.sendAgreement;
   const btn = document.getElementById('wlSaveBtn');
   if (btn && btn.disabled) return;
   const errBox = document.getElementById('wlSaveError');
@@ -1786,10 +1923,18 @@ async function saveWebsiteLeadTransfer(id){
   const category = (document.getElementById('wlTransferTarget') || {}).value || '';
   if (!category){
     errBox.style.display = 'block';
-    errBox.textContent = 'יש לבחור אם להעביר לעסקים למכירה או לקונים.';
+    errBox.textContent = sendAgreement
+      ? 'יש לבחור קונה או מוכר: לפי הבחירה נפתח הסכם קונה או הסכם מוכר והכרטיס עובר לרשימה המתאימה.'
+      : 'יש לבחור אם להעביר לעסקים למכירה או לקונים.';
+    return;
+  }
+  if (sendAgreement && !canSendAgreement()){
+    errBox.style.display = 'block';
+    errBox.textContent = 'אין לך הרשאה לשלוח הסכמים.';
     return;
   }
 
+  const agreementWin = sendAgreement ? openAgreementTabPlaceholder() : null;
   setLeadCardBusy(true, 'שומר ומעביר...');
   let destination = null;
   try {
@@ -1802,14 +1947,24 @@ async function saveWebsiteLeadTransfer(id){
       payload.type = 'seller';
       payload.status = 'הועבר למוכר';
       payload.website_intake_stage = null;
-      destination = await ensureWebsiteLeadBusiness({ ...source.data, ...payload });
+      destination = await ensureWebsiteLeadBusiness({ ...source.data, ...payload }, opts);
     } else {
+      if (!opts.allowDuplicateBuyer){
+        const dups = await existingBuyerDuplicates({ ...source.data, ...payload });
+        if (dups.length) throw buyerDuplicateChoice(dups);
+      }
       payload.type = 'buyer';
       payload.status = 'הועבר לקונה';
       payload.website_intake_stage = null;
       payload.requested_field = source.data.requested_field || payload.business_field || null;
       payload.requested_area = source.data.requested_area || payload.business_city || payload.city || null;
       payload.notes = websiteLeadTransferNotes({ ...source.data, ...payload });
+      // Same status change «📄 שלח הסכם» makes on the buyers screen, written
+      // together with the transfer. A signed agreement is never downgraded.
+      if (sendAgreement && source.data.agreement_status !== 'יש הסכם חתום'){
+        payload.agreement_status = 'נשלח הסכם לחתימה';
+        payload.agreement_sent = true;
+      }
     }
 
     const { error } = await window.supabaseClient.from('leads').update(payload).eq('id', id);
@@ -1820,19 +1975,47 @@ async function saveWebsiteLeadTransfer(id){
     const verify = await verifyLeadWrite(id, expected);
     if (!verify.ok) throw new Error('השמירה לא אושרה בבדיקה חוזרת: ' + verify.mismatches.join(' | '));
 
+    let agreementNote = '';
+    if (sendAgreement && destination && destination.agreement_status !== 'יש הסכם חתום'){
+      // Same status change «📄 שלח הסכם» makes on the businesses screen.
+      const marked = await window.supabaseClient.from('businesses').update({ agreement_status: 'נשלח הסכם לחתימה' }).eq('id', destination.id);
+      if (marked.error) agreementNote = ' סטטוס ההסכם בכרטיס העסק לא עודכן: ' + marked.error.message;
+    }
+
     if (window.BSDDataCache && CURRENT_PROFILE){
       window.BSDDataCache.remove('businesses-page', CURRENT_PROFILE.id);
       window.BSDDataCache.remove('leads-page', CURRENT_PROFILE.id);
     }
 
+    const targetUrl = destination ? 'businesses.html?open=' + encodeURIComponent(destination.id) : 'leads.html?open=' + encodeURIComponent(id);
     okBox.style.display = 'block';
-    okBox.textContent = category === 'seller' ? 'הכרטיס נשמר והועבר לעסקים למכירה.' : 'הכרטיס נשמר והועבר לקונים.';
-    if (destination){ location.href = 'businesses.html?open=' + encodeURIComponent(destination.id); return; }
-    location.href = 'leads.html?open=' + encodeURIComponent(id);
+    okBox.textContent = (category === 'seller' ? 'הכרטיס נשמר והועבר לעסקים למכירה.' : 'הכרטיס נשמר והועבר לקונים.') + agreementNote;
+
+    if (sendAgreement){
+      const agreementUrl = leadCardAgreementUrl(category, destination ? destination.id : id, {
+        name: payload.full_name, phone: payload.phone,
+        biz: destination ? (destination.internal_name || '') : (payload.requested_field || '')
+      });
+      if (agreementWin && !agreementWin.closed){
+        agreementWin.location.href = agreementUrl;
+        okBox.textContent += ' טופס ההסכם נפתח בלשונית חדשה.';
+      } else {
+        // The browser blocked the new tab: stay here with explicit links so the
+        // agreement step is not lost. The transfer itself is already done.
+        okBox.textContent += ' הדפדפן חסם פתיחת לשונית חדשה, לכן טופס ההסכם לא נפתח אוטומטית.';
+        okBox.appendChild(leadCardLink('📄 פתח את טופס ההסכם', agreementUrl, true));
+        okBox.appendChild(leadCardLink('מעבר לכרטיס', targetUrl, false));
+        return;
+      }
+    }
+    if (agreementNote){ setTimeout(() => { location.href = targetUrl; }, 2500); return; }
+    location.href = targetUrl;
   } catch (error){
-    errBox.style.display = 'block';
-    errBox.textContent = (destination ? 'כרטיס העסק קיים, אך השלמת ההעברה לא אושרה. אפשר לנסות שוב בלי ליצור כרטיס נוסף. ' : 'ההעברה לא הושלמה. ') + error.message;
+    if (agreementWin && !agreementWin.closed){ try { agreementWin.close(); } catch(e){} }
     setLeadCardBusy(false, 'שמור והעבר');
+    if (error instanceof LeadTransferChoice){ renderLeadTransferChoice(errBox, id, opts, error); return; }
+    errBox.style.display = 'block';
+    errBox.textContent = (destination ? 'כרטיס העסק קיים, אך השלמת ההעברה לא אושרה. אפשר לנסות שוב בלי ליצור כרטיס נוסף. ' : 'ההעברה לא הושלמה. ') + leadTransferErrorText(error);
   }
 }
 
