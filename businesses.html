@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610042100';
+    var PAGE_BUILD = '202610042200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202610041200">
+<link rel="stylesheet" href="css/style.css?v=202610042200">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -317,6 +317,27 @@
   .biz-tabpanes .btn{font-size:1.05rem;font-weight:700;padding:11px 20px;}
   .modal.biz-fullpage-modal .modal-actions{flex:none;background:#fff;box-shadow:0 -3px 12px rgba(0,0,0,.12);padding:7px 22px;margin-top:0;min-height:52px;box-sizing:border-box;align-items:center;}
   .modal.biz-fullpage-modal .modal-actions .btn{font-size:.95rem;padding:9px 22px;}
+  /* 04.10.2026 טאבלט: גובה המסך האמיתי (100dvh - בלי סרגל הדפדפן), כל 11
+     הלשוניות גלויות (שורות במקום גלילה צידה בלי פס גלילה), כותרת קומפקטית
+     ושמירה תמיד בשורה הראשונה. תצוגה בלבד - אף שדה לא מוסתר. */
+  @supports (height:100dvh){ .modal.biz-fullpage-modal{height:100dvh;max-height:100dvh;} }
+  @media (min-width:641px) and (max-width:1366px) and (any-pointer:coarse){
+    .biz-sticky-top{padding:6px 14px !important;gap:4px 10px;}
+    .biz-sticky-top h3{font-size:1rem;padding:0 8px 0 0;gap:6px;order:0;}
+    .biz-name-big{font-size:1.12rem;}
+    .biz-number-badge{font-size:.78rem;padding:2px 8px;}
+    .biz-sticky-top>.biz-header-actions{order:1;}
+    .biz-sticky-top>.agr-note{order:2;}
+    .biz-sticky-top>.agr-upload-row{order:3;}
+    .biz-sticky-top .agr-note{font-size:.78rem;}
+    .biz-sticky-top>.agr-upload-row .btn{padding:4px 10px;font-size:.76rem;}
+    .biz-sticky-top>.biz-header-actions .btn{font-size:.9rem;padding:8px 18px;min-height:38px;}
+    .biz-tabbar{flex-wrap:wrap;overflow:visible;gap:4px;padding:5px 10px;min-height:0;}
+    .biz-tabbar button{flex:0 0 auto;height:32px;padding:0 8px;font-size:.78rem;max-width:none;}
+    .biz-summary-strip{padding:3px 12px;gap:5px;min-height:0;font-size:.78rem;}
+    .biz-summary-strip .biz-matches-badge{font-size:.78rem;padding:2px 8px;}
+    .biz-tabpanes{padding:10px 16px 24px;}
+  }
   @media (max-width:640px){
     .biz-sticky-top{padding:8px 10px !important;gap:6px 9px;}
     .biz-sticky-top h3{font-size:1.05rem;flex-basis:100%;}
