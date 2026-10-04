@@ -574,3 +574,40 @@ tbody tr:not(.empty-row),
 /* 04.10.2026 visual audit: pages that never fill the yellow user/clock chip
    (e.g. מרכז ההתאמות) showed an empty yellow outline in the header. */
 #headerUserInfo:empty{ display:none; }
+
+/* ============================================================
+   04.10.2026 - טאבלט (iPad / אנדרואיד, 641-1366px, מסך מגע).
+   ברוך עבד על טאבלט ו"חצי מהדברים לא נראו": כרטיס ליד/קונה תפס רק 640px
+   (חצי מסך בשכיבה) וכרטיסי העסקים/הלידים ברשימה הראו 3 מתוך 13 עמודות
+   בעמידה, בלי שום סימן שיש עוד. תצוגה בלבד - שום שדה לא מוסתר, שום לוגיקה
+   או נתון לא משתנים. מחשב (בלי מסך מגע) וטלפון (עד 640px) לא מושפעים.
+   ============================================================ */
+@media (min-width:641px) and (max-width:1366px) and (any-pointer:coarse){
+  /* כרטיס ליד/קונה/התאמה: מנצל את רוחב וגובה המסך, נגלל בפנים, שורת השמירה נשארת דבוקה למטה */
+  .overlay.open:not(.biz-fullpage){ padding:12px; align-items:flex-start; }
+  .overlay.open:not(.biz-fullpage) > .modal:not(.biz-fullpage-modal):has(.form-grid){
+    max-width:min(1000px, 100%);
+    max-height:calc(100vh - 24px);
+    max-height:calc(100dvh - 24px);
+    overflow-y:auto;
+  }
+  .overlay.open:not(.biz-fullpage) > .modal:not(.biz-fullpage-modal){
+    max-height:calc(100vh - 24px);
+    max-height:calc(100dvh - 24px);
+  }
+}
+/* רשימות (עסקים / לידים) בטאבלט בעמידה: כרטיס לכל שורה, שתי עמודות של
+   "שם השדה: ערך" - כמו בטלפון, כך שכל 13 העמודות גלויות בלי גלילה הצידה. */
+@media (min-width:641px) and (max-width:900px) and (any-pointer:coarse){
+  .records-table thead{ display:none; }
+  .records-table, .records-table tbody{ display:block; width:100%; }
+  .records-table.proportional-table{ table-layout:auto; min-width:0; }
+  .records-table > tbody > tr{ display:grid; grid-template-columns:1fr 1fr; width:100%; box-sizing:border-box; margin-bottom:12px; border:1px solid #eee; border-radius:12px; padding:6px 0; }
+  .records-table > tbody > tr > td{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:7px 14px; border-bottom:1px solid #f5f3ec; text-align:right; box-sizing:border-box; min-width:0; width:auto; overflow-wrap:anywhere; }
+  .records-table > tbody > tr > td::before{ content:attr(data-label); font-weight:700; color:var(--navy); font-size:.75rem; flex-shrink:0; }
+  .records-table > tbody > tr > td:first-child{ grid-column:1 / -1; display:block; }
+  .records-table > tbody > tr > td:first-child::before{ display:block; margin-bottom:6px; }
+  .records-table > tbody > tr.empty-row > td{ grid-column:1 / -1; justify-content:center; }
+  .records-table > tbody > tr.empty-row > td::before{ content:''; }
+  .records-table .record-identity{ max-width:100%; }
+}

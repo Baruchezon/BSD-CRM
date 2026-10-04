@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202610042100';
+    var PAGE_BUILD = '202610042200';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -31,7 +31,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202610041200">
+<link rel="stylesheet" href="css/style.css?v=202610042200">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -45,6 +45,8 @@
   .filters input, .filters select{padding:9px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;}
   .filters input[type=text]{min-width:180px;}
   table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 8px 20px rgba(14,27,52,.10), 0 2px 6px rgba(14,27,52,.06);}
+  /* 04.10.2026 טאבלט/מסך צר: הטבלה נגללת הצידה בתוך עצמה במקום שעמודה תיחתך מחוץ למסך */
+  @media (min-width:701px) and (max-width:1100px){ table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;} }
   thead th{background:var(--navy);color:#fff;padding:10px 12px;font-size:.76rem;text-align:right;white-space:nowrap;}
   tbody td{padding:9px 12px;border-bottom:1px solid #f0ede4;font-size:.8rem;}
   tbody tr:hover{background:#faf8f2;}
