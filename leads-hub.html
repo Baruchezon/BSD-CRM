@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202609301620';
+    var PAGE_BUILD = '202610040745';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -89,6 +89,28 @@
     .modal h3{margin:0 0 8px;font-size:1.1rem;}
     .modal-actions{position:fixed;bottom:0;right:0;left:0;background:#fff;padding:12px 16px;box-shadow:0 -4px 16px rgba(0,0,0,.12);margin-top:0;z-index:5;}
   }
+
+  /* כרטיס ליד (renderWebsiteLeadConversationForm): css/style.css hands every
+     direct child of .modal flex:1 + overflow-y:auto (a 5-:not() selector that also
+     out-ranks its own desktop override), so inside the max-height flex column the
+     note fields and the name/phone grid were squeezed to ~18px. Scoped to this card
+     only: children keep their natural height and the modal itself scrolls. */
+  #modalBox:has(#wlSummary){ overflow-y:auto; }
+  @media (min-width:641px){
+    /* sticky save bar sits flush with the bottom edge instead of floating 28px above it */
+    #modalBox:has(#wlSummary){ padding-bottom:0; }
+    #modalBox:has(#wlSummary) > .modal-actions{ padding-bottom:18px; }
+  }
+  #modalBox > .wl-block{ flex:none; overflow:visible; padding-bottom:0; }
+  #modalBox > .wl-label{ flex:none; display:flex !important; align-items:center; justify-content:space-between; gap:8px; }
+  #modalBox > textarea.wl-note{ flex:none; display:block; min-height:8.5em; line-height:1.55; resize:vertical; overflow-y:auto; box-sizing:border-box; }
+  .wl-expand-btn{ border:1px solid #d8d3c4; background:#f7f5ee; color:#4a463c; border-radius:7px; padding:2px 9px; font-family:inherit; font-size:.74rem; font-weight:700; cursor:pointer; line-height:1.6; white-space:nowrap; }
+  .wl-expand-btn:hover{ background:#eee8d8; }
+  #modalBox > textarea.wl-note.wl-fullscreen{ position:fixed; top:64px; right:16px; bottom:16px; left:16px; width:auto !important; height:auto !important; max-height:none; margin:0 !important; z-index:210; font-size:1.05rem !important; padding:16px 18px !important; resize:none; box-shadow:0 20px 60px rgba(0,0,0,.45); border-color:var(--gold) !important; }
+  .wl-fs-bar{ position:fixed; top:0; right:0; left:0; height:56px; z-index:209; background:var(--navy,#0e1b34); color:#fff; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 16px; box-shadow:0 4px 16px rgba(0,0,0,.25); }
+  .wl-fs-bar b{ font-size:1rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .wl-fs-bar button{ border:none; background:var(--gold,#c9a227); color:#0e1b34; border-radius:8px; padding:8px 14px; font-family:inherit; font-size:.9rem; font-weight:800; cursor:pointer; }
+  .wl-fs-backdrop{ position:fixed; inset:0; z-index:208; background:rgba(14,27,52,.7); }
 </style>
 </head>
 <body>
@@ -1494,7 +1516,7 @@ function renderWebsiteLeadConversationForm(r){
       <span>סטטוס: <b>${esc(r.status || 'חדש')}</b></span>
     </div>
 
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;">
+    <div class="wl-block" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;">
       <div>
         <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">שם מלא</label>
         <input id="wlName" value="${esc(personName)}" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;">
@@ -1525,24 +1547,24 @@ function renderWebsiteLeadConversationForm(r){
       </div>
     </div>
 
-    <div style="height:1px;background:#eee6d4;margin:16px 0;"></div>
+    <div class="wl-block" style="height:1px;background:#eee6d4;margin:16px 0;"></div>
 
-    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">מהות השיחה</label>
-    <textarea id="wlSummary" rows="3" placeholder="מה נאמר בשיחה, מה מטרת הפנייה ומה חשוב לזכור" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_conversation_summary || '')}</textarea>
+    <label class="wl-label" style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;"><span>מהות השיחה</span><button type="button" class="wl-expand-btn" data-target="wlSummary" title="פתח את השדה במסך מלא לקריאה ועריכה">⛶ מסך מלא</button></label>
+    <textarea id="wlSummary" class="wl-note" rows="3" placeholder="מה נאמר בשיחה, מה מטרת הפנייה ומה חשוב לזכור" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_conversation_summary || '')}</textarea>
 
-    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">מה הלקוח מחפש</label>
-    <textarea id="wlWants" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_customer_wants || '')}</textarea>
+    <label class="wl-label" style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;"><span>מה הלקוח מחפש</span><button type="button" class="wl-expand-btn" data-target="wlWants" title="פתח את השדה במסך מלא לקריאה ועריכה">⛶ מסך מלא</button></label>
+    <textarea id="wlWants" class="wl-note" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_customer_wants || '')}</textarea>
 
-    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">פרטים חשובים</label>
-    <textarea id="wlDetails" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_important_details || '')}</textarea>
+    <label class="wl-label" style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;"><span>פרטים חשובים</span><button type="button" class="wl-expand-btn" data-target="wlDetails" title="פתח את השדה במסך מלא לקריאה ועריכה">⛶ מסך מלא</button></label>
+    <textarea id="wlDetails" class="wl-note" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_important_details || '')}</textarea>
 
-    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">הערות שיחה</label>
-    <textarea id="wlNotes" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_conversation_notes || '')}</textarea>
+    <label class="wl-label" style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;"><span>הערות שיחה</span><button type="button" class="wl-expand-btn" data-target="wlNotes" title="פתח את השדה במסך מלא לקריאה ועריכה">⛶ מסך מלא</button></label>
+    <textarea id="wlNotes" class="wl-note" rows="2" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:10px;resize:vertical;">${esc(r.intake_conversation_notes || '')}</textarea>
 
-    <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">הערות כלליות בליד</label>
-    <textarea id="wlGeneralNotes" rows="3" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:14px;resize:vertical;">${esc(r.notes || '')}</textarea>
+    <label class="wl-label" style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;"><span>הערות כלליות בליד</span><button type="button" class="wl-expand-btn" data-target="wlGeneralNotes" title="פתח את השדה במסך מלא לקריאה ועריכה">⛶ מסך מלא</button></label>
+    <textarea id="wlGeneralNotes" class="wl-note" rows="3" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:14px;resize:vertical;">${esc(r.notes || '')}</textarea>
 
-    <div style="background:#f7f5ee;border:1px solid #e4dece;border-radius:10px;padding:12px;margin-bottom:10px;">
+    <div class="wl-block" style="background:#f7f5ee;border:1px solid #e4dece;border-radius:10px;padding:12px;margin-bottom:10px;">
       <label style="display:block;font-size:.8rem;color:#665;margin-bottom:6px;font-weight:700;">יעד לשמירה והעברה</label>
       <select id="wlTransferTarget" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:9px 10px;font-family:inherit;font-size:.88rem;background:#fff;">
         <option value="">בחר יעד</option>
@@ -1552,8 +1574,8 @@ function renderWebsiteLeadConversationForm(r){
       <div style="font-size:.75rem;color:#777;margin-top:6px;">שמירה רגילה משאירה את הכרטיס ברשימת הלידים. שמירה והעברה יוצרת או מעדכנת את היעד ורק לאחר אימות מוציאה את הליד מרשימת ההמתנה.</div>
     </div>
 
-    <div id="wlSaveError" style="display:none;background:#fdeceb;border:1px solid #e4b3ac;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#a02c1d;margin-top:8px;"></div>
-    <div id="wlSaveOk" style="display:none;background:#e8f5ec;border:1px solid #b7ddc3;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#245c40;margin-top:8px;font-weight:700;"></div>
+    <div class="wl-block" id="wlSaveError" style="display:none;background:#fdeceb;border:1px solid #e4b3ac;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#a02c1d;margin-top:8px;"></div>
+    <div class="wl-block" id="wlSaveOk" style="display:none;background:#e8f5ec;border:1px solid #b7ddc3;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#245c40;margin-top:8px;font-weight:700;"></div>
 
     <div class="modal-actions" style="flex-wrap:wrap;">
       <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
@@ -1563,6 +1585,64 @@ function renderWebsiteLeadConversationForm(r){
     </div>
   `;
   document.getElementById('overlay').classList.add('open');
+  initLeadCardNoteFields(modal);
+}
+
+// --- Lead card note fields: grow with their content, plus a full-screen reader/editor.
+// Presentation only: the same <textarea> elements (same ids) are what
+// readLeadCardPayload() reads on save, so nothing about saving changes.
+function wlAutoGrow(el){
+  if (!el || el.classList.contains('wl-fullscreen')) return;
+  const cs = getComputedStyle(el);
+  const borders = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+  const max = Math.max(220, Math.round(window.innerHeight * 0.6));
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight + borders, max) + 'px';
+}
+function wlCloseFullscreen(){
+  const el = document.querySelector('#modalBox textarea.wl-fullscreen');
+  document.querySelectorAll('#modalBox .wl-fs-bar, #modalBox .wl-fs-backdrop').forEach(n => n.remove());
+  if (!el) return;
+  el.classList.remove('wl-fullscreen');
+  wlAutoGrow(el);
+  try { el.focus({ preventScroll:true }); el.scrollIntoView({ block:'nearest' }); } catch(e){}
+}
+function wlOpenFullscreen(id){
+  const modal = document.getElementById('modalBox');
+  const el = document.getElementById(id);
+  if (!modal || !el) return;
+  wlCloseFullscreen();
+  const label = el.previousElementSibling && el.previousElementSibling.querySelector('span');
+  const backdrop = document.createElement('div');
+  backdrop.className = 'wl-fs-backdrop';
+  backdrop.addEventListener('click', wlCloseFullscreen);
+  const bar = document.createElement('div');
+  bar.className = 'wl-fs-bar';
+  const title = document.createElement('b');
+  title.textContent = label ? label.textContent : '';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = '✕ סגור מסך מלא';
+  btn.addEventListener('click', wlCloseFullscreen);
+  bar.appendChild(title); bar.appendChild(btn);
+  modal.appendChild(backdrop); modal.appendChild(bar);
+  el.style.height = '';
+  el.classList.add('wl-fullscreen');
+  el.focus();
+}
+function initLeadCardNoteFields(modal){
+  if (!modal) return;
+  const notes = modal.querySelectorAll('textarea.wl-note');
+  notes.forEach(el => {
+    el.addEventListener('input', () => wlAutoGrow(el));
+    el.addEventListener('keydown', ev => {
+      if (ev.key === 'Escape' && el.classList.contains('wl-fullscreen')){ ev.preventDefault(); ev.stopPropagation(); wlCloseFullscreen(); }
+    });
+    wlAutoGrow(el);
+  });
+  modal.querySelectorAll('.wl-expand-btn').forEach(b => b.addEventListener('click', ev => { ev.preventDefault(); wlOpenFullscreen(b.dataset.target); }));
+  // fonts/layout may settle a frame later - re-measure once
+  requestAnimationFrame(() => notes.forEach(wlAutoGrow));
 }
 
 function websiteLeadTransferNotes(lead, existingNotes){
