@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610040745';
+    var PAGE_BUILD = '202610041200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608251810">
+<link rel="stylesheet" href="css/style.css?v=202610041200">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -100,7 +100,7 @@
   .record-title{display:block;min-width:0;white-space:normal;overflow:visible;overflow-wrap:anywhere;line-height:1.4;color:inherit;font-weight:800;}
   .record-number-slot{width:max-content;max-width:100%;direction:ltr;unicode-bidi:isolate;}
   .record-number-slot > span{display:block !important;width:100%;box-sizing:border-box;text-align:center;font-variant-numeric:tabular-nums;}
-  @media(max-width:700px){.records-table > tbody > tr > td:first-child{display:block;box-sizing:border-box;}.records-table > tbody > tr > td:first-child::before{display:block;margin-bottom:6px;}.record-identity{max-width:100%;}}
+  @media(max-width:700px){.records-table > tbody > tr > td:first-child{display:block;box-sizing:border-box;width:auto;min-width:0;}.records-table > tbody > tr > td:first-child::before{display:block;margin-bottom:6px;}.record-identity{max-width:100%;}}
   .record-sub-line{min-height:18px;line-height:18px;font-size:.75rem;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .record-code-line{min-height:16px;line-height:16px;font-size:.68rem;color:#bbb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .record-meta-line{display:flex;align-items:center;gap:10px;min-height:20px;line-height:20px;flex-wrap:wrap;}

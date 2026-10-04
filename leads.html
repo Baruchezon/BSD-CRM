@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610040745';
+    var PAGE_BUILD = '202610041200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202608251709">
+<link rel="stylesheet" href="css/style.css?v=202610041200">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -139,6 +139,8 @@
     .modal{max-width:100%;width:100%;min-height:100%;border-radius:0;padding:16px 14px 100px;}
     .modal h3{margin:0 0 8px;font-size:1.1rem;}
     .agr-note{padding:2px 2px 4px;margin-bottom:0;}
+    /* 04.10.2026: on a 375px phone «שותפות/השקעה» was cut to «שותפות/השקי»; let the label wrap inside its button. */
+    .type-toggle button{white-space:normal;overflow:visible;overflow-wrap:anywhere;line-height:1.2;padding:8px 4px;min-width:0;font-size:.85rem;}
     .form-grid{gap:8px;}
     .section-h{margin:6px 0 -2px;}
     .modal-actions{position:fixed;bottom:0;right:0;left:0;background:#fff;padding:12px 16px;box-shadow:0 -4px 16px rgba(0,0,0,.12);margin-top:0;z-index:5;}

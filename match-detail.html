@@ -11,7 +11,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610040745';
+    var PAGE_BUILD = '202610041200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -39,7 +39,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="js/pdfPipeline.js?v=202608261"></script>
-<link rel="stylesheet" href="css/style.css?v=202608251215">
+<link rel="stylesheet" href="css/style.css?v=202610041200">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1200px;margin:0 auto;}
@@ -71,6 +71,9 @@
 
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px;}
   @media(max-width:900px){.grid2{grid-template-columns:1fr;}}
+  /* 04.10.2026: a grid item's default min-width:auto let one long unbroken string (a pasted link) widen a whole card to ~900px on a phone; html/body overflow-x:hidden then cut it off with no way to scroll. */
+  .grid2 > *{min-width:0;}
+  .grid2 .card{overflow-wrap:anywhere;}
   .card{background:#fff;border-radius:14px;padding:20px 22px;box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 8px 20px rgba(14,27,52,.10),0 2px 6px rgba(14,27,52,.06);}
   .card h3{margin:0 0 12px;color:var(--navy);font-size:1rem;border-inline-start:4px solid var(--gold);padding-inline-start:10px;}
   .card.full{grid-column:1/3;}
