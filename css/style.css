@@ -176,7 +176,7 @@ input, select, textarea, button{
   font-weight:700;
   line-height:1;
   cursor:pointer;
-  z-index:65;
+  z-index:3; /* was 65: the arrows showed on top of every open modal/overlay (z 50); 3 still clears the nav buttons */
   padding:0;
   box-shadow:0 2px 8px rgba(0,0,0,.45);
   touch-action:manipulation;
@@ -253,6 +253,8 @@ input, select, textarea, button{
    match every other bar button exactly. */
 .nav > button.btn-ghost{
   display:inline-flex;
+  flex:0 0 auto; /* never shrink: on phones «יציאה» was squeezed to 24px and cut to «ציא» */
+  white-space:nowrap;
   align-items:center;
   justify-content:center;
   height:36px;
@@ -415,6 +417,18 @@ button:disabled, .btn:disabled{
 }
 .modal > form, .modal > div:not(.modal-actions):not(.agr-note):not(.type-toggle):not(.thread){ overflow-y:auto; flex:1; padding-bottom:16px; }
 .modal > .agr-note, .modal > .type-toggle, .modal > .thread{ flex:none; }
+/* 04.10.2026 visual audit: the rule above hands every direct <div> child of a
+   modal flex:1 + its own overflow-y:auto. Its 4 :not() clauses (specificity 0,5,1)
+   also out-rank the desktop override further down, so on every screen size a
+   modal whose content is taller than the window squeezed those children (and any
+   direct <textarea>) into thin, separately-scrolling slivers: cut-off info boxes,
+   participant rows hidden under the next field, the VIP box covering «שם פרטי»,
+   big empty gaps on mobile. Children now keep their natural height and the modal
+   itself is the single scroll container (sticky .modal-actions keep working).
+   The full-page business card has its own flex layout and is left untouched. */
+.modal:not(.biz-fullpage-modal){ overflow-y:auto; }
+.modal:not(.biz-fullpage-modal) > *,
+.modal:not(.biz-fullpage-modal) > div:not(.modal-actions):not(.agr-note):not(.type-toggle):not(.thread){ flex:0 0 auto; }
 .modal-actions{
   position:sticky;
   bottom:0;
@@ -443,6 +457,11 @@ button:disabled, .btn:disabled{
      giving every child (form, and any extra info panels like the match's participants/
      history) its natural content height instead. */
   .modal > form, .modal > div:not(.modal-actions){ padding-bottom:0; flex:none; overflow-y:visible; }
+  /* Sticky save/cancel bar: with the modal's 28px bottom padding the bar stuck
+     28px above the bottom edge and form fields showed through underneath it.
+     The bar now sits flush on the edge and carries the spacing itself. */
+  .modal:not(.biz-fullpage-modal):has(.modal-actions){ padding-bottom:0; }
+  .modal:not(.biz-fullpage-modal) .modal-actions{ padding-bottom:16px; }
 }
 
 /* טפסים - עמודה אחת בסלולרי */
@@ -551,3 +570,7 @@ tbody tr:not(.empty-row),
 @media (prefers-reduced-motion: reduce){
   .btn-spinner{ animation:none; }
 }
+
+/* 04.10.2026 visual audit: pages that never fill the yellow user/clock chip
+   (e.g. מרכז ההתאמות) showed an empty yellow outline in the header. */
+#headerUserInfo:empty{ display:none; }
