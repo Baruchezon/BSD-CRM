@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610041530';
+    var PAGE_BUILD = '202610041800';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1174,6 +1174,7 @@ function openAddChoice(){
     <form onsubmit="event.preventDefault();saveManualLead()">
       <div class="field"><label>שם מלא</label><input id="manualName" required maxlength="200"></div>
       <div class="field"><label>טלפון</label><input id="manualPhone" type="tel" dir="ltr" required></div>
+      <div class="field"><label>סוג הליד</label><select id="manualType"><option value="buyer">קונה</option><option value="seller">מוכר</option></select></div>
       <div class="field"><label>אימייל</label><input id="manualEmail" type="email" dir="ltr"></div>
       <div class="field"><label>תוכן הפנייה</label><textarea id="manualNotes" rows="4"></textarea></div>
       <div id="manualError" role="alert" style="color:#a02c1d"></div>
@@ -1191,7 +1192,7 @@ async function saveManualLead(){
     const phone = document.getElementById('manualPhone').value.trim();
     if (!name || !phone) throw new Error('יש למלא שם וטלפון');
     const { data, error } = await window.supabaseClient.from('leads').insert({
-      type:'buyer', full_name:name, phone,
+      type:(document.getElementById('manualType') || {}).value === 'seller' ? 'seller' : 'buyer', full_name:name, phone,
       email:document.getElementById('manualEmail').value.trim() || null,
       notes:document.getElementById('manualNotes').value.trim() || null,
       source:'הזנה ידנית', website_intake_stage:'new', status:'חדש',
@@ -1565,13 +1566,14 @@ function renderWebsiteLeadConversationForm(r){
     <textarea id="wlGeneralNotes" class="wl-note" rows="3" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:14px;resize:vertical;">${esc(r.notes || '')}</textarea>
 
     <div class="wl-block" style="background:#f7f5ee;border:1px solid #e4dece;border-radius:10px;padding:12px;margin-bottom:10px;">
-      <label for="wlTransferTarget" style="display:block;font-size:.8rem;color:#665;margin-bottom:6px;font-weight:700;">קונה או מוכר? (יעד ההעברה וסוג ההסכם)</label>
-      <select id="wlTransferTarget" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:9px 10px;font-family:inherit;font-size:.88rem;background:#fff;">
-        <option value="">בחר קונה או מוכר</option>
-        <option value="buyer">קונה: עובר לרשימת הקונים (הסכם קונה)</option>
-        <option value="seller">מוכר: עובר לעסקים למכירה (הסכם מוכר)</option>
+      <label for="wlTransferTarget" style="display:block;font-size:.8rem;color:#665;margin-bottom:6px;font-weight:700;">סוג הליד</label>
+      <select id="wlTransferTarget" onchange="updateLeadTransferHint()" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:9px 10px;font-family:inherit;font-size:.88rem;background:#fff;">
+        <option value="" ${leadCardTypeValue(r) ? '' : 'selected'}>בחר קונה או מוכר</option>
+        <option value="buyer" ${leadCardTypeValue(r) === 'buyer' ? 'selected' : ''}>קונה</option>
+        <option value="seller" ${leadCardTypeValue(r) === 'seller' ? 'selected' : ''}>מוכר</option>
       </select>
-      <div style="font-size:.75rem;color:#777;margin-top:6px;">«שמור והעבר» מעביר את הכרטיס לקונים או לעסקים למכירה ומוציא אותו מרשימת הלידים. «שלח הסכם והעבר» עושה את אותו הדבר ופותח את טופס ההסכם המתאים. ההסכם יוצא ללקוח רק כשתשלח אותו מתוך הטופס. «שמור בלידים» משאיר את הכרטיס כאן.</div>
+      <div id="wlTransferHint" style="font-size:.78rem;color:#245c40;font-weight:700;margin-top:6px;"></div>
+      <div style="font-size:.75rem;color:#777;margin-top:4px;">«שמור» שומר את הכרטיס והוא נשאר ברשימת הלידים. «שמור והעבר» שומר, מעביר לפי סוג הליד ומוציא אותו מרשימת הלידים. כל המידע וההערות עוברים לכרטיס החדש. לא נשלח שום הסכם.</div>
     </div>
 
     <div class="wl-block" id="wlSaveError" style="display:none;background:#fdeceb;border:1px solid #e4b3ac;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#a02c1d;margin-top:8px;"></div>
@@ -1580,13 +1582,31 @@ function renderWebsiteLeadConversationForm(r){
     <div class="modal-actions" style="flex-wrap:wrap;">
       <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
       <button type="button" class="btn btn-ghost" onclick="deleteRecord('${r.id}')" style="color:#a02c1d;">העבר לארכיון</button>
-      <button type="button" class="btn btn-ghost" id="wlSaveOnlyBtn" onclick="saveLeadOnly('${r.id}')">שמור בלידים</button>
+      ${canSendAgreement() ? `<button type="button" class="btn btn-ghost" id="wlAgreementBtn" title="אופציונלי: מעביר כמו «שמור והעבר» וגם פותח את טופס ההסכם. שום הסכם לא יוצא עד ששולחים אותו מתוך הטופס." onclick="saveWebsiteLeadTransfer('${r.id}', { sendAgreement:true })">📄 שלח הסכם והעבר</button>` : ''}
+      <button type="button" class="btn btn-ghost" id="wlSaveOnlyBtn" onclick="saveLeadOnly('${r.id}')">שמור</button>
       <button type="button" class="btn btn-navy" id="wlSaveBtn" onclick="saveWebsiteLeadTransfer('${r.id}')">שמור והעבר</button>
-      ${canSendAgreement() ? `<button type="button" class="btn" id="wlAgreementBtn" style="background:var(--gold,#c9a227);color:#1c2333;" onclick="saveWebsiteLeadTransfer('${r.id}', { sendAgreement:true })">📄 שלח הסכם והעבר</button>` : ''}
     </div>
   `;
   document.getElementById('overlay').classList.add('open');
   initLeadCardNoteFields(modal);
+  updateLeadTransferHint();
+}
+
+// The lead's own type decides where «שמור והעבר» moves it. It is preselected
+// from the record and can be corrected on the card before saving.
+function leadCardTypeValue(r){
+  if (!r) return '';
+  if (r.type === 'seller') return 'seller';
+  if (r.type === 'buyer' || r.type === 'partner') return 'buyer';
+  return '';
+}
+function updateLeadTransferHint(){
+  const sel = document.getElementById('wlTransferTarget');
+  const hint = document.getElementById('wlTransferHint');
+  if (!sel || !hint) return;
+  hint.textContent = sel.value === 'seller' ? '«שמור והעבר» ייצור או יקשר כרטיס בעסקים למכירה, והליד ייצא מרשימת הלידים.'
+    : sel.value === 'buyer' ? '«שמור והעבר» יעביר לרשימת הקונים (עם מספר לקוח), והליד ייצא מרשימת הלידים.'
+    : 'בחר אם זה קונה או מוכר כדי להעביר.';
 }
 
 // --- Lead card note fields: grow with their content, plus a full-screen reader/editor.
@@ -1761,6 +1781,28 @@ async function ensureWebsiteLeadBusiness(lead, opts){
   return checked.data;
 }
 
+// Notes written on the lead through «הערות» (record_notes) belong to the lead
+// row. A buyer keeps them (same row); for a seller they are copied to the new
+// business card so they show there too. Already-copied notes are skipped, so a
+// retry never doubles them. Failure here never undoes the transfer.
+const LEAD_NOTE_COPY_PREFIX = '[מהליד] ';
+async function copyLeadNotesToBusiness(leadId, businessId){
+  const db = window.supabaseClient;
+  const src = await db.from('record_notes').select('note_text, created_at').eq('table_name', 'leads').eq('record_id', leadId).order('created_at', { ascending: true });
+  if (src.error) return 'הערות הליד לא הועתקו לכרטיס העסק: ' + src.error.message;
+  const rows = (src.data || []).filter(n => n.note_text && n.note_text.trim());
+  if (!rows.length) return '';
+  const have = await db.from('record_notes').select('note_text').eq('table_name', 'businesses').eq('record_id', businessId);
+  if (have.error) return 'הערות הליד לא הועתקו לכרטיס העסק: ' + have.error.message;
+  const existing = new Set((have.data || []).map(n => n.note_text));
+  const toInsert = rows.map(n => LEAD_NOTE_COPY_PREFIX + n.note_text).filter(t => !existing.has(t))
+    .map(t => ({ table_name: 'businesses', record_id: businessId, author_id: CURRENT_PROFILE ? CURRENT_PROFILE.id : null, note_text: t }));
+  if (!toInsert.length) return '';
+  const ins = await db.from('record_notes').insert(toInsert);
+  if (ins.error) return 'הערות הליד לא הועתקו לכרטיס העסק: ' + ins.error.message;
+  return '';
+}
+
 // The lead row itself becomes the buyer card, so the only real duplicate is
 // another active buyer/partner card for the same phone or ID number. That is a
 // warning with a choice, never a silent duplicate and never a dead end.
@@ -1831,6 +1873,10 @@ async function saveLeadOnly(id){
     const payload = readLeadCardPayload();
     payload.status = 'בטיפול';
     payload.website_intake_stage = 'contacted';
+    // Remember the type chosen on the card; the lead stays in «לידים».
+    const chosenType = (document.getElementById('wlTransferTarget') || {}).value || '';
+    if (chosenType === 'seller' && source.data.type !== 'seller') payload.type = 'seller';
+    if (chosenType === 'buyer' && source.data.type !== 'buyer' && source.data.type !== 'partner') payload.type = 'buyer';
     setLeadCardBusy(true, 'שומר...');
     const saved = await window.supabaseClient.from('leads').update(payload).eq('id', id);
     if (saved.error) throw new Error(saved.error.message);
@@ -1840,7 +1886,7 @@ async function saveLeadOnly(id){
     if (!verify.ok) throw new Error('השמירה לא אושרה בבדיקה חוזרת: ' + verify.mismatches.join(' | '));
     if (window.BSDDataCache && CURRENT_PROFILE) window.BSDDataCache.remove('leads-page', CURRENT_PROFILE.id);
     okBox.style.display = 'block';
-    okBox.textContent = 'הכרטיס נשמר בלידים.';
+    okBox.textContent = 'הכרטיס נשמר ונשאר ברשימת הלידים.';
     await loadAll();
     setTimeout(() => closeModal(), 650);
   } catch (error){
@@ -1925,7 +1971,7 @@ async function saveWebsiteLeadTransfer(id, opts){
     errBox.style.display = 'block';
     errBox.textContent = sendAgreement
       ? 'יש לבחור קונה או מוכר: לפי הבחירה נפתח הסכם קונה או הסכם מוכר והכרטיס עובר לרשימה המתאימה.'
-      : 'יש לבחור אם להעביר לעסקים למכירה או לקונים.';
+      : 'יש לבחור בשדה «סוג הליד» אם זה קונה או מוכר, ואז ללחוץ שוב «שמור והעבר».';
     return;
   }
   if (sendAgreement && !canSendAgreement()){
@@ -1976,6 +2022,10 @@ async function saveWebsiteLeadTransfer(id, opts){
     if (!verify.ok) throw new Error('השמירה לא אושרה בבדיקה חוזרת: ' + verify.mismatches.join(' | '));
 
     let agreementNote = '';
+    if (destination){
+      const notesWarning = await copyLeadNotesToBusiness(id, destination.id);
+      if (notesWarning) agreementNote += ' ' + notesWarning;
+    }
     if (sendAgreement && destination && destination.agreement_status !== 'יש הסכם חתום'){
       // Same status change «📄 שלח הסכם» makes on the businesses screen.
       const marked = await window.supabaseClient.from('businesses').update({ agreement_status: 'נשלח הסכם לחתימה' }).eq('id', destination.id);
