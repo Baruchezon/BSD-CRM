@@ -19,3 +19,29 @@ Deno.test('pending-activation marker never verifies and client IP ignores caller
  assert(clientIp(req({}))==='unknown');
 });
 Deno.test('stored iteration count is honoured',async()=>{const h=await hashPassword('Abc234xyz!',undefined,310000);assert(h.startsWith('310000.'));assert(await verifyPassword('Abc234xyz!',h));});
+import {generatePassword,pathAllowed,extraFileType,safeFileName,strongPassword} from '../../supabase/functions/seller-portal-api/security.ts';
+import {documentBucket} from '../../supabase/functions/seller-portal-api/latest-files.ts';
+Deno.test('v2 generated passwords are strong, unambiguous and unique',()=>{
+ const seen=new Set<string>();for(let i=0;i<2000;i++){const p=generatePassword();assert(p.length===10&&strongPassword(p)&&!/[0O1lI]/.test(p)&&(p.match(/[0-9]/g)||[]).length>=2,p);seen.add(p);}assert(seen.size===2000);
+});
+Deno.test('v2 storage path scoping',()=>{
+ const id='11111111-1111-1111-1111-111111111111';
+ assert(pathAllowed(id+'/seller-portal-extra/a.jpg',id));
+ for(const p of [id+'x/a.jpg','other/'+id+'/a.jpg',id+'/../x.pdf',id+'//a.pdf',id+'/./a.pdf',id+'/a\\b.pdf','',null])assert(!pathAllowed(p,id),String(p));
+ assert(!pathAllowed(id+'/a.pdf',''));assert(!pathAllowed(id+'/a.pdf',null));
+});
+Deno.test('v2 extra file allow-list and safe names',()=>{
+ for(const n of ['a.jpg','B.PNG','x.pdf','d.docx','s.xlsx','m.mp4'])assert(extraFileType(n),n);
+ for(const n of ['a.html','a.htm','a.svg','a.js','a.xml','a.exe','noext','a.jpg.html'])assert(!extraFileType(n),n);
+ assert(extraFileType('photo.JPG')!.mime==='image/jpeg');
+ assert(!safeFileName('../../a<b>.jpg').includes('/')&&!safeFileName('../../a<b>.jpg').includes('<'));assert(safeFileName('')==='file');
+});
+Deno.test('v2 document types follow the CRM business-card mapping',()=>{
+ assert(documentBucket({category:'exec_summary',document_type:'anonymous_summary'})==='anonymous_summary');
+ assert(documentBucket({category:'anon_presentation',document_type:null})==='anonymous_summary');
+ assert(documentBucket({category:'exec_summary',document_type:'internal_full_summary'})==='full_summary');
+ assert(documentBucket({category:'exec_summary',document_type:null})==='full_summary');
+ assert(documentBucket({category:'economic_analysis',document_type:null})==='valuation');
+ assert(documentBucket({category:'other',document_type:'market_research'})==='market_research');
+ for(const f of [{category:'other',document_type:null},{category:'business_photo'},{category:'דוח פעילות פרסום',document_type:'activity_report'}])assert(documentBucket(f)===null);
+});

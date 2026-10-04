@@ -68,3 +68,32 @@ The expanded handler, security and migration tests run offline. Browser viewport
 - The «ניהול הפורטל» menu link is rendered only for active admin/manager profiles and portal-admin.html shows «אין הרשאה» to others; the API still enforces this on every admin_* action.
 - Show-password eye toggle on the login form.
 - Verified on a local isolated stack (PostgreSQL 17 + PostgREST + the real seller-portal-api code, fictional data). Hosted Supabase staging was not available (branching requires the Pro plan).
+
+## Version 2 on 2026-10-04 (approved by the owner)
+1. **One-click account opening.** In the CRM business card (admin/manager only), checking
+   «פתח חשבון בפורטל» calls `admin_open`. The server creates a 5-digit username and a random
+   10-character password (PBKDF2 hash only is stored), and the browser opens a ready wa.me
+   message that BSD sends manually. The message tells the owner to enter only through
+   www.bsd-bbi.co.il → the blue «פורטל בעלי עסקים» button. Unchecking blocks the account;
+   the card also has reset password + WhatsApp, block/unblock and delete. Nothing is sent
+   automatically. Inside the portal the owner can change the password («החלפת סיסמה»,
+   current password required, rate-limited). The old one-time activation link
+   (`#activate=`) still works for accounts opened before v2.
+2. **Automatic documents.** The portal shows the newest active PDF of each business-card
+   document type: anonymous summary, full summary, valuation (economic analysis) and market
+   research, using the same mapping as `js/saleFileModule2.js`. No per-file approval. The
+   latest published advertising report is shown as before.
+3. **Simple admin screen** (`portal-admin.html`, `admin_overview`/`admin_detail`): when and
+   how many times each owner logged in, which files were viewed/downloaded, and upload of
+   extra files (images, PDF, Office, txt/csv, mp4/mov, zip; max 20 MB; no html/svg). Extra
+   files go to `business-files/{business_id}/seller-portal-extra/{id}.{ext}` through a
+   server-issued signed upload URL and are listed in `seller_portal_files`.
+4. **Active users** in the admin screen stats is clickable and shows a read-only list.
+
+Separation is unchanged: every seller request is scoped to the session's own business,
+storage paths must start with `{business_id}/`, and the dashboard never returns buyers,
+matches, prices or commissions.
+
+### v2 rollback
+See `docs/seller-portal-v2-rollback.sql`: revert the frontend commit, redeploy the v1
+function code, remove extra-file storage objects, then drop the v2 table/column/index.
