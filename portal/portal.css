@@ -10,3 +10,49 @@
 /* Seller portal v2 (04.10.2026) */
 .side-help button+button{margin-top:8px}.section-gap{margin-top:30px}.form-error{color:#9b1c1c;font-weight:700;min-height:1em;margin:6px 0}.form-error:empty{display:none}.image-view{display:block;max-width:100%;max-height:70dvh;margin:12px auto 0;border:1px solid var(--line);border-radius:8px}
 .stats button[data-show-active]{cursor:pointer}.stats>div.panel{display:flex;flex-direction:column;gap:6px}
+
+/* 05.10.2026: buyers table (seller portal) */
+.stats{grid-template-columns:repeat(4,1fr)}
+.match-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}
+.match-summary div{background:linear-gradient(160deg,#f7fafc,#eaf1f6);border:1px solid var(--line);border-radius:12px;padding:14px 16px;border-top:3px solid var(--gold)}
+.match-summary b{display:block;font-size:30px;color:var(--navy);line-height:1.2}
+.match-summary span{font-size:14px;color:var(--muted)}
+.match-table{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.mt-head,.mt-row{display:grid;grid-template-columns:44px minmax(120px,1.1fr) 120px minmax(170px,1.3fr) minmax(170px,1.4fr) 100px minmax(140px,1.2fr);gap:12px;align-items:start;padding:14px 16px}
+.mt-head{background:var(--navy);color:#fff;font-size:14px;font-weight:700;padding-top:11px;padding-bottom:11px}
+.mt-row{border-top:1px solid var(--line);font-size:15px;background:#fff}
+.mt-row:nth-child(odd){background:#fafcfd}
+.mt-row.closed{opacity:.62}
+.mt-row small{display:block;color:var(--muted);font-size:13px}
+.mt-ref{color:var(--muted);font-weight:700}
+.mt-buyer strong{color:var(--navy);font-size:16px}
+.agr{display:inline-block;border-radius:999px;padding:3px 12px;font-size:14px;font-weight:700;white-space:nowrap;border:1px solid transparent}
+.agr-signed{background:#1f8a4c;color:#fff;box-shadow:0 2px 6px #1f8a4c40}
+.agr-sent{background:#fff4dc;color:#8a5a00;border-color:#efd08a}
+.agr-none{background:#eef2f5;color:#5b6c7b;border-color:#d8e0e6}
+.stage-label{display:block;color:var(--ink);font-size:15px;margin-bottom:6px}
+.steps{display:flex;gap:4px;direction:rtl}
+.steps i{display:block;width:22px;height:6px;border-radius:3px;background:#dfe7ed}
+.steps i.on{background:linear-gradient(90deg,#d8b45c,#c19a3f)}
+.stage-closed{font-size:13px;color:var(--muted)}
+.mat{display:inline-block;border-radius:7px;padding:2px 10px;font-size:14px;font-weight:700}
+.mat-full{background:#e6f4ec;color:#17643b}
+.mat-anonymous{background:#eaf0f6;color:#1d4c6e}
+.mat-none{background:#f3f3f3;color:#77818a}
+.mat-items{margin:6px 0 0;padding:0 18px 0 0;font-size:14px}
+.mat-items li{margin:2px 0}
+.mat-items small{display:inline!important}
+.m-note{margin:0 0 6px;font-size:14px;line-height:1.5}
+.m-note small{display:inline!important}
+.match-legend{font-size:14px;color:var(--muted);margin-top:16px;line-height:2.1}
+.match-legend .agr{font-size:12px;padding:1px 9px;margin-inline-start:8px}
+@media(max-width:1400px){.mt-head,.mt-row{grid-template-columns:34px minmax(100px,1fr) 104px minmax(130px,1.2fr) minmax(130px,1.3fr) 84px;}.mt-row>span:last-child::before{content:"הערות: ";font-weight:700;color:var(--muted);font-size:13px}.mt-head span:last-child{display:none}.mt-row>span:last-child{grid-column:2/-1;}.mt-row>span:last-child:has(.muted){display:none}}
+@media(max-width:1050px){.stats{grid-template-columns:repeat(2,1fr)}.match-summary{grid-template-columns:repeat(2,1fr)}
+.match-table{border:0;overflow:visible}.mt-head{display:none}
+.mt-row,.mt-row:nth-child(odd){display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;border:1px solid var(--line);border-radius:12px;margin-bottom:12px;padding:14px 16px;background:#fff}
+.mt-row>span{display:block;padding:4px 0}
+.mt-row>span[data-label]::before,.mt-row>span:last-child::before{content:attr(data-label);display:block;color:var(--muted);font-size:13px;font-weight:700;margin-bottom:3px}
+.mt-ref{display:none!important}
+.mt-row>.mt-buyer{grid-column:1/-1;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:2px}.mt-row>.mt-buyer::before{display:none!important}
+.mt-row>span:last-child{grid-column:1/-1}.mt-row>span:last-child:has(.muted){display:none}}
+@media(max-width:720px){.stats{grid-template-columns:1fr}.mt-row,.mt-row:nth-child(odd){grid-template-columns:1fr}}

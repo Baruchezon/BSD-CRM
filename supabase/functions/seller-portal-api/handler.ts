@@ -1,4 +1,5 @@
 import {portalDocuments,DOC_LABELS} from './latest-files.ts';
+import {buildOwnerMatches} from './matches.ts';
 import {digest,randomText,activationToken,validActivationToken,PENDING_ACTIVATION,strongPassword,hashPassword,verifyPassword,usableHash,sessionAllowed,fileAllowed,pathAllowed,clientIp,generatePassword,extraFileType,safeFileName,EXTRA_MAX_BYTES} from './security.ts';
 type Options={origins:string[];portalUrl:string;phone:string;ipSalt:string;ipHeader?:string;activationHours?:number;pruneRate?:number;site?:string};
 // Rate limit ceilings per 15 minutes. Global ceilings bound abuse even if a
@@ -27,6 +28,24 @@ export function createHandler(db:any,opts:Options){
   const {documents,reports}=portalDocuments(sale,id);
   const extras=(await query(db.from('seller_portal_files').select('id,business_id,storage_path,file_name,mime_type,size_bytes,status,created_at').eq('business_id',id).eq('status','active'))).filter((f:any)=>f.business_id===id&&pathAllowed(f.storage_path,id)).sort((a:any,b:any)=>(Date.parse(b.created_at)||0)-(Date.parse(a.created_at)||0));
   return {documents,reports,extras};
+ };
+ // Buyers matched to the seller's OWN business (05.10.2026). Every query is scoped by
+ // business id; buyer rows are read with name/agreement columns only (never phone,
+ // email, ID number or internal notes). Only notes marked visible_to_client are read.
+ const ownerMatches=async(id:string)=>{
+  const matches=(await query(db.from('matches').select('id,business_id,buyer_id,counterparty_type,status,legacy_status,status_changed_at,last_action_at,created_at').eq('business_id',id).limit(300))).filter((m:any)=>m.business_id===id&&m.buyer_id&&(m.counterparty_type??'buyer')==='buyer');
+  if(!matches.length)return buildOwnerMatches({businessId:id,matches:[],buyers:[]});
+  const mids=matches.map((m:any)=>m.id),bids=[...new Set(matches.map((m:any)=>m.buyer_id))];
+  const [buyers,permissions,anonSends,fullSends,history,notes]=await Promise.all([
+   query(db.from('leads').select('id,type,full_name,first_name,last_name,agreement_status,agreement_sent,agreement_signed_date').in('id',bids).eq('type','buyer')),
+   query(db.from('seller_portal_match_permissions').select('match_id,visible').in('match_id',mids)),
+   query(db.from('anon_distributions').select('business_id,buyer_id,distribution_type,delivery_status,sent_at,created_at').eq('business_id',id).in('buyer_id',bids)),
+   query(db.from('audit_log').select('record_id,details,occurred_at').eq('action','send_sale_files_to_buyer').eq('record_id',id).limit(500)),
+   query(db.from('match_status_history').select('match_id,status,changed_at').in('match_id',mids)),
+   query(db.from('match_activity_log').select('match_id,note,description,occurred_at,created_at,visible_to_client,deleted_at').in('match_id',mids).eq('visible_to_client',true).is('deleted_at',null))]);
+  const fileIds=[...new Set(fullSends.flatMap((s:any)=>Array.isArray(s.details?.file_ids)?s.details.file_ids:[]).filter(uuid))];
+  const files=fileIds.length?await query(db.from('business_sale_files').select('id,business_id,category,document_type,file_name').eq('business_id',id).in('id',fileIds)):[];
+  return buildOwnerMatches({businessId:id,matches,buyers,permissions,anonSends,fullSends,files,history,notes});
  };
  const publicFile=(f:any,kind:'document'|'advertising'|'extra')=>({id:f.id,file_source:kind==='extra'?'extra':'sale',name:f.file_name,kind,bucket:kind==='document'?f.bucket:kind,type:kind==='document'?DOC_LABELS[f.bucket]:kind==='advertising'?'דוח פרסום':'קובץ נוסף',date:f.created_at,period_from:f.portal_period_from??null,period_to:f.portal_period_to??null,mime:kind==='extra'?f.mime_type:'application/pdf',size:kind==='extra'?f.size_bytes:f.file_size??null});
  const publicFiles=(p:{documents:any[];reports:any[];extras:any[]})=>[...p.documents.map(f=>publicFile(f,'document')),...p.reports.map(f=>publicFile(f,'advertising')),...p.extras.map(f=>publicFile(f,'extra'))];
@@ -285,9 +304,12 @@ export function createHandler(db:any,opts:Options){
     await query(db.rpc('seller_portal_record_activity',{p_session:s.id,p_account:a.id,p_page:b.page,p_seconds:b.seconds,p_kind:b.kind}));return reply(200,{ok:true});
    }
    if(action==='dashboard'){
-    // Own business only. No buyers, matches, other sellers, prices or commissions.
+    // Own business only. Buyers: display name, agreement badge, stage, materials and
+    // owner-visible notes for THIS business's matches. No contact details, other sellers, prices or commissions.
     const {is_archived:_arch,agreement_status:_agr,...safeBusiness}=business;
-    return reply(200,{ok:true,business:safeBusiness,files:publicFiles(await portalFiles(business.id)),matches:[],update:a.client_update?{message:a.client_update,date:a.client_updated_at}:null,contact:{phone:opts.phone}});
+    // The buyers table never blocks documents: on any error the dashboard still loads, without buyers.
+    let owner:any={rows:[],summary:{total:0,active:0,signed:0,full:0}};try{owner=await ownerMatches(business.id);}catch{owner.unavailable=true;}
+    return reply(200,{ok:true,business:safeBusiness,files:publicFiles(await portalFiles(business.id)),matches:owner.rows,match_summary:owner.summary,...(owner.unavailable?{matches_unavailable:true}:{}),update:a.client_update?{message:a.client_update,date:a.client_updated_at}:null,contact:{phone:opts.phone}});
    }
    if(action==='file'){
     if(!uuid(b.file_id)||!['view','download'].includes(b.mode))return reply(404,{error:'not_found'});

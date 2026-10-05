@@ -84,7 +84,7 @@ Deno.test('v2 documents: newest of the 4 business-card types appear automaticall
  assert(ids.includes(anonNew.id)&&ids.includes(full.id)&&ids.includes(val.id)&&ids.includes(mr.id)&&ids.includes(ad.id)&&ids.length===5,'exact set '+JSON.stringify(ids));
  assert(!ids.includes(file)&&!ids.includes(photo.id)&&!ids.includes(misc.id)&&!ids.includes(bad.id),'superseded, photos, misc and foreign paths excluded');
  assert(d.files.find((x:any)=>x.id===val.id).type==='הערכת שווי','label');
- assert(Array.isArray(d.matches)&&d.matches.length===0,'no buyers/matches ever');
+ assert(Array.isArray(d.matches)&&d.matches.length===0,'a match without a buyer record is never shown');
  const ser=JSON.stringify(d);assert(!ser.includes('storage_path')&&!ser.includes('password_hash')&&!ser.includes('OTHER')&&!ser.includes('buyer'),'no leaks');
  assert((await f.request('file',{file_id:anonNew.id,mode:'download'})).status===200,'auto doc downloadable');
  assert((await f.request('file',{file_id:file,mode:'view'})).status===404,'superseded version 404');
@@ -179,3 +179,46 @@ Deno.test('spoofed left-most X-Forwarded-For cannot bypass the per-address login
 });
 Deno.test('admin_match rejects non-UUID ids with 400',async()=>{const f=await fixture();assert((await f.admin('admin_match',{business_id:biz,match_id:'x',visible:true,disclose_identity:false,client_status:'בבדיקה'})).status===400);});
 Deno.test('recovery accepts phone numbers with dashes',async()=>{const f=await fixture();assert((await f.request('recovery',{kind:'password',name:'TEST',business:'TEST',phone:'050-000-0000'},{'x-seller-token':''})).status===200);});
+Deno.test('buyers table: own business only, names + agreement badge, full materials only when signed, no contact data or internal notes',async()=>{
+ const f=await fixture();
+ const B=(id:string,name:string,agreement_status:string,extra:any={})=>({id,type:'buyer',full_name:name,phone:'052-9999'+id.slice(-3),email:id+'@buyer.test',id_number:'0123456'+id.slice(-2),notes:'INTERNAL-LEAD-NOTE',agreement_status,agreement_signed_date:agreement_status==='יש הסכם חתום'?'2026-09-10':null,...extra});
+ f.tables.leads=[B('b-signed','דנה כהן','יש הסכם חתום'),B('b-sent','יוסי לוי','נשלח הסכם לחתימה'),B('b-none','רון אבן','אין הסכם'),B('b-unsigned-full','מיכל רז','אין הסכם'),B('b-other','OTHER BUYER','יש הסכם חתום'),B('b-hidden','HIDDEN BUYER','יש הסכם חתום')];
+ const sa='a1000000-0000-4000-8000-000000000001',sv='a1000000-0000-4000-8000-000000000002';
+ f.tables.business_sale_files.push(doc(sa,biz,'exec_summary','internal_full_summary','2026-09-01T00:00:00Z'),doc(sv,biz,'economic_analysis',null,'2026-09-01T00:00:00Z'));
+ f.tables.matches=[
+  {id:'m-signed',business_id:biz,buyer_id:'b-signed',counterparty_type:'buyer',status:'במשא ומתן',notes:'INTERNAL-MATCH-NOTE commission 3%',created_at:'2026-09-01T00:00:00Z',status_changed_at:'2026-10-01T00:00:00Z'},
+  {id:'m-sent',business_id:biz,buyer_id:'b-sent',counterparty_type:'buyer',status:'מידע ראשוני נשלח',created_at:'2026-09-02T00:00:00Z'},
+  {id:'m-none',business_id:biz,buyer_id:'b-none',counterparty_type:'buyer',status:'התאמה חדשה',created_at:'2026-09-03T00:00:00Z'},
+  {id:'m-unsigned-full',business_id:biz,buyer_id:'b-unsigned-full',counterparty_type:'buyer',status:'חומרים מלאים נשלחו',created_at:'2026-09-03T00:00:00Z'},
+  {id:'m-other',business_id:other,buyer_id:'b-other',counterparty_type:'buyer',status:'במשא ומתן',created_at:'2026-09-03T00:00:00Z'},
+  {id:'m-hidden',business_id:biz,buyer_id:'b-hidden',counterparty_type:'buyer',status:'התאמה חדשה',created_at:'2026-09-03T00:00:00Z'},
+  {id:'m-broker',business_id:biz,buyer_id:null,broker_id:'br',counterparty_type:'broker',status:'חומרים מלאים נשלחו',created_at:'2026-09-03T00:00:00Z'}];
+ f.tables.seller_portal_match_permissions=[{match_id:'m-hidden',visible:false,disclose_identity:false,client_status:'x'}];
+ f.tables.match_status_history=[{match_id:'m-signed',status:'חומרים מלאים נשלחו',changed_at:'2026-09-20T00:00:00Z'}];
+ f.tables.anon_distributions=[{business_id:biz,buyer_id:'b-sent',distribution_type:'extended',delivery_status:'sent',sent_at:'2026-09-05T00:00:00Z'},{business_id:biz,buyer_id:'b-signed',distribution_type:'primary',delivery_status:'sent',sent_at:'2026-09-04T00:00:00Z'},{business_id:biz,buyer_id:'b-none',distribution_type:'primary',delivery_status:'failed',sent_at:'2026-09-04T00:00:00Z'}];
+ f.tables.audit_log=[{action:'send_sale_files_to_buyer',record_id:biz,occurred_at:'2026-09-21T00:00:00Z',details:{status:'sent',recipient_type:'buyer',recipient_id:'b-signed',buyer_email:'b-signed@buyer.test',file_ids:[sa,sv]}},
+  {action:'send_sale_files_to_buyer',record_id:biz,occurred_at:'2026-09-22T00:00:00Z',details:{status:'sent',recipient_type:'buyer',recipient_id:'b-unsigned-full',file_ids:[sa]}}];
+ f.tables.match_activity_log=[{match_id:'m-signed',note:'הקונה ביקש לראות את דוחות 2025',occurred_at:'2026-10-02T00:00:00Z',visible_to_client:true,deleted_at:null},{match_id:'m-signed',note:'INTERNAL-ACTIVITY',occurred_at:'2026-10-03T00:00:00Z',visible_to_client:false,deleted_at:null},{match_id:'m-signed',note:'DELETED-NOTE',occurred_at:'2026-10-03T00:00:00Z',visible_to_client:true,deleted_at:'2026-10-03'}];
+ const d=await json(await f.request('dashboard'));const rows=d.matches;
+ assert(rows.length===4,'own buyer matches only, hidden and broker excluded: '+rows.map((r:any)=>r.buyer).join(','));
+ const by=(n:string)=>rows.find((r:any)=>r.buyer===n);
+ const s=by('דנה כהן');assert(s.agreement.key==='signed'&&s.agreement.label==='חתום','signed badge');
+ assert(s.materials.level==='full'&&s.materials.items.map((x:any)=>x.label).join('|')==='תקציר מלא|הערכת שווי','full items '+JSON.stringify(s.materials));
+ assert(s.stage.step===5&&s.stage.label==='מתנהל משא ומתן','stage');
+ assert(s.notes.length===1&&s.notes[0].text.includes('2025'),'only owner-visible, non-deleted notes');
+ assert(by('יוסי לוי').agreement.label==='נשלח הסכם'&&by('יוסי לוי').materials.level==='anonymous'&&by('יוסי לוי').materials.items[0].label==='תקציר אנונימי מורחב','sent + anonymous');
+ assert(by('רון אבן').agreement.label==='לא נשלח'&&by('רון אבן').materials.level==='none','failed send is not material');
+ const u=by('מיכל רז');assert(u.materials.level==='anonymous'&&u.stage.step<=2&&u.stage.label==='קיבל מידע ראשוני על העסק','unsigned buyer never shown with full materials, even if the CRM says so');
+ assert(rows[0].buyer==='דנה כהן','most advanced first');
+ assert(s.updated_at==='2026-10-02T00:00:00.000Z'&&s.materials.date==='2026-09-21T00:00:00.000Z'&&rows.every((r:any)=>r.updated_at),'dates '+JSON.stringify([s.updated_at,s.materials.date]));
+ assert(d.match_summary.total===4&&d.match_summary.signed===1&&d.match_summary.full===1,'summary '+JSON.stringify(d.match_summary));
+ const ser=JSON.stringify(d);
+ for(const bad of ['052-9999','@buyer.test','0123456','INTERNAL','DELETED-NOTE','OTHER BUYER','HIDDEN BUYER','b-signed','m-signed','commission','storage_path'])assert(!ser.includes(bad),'leak: '+bad);
+ const other_=await json(await f.seller('token-b')('dashboard'));assert(other_.matches.length===1&&other_.matches[0].buyer==='OTHER BUYER'&&!JSON.stringify(other_).includes('דנה'),'other seller sees only his own buyers');
+});
+Deno.test('buyers table failure never blocks the documents dashboard',async()=>{
+ const f=await fixture();f.tables.matches=[{id:'m1',business_id:biz,buyer_id:'b1',counterparty_type:'buyer',status:'התאמה חדשה',created_at:'2026-09-01'}];
+ Object.defineProperty(f.tables,'leads',{get(){throw Error('boom');}});
+ const r=await f.request('dashboard');assert(r.status===200,'dashboard still 200: '+r.status);const d=await r.json();
+ assert(d.matches.length===0&&d.matches_unavailable===true&&d.files.length>0,'files shown, buyers flagged unavailable');
+});

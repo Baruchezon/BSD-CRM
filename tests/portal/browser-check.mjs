@@ -33,11 +33,14 @@ const noOverflow=page=>page.evaluate(()=>document.documentElement.scrollWidth<=i
 const docs=[['anonymous_summary','תקציר אנונימי'],['full_summary','תקציר מלא'],['valuation','הערכת שווי'],['market_research','חקר שוק']].map(([bucket,type],i)=>({id:`0000000${i}-0000-4000-8000-00000000000${i}`,file_source:'sale',name:`QA-${bucket}.pdf`,kind:'document',bucket,type,date:'2026-10-0'+(i+1)+'T08:00:00Z',mime:'application/pdf'}));
 const extras=[{id:'e0000000-0000-4000-8000-000000000001',file_source:'extra',name:'QA-photo.png',kind:'extra',type:'קובץ נוסף',date:'2026-10-04T07:00:00Z',mime:'image/png',size:68},{id:'e0000000-0000-4000-8000-000000000002',file_source:'extra',name:'QA-plan.docx',kind:'extra',type:'קובץ נוסף',date:'2026-10-04T07:10:00Z',mime:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',size:10}];
 const report={id:'r0000000-0000-4000-8000-000000000001',file_source:'sale',name:'QA-ads.pdf',kind:'advertising',type:'דוח פרסום',date:'2026-10-02T08:00:00Z',mime:'application/pdf'};
+// Buyers table (approved 05.10.2026): fake rows only. The API returns names and badges, never contact details.
+const QA_MATCHES=[{ref:1,buyer:'קונה בדיקה א (QA)',agreement:{key:'signed',label:'חתום',date:'2026-09-08T00:00:00Z'},stage:{label:'מתנהל משא ומתן',step:5,closed:false},materials:{level:'full',label:'חומרים מלאים',items:[{label:'תקציר מלא',date:'2026-09-12T00:00:00Z'}],date:'2026-09-12T00:00:00Z'},updated_at:'2026-10-01T00:00:00Z',notes:[{text:'הערה לבעל העסק (QA)',date:'2026-09-29T00:00:00Z'}]},
+ {ref:2,buyer:'קונה בדיקה ב (QA)',agreement:{key:'none',label:'לא נשלח',date:null},stage:{label:'קיבל מידע ראשוני על העסק',step:2,closed:false},materials:{level:'anonymous',label:'מידע אנונימי בלבד',items:[{label:'תקציר אנונימי',date:'2026-09-26T00:00:00Z'}],date:'2026-09-26T00:00:00Z'},updated_at:'2026-09-26T00:00:00Z',notes:[]}];
 for(const [name,width,height] of [['desktop',1440,1000],['mobile-375',375,812]]){
  const calls=[];let forced=false;
  const {context,page}=await newPage(width,height,async b=>{
   if(b.action==='login')return b.password==='QA-wrong'?{status:401,json:{error:'invalid_credentials'}}:{json:{ok:true,token:'QA-ONLY-TOKEN',must_change_password:forced}};
-  if(b.action==='dashboard')return {json:{ok:true,business:{internal_name:'עסק בדיקה (QA)',owner_name:'בעלים לדוגמה',owner_phone:'050-0000000',city:''},files:[...docs,report,...extras],matches:[],update:null,contact:{phone:'03-0000000'}}};
+  if(b.action==='dashboard')return {json:{ok:true,business:{internal_name:'עסק בדיקה (QA)',owner_name:'בעלים לדוגמה',owner_phone:'050-0000000',city:''},files:[...docs,report,...extras],matches:QA_MATCHES,match_summary:{total:2,active:2,signed:1,full:1},update:null,contact:{phone:'03-0000000'}}};
   if(b.action==='change_password'){if(!forced&&b.current_password!=='QA-current-1')return {status:400,json:{error:'wrong_current_password'}};forced=false;return {json:{ok:true}};}
   if(b.action==='file'){const f=[...docs,report,...extras].find(x=>x.id===b.file_id);if(!f)return {status:404,json:{error:'not_found'}};return f.mime==='application/pdf'?{type:'application/pdf',body:'%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF'}:f.mime==='image/png'?{type:'image/png',body:PNG}:{type:f.mime,body:'QA-DOCX'};}
   return {json:{ok:true}};
@@ -49,7 +52,13 @@ for(const [name,width,height] of [['desktop',1440,1000],['mobile-375',375,812]])
  await page.waitForFunction(()=>document.getElementById('status').textContent.includes('אינם תקינים'));
  await page.locator('#loginPassword').fill('QA-current-1');await page.locator('#loginForm button[type=submit]').click();await page.waitForSelector('#dashboard:not([hidden])');
  assert.ok(await noOverflow(page),'dashboard overflow '+name);
- const dash=await page.locator('#dashboard').innerText();assert.ok(!/התאמות|קונים|עמל/.test(dash),'dashboard mentions matches/buyers/commissions');
+ const dash=await page.locator('#dashboard').innerText();assert.ok(!/עמל/.test(dash),'dashboard mentions commissions');
+ assert.equal(await page.locator('#matchCount').innerText(),'2');
+ await page.locator('.sidebar [data-tab=matches]').click();assert.ok(await page.locator('#matches').isVisible(),'buyers tab visible');
+ assert.equal(await page.locator('#matchList .mt-row').count(),2,'two buyer rows');assert.equal(await page.locator('#matchList .agr-signed').count(),1,'green signed badge');
+ assert.ok(await page.locator('#matchList').getByText('מידע אנונימי בלבד').isVisible(),'unsigned buyer shows anonymous only');
+ assert.ok(await noOverflow(page),'buyers table overflow '+name);await page.screenshot({path:`${shots}/portal-matches-${name}.png`,fullPage:true});
+ await page.locator('.sidebar [data-tab=home]').click();
  assert.equal(await page.locator('#docCount').innerText(),'4');assert.equal(await page.locator('#extraCount').innerText(),'2');
  await page.screenshot({path:`${shots}/portal-home-${name}.png`,fullPage:true});
  await page.locator(width<720?'.sidebar [data-tab=documents]':'.sidebar [data-tab=documents]').click();assert.ok(await page.locator('#documents').isVisible());
@@ -81,7 +90,7 @@ for(const [name,width,height] of [['desktop',1440,1000],['mobile-375',375,812]])
  await page.locator('#loginUsername').fill('23456');await page.locator('#loginPassword').fill('QA-temp-1234');await page.locator('#loginForm button[type=submit]').click();await page.waitForSelector('#passwordForm');
  assert.equal(await page.locator('#passwordForm input[name=current]').count(),0);await page.locator('#passwordForm [name=password]').fill('QA-new-pass-77');await page.locator('#passwordForm [name=confirm]').fill('QA-new-pass-77');await page.locator('#passwordForm button').click();await page.waitForSelector('#dashboard:not([hidden])');
  assert.ok(!calls.some(c=>/^admin_/.test(c.action)),'portal must never call admin actions');
- console.log(`PASS portal ${name}: login (bad/good), 4 documents auto, extras, PDF+image view, downloads, change password (voluntary+forced), no matches text, no overflow`);
+ console.log(`PASS portal ${name}: login (bad/good), 4 documents auto, extras, PDF+image view, downloads, change password (voluntary+forced), buyers table (names + badges), no overflow`);
  await context.close();
 }
 // ---------- 2. Admin screen ----------
