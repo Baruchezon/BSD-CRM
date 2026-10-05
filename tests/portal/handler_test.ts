@@ -9,7 +9,7 @@ function mock(tables:Record<string,any[]>,objects:Record<string,string>={}){
   if(name==='seller_portal_take_attempt')return Promise.resolve({data:(rates[p_key]=(rates[p_key]||0)+1)<=p_max,error:null});
   if(name==='seller_portal_attempts_exceeded')return Promise.resolve({data:(rates[p_key]||0)>=p_max,error:null});
   if(name==='seller_portal_prune')return Promise.resolve({data:null,error:null});
-  if(name==='seller_portal_record_activity')return Promise.resolve({data:0,error:null});
+  if(name==='seller_portal_record_activity'){(tables._activityCalls||=[]).push(args);return Promise.resolve({data:0,error:null});}
   if(name==='seller_portal_activate'){const a=(tables.seller_portal_accounts||[]).find((r:any)=>r.activation_token_hash===args.p_token_hash&&Date.parse(r.activation_expires_at)>Date.now()&&r.status==='active');if(!a)return Promise.resolve({data:[],error:null});Object.assign(a,{password_hash:args.p_password_hash,must_change_password:false,activation_token_hash:null,activation_expires_at:null});(tables.seller_portal_sessions||=[]).push({id:crypto.randomUUID(),account_id:a.id,token_hash:args.p_session_hash,expires_at:args.p_session_expires,last_activity_at:new Date().toISOString()});return Promise.resolve({data:[{account_id:a.id,username:a.username}],error:null});}
   return Promise.resolve({data:null,error:{message:'unknown rpc'}});},
   storage:{from:()=>({
@@ -145,7 +145,7 @@ Deno.test('v2 change password inside the portal needs the current password',asyn
  assert((await f.request('change_password',{current_password:'BrandNew2026',password:'BrandNew2027'})).status===429,'rate limited');
 });
 Deno.test('existing session is denied immediately after archive or account blocking',async()=>{const f=await fixture();f.tables.businesses[0].is_archived=true;assert((await f.request('dashboard')).status===401);f.tables.businesses[0].is_archived=false;f.tables.seller_portal_accounts[0].status='blocked';assert((await f.request('dashboard')).status===401);});
-Deno.test('seller cannot call CRM admin endpoints and agents cannot manage portal',async()=>{const f=await fixture();for(const a of ['admin_list','admin_overview','admin_open','admin_upload_url','admin_status']){assert((await f.request(a,{business_id:biz})).status===401,a);assert((await f.request(a,{business_id:biz},{authorization:'Bearer agent'})).status===403,a);}assert((await f.request('admin_list',{}, {authorization:'Bearer admin'})).status===200);});
+Deno.test('seller cannot call CRM admin endpoints and agents cannot manage portal',async()=>{const f=await fixture();for(const a of ['admin_list','admin_overview','admin_open','admin_upload_url','admin_status','admin_preview']){assert((await f.request(a,{business_id:biz})).status===401,a);assert((await f.request(a,{business_id:biz},{authorization:'Bearer agent'})).status===403,a);}assert((await f.request('admin_list',{}, {authorization:'Bearer admin'})).status===200);});
 Deno.test('login has generic errors and rate limiting across unknown user attempts',async()=>{const f=await fixture();const wrong=await f.request('login',{username:'23456',password:'wrong'});const missing=await f.request('login',{username:'99999',password:'wrong'});assert(JSON.stringify(await wrong.json())===JSON.stringify(await missing.json()));for(let i=0;i<7;i++)await f.request('login',{username:'99999',password:'wrong'});assert((await f.request('login',{username:'99999',password:'wrong'})).status===429);});
 Deno.test('legacy must-change-password accounts must change password before retrieving business information',async()=>{const f=await fixture();f.tables.seller_portal_accounts[0].must_change_password=true;assert((await f.request('dashboard')).status===403);assert((await f.request('change_password',{password:'abc'})).status===400);assert((await f.request('change_password',{password:'SafePassword234!'})).status===200);assert((await f.request('dashboard')).status===200);});
 Deno.test('disallowed origin never gets authenticated response',async()=>{const f=await fixture();assert((await f.request('dashboard',{}, {origin:'https://evil.test'})).status===403);});
@@ -215,6 +215,50 @@ Deno.test('buyers table: own business only, names + agreement badge, full materi
  const ser=JSON.stringify(d);
  for(const bad of ['052-9999','@buyer.test','0123456','INTERNAL','DELETED-NOTE','OTHER BUYER','HIDDEN BUYER','b-signed','m-signed','commission','storage_path'])assert(!ser.includes(bad),'leak: '+bad);
  const other_=await json(await f.seller('token-b')('dashboard'));assert(other_.matches.length===1&&other_.matches[0].buyer==='OTHER BUYER'&&!JSON.stringify(other_).includes('דנה'),'other seller sees only his own buyers');
+});
+Deno.test('admin preview opens the owner home without counting login, files, or activity',async()=>{
+ const f=await fixture();const acc=f.tables.seller_portal_accounts[0];const bizRow=f.tables.businesses[0];
+ assert((await f.admin('admin_preview',{business_id:'99999999-9999-4999-8999-999999999999'})).status===404,'missing business');
+ acc.status='deleted';assert((await f.admin('admin_preview',{business_id:biz})).status===409,'deleted account');
+ acc.status='blocked';assert((await json(await f.admin('admin_preview',{business_id:biz}))).error==='preview_unavailable','blocked');
+ acc.status='active';bizRow.agreement_status='אין הסכם';assert((await json(await f.admin('admin_preview',{business_id:biz}))).error==='preview_unavailable','unsigned');
+ bizRow.is_archived=true;bizRow.agreement_status='יש הסכם חתום';assert((await f.admin('admin_preview',{business_id:biz})).status===409,'archived');
+ bizRow.is_archived=false;
+ const sessionsBefore=f.tables.seller_portal_sessions.length;const owner=f.tables.seller_portal_sessions[0];
+ const r=await f.admin('admin_preview',{business_id:biz});assert(r.status===200,'preview '+r.status);const d=await r.json();
+ assert(d.preview===true&&d.token&&d.token.length===48&&d.portal_url==='https://preview.test/portal/'&&d.business_name==='TEST BUSINESS','payload');
+ assert(!('password' in d),'no password');
+ const created=f.tables.seller_portal_sessions.at(-1);
+ assert(f.tables.seller_portal_sessions.length===sessionsBefore+1&&created.preview===true&&created.actor_id==='admin'&&created.account_id==='account','preview session');
+ assert(created.token_hash!==d.token&&!JSON.stringify(created).includes(d.token),'token stored only as a hash');
+ assert(!owner.revoked_at,'owner session stays open');
+ assert((await f.request('dashboard')).status===200,'owner session still works');
+ const home=await json(await f.seller(d.token)('dashboard'));
+ assert(home.ok&&home.preview===true&&home.business.internal_name==='TEST BUSINESS','owner home');
+ const events=()=>f.tables.seller_portal_events||[];
+ const n=(type:string)=>events().filter((e:any)=>e.event_type===type).length;
+ assert((await f.seller(d.token)('file',{file_id:file,mode:'view'})).status===200);
+ assert((await f.seller(d.token)('file',{file_id:file,mode:'download'})).status===200);
+ assert(n('login')===0&&n('document_view')===0&&n('document_download')===0,'preview file access is not counted');
+ assert((await f.seller(d.token)('activity',{page:'home',kind:'page_view',seconds:0})).status===200);
+ assert((await f.seller(d.token)('activity',{page:'documents',kind:'heartbeat',seconds:30})).status===200);
+ assert((f.tables._activityCalls||[]).length===0,'preview does not record activity');
+ const hash=acc.password_hash;
+ assert((await f.seller(d.token)('change_password',{current_password:'Correct234!',password:'BrandNew2026'})).status===403);
+ assert((await f.seller(d.token)('message',{message:'QA preview'})).status===403);
+ assert(acc.password_hash===hash&&!(f.tables.seller_portal_requests||[]).length,'preview cannot change the account');
+ acc.must_change_password=true;
+ const pending=await json(await f.admin('admin_preview',{business_id:biz}));
+ assert((await f.seller(pending.token)('dashboard')).status===200,'preview sees home even if a password change is pending');
+ assert((await f.request('dashboard')).status===403,'real session still must change password');
+ acc.must_change_password=false;
+ const o=await json(await f.admin('admin_overview'));
+ assert(o.accounts.find((x:any)=>x.id==='account').login_count===0,'overview logins unchanged');
+ assert((await f.request('file',{file_id:file,mode:'download'})).status===200);
+ assert(n('document_download')===1,'a real session still counts a download');
+ assert((await f.request('activity',{page:'home',kind:'page_view',seconds:0})).status===200);
+ assert((f.tables._activityCalls||[]).length===1,'a real session still records activity');
+ assert(f.tables.businesses.length===2&&f.tables.seller_portal_accounts.length===2,'no business or account deleted');
 });
 Deno.test('buyers table failure never blocks the documents dashboard',async()=>{
  const f=await fixture();f.tables.matches=[{id:'m1',business_id:biz,buyer_id:'b1',counterparty_type:'buyer',status:'התאמה חדשה',created_at:'2026-09-01'}];

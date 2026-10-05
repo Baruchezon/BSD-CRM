@@ -88,7 +88,14 @@ The expanded handler, security and migration tests run offline. Browser viewport
    extra files (images, PDF, Office, txt/csv, mp4/mov, zip; max 20 MB; no html/svg). Extra
    files go to `business-files/{business_id}/seller-portal-extra/{id}.{ext}` through a
    server-issued signed upload URL and are listed in `seller_portal_files`.
-4. **Active users** in the admin screen stats is clickable and shows a read-only list.
+4. **Summary cards** on the admin screen (active users, portal logins, file downloads) are
+   clickable and each opens a read-only list.
+5. **View as owner** (`admin_preview`, button «צפייה כבעל העסק» / «התחזה») opens the portal
+   home for an active portal account. Admin/manager CRM auth only. The session is flagged
+   `preview`: it does not write a login event, file view/download events, or activity
+   (`seller_portal_record_activity` returns immediately). Password change and owner messages
+   are rejected. Apply `20261005174000_seller_portal_admin_preview.sql` and redeploy
+   `seller-portal-api` before the button works in production.
 
 Separation is unchanged: every seller request is scoped to the session's own business,
 storage paths must start with `{business_id}/`, and the dashboard never returns buyers,

@@ -249,6 +249,16 @@ export function createHandler(db:any,opts:Options){
      const contact=await query(db.from('businesses').select('owner_email').eq('id',business.id).maybeSingle());
      return reply(200,{ok:true,username:a.username,activation_url,activation_expires_at,portal_url:opts.portalUrl,phone:business.owner_phone,email:contact?.owner_email||'',name:business.owner_name,contact_phone:opts.phone});
     }
+    if(action==='admin_preview'){
+     // QA view-as-owner for admin/manager. A separate session flagged preview is
+     // not a login: the owner's real sessions stay open, and seller calls below
+     // skip login, file and activity counters.
+     if(!a||a.status==='deleted')return reply(409,{error:'account_required'});
+     if(a.status!=='active'||!eligible(business))return reply(409,{error:'preview_unavailable'});
+     const token=randomText(48),expires_at=new Date(Date.now()+8*3600000).toISOString();
+     await query(db.from('seller_portal_sessions').insert({account_id:a.id,token_hash:await digest(token),expires_at,preview:true,actor_id:p.id}));
+     return reply(200,{ok:true,token,portal_url:opts.portalUrl,preview:true,business_name:business.internal_name||''});
+    }
     if(!a)return reply(409,{error:'account_required'});
     if(action==='admin_delete'){
      await query(db.from('seller_portal_accounts').update({status:'deleted',password_hash:PENDING_ACTIVATION,must_change_password:true,temporary_expires_at:null,activation_token_hash:null,activation_expires_at:null,client_update:null,client_updated_at:null}).eq('id',a.id));
@@ -282,11 +292,13 @@ export function createHandler(db:any,opts:Options){
    const a=s?await query(db.from('seller_portal_accounts').select('*').eq('id',s.account_id).maybeSingle()):null;
    const business=a?await query(db.from('businesses').select('id,internal_name,owner_name,owner_phone,city,is_archived,agreement_status').eq('id',a.business_id).maybeSingle()):null;
    if(!sessionAllowed(s,a,business))return reply(401,{error:'unauthorized'});
+   const preview=!!s.preview;
    await query(db.from('seller_portal_sessions').update({last_activity_at:new Date().toISOString()}).eq('id',s.id));
    if(action==='logout'){
     await query(db.from('seller_portal_sessions').update({revoked_at:new Date().toISOString()}).eq('id',s.id));return reply(200,{ok:true});
    }
    if(action==='change_password'){
+    if(preview)return reply(403,{error:'preview_read_only'});
     const password=text(b.password,128);
     if(!strongPassword(password))return reply(400,{error:'strong_password_required'});
     if(!a.must_change_password){
@@ -298,9 +310,11 @@ export function createHandler(db:any,opts:Options){
     await query(db.from('seller_portal_sessions').update({revoked_at:new Date().toISOString()}).eq('account_id',a.id).neq('id',s.id));
     await event(a.id,'password_changed');return reply(200,{ok:true});
    }
-   if(a.must_change_password)return reply(403,{error:'password_change_required'});
+   if(a.must_change_password&&!preview)return reply(403,{error:'password_change_required'});
    if(action==='activity'){
     if(!['home','documents','matches','reports','business'].includes(b.page)||!['page_view','heartbeat'].includes(b.kind)||!Number.isInteger(b.seconds)||b.seconds<0||b.seconds>90)return reply(400,{error:'invalid_request'});
+    // Preview is a management check. Do not add active time or page/heartbeat events.
+    if(preview)return reply(200,{ok:true});
     await query(db.rpc('seller_portal_record_activity',{p_session:s.id,p_account:a.id,p_page:b.page,p_seconds:b.seconds,p_kind:b.kind}));return reply(200,{ok:true});
    }
    if(action==='dashboard'){
@@ -309,7 +323,7 @@ export function createHandler(db:any,opts:Options){
     const {is_archived:_arch,agreement_status:_agr,...safeBusiness}=business;
     // The buyers table never blocks documents: on any error the dashboard still loads, without buyers.
     let owner:any={rows:[],summary:{total:0,active:0,signed:0,full:0}};try{owner=await ownerMatches(business.id);}catch{owner.unavailable=true;}
-    return reply(200,{ok:true,business:safeBusiness,files:publicFiles(await portalFiles(business.id)),matches:owner.rows,match_summary:owner.summary,...(owner.unavailable?{matches_unavailable:true}:{}),update:a.client_update?{message:a.client_update,date:a.client_updated_at}:null,contact:{phone:opts.phone}});
+    return reply(200,{ok:true,preview,business:safeBusiness,files:publicFiles(await portalFiles(business.id)),matches:owner.rows,match_summary:owner.summary,...(owner.unavailable?{matches_unavailable:true}:{}),update:a.client_update?{message:a.client_update,date:a.client_updated_at}:null,contact:{phone:opts.phone}});
    }
    if(action==='file'){
     if(!uuid(b.file_id)||!['view','download'].includes(b.mode))return reply(404,{error:'not_found'});
@@ -322,11 +336,12 @@ export function createHandler(db:any,opts:Options){
     const bytes=await r.data.arrayBuffer();
     if(!extra&&new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')return reply(422,{error:'invalid_pdf'});
     const mime=extra?(extraFileType(f.storage_path)?.mime||'application/octet-stream'):'application/pdf';
-    await event(a.id,(f.portal_kind==='advertising'?'report_':'document_')+(b.mode==='view'?'view':'download'),extra?null:f.id,null,null,extra?f.id:null);
+    if(!preview)await event(a.id,(f.portal_kind==='advertising'?'report_':'document_')+(b.mode==='view'?'view':'download'),extra?null:f.id,null,null,extra?f.id:null);
     const inline=b.mode==='view'&&(mime==='application/pdf'||mime.startsWith('image/'));
     return new Response(bytes,{headers:{...headers,'Content-Type':mime,'Content-Disposition':`${inline?'inline':'attachment'}; filename="file"; filename*=UTF-8''${encodeURIComponent(f.file_name)}`}});
    }
    if(action==='message'){
+    if(preview)return reply(403,{error:'preview_read_only'});
     if(!text(b.message,2000))return reply(400,{error:'invalid_request'});
     await query(db.from('seller_portal_requests').insert({account_id:a.id,kind:'message',requester_name:business.owner_name||a.username,business_name:business.internal_name,phone:business.owner_phone||'',message:text(b.message,2000)}));await event(a.id,'message');return reply(200,{ok:true});
    }
