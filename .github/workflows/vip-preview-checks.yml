@@ -96,7 +96,14 @@ jobs:
           grep -q "recent_sessions" supabase/functions/vip-api/index.ts
           grep -q "file_label" supabase/functions/vip-api/index.ts
           grep -q "admin_inquiries" supabase/functions/vip-api/index.ts
-          grep -q "לידים לקוחות VIP" leads-hub.html
+          if grep -q "לידים לקוחות VIP" leads-hub.html; then
+            echo "VIP leads inbox tab must stay removed from leads-hub.html"
+            exit 1
+          fi
+          if grep -q 'leads-hub.html?tab=vip' vip-admin.html; then
+            echo "VIP admin must not deep-link into the removed leads tab"
+            exit 1
+          fi
           grep -q "המועדפים שלי" vip-test.html
           grep -q "active_seconds" vip-admin.html
           grep -q "שלח ב WhatsApp" vip-admin.html

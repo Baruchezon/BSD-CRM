@@ -70,15 +70,21 @@ test('VIP admin return link preserves the originating record', async () => {
   assert.doesNotMatch(admin, /href="leads\.html">חזרה לקונים/);
 });
 
-test('VIP leads remain linked to existing buyer and business cards', async () => {
+test('VIP inquiry inbox is not a leads-hub tab', async () => {
   const hub = await readFile(new URL('../../leads-hub.html', import.meta.url), 'utf8');
+  const admin = await readFile(new URL('../../vip-admin.html', import.meta.url), 'utf8');
   const api = await readFile(new URL('../../supabase/functions/vip-api/index.ts', import.meta.url), 'utf8');
-  assert.match(hub, /לידים לקוחות VIP/);
-  assert.match(hub, /leads\.html\?open=/);
-  assert.match(hub, /businesses\.html\?open=/);
-  assert.match(hub, /admin_inquiry_action/);
+  const portal = await readFile(new URL('../../vip-test.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(hub, /לידים לקוחות VIP/);
+  assert.doesNotMatch(hub, /data-tab="vip"/);
+  assert.doesNotMatch(hub, /admin_inquiries|admin_inquiry_action|renderVipLeads|openVipInquiry|countVip/);
+  assert.doesNotMatch(admin, /leads-hub\.html\?tab=vip/);
+  assert.doesNotMatch(admin, /פתח לידי VIP/);
+  // Buyer portal, inquiry submission, and VIP publishing stay in place.
+  assert.match(portal, /inquiry/);
+  assert.match(api, /async function handleInquiry/);
+  assert.match(api, /admin_publish_business|admin_business_publications/);
   assert.match(api, /handleAdminInquiries/);
-  assert.match(api, /internal_name,business_number/);
 });
 
 test('VIP favorites are personal bookmarks and do not create workflow records', async () => {
