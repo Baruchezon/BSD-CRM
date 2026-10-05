@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610042300';
+    var PAGE_BUILD = '202610051100';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202610042300">
+<link rel="stylesheet" href="css/style.css?v=202610051100">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -264,6 +264,15 @@
   .biz-vip-inline label.is-disabled{opacity:.5;cursor:not-allowed;}
   .biz-vip-inline input{width:17px;height:17px;margin:0;accent-color:#d5b85c;cursor:pointer;}
   .biz-vip-inline input:disabled{cursor:not-allowed;}
+  /* 05.10.2026: כשהתיבה נעולה - שורה קצרה וגלויה (גם בטאבלט) שאומרת מה חסר + כפתור «הכן ל-VIP». */
+  .biz-vip-inline{flex-wrap:wrap;gap:4px 8px;}
+  .biz-vip-hint{display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px 8px;}
+  .biz-vip-hint:empty{display:none;}
+  .biz-vip-why{color:#9a4d00;font-size:.78rem;font-weight:700;white-space:nowrap;}
+  .biz-vip-prep{border:1px solid #b8962e;background:#fff4c2;color:#5c4300;border-radius:7px;padding:2px 10px;font-size:.78rem;font-weight:800;font-family:inherit;cursor:pointer;white-space:nowrap;min-height:26px;}
+  .biz-vip-prep:hover{background:#ffe98a;}
+  .biz-vip-prep:disabled{opacity:.6;cursor:wait;}
+  .biz-vip-status{font-size:.74rem;color:#665;}
   /* שם העסק גדול יותר ליד הכותרת "עריכת עסק", ומספר העסק כתגית עם רקע
      שחור בולט - שניהם בכותרת הקבועה כדי שיהיו גלויים תמיד, בכל לשונית
      (לפי בקשתו 03.09.2026). */
@@ -476,7 +485,7 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=20260930archive1"></script>
+<script src="js/config.js?v=202610051100"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
 <script src="js/permissions.js?v=202608251215"></script>

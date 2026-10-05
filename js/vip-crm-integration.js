@@ -160,52 +160,194 @@
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // 05.10.2026 (בקשת ברוך): תיבת «פרסום ללקוחות VIP» בכרטיס עסק.
+  // הכלל בשרת (vip-api) לא השתנה: אפשר לפרסם רק אם בתיק המכירה של העסק יש
+  // קובץ פעיל מסוג «תקציר אנונימי» ברמת סודיות 1 (ה-PDF של התקציר האנונימי).
+  // מה שהשתנה הוא התצוגה בלבד:
+  //  1. כשהתיבה נעולה מוצגת תמיד שורה קצרה שאומרת בדיוק מה חסר (ולא רק
+  //     tooltip שבטאבלט/טלפון לא רואים בכלל).
+  //  2. כפתור «⭐ הכן ל-VIP» שמריץ את אותה הפקת PDF קיימת («📄 הפק PDF אנונימי»)
+  //     מתוך התקציר האנונימי השמור, ואז בודק שוב ופותח את התיבה. הפרסום עצמו
+  //     נשאר בסימון ידני של התיבה - שום דבר לא מתפרסם אוטומטית.
+  //  3. אחרי כל שינוי בתיק המכירה (הפקה/העלאה/מחיקה) הסטטוס נבדק מחדש, כך
+  //     שאין צורך לסגור ולפתוח את הכרטיס.
+  // ---------------------------------------------------------------------------
+  const VIP_MSG_LOADING='טוען סטטוס פרסום';
+  const VIP_MSG_LOAD_FAILED='לא ניתן לטעון כרגע את סטטוס הפרסום';
+  const VIP_MSG_NO_SUMMARY='חסר תקציר אנונימי שמור (וגם PDF שלו)';
+  const VIP_MSG_NO_PDF='חסר PDF של התקציר האנונימי בתיק המכירה';
+  let businessVipState=null; // { bizId, files, publication, chosen, busy }
+  let businessVipRefreshTimer=null;
+
+  function currentBiz(bizId, fallback){
+    try { return (typeof ALL_BIZ!=='undefined' && ALL_BIZ.find(x=>x.id===bizId)) || fallback || null; }
+    catch(e){ return fallback || null; }
+  }
+  function normText(v){ return String(v ?? '').replace(/\r\n?/g,'\n').trim(); }
+  function vipBoxEl(){ return document.querySelector('[data-vip-crm-box][data-vip-biz]'); }
+  function setVipHint(html){
+    const hint=document.getElementById('vipPrepHint');
+    if(hint) hint.innerHTML=html || '';
+  }
+  function goToAnonSummary(){
+    if(typeof window.bsdGoToAnonSummary==='function'){ try{ window.bsdGoToAnonSummary(); return; }catch(e){} }
+    if(typeof window.bsdActivateBizTab==='function'){ try{ window.bsdActivateBizTab('summaries'); }catch(e){} }
+  }
+
+  function applyBusinessVipStatus(biz, status){
+    const checkbox=document.getElementById('vipPublishBusiness');
+    const box=vipBoxEl();
+    if(!checkbox || !box || box.dataset.vipBiz!==biz.id) return;
+    const files=status.eligible_files || [];
+    const publication=status.publication || null;
+    const enabled=!!publication?.enabled;
+    const chosen=publication?.anonymous_file_id || files[0]?.id || '';
+    const noFiles=!files.length;
+    businessVipState={ bizId:biz.id, files, publication, chosen, busy:false };
+    checkbox.checked=enabled;
+    checkbox.disabled=noFiles;
+    const label=checkbox.parentElement;
+    const hasSummary=!!normText(currentBiz(biz.id,biz)?.anon_summary);
+    const reason=!noFiles ? '' : (hasSummary ? VIP_MSG_NO_PDF : VIP_MSG_NO_SUMMARY);
+    if(label){
+      label.classList.toggle('is-disabled',noFiles);
+      label.title=noFiles ? ('🔒 '+reason+'. לחץ «⭐ הכן ל-VIP».') : 'הצגה באזור לקוחות VIP';
+    }
+    if(noFiles){
+      setVipHint(`<span class="biz-vip-why">🔒 ${esc(reason)}</span>
+        <button type="button" class="biz-vip-prep" id="vipPrepBtn" title="מפיק PDF מהתקציר האנונימי השמור ושומר אותו בתיק המכירה. הפרסום עצמו נשאר בסימון ידני.">⭐ הכן ל-VIP</button>
+        <span id="vipPrepStatus" class="biz-vip-status"></span>`);
+      const btn=document.getElementById('vipPrepBtn');
+      if(btn) btn.addEventListener('click',()=>prepareBusinessForVip(biz));
+    } else {
+      setVipHint('');
+    }
+  }
+
+  async function refreshBusinessVip(biz){
+    const box=vipBoxEl();
+    if(!box || box.dataset.vipBiz!==biz.id) return;
+    let status;
+    try { status=await adminApi('admin_business_status',{business_id:biz.id}); }
+    catch(e){
+      const checkbox=document.getElementById('vipPublishBusiness');
+      if(checkbox){ checkbox.disabled=true; if(checkbox.parentElement){ checkbox.parentElement.classList.add('is-disabled'); checkbox.parentElement.title=VIP_MSG_LOAD_FAILED; } }
+      setVipHint(`<span class="biz-vip-why">⚠️ ${esc(VIP_MSG_LOAD_FAILED)}</span> <button type="button" class="biz-vip-prep" id="vipRetryBtn">נסה שוב</button>`);
+      const retry=document.getElementById('vipRetryBtn');
+      if(retry) retry.addEventListener('click',()=>refreshBusinessVip(biz));
+      return;
+    }
+    applyBusinessVipStatus(biz, status);
+  }
+
+  function scheduleBusinessVipRefresh(bizId){
+    const box=vipBoxEl();
+    if(!box || box.dataset.vipBiz!==bizId || businessVipState?.busy) return;
+    clearTimeout(businessVipRefreshTimer);
+    businessVipRefreshTimer=setTimeout(()=>{
+      const biz=currentBiz(bizId,{ id:bizId });
+      if(biz) refreshBusinessVip(biz);
+    },400);
+  }
+
+  async function prepareBusinessForVip(biz){
+    const fresh=currentBiz(biz.id,biz) || biz;
+    const saved=normText(fresh.anon_summary);
+    const textarea=document.getElementById('anon_summary');
+    if(!saved){
+      goToAnonSummary();
+      toast('חסר תקציר אנונימי שמור. כתוב או צור אותו (AI), לחץ «💾 שמור תקציר אנונימי» ואז שוב «⭐ הכן ל-VIP».',true);
+      return;
+    }
+    if(textarea && normText(textarea.value)!==saved){
+      goToAnonSummary();
+      toast('יש בתקציר האנונימי שינויים שלא נשמרו. ה-PDF נבנה רק מהנוסח השמור - לחץ «💾 שמור תקציר אנונימי» ואז שוב «⭐ הכן ל-VIP».',true);
+      return;
+    }
+    if(typeof window.sfCanUpload==='function' && !window.sfCanUpload()){
+      toast('אין לך הרשאה להפיק קבצים לתיק המכירה',true);
+      return;
+    }
+    if(typeof window.generateAndSaveSummaryPdf!=='function'){
+      toast('הפקת PDF אינה זמינה כרגע במסך הזה. רענן את הדף ונסה שוב.',true);
+      return;
+    }
+    const btn=document.getElementById('vipPrepBtn');
+    if(btn) btn.disabled=true;
+    if(businessVipState) businessVipState.busy=true;
+    const statusEl=document.getElementById('vipPrepStatus');
+    if(statusEl) statusEl.textContent='📄 מפיק PDF...';
+    try{
+      // אותה פונקציה בדיוק של הכפתור «📄 הפק PDF אנונימי» - כולל בדיקת המזהים.
+      await window.generateAndSaveSummaryPdf(biz.id,'anonymous_summary','vipPrepStatus');
+    }finally{
+      if(businessVipState) businessVipState.busy=false;
+    }
+    const failText=(document.getElementById('vipPrepStatus')?.textContent || '');
+    await refreshBusinessVip(biz);
+    const checkbox=document.getElementById('vipPublishBusiness');
+    if(checkbox && !checkbox.disabled){
+      toast('✓ העסק מוכן ל-VIP. כדי לפרסם - סמן את התיבה «פרסום ללקוחות VIP».');
+      try { checkbox.focus({ preventScroll:true }); } catch(e){}
+    } else if(/^[❌⚠]/.test(failText)){
+      const st=document.getElementById('vipPrepStatus');
+      if(st) st.textContent=failText;
+    }
+  }
+
   async function renderBusinessVip(biz){
     const modal=document.getElementById('modalBox');
     if(!modal || !biz) return;
     const profile=await getProfile();
     if(!profile || !['admin','manager'].includes(profile.role)) return;
     modal.querySelectorAll('[data-vip-crm-box]').forEach(x=>x.remove());
+    businessVipState=null;
     const target=businessVipTarget(modal);
     target.dataset.vipReturn=`businesses.html?open=${encodeURIComponent(biz.id)}`;
 
     // מוכנס מיד כאלמנט קטן וקבוע כדי שלא תהיה קפיצת פריסה כשהשרת חוזר.
     target.insertAdjacentHTML('beforeend',businessVipBox(`
-      <label title="טוען סטטוס פרסום"><input id="vipPublishBusiness" type="checkbox" disabled> פרסום ללקוחות VIP</label>
+      <label title="${VIP_MSG_LOADING}"><input id="vipPublishBusiness" type="checkbox" disabled> פרסום ללקוחות VIP</label>
+      <span id="vipPrepHint" class="biz-vip-hint"></span>
     `));
+    const box=vipBoxEl() || modal.querySelector('[data-vip-crm-box]');
+    if(box) box.dataset.vipBiz=biz.id;
     const checkbox=document.getElementById('vipPublishBusiness');
-
-    let status;
-    try { status=await adminApi('admin_business_status',{business_id:biz.id}); }
-    catch(e){
-      if(checkbox?.parentElement) checkbox.parentElement.title='לא ניתן לטעון כרגע את סטטוס הפרסום';
-      return;
-    }
-    const files=status.eligible_files || [];
-    const publication=status.publication || null;
-    const enabled=!!publication?.enabled;
-    const chosen=publication?.anonymous_file_id || files[0]?.id || '';
-    const noFiles=!files.length;
     if(!checkbox) return;
-    checkbox.checked=enabled;
-    checkbox.disabled=noFiles;
-    if(checkbox.parentElement){
-      checkbox.parentElement.classList.toggle('is-disabled',noFiles);
-      checkbox.parentElement.title=noFiles ? 'יש להעלות תחילה תקציר אנונימי מאושר' : 'הצגה באזור לקוחות VIP';
-    }
+
     async function save(){
+      const state=businessVipState;
+      if(!state || state.bizId!==biz.id || !state.files.length){ checkbox.checked=!checkbox.checked; return; }
       checkbox.disabled=true;
       try{
-        await adminApi('admin_publish_business',{business_id:biz.id,enabled:checkbox.checked,anonymous_file_id:chosen});
+        await adminApi('admin_publish_business',{business_id:biz.id,enabled:checkbox.checked,anonymous_file_id:state.chosen});
         window.dispatchEvent(new CustomEvent('bsd:vip-publication-changed',{
           detail:{ businessId:biz.id, enabled:checkbox.checked }
         }));
         toast(checkbox.checked ? 'העסק פורסם ללקוחות VIP' : 'העסק הוסר מאזור VIP');
       }catch(e){
         checkbox.checked=!checkbox.checked; toast(e.message,true);
-      }finally{ checkbox.disabled=noFiles; }
+      }finally{ checkbox.disabled=!(businessVipState && businessVipState.files.length); }
     }
-    checkbox?.addEventListener('change',save);
+    checkbox.addEventListener('change',save);
+    await refreshBusinessVip(biz);
+  }
+
+  // כל טעינה מחדש של תיק המכירה (אחרי הפקה/העלאה/מחיקה של קובץ) בודקת שוב
+  // את סטטוס ה-VIP של הכרטיס הפתוח. קריאה בלבד - לא משנה את הפונקציה המקורית.
+  function installSaleFileRefreshHook(){
+    if(typeof window.loadSaleFileModule!=='function') return false;
+    if(window.loadSaleFileModule.__vipHooked) return true;
+    const original=window.loadSaleFileModule;
+    const wrapped=async function(bizId){
+      const result=await original.apply(this,arguments);
+      try{ scheduleBusinessVipRefresh(bizId); }catch(e){}
+      return result;
+    };
+    wrapped.__vipHooked=true;
+    window.loadSaleFileModule=wrapped;
+    return true;
   }
 
   function installLeadWrapper(){
@@ -234,12 +376,14 @@
       setTimeout(()=>{
         try{
           const biz=(typeof ALL_BIZ!=='undefined' && id) ? ALL_BIZ.find(x=>x.id===id) : null;
+          installSaleFileRefreshHook();
           if(biz) renderBusinessVip(biz);
         }catch(e){ console.warn('[BSD VIP] business integration',e); }
       },0);
       return result;
     };
     window.openBizForm.__vipWrapped=true;
+    installSaleFileRefreshHook();
     return true;
   }
 
