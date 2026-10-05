@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610051300';
+    var PAGE_BUILD = '202610051500';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202610051300">
+<link rel="stylesheet" href="css/style.css?v=202610051500">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Gveret+Levin&display=swap" rel="stylesheet">
@@ -244,7 +244,8 @@
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
 <script src="js/permissions.js?v=202608251215"></script>
-<script src="js/push.js?v=202608122320"></script>
+<script src="js/bsdNotify.js?v=202610051500"></script>
+<script src="js/push.js?v=202610051500"></script>
 <script>
 let currentPeriod = 'week';
 let customFrom = null, customTo = null;
@@ -928,6 +929,8 @@ let TASKS_POPUP_PROFILE = null;
 async function checkTasksPopup(){
   const profile = TASKS_POPUP_PROFILE;
   if (!profile) return;
+  // השתקה (05.10.2026): אם המשתמש השתיק משימות / את כל ההתראות - לא מציגים ולא "שורפים" את הסימון היומי
+  if (window.BSDNotify && !BSDNotify.allowed('tasks')) return;
   const today = localTodayKey();
   const dayShownKey = 'bsdTasksPopupShown_' + profile.id;
   const dayAlreadyShown = localStorage.getItem(dayShownKey) === today;
@@ -967,28 +970,22 @@ async function checkTasksPopup(){
 }
 
 function showTasksPopup(tasks){
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:center;justify-content:center;z-index:9998;padding:20px;';
-  overlay.innerHTML = `
-    <div style="background:#fff;border-radius:14px;padding:26px 28px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
-      <div style="font-size:1.8rem;margin-bottom:4px;">📋</div>
-      <div style="font-weight:700;color:#0e1b34;font-size:1.1rem;margin-bottom:2px;">המשימות שלך להיום</div>
-      <div style="color:#8a93a8;font-size:.82rem;margin-bottom:14px;">${tasks.length} משימות פתוחות</div>
-      <div style="max-height:280px;overflow-y:auto;margin-bottom:16px;">
-        ${tasks.map(t=>`
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid #f0ede4;">
-            <span style="font-size:.92rem;color:#1c2333;">${esc(t.title)}${t.due_time ? ' <span style="color:#8a93a8;font-size:.78rem;">· ' + esc(t.due_time.slice(0,5)) + '</span>' : ''}</span>
-            <span style="font-size:.7rem;padding:3px 10px;border-radius:10px;white-space:nowrap;${t.priority==='גבוהה' ? 'background:#fbe4e0;color:#832d1f;' : 'background:#eef1f6;color:#0e1b34;'}">${esc(t.priority)}</span>
-          </div>
-        `).join('')}
-      </div>
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <a href="tasks.html" class="btn btn-primary" style="background:#0e1b34;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;">למסך המשימות</a>
-        <button class="btn btn-ghost" id="todayTasksCloseBtn" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;border-radius:8px;padding:10px 20px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer;">סגירה</button>
-      </div>
+  // 05.10.2026: כרטיס קטן בפינה במקום חלון כהה שחוסם את כל המסך.
+  // מוצג פעם אחת ביום (משימות בלי שעה) / פעם אחת לכל משימה עם שעה - כמו קודם.
+  const body = `
+    <div style="color:#8a93a8;font-size:.78rem;margin-bottom:6px;">${tasks.length} משימות פתוחות</div>
+    <div style="max-height:200px;overflow-y:auto;">
+      ${tasks.map(t=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #f0ede4;">
+          <span style="font-size:.86rem;color:#1c2333;">${esc(t.title)}${t.due_time ? ' <span style="color:#8a93a8;font-size:.74rem;">· ' + esc(t.due_time.slice(0,5)) + '</span>' : ''}</span>
+          <span style="font-size:.68rem;padding:2px 8px;border-radius:10px;white-space:nowrap;${t.priority==='גבוהה' ? 'background:#fbe4e0;color:#832d1f;' : 'background:#eef1f6;color:#0e1b34;'}">${esc(t.priority)}</span>
+        </div>`).join('')}
     </div>`;
-  document.body.appendChild(overlay);
-  document.getElementById('todayTasksCloseBtn').addEventListener('click', () => overlay.remove());
+  if (!window.BSDNotify) return;
+  BSDNotify.showCard({
+    key: 'tasks', kind: 'tasks', icon: '📋', title: 'המשימות שלך להיום', bodyHtml: body,
+    actions: [{ label: 'למסך המשימות', href: 'tasks.html', primary: true }]
+  });
 }
 
 // ============================================================
@@ -1034,6 +1031,8 @@ function initTasksPopupWatcher(profile){
 // dashboard stays open, so a message sent mid-session still pops).
 // ============================================================
 async function checkNewMessagesPopup(profile){
+  // השתקה (05.10.2026): מושתק -> לא מציגים, וההודעות עדיין לא סומנו כ"הוצגו" (יופיעו פעם אחת כשמבטלים השתקה)
+  if (window.BSDNotify && !BSDNotify.allowed('messages')) return;
   const { data, error } = await window.supabaseClient
     .from('messages')
     .select('id, sender_id, body, created_at')
@@ -1057,35 +1056,28 @@ async function checkNewMessagesPopup(profile){
 }
 
 function showNewMessagesPopup(msgs){
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:center;justify-content:center;z-index:9998;padding:20px;';
-  overlay.innerHTML = `
-    <div style="background:#fff;border-radius:14px;padding:26px 28px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
-      <div style="font-size:1.8rem;margin-bottom:4px;">💬</div>
-      <div style="font-weight:700;color:#0e1b34;font-size:1.1rem;margin-bottom:2px;">הודעות חדשות</div>
-      <div style="color:#8a93a8;font-size:.82rem;margin-bottom:14px;">${msgs.length} הודעות שלא נקראו</div>
-      <div style="max-height:340px;overflow-y:auto;margin-bottom:16px;">
-        ${msgs.map((m,i)=>`
-          <div style="padding:10px 12px;border-bottom:1px solid #f0ede4;" id="popupMsg${i}">
-            <div style="font-size:.78rem;color:#8a93a8;margin-bottom:2px;">${esc(m.senderName)}</div>
-            <div style="font-size:.92rem;color:#1c2333;margin-bottom:6px;">${esc(m.body)}</div>
-            <button type="button" onclick="togglePopupReply(${i})" style="background:none;border:none;color:#2b6fc9;font-size:.78rem;font-weight:700;cursor:pointer;padding:0;">↩️ השב</button>
-            <div id="popupReplyBox${i}" style="display:none;margin-top:8px;">
-              <textarea id="popupReplyText${i}" style="width:100%;min-height:50px;padding:8px 10px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;resize:vertical;font-size:.85rem;"></textarea>
-              <div style="display:flex;justify-content:flex-end;margin-top:6px;">
-                <button type="button" onclick="sendPopupReply(${i}, '${m.sender_id}')" style="background:#0e1b34;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-family:inherit;font-size:.78rem;font-weight:700;cursor:pointer;">📤 שלח</button>
-              </div>
+  // 05.10.2026: כרטיס קטן בפינה (לא חוסם). כל הודעה מוצגת פעם אחת במכשיר הזה (bsdMsgPopupShown_*).
+  const body = `
+    <div style="color:#8a93a8;font-size:.78rem;margin-bottom:6px;">${msgs.length} הודעות שלא נקראו</div>
+    <div style="max-height:260px;overflow-y:auto;">
+      ${msgs.map((m,i)=>`
+        <div style="padding:6px 0;border-bottom:1px solid #f0ede4;" id="popupMsg${i}">
+          <div style="font-size:.74rem;color:#8a93a8;margin-bottom:2px;">${esc(m.senderName)}</div>
+          <div style="font-size:.86rem;color:#1c2333;margin-bottom:4px;white-space:pre-wrap;">${esc(m.body)}</div>
+          <button type="button" onclick="togglePopupReply(${i})" style="background:none;border:none;color:#2b6fc9;font-size:.76rem;font-weight:700;cursor:pointer;padding:0;">↩️ השב</button>
+          <div id="popupReplyBox${i}" style="display:none;margin-top:6px;">
+            <textarea id="popupReplyText${i}" style="width:100%;min-height:46px;padding:6px 8px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;resize:vertical;font-size:.84rem;"></textarea>
+            <div style="display:flex;justify-content:flex-end;margin-top:4px;">
+              <button type="button" onclick="sendPopupReply(${i}, '${m.sender_id}')" style="background:#0e1b34;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-family:inherit;font-size:.76rem;font-weight:700;cursor:pointer;">📤 שלח</button>
             </div>
           </div>
-        `).join('')}
-      </div>
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <a href="messages.html" class="btn btn-primary" style="background:#0e1b34;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;">למסך ההודעות</a>
-        <button class="btn btn-ghost" id="newMsgPopupCloseBtn" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;border-radius:8px;padding:10px 20px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer;">סגירה</button>
-      </div>
+        </div>`).join('')}
     </div>`;
-  document.body.appendChild(overlay);
-  document.getElementById('newMsgPopupCloseBtn').addEventListener('click', () => overlay.remove());
+  if (!window.BSDNotify) return;
+  BSDNotify.showCard({
+    key: 'messages', kind: 'messages', icon: '💬', title: 'הודעות חדשות', bodyHtml: body,
+    actions: [{ label: 'למסך ההודעות', href: 'messages.html', primary: true }]
+  });
 }
 
 function togglePopupReply(i){
@@ -1109,54 +1101,59 @@ async function sendPopupReply(i, recipientId){
 }
 
 // ============================================================
-// NEW LEAD POPUP — הליד עצמו נשלף ישירות (website_intake_stage='new'),
-// לא דרך משימה. בכוונה בלי localStorage שמדכא לצמיתות אחרי שנראה פעם
-// אחת - לפי דרישה מפורשת (20.08.2026): הפופ-אפ לא "נעלם לתמיד" רק כי
-// נסגר או נצפה; הוא ימשיך להופיע (בכל טעינת דף/בדיקה כל דקה) כל עוד
-// הליד עדיין במצב 'new' בפועל ב-DB, ויפסיק להופיע רק כשמסמנים בפועל
-// "שוחחתי עם הלקוח" (המצב אז הופך ל-'contacted' והשאילתה כאן לא תחזיר
-// אותו יותר) - windowSessionSuppressed מונע רק הכפלה של אותו overlay
-// כמה פעמים באותה טעינת עמוד ממש, לא מדכא בין רענונים/כניסות.
+// NEW LEAD POPUP - ליד חדש מהאתר (website_intake_stage='new')
+//
+// שורש הבעיה שתוקנה ב-05.10.2026 ("קופץ שוב ושוב בלי שליטה"):
+//  1. הבדיקה רצה בכל טעינת דף + כל 60 שניות, ו"סגירה" רק הסירה את החלון
+//     מהמסך - שום דבר לא זכר שסגרת, אז הוא חזר תוך דקה ובכל כניסה
+//     (כך תוכנן ב-20.08.2026: "להופיע עד שמסמנים שוחחתי").
+//  2. השאילתה לא סיננה לידים בארכיון - ליד שהועבר לארכיון כשהוא עדיין
+//     בשלב 'new' (למשל יובל, 04.10) קפץ לנצח, ואי אפשר היה "לסמן שוחחתי".
+// עכשיו: לידים בארכיון לא קופצים; "סגירה"/✕/Esc/"פתח את הליד" נזכרים לכל
+// ליד (לא יקפוץ שוב במכשיר הזה); "הזכר לי בעוד שעה"; "🔕 השתק".
+// ליד חדש באמת עדיין קופץ פעם אחת (הבדיקה כל דקה נשארה).
+// הליד עצמו נשאר בתיבת הקליטה ב"מרכז הלידים" עד שמסמנים שוחחתי.
 // ============================================================
-let _leadPopupOpenIds = new Set();
 async function checkNewLeadPopup(profile){
+  if (!window.BSDNotify) return;
+  if (!BSDNotify.allowed('leads')){ BSDNotify.closeCard('new-lead'); return; }
   const { data, error } = await window.supabaseClient
     .from('leads')
     .select('id, full_name, phone, website_purpose_guess, created_at')
     .eq('website_intake_stage', 'new')
+    .not('is_archived', 'is', true)
     .order('created_at', { ascending: false });
-  if (error || !data || data.length === 0) return;
-  // אם overlay של אותם לידים כבר פתוח על המסך עכשיו - לא פותחים שני overlay-ים זה על זה
-  const ids = data.map(l => l.id).join(',');
-  if (document.getElementById('newLeadPopupOverlay') && document.getElementById('newLeadPopupOverlay').dataset.ids === ids) return;
-  showNewLeadPopup(data);
+  if (error || !data) return;
+  const fresh = data.filter(l => !BSDNotify.isHidden('lead', l.id));
+  const open = BSDNotify.findCard('new-lead');
+  if (fresh.length === 0){ if (open) open.remove(); return; }
+  const ids = fresh.map(l => l.id).join(',');
+  if (open && open.dataset.ids === ids) return; // אותו כרטיס כבר מוצג - לא מקפיצים מחדש
+  showNewLeadPopup(fresh, data.length);
 }
 
-function showNewLeadPopup(leads){
-  const existing = document.getElementById('newLeadPopupOverlay');
-  if (existing) existing.remove();
-  const overlay = document.createElement('div');
-  overlay.id = 'newLeadPopupOverlay';
-  overlay.dataset.ids = leads.map(l => l.id).join(',');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:center;justify-content:center;z-index:9998;padding:20px;';
+function showNewLeadPopup(leads, totalWaiting){
   const first = leads[0];
   const name = first.full_name || 'שם לא זוהה';
   const extraCount = leads.length - 1;
-  overlay.innerHTML = `
-    <div style="background:#fff;border-radius:14px;padding:26px 28px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;text-align:center;">
-      <div style="font-size:2.2rem;margin-bottom:4px;">🆕</div>
-      <div style="font-weight:700;color:#0e1b34;font-size:1.15rem;margin-bottom:6px;">ליד חדש מהאתר</div>
-      <div style="color:#40485c;font-size:.92rem;margin-bottom:2px;">${esc(name)}${first.phone ? ' · ' + esc(first.phone) : ''}</div>
-      ${first.website_purpose_guess ? `<div style="color:#8a93a8;font-size:.78rem;margin-bottom:4px;">${esc(first.website_purpose_guess)}</div>` : ''}
-      ${extraCount > 0 ? `<div style="color:#8a93a8;font-size:.78rem;margin-bottom:14px;">ועוד ${extraCount} ליד/ים ממתינים בתיבת הקליטה</div>` : '<div style="margin-bottom:14px;"></div>'}
-      <div style="display:flex;gap:10px;justify-content:center;">
-        <a href="leads-hub.html?open=${encodeURIComponent(first.id)}" class="btn btn-primary" style="background:#0e1b34;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;">פתח את הליד</a>
-        <button class="btn btn-ghost" id="newLeadPopupCloseBtn" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;border-radius:8px;padding:10px 20px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer;">סגירה</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-  document.getElementById('newLeadPopupCloseBtn').addEventListener('click', () => overlay.remove());
+  const ids = leads.map(l => l.id);
+  const body = `
+    <div style="font-size:.92rem;color:#1c2333;font-weight:600;">${esc(name)}${first.phone ? ' · <span dir="ltr">' + esc(first.phone) + '</span>' : ''}</div>
+    ${first.website_purpose_guess ? `<div style="color:#8a93a8;font-size:.76rem;margin-top:2px;">${esc(first.website_purpose_guess)}</div>` : ''}
+    ${extraCount > 0 ? `<div style="color:#8a93a8;font-size:.76rem;margin-top:4px;">ועוד ${extraCount} לידים חדשים</div>` : ''}
+    ${totalWaiting > leads.length ? `<div style="color:#8a93a8;font-size:.74rem;margin-top:4px;">${totalWaiting} ממתינים בתיבת הקליטה במרכז הלידים</div>` : ''}`;
+  const card = BSDNotify.showCard({
+    key: 'new-lead', kind: 'leads', icon: '🆕', title: 'ליד חדש מהאתר', bodyHtml: body,
+    actions: [{ label: 'פתח את הליד', href: 'leads-hub.html?open=' + encodeURIComponent(first.id), primary: true,
+                onClick: () => { ids.forEach(id => BSDNotify.dismiss('lead', id)); location.href = 'leads-hub.html?open=' + encodeURIComponent(first.id); } }],
+    snoozeMs: 60 * 60 * 1000,
+    onSnooze: (ms) => ids.forEach(id => BSDNotify.snooze('lead', id, ms)),
+    onDismiss: () => ids.forEach(id => BSDNotify.dismiss('lead', id))
+  });
+  card.dataset.ids = ids.join(',');
 }
+// נקרא מ-push.js כשמגיעה התראת Push על ליד והדשבורד פתוח - מציגים את אותו כרטיס במקום כרטיס כפול
+window.bsdOnLeadPush = function(){ if (CURRENT_PROFILE) checkNewLeadPopup(CURRENT_PROFILE); return true; };
 
 (async function init(){
   const profile = await requireAuth();
