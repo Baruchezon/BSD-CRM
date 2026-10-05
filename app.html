@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610051500';
+    var PAGE_BUILD = '202610051600';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202610051500">
+<link rel="stylesheet" href="css/style.css?v=202610051600">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Gveret+Levin&display=swap" rel="stylesheet">
@@ -161,8 +161,8 @@
       <div id="welcomeBlessing" style="font-family:'Gveret Levin',cursive;color:#0e1b34;background:#fdf1cf;display:inline-block;padding:3px 11px;border-radius:7px;border:1px solid var(--gold);font-size:1rem;font-weight:400;margin-top:6px;"></div>
     </div>
     <div>
-      <button id="aiMatchBtn" onclick="runAiMatchSuggestions()" style="background:var(--gold);color:#1c2333;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;margin-left:10px;">
-        🧠 קבל הצעות התאמה חכמות
+      <button id="aiMatchBtn" onclick="runAiMatchSuggestions()" title="מסך מלא עם התאמות חדשות בלבד (50%+) והסבר לכל התאמה" style="background:var(--gold);color:#1c2333;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;margin-left:10px;">
+        🧠 התאמות AI חכמות
       </button>
       <button id="surveyBtn" onclick="openSurveyModal()" style="background:var(--navy);color:#fff;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;">
         🔍 סקר
@@ -595,112 +595,11 @@ function toast(msg){
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-function closeAiModal(){
-  const ov = document.getElementById('aiMatchOverlay');
-  if (ov) ov.remove();
-}
-
-function renderAiMatchModal(suggestions){
-  closeAiModal();
-  const tierBg = { white: '#ffffff', yellow: '#fff8d6', blue: '#dbeeff' };
-  const tierBadge = { white: 'background:#e8e8e8;color:#666;', yellow: 'background:#f5d94e;color:#6b5a00;', blue: 'background:#8ec6f0;color:#0a3a5c;' };
-  const rowsHtml = suggestions.length ? suggestions.map(s => {
-    const tier = s.tier || (s.score > 60 ? 'blue' : s.score >= 50 ? 'yellow' : 'white');
-    return `
-    <tr style="background:${tierBg[tier]};">
-      <td style="padding:8px 10px;border-bottom:1px solid #f0ede4;">${esc(s.buyer)}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid #f0ede4;">${esc(s.business)}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid #f0ede4;text-align:center;">
-        <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-weight:700;font-size:.78rem;${tierBadge[tier]}">${s.score}%</span>
-      </td>
-      <td style="padding:8px 10px;border-bottom:1px solid #f0ede4;color:#666;font-size:.78rem;">${esc(s.reason)}</td>
-    </tr>`;
-  }).join('') : `<tr><td colspan="4" style="padding:20px;text-align:center;color:#999;">אין נתונים</td></tr>`;
-
-  const overlay = document.createElement('div');
-  overlay.id = 'aiMatchOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:90;padding:40px 20px;';
-  overlay.innerHTML = `
-    <div style="background:#fff;border-radius:14px;max-width:720px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
-      <h3 style="margin:0 0 6px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">הצעות התאמה חכמות</h3>
-      <p style="color:#777;font-size:.82rem;margin:6px 0 16px;">${suggestions.length} צירופים נבדקו. 🟡 צהוב = 50-60% התאמה, 🔵 כחול = מעל 60%. זו המלצה בלבד - תבחר אילו להוסיף בפועל כהתאמה.</p>
-      <div style="max-height:50vh;overflow-y:auto;border:1px solid #f0ede4;border-radius:8px;">
-        <table style="width:100%;border-collapse:collapse;font-size:.85rem;">
-          <thead><tr style="background:#f7f5ef;position:sticky;top:0;">
-            <th style="padding:8px 10px;text-align:right;">קונה</th>
-            <th style="padding:8px 10px;text-align:right;">עסק</th>
-            <th style="padding:8px 10px;text-align:center;">אחוז</th>
-            <th style="padding:8px 10px;text-align:right;">נימוק</th>
-          </tr></thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;">
-        <button onclick="closeAiModal()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
-        <button id="aiMailBtn" onclick="emailAiMatchSuggestions()" style="background:var(--navy);color:#fff;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">📧 שלח גם למייל</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-}
-
-async function runAiMatchSuggestions(){
-  const btn = document.getElementById('aiMatchBtn');
-  btn.disabled = true;
-  btn.textContent = '⏳ מפיק הצעות...';
-  try {
-    // 02.10.2026: הפונקציה דורשת עכשיו משתמש מחובר - שולחים את טוקן ה-session ולא את המפתח הציבורי
-    const { data: { session } } = await window.supabaseClient.auth.getSession();
-    const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/match-suggestions-report', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + (session?.access_token || ''),
-        'apikey': window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ send_email: false })
-    });
-    const data = await res.json();
-    if (!res.ok || data.error){
-      toast('שגיאה בהפקת ההצעות: ' + (data.error || res.status));
-    } else {
-      renderAiMatchModal(data.suggestions || []);
-    }
-  } catch (e) {
-    toast('שגיאה בחיבור: ' + e.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '🧠 קבל הצעות התאמה חכמות';
-  }
-}
-
-async function emailAiMatchSuggestions(){
-  const btn = document.getElementById('aiMailBtn');
-  if (btn){ btn.disabled = true; btn.textContent = 'שולח...'; }
-  try {
-    // 02.10.2026: הפונקציה דורשת עכשיו משתמש מחובר - שולחים את טוקן ה-session ולא את המפתח הציבורי
-    const { data: { session } } = await window.supabaseClient.auth.getSession();
-    const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/match-suggestions-report', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + (session?.access_token || ''),
-        'apikey': window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ send_email: true })
-    });
-    const data = await res.json();
-    if (!res.ok || data.error){
-      toast('שגיאה בשליחת המייל: ' + (data.error || res.status));
-    } else if (data.skipped) {
-      toast('המייל לא נשלח: ' + (data.reason || ''));
-    } else {
-      toast('הדוח נשלח למייל שלך 📧');
-    }
-  } catch (e) {
-    toast('שגיאה בחיבור: ' + e.message);
-  } finally {
-    if (btn){ btn.disabled = false; btn.textContent = '📧 שלח גם למייל'; }
-  }
+// 05.10.2026 (בקשת ברוך): «התאמות AI חכמות» - הכפתור פותח מסך מלא (smart-matches.html) במקום החלון הקטן.
+// שם: רק התאמות חדשות מ-50% ומעלה, כל שורה לחיצה עם הסבר בעברית פשוטה, טלפונים וקישורים לחיצים,
+// וכפתור שליחה למייל (אותה פונקציה match-suggestions-report, גרסה 6).
+function runAiMatchSuggestions(){
+  window.location.href = 'smart-matches.html';
 }
 
 let SURVEY_TARGET_TYPE = 'business';

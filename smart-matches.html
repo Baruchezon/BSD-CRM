@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<script>
+(function(){
+  try{
+    var PAGE_BUILD = '202610051600';
+    window.PAGE_BUILD = PAGE_BUILD;
+    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - התאמות AI חכמות</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=202610051600">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body{background:var(--bg);}
+  .sm-wrap{padding:20px 26px 70px;max-width:1500px;margin:0 auto;}
+  .sm-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:14px;}
+  .sm-top h1{margin:0;color:var(--navy);font-size:1.45rem;}
+  .sm-top p{margin:6px 0 0;color:#5d6577;font-size:.86rem;max-width:880px;line-height:1.6;}
+  .sm-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .sm-btn{border:1px solid #d8d3c4;background:#fff;color:var(--navy);border-radius:10px;padding:9px 14px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;}
+  .sm-btn.primary{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .sm-btn.gold{background:var(--gold);color:#1c2333;border-color:var(--gold);}
+  .sm-btn:disabled{opacity:.6;cursor:wait;}
+  .sm-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:12px 0 16px;}
+  .sm-kpi{background:#fff;border-radius:12px;padding:12px 10px;text-align:center;box-shadow:0 4px 12px rgba(14,27,52,.08);border:1px solid #efeadb;cursor:default;}
+  .sm-kpi.click{cursor:pointer;} .sm-kpi.on{outline:2px solid var(--gold);}
+  .sm-kpi .n{font-size:1.45rem;font-weight:800;color:var(--navy);} .sm-kpi .l{font-size:.72rem;color:#7b8293;margin-top:2px;}
+  .sm-filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#fff;border:1px solid #efeadb;border-radius:12px;padding:10px 12px;margin-bottom:14px;position:sticky;top:0;z-index:5;box-shadow:0 4px 12px rgba(14,27,52,.06);}
+  .sm-filters input[type=search],.sm-filters select{padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;background:#fff;}
+  .sm-filters input[type=search]{min-width:230px;flex:1;}
+  .sm-filters label{font-size:.8rem;color:#4b5263;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
+  .sm-seg{display:inline-flex;border:1px solid #d8d3c4;border-radius:9px;overflow:hidden;}
+  .sm-seg button{border:0;background:#fff;padding:8px 11px;font-family:inherit;font-size:.8rem;cursor:pointer;color:#4b5263;}
+  .sm-seg button.on{background:var(--navy);color:#fff;}
+  .sm-group-h{margin:18px 2px 8px;font-weight:800;color:var(--navy);font-size:.95rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .sm-group-h small{color:#7b8293;font-weight:400;}
+  .sm-card{background:#fff;border:1px solid #ece6d4;border-radius:14px;margin:8px 0;box-shadow:0 2px 8px rgba(14,27,52,.05);transition:box-shadow .15s;}
+  .sm-card:hover{box-shadow:0 6px 18px rgba(14,27,52,.10);}
+  .sm-card.existing{opacity:.78;background:#fafaf7;}
+  .sm-row{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 14px;cursor:pointer;}
+  .sm-score{width:62px;height:62px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:1.05rem;line-height:1;}
+  .sm-score small{font-size:.58rem;font-weight:700;margin-top:3px;opacity:.95;}
+  .lvl-high{background:linear-gradient(135deg,#1e7b4f,#2e9a66);} .lvl-good{background:linear-gradient(135deg,#1d5fa8,#3a7fd0);} .lvl-check{background:linear-gradient(135deg,#a77400,#d39b1d);}
+  .sm-names{font-size:1rem;font-weight:800;color:var(--navy);display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  .sm-names a{color:var(--navy);text-decoration:none;border-bottom:1px dashed #b9b2a0;}
+  .sm-names a:hover{color:#1d5fa8;border-bottom-color:#1d5fa8;}
+  .sm-arrow{color:var(--gold);font-weight:800;}
+  .sm-sum{color:#2f3647;font-size:.88rem;margin-top:4px;line-height:1.55;}
+  .sm-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;}
+  .chip{font-size:.72rem;background:#f4f1e8;color:#5a5240;border-radius:999px;padding:3px 9px;white-space:nowrap;}
+  .chip.blue{background:#e6f0fb;color:#1d5fa8;} .chip.green{background:#e6f4ea;color:#1e7b34;} .chip.orange{background:#fff1dc;color:#9a5a00;} .chip.gray{background:#eceef2;color:#5d6577;}
+  .sm-contact{display:flex;flex-direction:column;gap:6px;align-items:flex-end;}
+  .sm-contact .line{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+  .ic{display:inline-flex;align-items:center;gap:4px;border:1px solid #e1dccb;border-radius:8px;padding:5px 9px;font-size:.76rem;color:var(--navy);text-decoration:none;background:#fff;white-space:nowrap;}
+  .ic:hover{background:#f7f4ea;} .ic.wa{color:#128c4b;border-color:#bfe5cf;}
+  .sm-toggle{font-size:.75rem;color:#7b8293;margin-top:4px;}
+  .sm-detail{display:none;border-top:1px dashed #e6dfca;padding:14px 16px 16px;}
+  .sm-card.open .sm-detail{display:block;}
+  .sm-card.open .sm-toggle .t1{display:none;} .sm-card:not(.open) .sm-toggle .t2{display:none;}
+  .sm-cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;}
+  .sm-box{border-radius:12px;padding:12px 14px;}
+  .sm-box h4{margin:0 0 8px;font-size:.9rem;}
+  .sm-box ul{margin:0;padding-inline-start:18px;} .sm-box li{margin:5px 0;font-size:.84rem;line-height:1.55;color:#2f3647;}
+  .box-why{background:#eef7f1;border:1px solid #cfe8d8;} .box-why h4{color:#1e7b34;}
+  .box-cav{background:#fff7ea;border:1px solid #f1dcb2;} .box-cav h4{color:#9a5a00;}
+  .box-how{background:#f3f6fb;border:1px solid #d8e2f1;} .box-how h4{color:#1d5fa8;}
+  .how-row{margin:7px 0;font-size:.8rem;color:#2f3647;}
+  .how-row .top{display:flex;justify-content:space-between;gap:8px;font-weight:700;}
+  .how-bar{height:7px;background:#e3e8f1;border-radius:9px;overflow:hidden;margin:4px 0 3px;}
+  .how-bar i{display:block;height:100%;background:#3a7fd0;border-radius:9px;}
+  .how-bar.neg i{background:#c0563f;}
+  .how-row .txt{color:#5d6577;font-weight:400;line-height:1.5;}
+  .how-total{border-top:1px solid #d8e2f1;margin-top:8px;padding-top:7px;font-weight:800;color:var(--navy);font-size:.85rem;}
+  .sm-facts{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;font-size:.8rem;color:#4b5263;}
+  .sm-facts b{color:var(--navy);}
+  .sm-note{margin-top:10px;font-size:.75rem;color:#7b8293;}
+  .sm-empty,.sm-loading,.sm-error{background:#fff;border-radius:14px;padding:40px 20px;text-align:center;color:#5d6577;border:1px solid #efeadb;}
+  .sm-loading .spin{width:36px;height:36px;border:4px solid #eee4c8;border-top-color:var(--gold);border-radius:50%;margin:0 auto 12px;animation:smspin 1s linear infinite;}
+  @keyframes smspin{to{transform:rotate(360deg);}}
+  .no-access{max-width:520px;margin:80px auto;text-align:center;background:#fff;border-radius:14px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,.15);}
+  @media (max-width:1100px){ .sm-kpis{grid-template-columns:repeat(3,minmax(0,1fr));} .sm-cols{grid-template-columns:1fr;} }
+  @media (max-width:760px){
+    .sm-wrap{padding:14px 10px 60px;}
+    .sm-row{grid-template-columns:58px minmax(0,1fr);gap:10px;}
+    .sm-score{width:52px;height:52px;font-size:.95rem;}
+    .sm-contact{grid-column:1 / -1;align-items:stretch;} .sm-contact .line{justify-content:flex-start;}
+    .sm-filters{position:static;} .sm-filters input[type=search]{min-width:0;width:100%;}
+    .sm-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}
+  }
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span id="bsdVerLabel" style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.2px;"></span></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.05rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;"></div>
+  <div class="nav">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+    <a href="matches.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
+    <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+  </div>
+</div>
+
+<div class="sm-wrap" id="mainWrap" style="display:none;">
+  <div class="sm-top">
+    <div>
+      <h1>🧠 התאמות AI חכמות</h1>
+      <p id="smIntro">המערכת עוברת על כל העסקים הפעילים ועל כל הקונים הפעילים - תחום, מחיר מול תקציב, מיקום (עסק אונליין לא תלוי מקום, מפעל אולי אפשר להעביר) ומה שכתוב בהערות - ומציגה רק התאמות <b>חדשות</b> (שעדיין לא נפתחו במערכת) מ-50% ומעלה. לחיצה על שורה פותחת הסבר מלא.</p>
+    </div>
+    <div class="sm-actions">
+      <button class="sm-btn gold" id="smRefresh" onclick="loadSuggestions()">🔄 חשב מחדש</button>
+      <button class="sm-btn primary" id="smMail" onclick="emailSuggestions()">📧 שלח את הרשימה למייל</button>
+      <a class="sm-btn" href="app.html">→ חזרה ללוח הבקרה</a>
+    </div>
+  </div>
+
+  <div class="sm-kpis" id="smKpis"></div>
+
+  <div class="sm-filters" id="smFilters" style="display:none;">
+    <input type="search" id="fText" placeholder="חיפוש לפי שם קונה, עסק, עיר, תחום…" oninput="render()">
+    <div class="sm-seg" id="fLevel">
+      <button data-v="" class="on">הכל</button><button data-v="high">גבוהה 75%+</button><button data-v="good">טובה 60-74%</button><button data-v="check">שווה בדיקה 50-59%</button>
+    </div>
+    <select id="fSector" onchange="render()"><option value="">כל התחומים</option></select>
+    <label>מינימום <input type="range" id="fMin" min="50" max="95" step="5" value="50" oninput="document.getElementById('fMinV').textContent=this.value+'%';render()"> <b id="fMinV">50%</b></label>
+    <div class="sm-seg" id="fGroup">
+      <button data-v="list" class="on">רשימה</button><button data-v="buyer">לפי קונה</button><button data-v="business">לפי עסק</button>
+    </div>
+    <label><input type="checkbox" id="fExisting" onchange="render()"> הצג גם כאלה שכבר קיימות כהתאמה</label>
+  </div>
+
+  <div id="smList"><div class="sm-loading"><div class="spin"></div>המערכת לומדת את כל העסקים והקונים ומחשבת התאמות…</div></div>
+</div>
+
+<div class="no-access" id="noAccess" style="display:none;">
+  <h2>אין הרשאה</h2>
+  <p>הכפתור «התאמות AI חכמות» זמין למנהלים, או למשתמש שקיבל הרשאה מיוחדת במסך המשתמשים.</p>
+  <a href="app.html" class="btn btn-primary" style="text-decoration:none;display:inline-block;margin-top:10px;">חזרה ללוח הבקרה</a>
+</div>
+
+<div id="toastBox"></div>
+
+<script src="js/config.js?v=20260930archive1"></script>
+<script src="js/supabaseClient.js?v=202608111530"></script>
+<script src="js/auth.js?v=202609241200"></script>
+<script>
+// 05.10.2026 (בקשת ברוך): מסך מלא לכפתור «התאמות AI חכמות» (שדרוג "קבל הצעות התאמה חכמות").
+// הדף רק קורא - לא יוצר התאמות ולא משנה שום נתון. הנתונים מגיעים מהפונקציה match-suggestions-report (v6).
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toast(msg, isError){
+  const el = document.createElement('div');
+  el.textContent = msg;
+  el.style.cssText = 'position:fixed;bottom:20px;right:20px;background:'+(isError?'#b3402c':'#0e1b34')+';color:#fff;padding:10px 16px;border-radius:8px;font-size:.85rem;z-index:9999;box-shadow:0 8px 20px rgba(0,0,0,.3);';
+  document.getElementById('toastBox').appendChild(el);
+  setTimeout(()=>el.remove(), isError ? 7000 : 3500);
+}
+function money(n){ if(n===null||n===undefined||isNaN(n)) return ''; n=Number(n); if(n>=1e6) return (Math.round(n/1e5)/10).toLocaleString('he-IL')+' מיליון ₪'; if(n>=1e3) return Math.round(n/1e3).toLocaleString('he-IL')+' אלף ₪'; return n.toLocaleString('he-IL')+' ₪'; }
+function telHref(p){ return 'tel:' + String(p||'').replace(/[^\d+]/g,''); }
+function waHref(p){ let d=String(p||'').replace(/\D/g,''); if(d.startsWith('0')) d='972'+d.slice(1); return 'https://wa.me/'+d; }
+function siteHref(u){ u=String(u||'').trim(); return /^https?:\/\//i.test(u) ? u : 'https://'+u; }
+const LEVEL_LABEL = { high:'גבוהה', good:'טובה', check:'שווה בדיקה' };
+
+let DATA = null, STATE = { level:'', group:'list' };
+
+async function callFn(sendEmail){
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/match-suggestions-report', {
+    method:'POST',
+    headers:{ 'Authorization':'Bearer ' + (session?.access_token || ''), 'apikey': window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY, 'Content-Type':'application/json' },
+    body: JSON.stringify({ send_email: !!sendEmail })
+  });
+  let data = {};
+  try { data = await res.json(); } catch(_e) {}
+  if (!res.ok || data.error) throw new Error(data.error || ('שגיאה ' + res.status));
+  return data;
+}
+
+async function loadSuggestions(){
+  const btn = document.getElementById('smRefresh');
+  btn.disabled = true; btn.textContent = '⏳ מחשב…';
+  document.getElementById('smList').innerHTML = '<div class="sm-loading"><div class="spin"></div>המערכת לומדת את כל העסקים והקונים ומחשבת התאמות…</div>';
+  try {
+    DATA = await callFn(false);
+    if (!DATA.engine_version) {
+      // הפונקציה בשרת עדיין בגרסה הישנה (כל הצירופים, בלי הסברים) - לא מציגים נתונים חלקיים
+      document.getElementById('smList').innerHTML = '<div class="sm-error">מנוע ההתאמות בשרת עדיין לא עודכן לגרסה החדשה. אחרי העדכון הדף יציג את ההתאמות כאן.</div>';
+      return;
+    }
+    buildSectorFilter();
+    document.getElementById('smFilters').style.display = '';
+    render();
+  } catch (e) {
+    document.getElementById('smList').innerHTML = `<div class="sm-error">לא הצלחנו לחשב התאמות: ${esc(e.message)}<br><br><button class="sm-btn" onclick="loadSuggestions()">נסה שוב</button></div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '🔄 חשב מחדש';
+  }
+}
+
+async function emailSuggestions(){
+  const btn = document.getElementById('smMail');
+  btn.disabled = true; btn.textContent = 'שולח…';
+  try {
+    const d = await callFn(true);
+    if (d.skipped) toast('המייל לא נשלח: ' + (d.reason || ''), true);
+    else toast('הרשימה נשלחה למייל 📧');
+  } catch (e) { toast('שגיאה בשליחת המייל: ' + e.message, true); }
+  finally { btn.disabled = false; btn.textContent = '📧 שלח את הרשימה למייל'; }
+}
+
+function buildSectorFilter(){
+  const sel = document.getElementById('fSector');
+  const cur = sel.value;
+  const set = [...new Set([...(DATA.suggestions||[]), ...(DATA.already_matched||[])].map(s => s.business_info?.sector).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'he'));
+  sel.innerHTML = '<option value="">כל התחומים</option>' + set.map(s => `<option ${s===cur?'selected':''}>${esc(s)}</option>`).join('');
+}
+
+function filtered(){
+  const q = document.getElementById('fText').value.trim().toLowerCase();
+  const sector = document.getElementById('fSector').value;
+  const min = +document.getElementById('fMin').value;
+  const withExisting = document.getElementById('fExisting').checked;
+  const list = [...(DATA.suggestions||[]).map(s => ({...s, _existing:false})), ...(withExisting ? (DATA.already_matched||[]).map(s => ({...s, _existing:true})) : [])];
+  return list.filter(s => {
+    if (s.score < min) return false;
+    if (STATE.level && s.level !== STATE.level) return false;
+    if (sector && s.business_info?.sector !== sector) return false;
+    if (q){
+      const hay = [s.buyer, s.business, s.buyer_info?.city, s.business_info?.city, s.business_info?.sector, s.buyer_info?.client_number, s.business_info?.number, s.summary].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }).sort((a,b) => (a._existing - b._existing) || b.score - a.score);
+}
+
+function renderKpis(){
+  const st = DATA.stats || {};
+  const sug = DATA.suggestions || [];
+  const k = (n, l, v) => `<div class="sm-kpi ${v!==undefined?'click':''} ${v!==undefined && STATE.level===v?'on':''}" ${v!==undefined?`onclick="setLevel('${v}')"`:''}><div class="n">${n}</div><div class="l">${l}</div></div>`;
+  document.getElementById('smKpis').innerHTML =
+    k(sug.length, 'התאמות חדשות (50%+)', '') +
+    k(sug.filter(s=>s.level==='high').length, 'התאמה גבוהה (75%+)', 'high') +
+    k(sug.filter(s=>s.level==='good').length, 'התאמה טובה (60-74%)', 'good') +
+    k(sug.filter(s=>s.level==='check').length, 'שווה בדיקה (50-59%)', 'check') +
+    k(`${st.buyers||0} / ${st.businesses||0}`, 'קונים / עסקים שנבדקו') +
+    k(st.buyers_without_info||0, 'קונים בלי מספיק מידע (אין תחום/הערות)');
+  const gen = DATA.generated_at ? new Date(DATA.generated_at).toLocaleString('he-IL',{timeZone:'Asia/Jerusalem'}) : '';
+  document.getElementById('smIntro').innerHTML = `עברנו על <b>${st.buyers||0}</b> קונים פעילים ועל <b>${st.businesses||0}</b> עסקים פעילים (${(st.pairs_checked||0).toLocaleString('he-IL')} צירופים). מוצגות רק התאמות <b>חדשות</b> - כאלה שעדיין לא נפתחו במערכת - מ-50% ומעלה. ${st.already_matched ? `עוד ${st.already_matched} צירופים טובים כבר קיימים כהתאמה (אפשר להציג אותם בסימון למטה).` : ''} לחיצה על שורה פותחת הסבר מלא. <span style="color:#9aa1b0;">חושב: ${esc(gen)}</span>`;
+}
+
+function setLevel(v){ STATE.level = v; document.querySelectorAll('#fLevel button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); render(); }
+
+function cardHtml(s, idx){
+  const b = s.buyer_info || {}, z = s.business_info || {};
+  const chips = [];
+  if (z.sector) chips.push(`<span class="chip">${esc(z.sector)}</span>`);
+  if (z.city) chips.push(`<span class="chip gray">📍 ${esc(z.city)}</span>`);
+  if (z.asking_price) chips.push(`<span class="chip gray">💰 ${esc(money(z.asking_price))}</span>`);
+  if (s.mentioned) chips.push(`<span class="chip green">⭐ הקונה הזכיר את העסק</span>`);
+  if (s.online) chips.push(`<span class="chip blue">🌐 עסק אונליין</span>`);
+  if (s.relocatable) chips.push(`<span class="chip blue">🏭 מפעל - אולי אפשר להעביר</span>`);
+  if (s.distributed_at) chips.push(`<span class="chip orange">📨 נשלח תקציר בעבר</span>`);
+  if (s._existing) chips.push(`<span class="chip gray">✔ כבר קיימת כהתאמה${s.existing_match?.status ? ' · ' + esc(s.existing_match.status) : ''}</span>`);
+  if (b.city) chips.push(`<span class="chip gray">👤 גר ב${esc(b.city)}</span>`);
+  const stop = 'onclick="event.stopPropagation()"';
+  const contacts = [];
+  if (b.phone) contacts.push(`<a class="ic" href="${telHref(b.phone)}" ${stop}>📞 ${esc(b.phone)}</a><a class="ic wa" href="${waHref(b.phone)}" target="_blank" rel="noopener" ${stop}>WhatsApp</a>`);
+  if (b.phone2) contacts.push(`<a class="ic" href="${telHref(b.phone2)}" ${stop}>📞 ${esc(b.phone2)}</a>`);
+  if (b.email) contacts.push(`<a class="ic" href="mailto:${esc(b.email)}" ${stop}>✉️ מייל</a>`);
+  const bizLinks = [];
+  if (z.owner_phone) bizLinks.push(`<a class="ic" href="${telHref(z.owner_phone)}" ${stop} title="טלפון בעל העסק">📞 בעל העסק</a>`);
+  if (z.website) bizLinks.push(`<a class="ic" href="${esc(siteHref(z.website))}" target="_blank" rel="noopener" ${stop}>🌐 אתר העסק</a>`);
+  const leadUrl = 'leads.html?open=' + encodeURIComponent(s.buyer_id);
+  const bizUrl = 'businesses.html?open=' + encodeURIComponent(s.business_id);
+  const total = s.how.reduce((a,h)=>a+h.pts,0);
+  const howHtml = s.how.map(h => {
+    const pct = h.max ? Math.max(0, Math.min(100, Math.round(Math.abs(h.pts) / h.max * 100))) : 0;
+    return `<div class="how-row"><div class="top"><span>${esc(h.label)}</span><span>${h.pts>0?'+':''}${h.pts} מתוך ${h.max}</span></div><div class="how-bar ${h.pts<0?'neg':''}"><i style="width:${pct}%"></i></div><div class="txt">${esc(h.text)}</div></div>`;
+  }).join('');
+  return `<div class="sm-card ${s._existing?'existing':''}" data-i="${idx}">
+    <div class="sm-row" onclick="toggleCard(this)" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleCard(this);}" aria-expanded="false">
+      <div class="sm-score lvl-${esc(s.level)}">${s.score}%<small>${LEVEL_LABEL[s.level]||''}</small></div>
+      <div style="min-width:0;">
+        <div class="sm-names">
+          <a href="${leadUrl}" ${stop} title="פתח את כרטיס הקונה">👤 ${esc(s.buyer)}</a>${b.client_number?`<span class="chip gray">${esc(b.client_number)}</span>`:''}
+          <span class="sm-arrow">⟷</span>
+          <a href="${bizUrl}" ${stop} title="פתח את כרטיס העסק">🏪 ${esc(s.business)}</a>${z.number?`<span class="chip gray">${esc(z.number)}</span>`:''}
+        </div>
+        <div class="sm-sum">${esc(s.summary)}</div>
+        <div class="sm-chips">${chips.join('')}</div>
+        <div class="sm-toggle"><span class="t1">▼ לחץ להסבר המלא: איך הגענו לזה, למה זה מתאים ומה לא</span><span class="t2">▲ סגור הסבר</span></div>
+      </div>
+      <div class="sm-contact">
+        ${contacts.length ? `<div class="line">${contacts.join('')}</div>` : ''}
+        <div class="line"><a class="ic" href="${leadUrl}" ${stop}>כרטיס קונה</a><a class="ic" href="${bizUrl}" ${stop}>כרטיס עסק</a>${bizLinks.join('')}</div>
+      </div>
+    </div>
+    <div class="sm-detail">
+      <div class="sm-cols">
+        <div class="sm-box box-why"><h4>✅ למה זה מתאים</h4><ul>${s.why.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></div>
+        <div class="sm-box box-cav"><h4>⚠️ מה לא מתאים / לשים לב</h4>${s.caveats.length ? `<ul>${s.caveats.map(w=>`<li>${esc(w)}</li>`).join('')}</ul>` : '<div style="font-size:.84rem;color:#5d6577;">לא מצאנו משהו שלא מתאים.</div>'}</div>
+        <div class="sm-box box-how"><h4>🧮 איך הגענו ל-${s.score}%</h4>${howHtml}<div class="how-total">סה"כ: ${total} נקודות → ${s.score}%${total>99?' (התקרה היא 99%)':''}${total<0?' (המינימום הוא 0%)':''}</div></div>
+      </div>
+      <div class="sm-facts">
+        ${z.asking_price?`<span>מחיר מבוקש: <b>${esc(money(z.asking_price))}</b></span>`:''}
+        ${z.annual_revenue?`<span>מחזור שנתי: <b>${esc(money(z.annual_revenue))}</b></span>`:''}
+        ${z.net_profit?`<span>רווח שנתי: <b>${esc(money(z.net_profit))}</b></span>`:''}
+        ${b.agreement_status?`<span>הסכם עם הקונה: <b>${esc(b.agreement_status)}</b></span>`:''}
+      </div>
+      <div class="sm-note">זו המלצה בלבד - שום דבר לא נשמר. כדי לפתוח התאמה, פתח את כרטיס הקונה או העסק כרגיל.</div>
+    </div>
+  </div>`;
+}
+
+function toggleCard(row){ const card = row.closest('.sm-card'); card.classList.toggle('open'); row.setAttribute('aria-expanded', card.classList.contains('open') ? 'true' : 'false'); }
+
+function render(){
+  if (!DATA) return;
+  renderKpis();
+  const list = filtered();
+  const box = document.getElementById('smList');
+  if (!list.length){
+    box.innerHTML = `<div class="sm-empty">${(DATA.suggestions||[]).length ? 'אין התאמות שעונות על הסינון.' : 'אין כרגע התאמות חדשות מ-50% ומעלה. כדאי להוסיף לקונים תחום/אזור/תקציב בהערות - זה משפר את ההתאמות.'}</div>`;
+    return;
+  }
+  if (STATE.group === 'list'){ box.innerHTML = list.map(cardHtml).join(''); return; }
+  const key = STATE.group === 'buyer' ? (s => s.buyer_id) : (s => s.business_id);
+  const groups = new Map();
+  list.forEach(s => { const k = key(s); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s); });
+  let i = 0;
+  box.innerHTML = [...groups.values()].sort((a,b) => b[0].score - a[0].score).map(g => {
+    const s = g[0];
+    const title = STATE.group === 'buyer'
+      ? `👤 <a href="leads.html?open=${encodeURIComponent(s.buyer_id)}">${esc(s.buyer)}</a> <small>${esc(s.buyer_info?.city||'')} · ${g.length} עסקים מתאימים</small>`
+      : `🏪 <a href="businesses.html?open=${encodeURIComponent(s.business_id)}">${esc(s.business)}</a> <small>${esc(s.business_info?.sector||'')} · ${esc(s.business_info?.city||'')} · ${g.length} קונים מתאימים</small>`;
+    return `<div class="sm-group-h">${title}</div>` + g.map(x => cardHtml(x, i++)).join('');
+  }).join('');
+}
+
+document.querySelectorAll('#fLevel button').forEach(b => b.addEventListener('click', () => setLevel(b.dataset.v)));
+document.querySelectorAll('#fGroup button').forEach(b => b.addEventListener('click', () => { STATE.group = b.dataset.v; document.querySelectorAll('#fGroup button').forEach(x => x.classList.toggle('on', x === b)); render(); }));
+
+(async function init(){
+  const profile = await requireAuth();
+  if (!profile) return;
+  const fullAccess = profile.role === 'admin' || profile.role === 'manager';
+  if (!fullAccess && !profile.can_use_ai_match){ document.getElementById('noAccess').style.display = 'block'; return; }
+  document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email);
+  document.getElementById('mainWrap').style.display = 'block';
+  await loadSuggestions();
+})();
+</script>
+</body>
+</html>

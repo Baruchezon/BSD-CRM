@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610051500';
+    var PAGE_BUILD = '202610051600';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202610051500">
+<link rel="stylesheet" href="css/style.css?v=202610051600">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1200px;margin:0 auto;}
@@ -138,7 +138,7 @@
       מנהל — הרשאות רחבות כמו Admin, ללא ניהול משתמשים.
       סוכן מורשה — צופה בכל הנתונים הקיימים, ומזין נתונים חדשים (מתויגים אוטומטית על שמו).
       סוכן — רואה רק את מה שהזין בעצמו, במערכת אישית ממותגת על שמו.
-      כפתורי "סקר" ו"הצעות התאמה חכמות" מוסתרים כברירת מחדל לסוכן מורשה וסוכן - ניתן להפעיל לכל משתמש בנפרד.
+      כפתורי "סקר" ו"התאמות AI חכמות" מוסתרים כברירת מחדל לסוכן מורשה וסוכן - ניתן להפעיל לכל משתמש בנפרד.
     </div>
 
     <div class="table-scroll-wrap" style="position:relative;">
@@ -404,7 +404,7 @@ function openEditForm(id){
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_create_biz" style="width:auto;" ${u.can_create_businesses?'checked':''}> יצירת עסקים</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_create_buyer" style="width:auto;" ${u.can_create_buyers?'checked':''}> יצירת קונים</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-left:18px;"><input type="checkbox" id="can_survey" style="width:auto;" ${u.can_use_survey?'checked':''}> אפשר כפתור "סקר"</label>
-          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="can_ai_match" style="width:auto;" ${u.can_use_ai_match?'checked':''}> אפשר כפתור "הצעות התאמה חכמות"</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="can_ai_match" style="width:auto;" ${u.can_use_ai_match?'checked':''}> אפשר כפתור "התאמות AI חכמות"</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_agreement" style="width:auto;" ${u.can_send_agreement?'checked':''}> אפשר שליחת הסכם התקשרות</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_presentations" style="width:auto;" ${u.can_send_presentations?'checked':''}> אפשר שליחת מצגות אנונימיות</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="can_all_messages" style="width:auto;" ${u.can_view_all_messages?'checked':''}> אפשר צפייה בהודעות של כל המשתמשים (לא רק שלו)</label>
@@ -617,7 +617,7 @@ function openCreateForm(){
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_create_biz" style="width:auto;"> יצירת עסקים</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_create_buyer" style="width:auto;"> יצירת קונים</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-left:18px;"><input type="checkbox" id="new_can_survey" style="width:auto;"> אפשר כפתור "סקר"</label>
-          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="new_can_ai_match" style="width:auto;"> אפשר כפתור "הצעות התאמה חכמות"</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="new_can_ai_match" style="width:auto;"> אפשר כפתור "התאמות AI חכמות"</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_agreement" style="width:auto;"> אפשר שליחת הסכם התקשרות</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_presentations" style="width:auto;"> אפשר שליחת מצגות אנונימיות</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;margin-right:18px;"><input type="checkbox" id="new_can_all_messages" style="width:auto;"> אפשר צפייה בהודעות של כל המשתמשים (לא רק שלו)</label>
