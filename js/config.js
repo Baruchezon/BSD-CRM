@@ -577,7 +577,7 @@ window.BSDDataCache = (() => {
     const page = (location.pathname.split('/').pop() || '').toLowerCase();
     if (page !== 'leads.html' && page !== 'businesses.html') return;
     const script = document.createElement('script');
-    script.src = 'js/vip-crm-integration.js?v=202610051100';
+    script.src = 'js/vip-crm-integration.js?v=202610051200';
     script.defer = true;
     script.dataset.bsdVipModule = '1';
     document.head.appendChild(script);

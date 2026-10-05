@@ -177,6 +177,11 @@
   const VIP_MSG_LOAD_FAILED='לא ניתן לטעון כרגע את סטטוס הפרסום';
   const VIP_MSG_NO_SUMMARY='חסר תקציר אנונימי שמור (וגם PDF שלו)';
   const VIP_MSG_NO_PDF='חסר PDF של התקציר האנונימי בתיק המכירה';
+  const VIP_MSG_STALE='ה-PDF ישן מהתקציר';
+  const VIP_MSG_VIP_ON_OLDER='ב-VIP מוצג PDF ישן';
+  const VIP_MSG_UNKNOWN='לא ידוע אם ה-PDF תואם לתקציר';
+  const VIP_MSG_OLDER_VERSIONS='בתיק המכירה יש גם גרסאות PDF ישנות';
+  const VIP_FIX_TITLE='מפיק PDF חדש מהתקציר השמור (אם צריך), ה-VIP - רק אם העסק כבר מפורסם - יציג את החדש, והגרסאות הישנות יוסרו מתיק המכירה. עסק שלא ב-VIP לא יפורסם.';
   let businessVipState=null; // { bizId, files, publication, chosen, busy }
   let businessVipRefreshTimer=null;
 
@@ -195,24 +200,51 @@
     if(typeof window.bsdActivateBizTab==='function'){ try{ window.bsdActivateBizTab('summaries'); }catch(e){} }
   }
 
-  function applyBusinessVipStatus(biz, status){
+  // 05.10.2026 (כלל ברוך): ב-VIP תמיד רק הגרסה האחרונה של ה-PDF האנונימי.
+  // ה-PDF נחשב "ישן" אם נבנה מטקסט שונה מהתקציר השמור כרגע (ראו
+  // window.BSDAnonPdf ב-businesses.html). PDF ישן לא ניתן לפרסום חדש, ומוצג
+  // כפתור שמעדכן אותו (PDF חדש, ה-VIP - אם כבר מפורסם - מצביע עליו, והישן מוסר).
+  async function vipPdfFreshness(biz, files, publication){
+    const out={ fresh:true, vipOnOlder:false, older:files.length>1 };
+    if(!files.length) return out;
+    const enabled=!!publication?.enabled;
+    out.vipOnOlder=enabled && publication.anonymous_file_id!==files[0].id;
+    const A=window.BSDAnonPdf;
+    if(!A) return out;
+    try{
+      const b=currentBiz(biz.id,biz) || biz;
+      const hash=await A.hash(b);
+      const tagged=A.TAG_RE.test(String(files[0].storage_path||''));
+      const changedAt=tagged ? null : await A.changedAt(b);
+      out.fresh=A.freshness(files[0],hash,changedAt);
+    }catch(e){ out.fresh=true; }
+    return out;
+  }
+
+  async function applyBusinessVipStatus(biz, status){
     const checkbox=document.getElementById('vipPublishBusiness');
     const box=vipBoxEl();
     if(!checkbox || !box || box.dataset.vipBiz!==biz.id) return;
-    const files=status.eligible_files || [];
+    const files=(status.eligible_files || []).slice().sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
     const publication=status.publication || null;
     const enabled=!!publication?.enabled;
-    const chosen=publication?.anonymous_file_id || files[0]?.id || '';
     const noFiles=!files.length;
-    businessVipState={ bizId:biz.id, files, publication, chosen, busy:false };
+    const pdf=await vipPdfFreshness(biz, files, publication);
+    if(document.getElementById('vipPublishBusiness')!==checkbox) return; // הכרטיס נבנה מחדש בינתיים
+    const stale=!noFiles && pdf.fresh===false;
+    // פרסום חדש תמיד עם הגרסה האחרונה בלבד; PDF ישן לא ניתן לפרסום חדש (אפשר רק להסיר).
+    const lockPublish=noFiles || (stale && !enabled);
+    businessVipState={ bizId:biz.id, files, publication, chosen:files[0]?.id || '', busy:false, lockPublish };
     checkbox.checked=enabled;
-    checkbox.disabled=noFiles;
+    checkbox.disabled=lockPublish;
     const label=checkbox.parentElement;
     const hasSummary=!!normText(currentBiz(biz.id,biz)?.anon_summary);
     const reason=!noFiles ? '' : (hasSummary ? VIP_MSG_NO_PDF : VIP_MSG_NO_SUMMARY);
     if(label){
-      label.classList.toggle('is-disabled',noFiles);
-      label.title=noFiles ? ('🔒 '+reason+'. לחץ «⭐ הכן ל-VIP».') : 'הצגה באזור לקוחות VIP';
+      label.classList.toggle('is-disabled',lockPublish);
+      label.title=noFiles ? ('🔒 '+reason+'. לחץ «⭐ הכן ל-VIP».')
+        : stale ? '🔒 '+VIP_MSG_STALE+'. לחץ «🔄 עדכן ל-PDF האחרון».'
+        : 'הצגה באזור לקוחות VIP';
     }
     if(noFiles){
       setVipHint(`<span class="biz-vip-why">🔒 ${esc(reason)}</span>
@@ -220,9 +252,68 @@
         <span id="vipPrepStatus" class="biz-vip-status"></span>`);
       const btn=document.getElementById('vipPrepBtn');
       if(btn) btn.addEventListener('click',()=>prepareBusinessForVip(biz));
-    } else {
-      setVipHint('');
+      return;
     }
+    let why='';
+    if(stale) why='⚠️ '+VIP_MSG_STALE;
+    else if(pdf.vipOnOlder) why='⚠️ '+VIP_MSG_VIP_ON_OLDER;
+    else if(pdf.fresh===null) why='ℹ️ '+VIP_MSG_UNKNOWN;
+    else if(pdf.older) why='ℹ️ '+VIP_MSG_OLDER_VERSIONS;
+    if(!why){ setVipHint(''); return; }
+    const btnText=pdf.fresh===true && !pdf.vipOnOlder ? '🧹 השאר רק את האחרון' : '🔄 עדכן ל-PDF האחרון';
+    setVipHint(`<span class="biz-vip-why">${esc(why)}</span>
+      <button type="button" class="biz-vip-prep" id="vipFixPdfBtn" title="${esc(VIP_FIX_TITLE)}">${esc(btnText)}</button>
+      <span id="vipPrepStatus" class="biz-vip-status"></span>`);
+    const fix=document.getElementById('vipFixPdfBtn');
+    if(fix) fix.addEventListener('click',()=>fixBusinessVipPdf(biz, pdf.fresh===null));
+  }
+
+  // בודק שיש תקציר שמור ושאין בו שינויים שלא נשמרו (ה-PDF נבנה רק מהנוסח השמור).
+  function savedSummaryReady(biz){
+    const fresh=currentBiz(biz.id,biz) || biz;
+    const saved=normText(fresh.anon_summary);
+    const textarea=document.getElementById('anon_summary');
+    if(!saved){
+      goToAnonSummary();
+      toast('חסר תקציר אנונימי שמור. כתוב או צור אותו (AI), לחץ «💾 שמור תקציר אנונימי» ואז נסה שוב.',true);
+      return false;
+    }
+    if(textarea && normText(textarea.value)!==saved){
+      goToAnonSummary();
+      toast('יש בתקציר האנונימי שינויים שלא נשמרו. ה-PDF נבנה רק מהנוסח השמור - לחץ «💾 שמור תקציר אנונימי» (ה-PDF יתעדכן אוטומטית).',true);
+      return false;
+    }
+    return true;
+  }
+
+  async function fixBusinessVipPdf(biz, forceNew){
+    if(!savedSummaryReady(biz)) return;
+    if(!window.BSDAnonPdf || typeof window.BSDAnonPdf.sync!=='function'){
+      toast('עדכון ה-PDF אינו זמין כרגע במסך הזה. רענן את הדף ונסה שוב.',true);
+      return;
+    }
+    const btn=document.getElementById('vipFixPdfBtn');
+    if(btn) btn.disabled=true;
+    if(businessVipState) businessVipState.busy=true;
+    const statusEl=()=>document.getElementById('vipPrepStatus');
+    let res=null;
+    try{
+      res=await window.BSDAnonPdf.sync(biz.id,{ mode: forceNew ? 'generate' : 'fix', onStatus:t=>{ const el=statusEl(); if(el) el.textContent=t; } });
+    }catch(e){
+      res={ ok:false, message:(e && e.message) || String(e) };
+    }finally{
+      if(businessVipState) businessVipState.busy=false;
+    }
+    if(res && (res.ok || res.generated)){
+      if(typeof window.BSDAnonPdf.report==='function') window.BSDAnonPdf.report(biz.id,res);
+      else toast('✓ '+(window.BSDAnonPdf.summary?.(res) || 'עודכן'));
+    } else {
+      const msg=(res && (res.message || res.reason)) || 'העדכון נכשל';
+      toast('⚠️ '+msg,true);
+      const el=statusEl(); if(el) el.textContent='❌ '+msg;
+      if(btn) btn.disabled=false;
+    }
+    await refreshBusinessVip(biz);
   }
 
   async function refreshBusinessVip(biz){
@@ -238,7 +329,7 @@
       if(retry) retry.addEventListener('click',()=>refreshBusinessVip(biz));
       return;
     }
-    applyBusinessVipStatus(biz, status);
+    await applyBusinessVipStatus(biz, status);
   }
 
   function scheduleBusinessVipRefresh(bizId){
@@ -252,19 +343,7 @@
   }
 
   async function prepareBusinessForVip(biz){
-    const fresh=currentBiz(biz.id,biz) || biz;
-    const saved=normText(fresh.anon_summary);
-    const textarea=document.getElementById('anon_summary');
-    if(!saved){
-      goToAnonSummary();
-      toast('חסר תקציר אנונימי שמור. כתוב או צור אותו (AI), לחץ «💾 שמור תקציר אנונימי» ואז שוב «⭐ הכן ל-VIP».',true);
-      return;
-    }
-    if(textarea && normText(textarea.value)!==saved){
-      goToAnonSummary();
-      toast('יש בתקציר האנונימי שינויים שלא נשמרו. ה-PDF נבנה רק מהנוסח השמור - לחץ «💾 שמור תקציר אנונימי» ואז שוב «⭐ הכן ל-VIP».',true);
-      return;
-    }
+    if(!savedSummaryReady(biz)) return;
     if(typeof window.sfCanUpload==='function' && !window.sfCanUpload()){
       toast('אין לך הרשאה להפיק קבצים לתיק המכירה',true);
       return;
@@ -318,7 +397,7 @@
 
     async function save(){
       const state=businessVipState;
-      if(!state || state.bizId!==biz.id || !state.files.length){ checkbox.checked=!checkbox.checked; return; }
+      if(!state || state.bizId!==biz.id || !state.files.length || (state.lockPublish && checkbox.checked)){ checkbox.checked=!checkbox.checked; return; }
       checkbox.disabled=true;
       try{
         await adminApi('admin_publish_business',{business_id:biz.id,enabled:checkbox.checked,anonymous_file_id:state.chosen});
@@ -328,11 +407,16 @@
         toast(checkbox.checked ? 'העסק פורסם ללקוחות VIP' : 'העסק הוסר מאזור VIP');
       }catch(e){
         checkbox.checked=!checkbox.checked; toast(e.message,true);
-      }finally{ checkbox.disabled=!(businessVipState && businessVipState.files.length); }
+      }finally{
+        // אחרי הסרה מ-VIP של PDF ישן - התיבה ננעלת שוב עד שה-PDF יעודכן.
+        await refreshBusinessVip(biz);
+      }
     }
     checkbox.addEventListener('change',save);
     await refreshBusinessVip(biz);
   }
+
+  window.BSDVIPRefreshBusiness=bizId=>scheduleBusinessVipRefresh(bizId);
 
   // כל טעינה מחדש של תיק המכירה (אחרי הפקה/העלאה/מחיקה של קובץ) בודקת שוב
   // את סטטוס ה-VIP של הכרטיס הפתוח. קריאה בלבד - לא משנה את הפונקציה המקורית.
