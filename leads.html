@@ -781,6 +781,8 @@ function renderTable(){
 
   let rows = ALL_LEADS.filter(l=>{
     if (l.website_intake_stage === 'new' || l.website_intake_stage === 'contacted' || l.website_intake_stage === 'training') return false;
+    // Seller-type leads are not the businesses list. This screen is buyers and investors.
+    if (l.type === 'seller') return false;
     if (type !== 'all' && l.type !== type) return false;
     if (agreement !== 'all' && (l.agreement_status || 'אין הסכם') !== agreement) return false;
     if (createdBy !== 'all' && l.created_by !== createdBy) return false;
@@ -1784,8 +1786,9 @@ function setLeadViewMode(mode){
 function renderArchiveLeadsTable(){
   const body = document.getElementById('leadsBody');
   if (!body) return;
-  if (!ARCHIVED_LEADS.length){ body.innerHTML = '<tr class="empty-row"><td colspan="10">אין רשומות בארכיון</td></tr>'; return; }
-  body.innerHTML = ARCHIVED_LEADS.map(l => {
+  const rows = ARCHIVED_LEADS.filter(l => l.type !== 'seller');
+  if (!rows.length){ body.innerHTML = '<tr class="empty-row"><td colspan="10">אין רשומות בארכיון</td></tr>'; return; }
+  body.innerHTML = rows.map(l => {
     const personName = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || (l.business_name||'—');
     return `
     <tr>
