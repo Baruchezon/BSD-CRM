@@ -126,20 +126,49 @@ document.addEventListener('DOMContentLoaded', bsdInitPushBell);
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', event => {
     if (event.data && event.data.type === 'BSD_PUSH_SOUND') {
-      // 'morning' = task with date only (plays once, gentle). 'nudnik' = task with date+time (repeats until read/dismissed).
-      const file = event.data.kind === 'nudnik' ? 'sounds/nudnik-reminder.wav' : 'sounds/morning-reminder.wav';
-      try {
-        const audio = new Audio(file);
-        audio.play().catch(() => {});
-      } catch (e) { /* ignore */ }
-
-      // If the app is open in the foreground when the reminder arrives, jump straight
-      // to the full-screen task-alert page instead of leaving it buried behind a tap on
-      // the OS notification — this is what makes the reminder impossible to miss/ignore.
+      // 05.10.2026: respects the user's popup settings (js/bsdNotify.js):
+      //  - muted / sound off -> no sound;
+      //  - no more automatic jump away from what you're doing: a small card with
+      //    "פתח" instead (the old full-screen jump is still available as an
+      //    opt-in setting "לעבור אוטומטית למסך ההתראה").
+      // The OS notification itself is shown by sw.js and is controlled by the push bell.
+      const N = window.BSDNotify;
       const targetUrl = event.data.url;
-      if (targetUrl && !location.pathname.endsWith('task-alert.html') && document.visibilityState === 'visible') {
-        location.href = targetUrl;
+      const isLead = !!(targetUrl && /lead-alert\.html/.test(targetUrl));
+      let leadId = null;
+      if (isLead) { try { leadId = new URL(targetUrl, location.href).searchParams.get('id'); } catch (e) {} }
+
+      const soundOk = N ? N.soundAllowed() : true;
+      if (soundOk) {
+        // 'morning' = gentle single chime. 'nudnik' = task with date+time (server repeats it every 30 min, max 6 times).
+        const file = event.data.kind === 'nudnik' ? 'sounds/nudnik-reminder.wav' : 'sounds/morning-reminder.wav';
+        try {
+          const audio = new Audio(file);
+          audio.play().catch(() => {});
+        } catch (e) { /* ignore */ }
       }
+
+      if (!targetUrl || location.pathname.endsWith('task-alert.html') || location.pathname.endsWith('lead-alert.html')) return;
+      if (!N) {
+        // module not loaded on this page -> old behaviour
+        if (document.visibilityState === 'visible') location.href = targetUrl;
+        return;
+      }
+      if (N.autoJump() && document.visibilityState === 'visible') { location.href = targetUrl; return; }
+      if (isLead && !N.allowed('leads')) return;
+      if (!isLead && !N.allowed('tasks')) return;
+      if (isLead && leadId && N.isHidden('lead', leadId)) return;
+      if (isLead && typeof window.bsdOnLeadPush === 'function' && window.bsdOnLeadPush(leadId)) return;
+      N.showCard({
+        key: 'push:' + targetUrl,
+        kind: isLead ? 'leads' : 'tasks',
+        icon: isLead ? '🆕' : '⏰',
+        title: event.data.title || (isLead ? 'ליד חדש מהאתר' : 'תזכורת למשימה'),
+        bodyHtml: event.data.body ? String(event.data.body).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]) : '',
+        actions: [{ label: 'פתח', href: targetUrl, primary: true,
+                    onClick: () => { if (isLead && leadId) N.dismiss('lead', leadId); location.href = targetUrl; } }],
+        onDismiss: () => { if (isLead && leadId) N.dismiss('lead', leadId); }
+      });
     }
   });
 }

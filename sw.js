@@ -27,7 +27,7 @@ self.addEventListener('push', event => {
     Promise.all([
       self.registration.showNotification(title, options),
       self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
-        clientList.forEach(client => client.postMessage({ type: 'BSD_PUSH_SOUND', kind, url: targetUrl }));
+        clientList.forEach(client => client.postMessage({ type: 'BSD_PUSH_SOUND', kind, url: targetUrl, title, body: options.body }));
       })
     ])
   );
