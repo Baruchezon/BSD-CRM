@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610051200';
+    var PAGE_BUILD = '202610051300';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202610051200">
+<link rel="stylesheet" href="css/style.css?v=202610051300">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -86,6 +86,10 @@
   .row-menu-btn:hover{background:#eee8d8;}
   .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
   .notes-cell{white-space:normal;word-break:break-word;max-width:420px;line-height:1.4;}
+  /* 05.10.2026 (בקשת ברוך): תצוגת ההערות ברשימה בגובה קבוע וזהה בכל השורות -
+     עד 3 שורות ואז «...». הטקסט המלא נשאר בכרטיס (ובריחוף עם העכבר). */
+  .notes-preview{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden;text-overflow:ellipsis;height:4.2em;max-height:4.2em;line-height:1.4;}
+  @media (max-width:640px){ .notes-preview{height:auto;} }
   .email-cell{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help;}
   .phone-cell{white-space:nowrap;min-width:100px;}
   .records-table > thead > tr > th:first-child,
@@ -263,7 +267,7 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202610051200"></script>
+<script src="js/config.js?v=202610051300"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
 <script src="js/permissions.js?v=202608251709"></script>
@@ -899,7 +903,7 @@ function renderTable(){
       <td data-label="סטטוס הסכם">${agreementBadge(l.agreement_status)}</td>
       <td data-label="נוצר">${fmtDate(l.created_at)}</td>
       <td data-label="עודכן">${fmtDate(l.updated_at)}</td>
-      <td data-label="הערות" class="notes-cell">${esc(l.notes||'—')}</td>
+      <td data-label="הערות" class="notes-cell"><div class="notes-preview" title="${esc(l.notes||'')}">${esc(l.notes||'—')}</div></td>
     </tr>`;
   }).join('');
 }
