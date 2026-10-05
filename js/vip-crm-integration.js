@@ -115,49 +115,85 @@
     const blocked=account && account.status==='blocked';
     const statusText=active ? 'פעיל' : blocked ? 'חסום' : 'לא הופעל';
     const statusColor=active ? '#217a4d' : blocked ? '#a72a2a' : '#6f7787';
-    const disabled=(!eligible || !!account) ? 'disabled' : '';
+    // 05.10.2026 (בקשת ברוך): סימון VIP בטעות חייב להיות הפיך. קודם התיבה ננעלה
+    // ברגע שנוצר חשבון (disabled כש-account קיים) והאירוע טיפל רק בסימון, כך
+    // שאי אפשר היה לבטל. עכשיו: הפעלה עדיין מותרת רק אחרי שנשלח/נחתם הסכם
+    // (אותו כלל גם בשרת), אבל ביטול מותר תמיד - הסרת הסימון מבטלת את החשבון
+    // (admin_account_action 'delete': מחיקה רכה + ניתוק כל הכניסות). אפשר
+    // להפעיל שוב בכל עת (נוצרת סיסמה זמנית חדשה).
+    const disabled=(!eligible && !account) ? 'disabled' : '';
     const checked=account ? 'checked' : '';
-    const reason=!eligible ? '<div style="margin-top:8px;color:#9a6514;font-size:.8rem;">ניתן לפתוח גישת VIP רק לאחר שנשלח הסכם לקונה.</div>' : '';
+    const reason=(!eligible && !account) ? '<div style="margin-top:8px;color:#9a6514;font-size:.8rem;">ניתן לפתוח גישת VIP רק לאחר שנשלח הסכם לקונה.</div>' : '';
 
     modal.insertAdjacentHTML('beforeend',vipBox('גישת לקוח VIP',`
       <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;">
-        <label style="display:flex;align-items:center;gap:9px;font-weight:800;color:#23304a;cursor:${disabled?'not-allowed':'pointer'};">
+        <label style="display:flex;align-items:center;gap:9px;font-weight:800;color:#23304a;cursor:${disabled?'not-allowed':'pointer'};" title="${account ? 'הסרת הסימון מבטלת את גישת ה-VIP של הלקוח' : ''}">
           <input id="vipEnableBuyer" type="checkbox" ${checked} ${disabled} style="width:20px;height:20px;accent-color:#d5b85c;"> אפשר גישת VIP
         </label>
-        <span style="font-weight:800;color:${statusColor};">סטטוס: ${statusText}</span>
+        <span id="vipBuyerStatus" style="font-weight:800;color:${statusColor};">סטטוס: ${statusText}</span>
       </div>
-      ${account ? `<div style="margin-top:10px;font-size:.85rem;"><b>שם משתמש:</b> ${esc(account.username)}</div>` : ''}
+      <div id="vipBuyerAccountLine">${account ? `<div style="margin-top:10px;font-size:.85rem;"><b>שם משתמש:</b> ${esc(account.username)}</div><div style="margin-top:4px;font-size:.75rem;color:#6f7787;">סומן בטעות? הסר את הסימון כדי לבטל את גישת ה-VIP.</div>` : ''}</div>
       ${reason}
       <div id="vipBuyerCredentials" style="margin-top:10px;"></div>
     `,`leads.html?open=${encodeURIComponent(lead.id)}`));
 
     const checkbox=document.getElementById('vipEnableBuyer');
-    if(checkbox && !checkbox.disabled){
-      checkbox.addEventListener('change',async()=>{
-        if(!checkbox.checked) return;
-        checkbox.disabled=true;
-        try{
-          const result=await adminApi('admin_enable_buyer',{buyer_id:lead.id});
-          if(result.already_exists){ toast('ללקוח כבר קיים חשבון VIP'); return; }
-          const username=result.account?.username || '';
-          const pwd=result.temporary_password || '';
-          const phone=(result.buyer?.phone || lead.phone || '').replace(/\D/g,'');
-          const name=result.buyer?.name || lead.full_name || '';
-          const site='https://www.bsd-bbi.co.il/vip/';
-          const message=`שלום ${name},\n\nברוך הבא לאזור לקוחות VIP של BSD.\nהמערכת מתעדכנת באופן שוטף בעסקים חדשים והזדמנויות עסקיות אנונימיות.\n\nכניסה: ${site}\nשם משתמש: ${username}\nסיסמה זמנית: ${pwd}\n\nבכניסה ניתן לשנות את הסיסמה. אם שכחת את הסיסמה, פנה ל BSD.`;
-          const waPhone=phone.startsWith('0') ? '972'+phone.slice(1) : phone;
-          const target=document.getElementById('vipBuyerCredentials');
-          if(target) target.innerHTML=`<div style="background:#f7f2df;border:1px solid #e1cc87;border-radius:10px;padding:12px;line-height:1.7;">
-            <div><b>שם משתמש:</b> ${esc(username)}</div><div><b>סיסמה זמנית:</b> <span style="font-family:monospace;font-size:1rem;">${esc(pwd)}</span></div>
-            <div style="font-size:.75rem;color:#755f23;margin-top:4px;">הסיסמה מוצגת כעת לצורך השליחה. היא אינה נשמרת כטקסט גלוי.</div>
-            ${waPhone ? `<a href="https://wa.me/${esc(waPhone)}?text=${encodeURIComponent(message)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:9px;background:#1f9d55;color:#fff;text-decoration:none;border-radius:8px;padding:8px 13px;font-weight:800;">שלח פרטי כניסה ב WhatsApp</a>` : ''}
-          </div>`;
-          toast('חשבון VIP נוצר בהצלחה');
-        }catch(e){
-          checkbox.checked=false; checkbox.disabled=false; toast(e.message,true);
-        }
-      });
+    if(!checkbox || checkbox.disabled) return;
+    let current=account; // החשבון הנוכחי (מתעדכן גם מיד אחרי יצירה, כדי שאפשר יהיה לבטל מיד)
+    const setStatus=(text,color)=>{ const el=document.getElementById('vipBuyerStatus'); if(el){ el.textContent='סטטוס: '+text; el.style.color=color; } };
+
+    async function enable(){
+      checkbox.disabled=true;
+      try{
+        const result=await adminApi('admin_enable_buyer',{buyer_id:lead.id});
+        if(result.already_exists){ current=result.account || current; toast('ללקוח כבר קיים חשבון VIP'); return; }
+        current=result.account || null;
+        const username=result.account?.username || '';
+        const pwd=result.temporary_password || '';
+        const phone=(result.buyer?.phone || lead.phone || '').replace(/\D/g,'');
+        const name=result.buyer?.name || lead.full_name || '';
+        const site='https://www.bsd-bbi.co.il/vip/';
+        const message=`שלום ${name},\n\nברוך הבא לאזור לקוחות VIP של BSD.\nהמערכת מתעדכנת באופן שוטף בעסקים חדשים והזדמנויות עסקיות אנונימיות.\n\nכניסה: ${site}\nשם משתמש: ${username}\nסיסמה זמנית: ${pwd}\n\nבכניסה ניתן לשנות את הסיסמה. אם שכחת את הסיסמה, פנה ל BSD.`;
+        const waPhone=phone.startsWith('0') ? '972'+phone.slice(1) : phone;
+        const target=document.getElementById('vipBuyerCredentials');
+        if(target) target.innerHTML=`<div style="background:#f7f2df;border:1px solid #e1cc87;border-radius:10px;padding:12px;line-height:1.7;">
+          <div><b>שם משתמש:</b> ${esc(username)}</div><div><b>סיסמה זמנית:</b> <span style="font-family:monospace;font-size:1rem;">${esc(pwd)}</span></div>
+          <div style="font-size:.75rem;color:#755f23;margin-top:4px;">הסיסמה מוצגת כעת לצורך השליחה. היא אינה נשמרת כטקסט גלוי.</div>
+          ${waPhone ? `<a href="https://wa.me/${esc(waPhone)}?text=${encodeURIComponent(message)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:9px;background:#1f9d55;color:#fff;text-decoration:none;border-radius:8px;padding:8px 13px;font-weight:800;">שלח פרטי כניסה ב WhatsApp</a>` : ''}
+          <div style="font-size:.75rem;color:#6f7787;margin-top:6px;">סומן בטעות? הסר את הסימון כדי לבטל מיד.</div>
+        </div>`;
+        setStatus('פעיל','#217a4d');
+        toast('חשבון VIP נוצר בהצלחה');
+      }catch(e){
+        checkbox.checked=false; toast(e.message,true);
+      }finally{
+        checkbox.disabled=false;
+      }
     }
+
+    async function disable(){
+      if(!current || !current.id){ checkbox.checked=false; return; }
+      const name=lead.full_name || 'הלקוח';
+      const ok=window.confirm(`לבטל את גישת ה-VIP של ${name}?\n\nשם המשתמש ${current.username || ''} יבוטל וכל הכניסות הפעילות ינותקו.\nאפשר להפעיל שוב בכל עת (תיווצר סיסמה זמנית חדשה).`);
+      if(!ok){ checkbox.checked=true; return; }
+      checkbox.disabled=true;
+      try{
+        await adminApi('admin_account_action',{account_id:current.id,account_action:'delete'});
+        current=null;
+        const creds=document.getElementById('vipBuyerCredentials'); if(creds) creds.innerHTML='';
+        const line=document.getElementById('vipBuyerAccountLine'); if(line) line.innerHTML='';
+        setStatus('לא הופעל','#6f7787');
+        toast('גישת ה-VIP בוטלה');
+      }catch(e){
+        checkbox.checked=true; toast(e.message,true);
+      }finally{
+        // אחרי ביטול: הפעלה מחדש שוב רק אם נשלח/נחתם הסכם.
+        checkbox.disabled=!current && !eligible;
+        if(checkbox.parentElement) checkbox.parentElement.style.cursor=checkbox.disabled?'not-allowed':'pointer';
+      }
+    }
+
+    checkbox.addEventListener('change',()=>{ if(checkbox.checked) enable(); else disable(); });
   }
 
   // ---------------------------------------------------------------------------
