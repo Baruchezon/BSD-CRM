@@ -1607,6 +1607,7 @@ function openBizForm(id){
             <a href="#" onclick="revertAiText('short_description');return false;" style="color:var(--navy,#0e1b34);text-decoration:underline;">↩ שחזר לנוסח שלפני עריכת ה-AI</a>
           </div>
           ${bsdOldTextsFoldHtml(biz)}
+          ${bsdPreResearchFoldHtml(biz)}
         </div>
 
         <div class="section-h">סיווג ומיקום</div>
@@ -1855,6 +1856,7 @@ function openBizForm(id){
   if (biz) initAiEditIndicators(biz);
   // 04.10.2026: נקודת ייחוס לשמירה בלי דריסה + רענון שקט מהשרת (הרשימה עשויה להגיע ממטמון יומי)
   bsdCaptureBizFormBaseline(biz);
+  bsdInitPreResearchBox();
   bsdInitAnonSummaryCounter();
   if (biz) bsdRevalidateOpenBizForm(biz.id);
 }
@@ -3260,10 +3262,11 @@ async function maybeAutoRefreshAnonSummary(bizId, existingBiz, payload){
 // הם השתנו בשרת מאז שהטופס נפתח (אישור AI, משתמש אחר, עדכון ידני) - לא דורסים
 // אלא שואלים.
 // ============================================================================
-const BIZ_GUARDED_TEXT_FIELDS = ['anon_summary','anon_display_name','internal_business_summary','short_description','notes'];
+const BIZ_GUARDED_TEXT_FIELDS = ['anon_summary','anon_display_name','internal_business_summary','short_description','notes','pre_research'];
 const BIZ_GUARDED_FIELD_LABELS = {
   anon_summary: 'תקציר אנונימי', anon_display_name: 'שם תצוגה אנונימי',
   internal_business_summary: 'תקציר עסקי פנימי מלא', short_description: 'כל המידע על העסק', notes: 'הערות',
+  pre_research: '🔎 חקר מקדים',
 };
 let BIZ_FORM_BASELINE = null; // { bizId, form:{field:value as shown}, db:{field:value from server} }
 let BIZ_PENDING_CONFLICT = null;
@@ -3407,6 +3410,7 @@ async function bsdRevalidateOpenBizForm(bizId){
     if (bsdNormText(el.value) !== BIZ_FORM_BASELINE.form[f]) return; // המשתמש כבר הקליד - בדיקת השמירה תטפל
     el.value = fresh[f] || '';
     bsdSetBizBaselineField(bizId, f, el.value, fresh[f]);
+    if (f === 'pre_research' && el.value.trim()){ const fold = document.getElementById('bizPreResearchFold'); if (fold) fold.open = true; }
     updated.push(BIZ_GUARDED_FIELD_LABELS[f] || f);
   });
   if (updated.length){
@@ -4787,6 +4791,30 @@ function bsdOldTextsFoldHtml(biz){
           </details>`;
 }
 
+// 06.10.2026 (בקשת ברוך): «🔎 חקר מקדים» (businesses.pre_research) - חלק פנימי משני
+// מתחת לתיבה המלאה, לא תיבה שלישית: קיפול סגור כשהוא ריק, פתוח כשיש בו חקר.
+// פנימי בלבד: לא נכנס ל-AI של התקציר האנונימי / התקציר הפנימי, לא לאתר, לא
+// לסוכנים, לא ל-PDF ולא לשליחה. נשמר דרך «שמירה» הרגיל, רק אם שונה (BIZ_GUARDED_TEXT_FIELDS).
+function bsdPreResearchFoldHtml(biz){
+  const val = biz && biz.pre_research != null ? String(biz.pre_research) : '';
+  return `
+          <details id="bizPreResearchFold" class="bsd-pre-research"${val.trim() ? ' open' : ''} style="margin-top:10px;background:#f6f8fc;border:1px solid #d3dcec;border-radius:8px;padding:4px 10px 8px;">
+            <summary style="cursor:pointer;font-size:.86rem;font-weight:700;color:#1c2b4a;padding:6px 0;">🔎 חקר מקדים <span style="font-weight:400;color:#8a8578;font-size:.75rem;">(פנימי בלבד - לא מתפרסם, לא נשלח ולא נכנס לתקציר האנונימי)</span></summary>
+            <textarea id="pre_research" rows="6" style="width:100%;box-sizing:border-box;min-height:140px;margin-top:4px;resize:vertical;white-space:pre-wrap;font-size:16px;line-height:1.45;">${esc(val)}</textarea>
+          </details>`;
+}
+
+// התיבה גדלה לפי התוכן (עד 60% מגובה המסך) - גם כשהקיפול נפתח. תצוגה בלבד, לא נוגע בשמירה.
+function bsdInitPreResearchBox(){
+  const box = document.getElementById('pre_research');
+  if (!box) return;
+  const grow = () => { if (!box.getClientRects().length) return; box.style.height = 'auto'; box.style.height = Math.min(box.scrollHeight + 2, Math.max(220, Math.round(window.innerHeight * 0.6))) + 'px'; };
+  box.addEventListener('input', grow);
+  const fold = document.getElementById('bizPreResearchFold');
+  if (fold) fold.addEventListener('toggle', grow);
+  requestAnimationFrame(grow);
+}
+
 // טקסטים ישנים (מהשדות המוסתרים) שנשלחים לאיחוד עם התיבה המלאה. טקסט שכבר מופיע
 // מילה במילה בתיבה - לא נשלח שוב.
 function bsdCollectOldTextsForMerge(boxText){
@@ -5059,6 +5087,10 @@ async function saveBiz(e){
     // 03.09.2026 (מודול מתווכים - משוב): שדה חדש בלבד, לא נוגע בשום שדה אחר כאן
     referred_by_broker_id: g('referred_by_broker_id') || null,
   };
+  // 06.10.2026: «🔎 חקר מקדים» - רק אם התיבה קיימת בטופס. בעסק קיים הוא נשלח רק אם
+  // שונה (בדיקת BIZ_GUARDED_TEXT_FIELDS למטה), בעסק חדש רק אם מולא.
+  const preResearchEl = document.getElementById('pre_research');
+  if (preResearchEl && (bizId || preResearchEl.value.trim())) payload.pre_research = preResearchEl.value.trim() ? preResearchEl.value : null;
 
   // סימון אמין של שימוש AI על תיאור/הערות (סעיף 3) - נכתב ל-DB רק כאן,
   // בשמירה עצמה, בדיוק כמו כל שדה אחר בטופס. AI_EDIT_PENDING מוזן ב-

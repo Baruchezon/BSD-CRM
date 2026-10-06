@@ -1162,6 +1162,13 @@ function openLeadForm(id, forcedType, prefillData){
           <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="openNotesRecording({recordId:'${lead ? lead.id : 'new-' + Date.now()}', label:'${esc((lead?.full_name || 'רשומה חדשה').replace(/'/g,''))}', textareaId:'notes', currentProfile:CURRENT_PROFILE})">🎙️ הקלט הערות</button>
         </div>
         ${textareaRow('notes','הערות', lead?.notes || pf.notes, 180)}
+        <!-- 06.10.2026 (בקשת ברוך): «🔎 חקר מקדים» - עמודה leads.pre_research. פנימי בלבד (אותה הרשאת צפייה כמו «הערות»):
+             לא נשלח לקונה, לא בהתאמות/דוחות לסוכנים, לא מתפרסם. נשמר רק אם שונה בכרטיס הזה. -->
+        <div class="section-h">🔎 חקר מקדים</div>
+        <div class="field full">
+          <label for="pre_research" style="font-weight:400;color:#8a8578;font-size:.78rem;">חקר שוק מקדים (פנימי בלבד - לא נשלח ולא מתפרסם)</label>
+          <textarea id="pre_research" rows="${Math.min(16, Math.max(5, String(lead?.pre_research || '').split('\n').length + 1))}" data-orig="${esc(lead?.pre_research || '')}" style="min-height:120px;width:100%;box-sizing:border-box;font-size:16px;line-height:1.45;white-space:pre-wrap;resize:vertical;">${esc(lead?.pre_research || '')}</textarea>
+        </div>
         ${(lead && !isGrantOnlyViewer(lead)) ? `
         <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;">
           <span>📲 WhatsApp</span>
@@ -1225,6 +1232,13 @@ function openLeadForm(id, forcedType, prefillData){
       const el = document.getElementById(id);
       if (el) el.addEventListener('input', dupCheck);
     });
+  }
+  // «🔎 חקר מקדים»: התיבה גדלה לפי התוכן (עד 60% מגובה המסך), כדי שיהיה קריא בטאבלט ובטלפון.
+  const preResearchBox = document.getElementById('pre_research');
+  if (preResearchBox){
+    const grow = () => { preResearchBox.style.height = 'auto'; preResearchBox.style.height = Math.min(preResearchBox.scrollHeight + 2, Math.max(220, Math.round(window.innerHeight * 0.6))) + 'px'; };
+    preResearchBox.addEventListener('input', grow);
+    requestAnimationFrame(grow);
   }
   if (lead && !isGrantOnlyViewer(lead)) loadLeadMeetings(lead.id);
   if (lead && !isGrantOnlyViewer(lead)) waRenderHistory('lead', lead.id, 'leadWaHistoryBox');
@@ -1504,6 +1518,27 @@ async function saveLead(e){
       asking_price: num(g('asking_price')), sale_reason: g('sale_reason'),
       agreement_signed_date: g('agreement_signed_date') || null
     });
+  }
+
+  // «🔎 חקר מקדים»: נשלח רק אם שונה בכרטיס הזה, כדי ששמירה של כרטיס שנפתח קודם
+  // לא תמחק חקר שנכתב בינתיים (למשל ע"י דנה). אם השתנה גם בשרת - לא שומרים כלום.
+  const preEl = document.getElementById('pre_research');
+  if (preEl && !preEl.disabled){
+    const norm = v => (v === null || v === undefined) ? '' : String(v).replace(/\r\n?/g, '\n').trim();
+    const orig = norm(preEl.dataset.orig), mine = norm(preEl.value);
+    if (mine !== orig){
+      if (leadId){
+        const { data: cur, error: curErr } = await window.supabaseClient.from('leads').select('pre_research').eq('id', leadId).maybeSingle();
+        if (curErr || !cur){ toast('❌ לא ניתן לוודא את «🔎 חקר מקדים» מול השרת (' + (curErr ? curErr.message : 'הרשומה לא נמצאה') + ') - לא נשמר כלום, נסה שוב.'); return; }
+        const server = norm(cur.pre_research);
+        if (server !== orig && server !== mine){
+          preEl.value = cur.pre_research || ''; preEl.dataset.orig = cur.pre_research || '';
+          toast('⚠️ «🔎 חקר מקדים» עודכן במקום אחר אחרי שפתחת את הכרטיס. הנוסח השמור נטען - הוסף את השינוי שלך ושמור שוב. לא נשמר כלום.');
+          return;
+        }
+      }
+      payload.pre_research = mine || null;
+    }
   }
 
   let error;
