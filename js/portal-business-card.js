@@ -6,7 +6,7 @@
 (()=>{'use strict';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const when=v=>v?new Date(v).toLocaleString('he-IL',{timeZone:'Asia/Jerusalem',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
-const ERRORS={signed_agreement_required:'נדרש עסק פעיל עם הסכם חתום',account_required:'אין חשבון פורטל לעסק זה'};
+const ERRORS={signed_agreement_required:'נדרש עסק פעיל עם הסכם חתום',account_required:'אין חשבון פורטל לעסק זה',preview_unavailable:'החשבון אינו פתוח לצפייה. נדרש חשבון פורטל פעיל לעסק עם הסכם חתום'};
 async function api(action,payload={}){
  const url=window.BSD_CONFIG.SELLER_PORTAL_API_URL;if(!url)throw Error('שירות הפורטל טרם הופעל. פרטי העסק נשמרים כרגיל');
  const {data:{session}}=await window.supabaseClient.auth.getSession();if(!session)throw Error('יש להתחבר למערכת');
@@ -41,7 +41,7 @@ async function mount(biz){
   if(exists()){s='שם משתמש: '+account.username+' · '+(account.status==='active'?(account.pending?'ממתין לסיסמה (נפתח בשיטה הקודמת)':'פעיל'):account.status==='archived'?'חסום עקב ארכיון':'חסום');if(!account.pending)s+=' · '+(account.last_login_at?'כניסה אחרונה '+when(account.last_login_at)+' · '+account.login_count+' כניסות':'טרם נכנס');}
   if(!eligible())s+=' · הגישה אפשרית רק לעסק פעיל עם הסכם חתום';
   summary.textContent=lastError||s;summary.style.color=lastError?'#a33':'';
-  controls.innerHTML=exists()?`${account.status==='active'?`<button type="button" data-portal-open>${account.pending?'יצירת סיסמה ושליחה ב-WhatsApp':'איפוס סיסמה ושליחה ב-WhatsApp'}</button><button type="button" data-portal-block>חסימת החשבון</button>`:`<button type="button" data-portal-unblock ${!eligible()?'disabled':''}>הפעלת החשבון</button>`}<button type="button" data-portal-delete>מחיקת חשבון הפורטל</button><a href="portal-admin.html?business_id=${encodeURIComponent(biz.id)}" style="align-self:center">ניהול הפורטל של העסק ←</a>`:'';
+  controls.innerHTML=exists()?`${account.status==='active'&&eligible()?`<button type="button" data-portal-preview>צפייה כבעל העסק</button>`:''}${account.status==='active'?`<button type="button" data-portal-open>${account.pending?'יצירת סיסמה ושליחה ב-WhatsApp':'איפוס סיסמה ושליחה ב-WhatsApp'}</button><button type="button" data-portal-block>חסימת החשבון</button>`:`<button type="button" data-portal-unblock ${!eligible()?'disabled':''}>הפעלת החשבון</button>`}<button type="button" data-portal-delete>מחיקת חשבון הפורטל</button><a href="portal-admin.html?business_id=${encodeURIComponent(biz.id)}" style="align-self:center">ניהול הפורטל של העסק ←</a>`:'';
   if(busy)controls.querySelectorAll('button').forEach(b=>b.disabled=true);
  };
  const reload=async()=>{const d=await api('admin_detail',{business_id:biz.id});account=d.account;draw();};
@@ -55,7 +55,8 @@ async function mount(biz){
  root.addEventListener('click',async e=>{
   const copy=e.target.closest('[data-portal-copy]');if(copy){const t=root.querySelector('[data-portal-invite]');try{await navigator.clipboard.writeText(t.value);copy.textContent='ההודעה הועתקה';}catch(_){t.select();}return;}
   const button=e.target.closest('[data-portal-controls] button');if(!button||busy)return;
-  if(button.hasAttribute('data-portal-open')){if(!account.pending&&!confirm('ליצור סיסמה חדשה? הסיסמה הקודמת תפסיק לעבוד מיד.'))return;const tab=reserveTab();run(()=>open(tab),tab);}
+  if(button.hasAttribute('data-portal-preview')){const tab=reserveTab();run(async()=>{const d=await api('admin_preview',{business_id:biz.id});const url=String(d.portal_url||'').replace(/#.*$/,'')+'#preview='+d.token;if(tab)tab.location.replace(url);else location.assign(url);},tab);}
+  else if(button.hasAttribute('data-portal-open')){if(!account.pending&&!confirm('ליצור סיסמה חדשה? הסיסמה הקודמת תפסיק לעבוד מיד.'))return;const tab=reserveTab();run(()=>open(tab),tab);}
   else if(button.hasAttribute('data-portal-block'))run(async()=>{await api('admin_status',{business_id:biz.id,status:'blocked'});credBox.replaceChildren();await reload();});
   else if(button.hasAttribute('data-portal-unblock'))run(async()=>{await api('admin_status',{business_id:biz.id,status:'active'});await reload();});
   else if(button.hasAttribute('data-portal-delete')){if(!confirm('למחוק את חשבון הפורטל בלבד? כרטיס העסק וכל הקבצים יישארו.'))return;run(async()=>{await api('admin_delete',{business_id:biz.id});credBox.replaceChildren();await reload();});}

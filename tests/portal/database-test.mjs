@@ -74,11 +74,21 @@ await blocked(`insert into seller_portal_files(business_id,storage_path,file_nam
 await blocked(`insert into seller_portal_files(business_id,storage_path,file_name,mime_type,size_bytes) values('11111111-1111-1111-1111-111111111111','p2','x','image/png',30000000)`);
 for(const role of ['anon','authenticated']){await db.exec(`set role ${role}`);await blocked('select * from seller_portal_files');await db.exec('reset role');}
 assert.equal((await db.query("select count(*)::int n from pg_class where relname like 'seller_portal_%' and relkind='r' and relrowsecurity")).rows[0].n,7);
+await db.exec(await readFile(new URL('../../supabase/migrations/20261005174000_seller_portal_admin_preview.sql',import.meta.url),'utf8'));
+await db.exec(`update businesses set is_archived=false,agreement_status='יש הסכם חתום' where id='11111111-1111-1111-1111-111111111111';update seller_portal_accounts set status='active' where id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+insert into seller_portal_sessions(id,account_id,token_hash,expires_at,last_activity_measure_at,preview) values('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','live-after-replace',now()+interval '1 hour',clock_timestamp()-interval '35 seconds',false),('dddddddd-dddd-dddd-dddd-dddddddddddd','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','preview-session',now()+interval '8 hours',clock_timestamp()-interval '35 seconds',true);`);
+const live=(await db.query(`select seller_portal_record_activity('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','documents',90,'heartbeat') n`)).rows[0].n;
+assert.ok(live>=35&&live<=36,'replaced activity function still counts a real session');
+const eventsBefore=(await db.query('select count(*)::int n from seller_portal_events')).rows[0].n;
+const previewDelta=(await db.query(`select seller_portal_record_activity('dddddddd-dddd-dddd-dddd-dddddddddddd','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','home',30,'page_view') n`)).rows[0].n;
+assert.equal(previewDelta,0,'preview activity is a no-op');
+assert.equal((await db.query('select count(*)::int n from seller_portal_events')).rows[0].n,eventsBefore,'preview writes no event');
+assert.equal((await db.query(`select active_seconds from seller_portal_sessions where id='dddddddd-dddd-dddd-dddd-dddddddddddd'`)).rows[0].active_seconds,0,'preview adds no active time');
 await db.exec(`delete from businesses where id='11111111-1111-1111-1111-111111111111'`);
 assert.equal((await db.query('select business_id,status from seller_portal_accounts')).rows[0].business_id,null);
 assert.equal((await db.query('select status from seller_portal_accounts')).rows[0].status,'blocked');
 assert.ok((await db.query('select count(*) n from seller_portal_events')).rows[0].n>0);
 assert.equal((await db.query('select count(*)::int n from seller_portal_files')).rows[0].n,0,'extra files follow the business delete');
 assert.equal((await db.query("select count(*)::int n from seller_portal_events where event_type='document_download' and extra_file_id is null")).rows[0].n,1,'download audit kept after delete');
-console.log('PASS: migration, hardening (single-use activation, expiry, signed-agreement gate, global ceiling, pruning keeps audit), agreement gate, archive revocation, restore stays blocked, uniqueness, atomic rate limits, RLS, no direct API access, manager file approval, v2 extra files (RLS, checks, cascade, audit kept)');await db.close();
+console.log('PASS: migration, hardening (single-use activation, expiry, signed-agreement gate, global ceiling, pruning keeps audit), agreement gate, archive revocation, restore stays blocked, uniqueness, atomic rate limits, RLS, no direct API access, manager file approval, v2 extra files (RLS, checks, cascade, audit kept), preview activity no-op');await db.close();
 

@@ -217,9 +217,7 @@
       <option value="all">כל הסוגים</option>
       <option value="buyer">קונים בלבד</option>
       <option value="partner">שותפות/השקעה בלבד</option>
-      <option value="seller">מוכרים בלבד</option>
     </select>
-    <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
     <select id="fAgreement">
       <option value="all">כל סטטוסי ההסכם</option>
       <option value="אין הסכם">אין הסכם</option>
@@ -227,14 +225,12 @@
       <option value="יש הסכם חתום">יש הסכם חתום</option>
     </select>
     <select id="fCreatedBy"><option value="all">כל מי שהזין</option></select>
-    <select id="fRating" style="display:none;"><option value="all">כל רמות הרצינות</option></select>
     <select id="fSort">
       <option value="updated_desc">עודכן לאחרונה</option>
       <option value="created_desc">נוצר לאחרונה</option>
       <option value="name_asc">שם (א-ת)</option>
       <option value="city_asc">עיר (א-ת)</option>
       <option value="created_by_asc">הוזן ע"י (א-ת)</option>
-      <option value="rating_desc">רמת רצינות (מהגבוה לנמוך)</option>
       <option value="agreement_asc">סטטוס הסכם</option>
     </select>
   </div>
@@ -677,9 +673,7 @@ function restoreLeadsPageCache(){
   RATING_BY_ID = {};
   RATING_LEVELS.forEach(r => { RATING_BY_ID[r.id] = r; });
   MATCH_COUNT_BY_BUYER = c.matchCounts || {};
-  populateStatusFilter();
   populateCreatedByFilter();
-  populateRatingFilter();
   renderTable();
   return true;
 }
@@ -694,9 +688,7 @@ function paintLeadRows(data){
   ALL_LEADS = (data || []).filter(l => !l.is_archived);
   ARCHIVED_LEADS = (data || []).filter(l => l.is_archived);
   LEADS_DATA_READY = true;
-  populateStatusFilter();
   populateCreatedByFilter();
-  populateRatingFilter();
   renderTable();
 }
 
@@ -757,19 +749,6 @@ async function maybeHandleUrlParams(){
   }
 }
 
-function populateStatusFilter(){
-  const sel = document.getElementById('fStatus');
-  const existing = new Set(Array.from(sel.options).map(o=>o.value));
-  const statuses = [...new Set(ALL_LEADS.map(l=>l.status).filter(Boolean))];
-  statuses.forEach(s=>{
-    if (!existing.has(s)){
-      const opt = document.createElement('option');
-      opt.value = s; opt.textContent = s;
-      sel.appendChild(opt);
-    }
-  });
-}
-
 function populateCreatedByFilter(){
   const sel = document.getElementById('fCreatedBy');
   const existing = new Set(Array.from(sel.options).map(o=>o.value));
@@ -783,24 +762,12 @@ function populateCreatedByFilter(){
   });
 }
 
-function populateRatingFilter(){
-  const sel = document.getElementById('fRating');
-  if (!sel) return;
-  if (!canViewBuyerRating(CURRENT_PROFILE) || !RATING_LEVELS.length){ sel.style.display = 'none'; return; }
-  // בונים מחדש בכל טעינה (הרמות עצמן עלולות להשתנות בעתיד דרך מסך ההגדרות)
-  sel.innerHTML = '<option value="all">כל רמות הרצינות</option>'
-    + '<option value="serious_plus">קונים פעילים ורציניים ומעלה</option>'
-    + RATING_LEVELS.map(r => `<option value="${r.id}">${esc(r.icon||'')} ${esc(r.name)} בלבד</option>`).join('');
-}
-
 function switchLeadTypeTab(type){
   document.getElementById('fType').value = type;
   document.getElementById('tabBuyerBtn').style.borderBottomColor = type === 'buyer' ? 'var(--gold)' : 'transparent';
   document.getElementById('tabBuyerBtn').style.color = type === 'buyer' ? 'var(--navy)' : '#8a8578';
   document.getElementById('tabPartnerBtn').style.borderBottomColor = type === 'partner' ? 'var(--gold)' : 'transparent';
   document.getElementById('tabPartnerBtn').style.color = type === 'partner' ? 'var(--navy)' : '#8a8578';
-  const ratingSel = document.getElementById('fRating');
-  if (ratingSel) ratingSel.style.display = canViewBuyerRating(CURRENT_PROFILE) && RATING_LEVELS.length ? '' : 'none';
   renderTable();
 }
 
@@ -808,27 +775,17 @@ function renderTable(){
   if (typeof LEAD_VIEW_MODE !== 'undefined' && LEAD_VIEW_MODE === 'archive'){ renderArchiveLeadsTable(); return; }
   const search = document.getElementById('fSearch').value.trim().toLowerCase();
   const type = document.getElementById('fType').value;
-  const status = document.getElementById('fStatus').value;
   const agreement = document.getElementById('fAgreement').value;
   const createdBy = document.getElementById('fCreatedBy').value;
   const sort = document.getElementById('fSort').value;
-  const ratingFilter = document.getElementById('fRating') ? document.getElementById('fRating').value : 'all';
-  const activeBuyerLevel = RATING_LEVELS.find(r => r.level_key === 'active_buyer');
 
   let rows = ALL_LEADS.filter(l=>{
     if (l.website_intake_stage === 'new' || l.website_intake_stage === 'contacted' || l.website_intake_stage === 'training') return false;
+    // Seller-type leads are not the businesses list. This screen is buyers and investors.
+    if (l.type === 'seller') return false;
     if (type !== 'all' && l.type !== type) return false;
-    if (status !== 'all' && l.status !== status) return false;
     if (agreement !== 'all' && (l.agreement_status || 'אין הסכם') !== agreement) return false;
     if (createdBy !== 'all' && l.created_by !== createdBy) return false;
-    if (ratingFilter && ratingFilter !== 'all' && (l.type === 'buyer' || l.type === 'partner')){
-      if (ratingFilter === 'serious_plus'){
-        const lvl = l.rating_level_id ? RATING_BY_ID[l.rating_level_id] : null;
-        if (!lvl || !activeBuyerLevel || lvl.sort_order < activeBuyerLevel.sort_order) return false;
-      } else if (l.rating_level_id !== ratingFilter){
-        return false;
-      }
-    }
     if (search){
       const clientNumDigits = (l.client_number||'').match(/(\d{3,4})$/)?.[1] || '';
       const hay = [l.full_name, l.first_name, l.last_name, l.phone, l.phone2, l.city, l.source, l.status, l.email,
@@ -846,11 +803,6 @@ function renderTable(){
     if (sort === 'created_desc') return new Date(b.created_at) - new Date(a.created_at);
     if (sort === 'created_by_asc') return userName(a.created_by).localeCompare(userName(b.created_by), 'he');
     if (sort === 'agreement_asc') return (a.agreement_status||'').localeCompare(b.agreement_status||'', 'he');
-    if (sort === 'rating_desc'){
-      const oa = a.rating_level_id && RATING_BY_ID[a.rating_level_id] ? RATING_BY_ID[a.rating_level_id].sort_order : -1;
-      const ob = b.rating_level_id && RATING_BY_ID[b.rating_level_id] ? RATING_BY_ID[b.rating_level_id].sort_order : -1;
-      return ob - oa;
-    }
     return new Date(b.updated_at) - new Date(a.updated_at);
   });
 
@@ -1065,7 +1017,7 @@ async function manualAgreementRefreshAfterUpload(tableName, recordId){
   if (tableName === 'leads'){ await loadLeads(); openLeadForm(recordId); }
 }
 
-['fSearch','fType','fStatus','fAgreement','fCreatedBy','fSort','fRating'].forEach(id=>{
+['fSearch','fType','fAgreement','fCreatedBy','fSort'].forEach(id=>{
   document.getElementById(id).addEventListener('input', renderTable);
   document.getElementById(id).addEventListener('change', renderTable);
 });
@@ -1834,8 +1786,9 @@ function setLeadViewMode(mode){
 function renderArchiveLeadsTable(){
   const body = document.getElementById('leadsBody');
   if (!body) return;
-  if (!ARCHIVED_LEADS.length){ body.innerHTML = '<tr class="empty-row"><td colspan="10">אין רשומות בארכיון</td></tr>'; return; }
-  body.innerHTML = ARCHIVED_LEADS.map(l => {
+  const rows = ARCHIVED_LEADS.filter(l => l.type !== 'seller');
+  if (!rows.length){ body.innerHTML = '<tr class="empty-row"><td colspan="10">אין רשומות בארכיון</td></tr>'; return; }
+  body.innerHTML = rows.map(l => {
     const personName = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || (l.business_name||'—');
     return `
     <tr>
@@ -1880,7 +1833,7 @@ function renderArchiveLeadsTable(){
   Promise.allSettled([loadUsers(), loadRatingLevels(), loadMatchCounts(), loadNotesSummary('leads')])
     .then(() => {
       if (!LEADS_DATA_READY) return;
-      populateCreatedByFilter(); populateRatingFilter(); renderTable(); saveLeadsPageCache();
+      populateCreatedByFilter(); renderTable(); saveLeadsPageCache();
     })
     .catch(error => console.warn('Buyer supplemental data:', error));
 })();

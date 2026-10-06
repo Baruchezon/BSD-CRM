@@ -102,6 +102,8 @@ for(const [name,width,height] of [['desktop',1440,1000],['mobile-375',375,812]])
  const calls=[];let extraList=[...extras];
  const {context,page}=await newPage(width,height,async b=>{
   if(b.action==='admin_overview')return {json:{ok:true,accounts,requests:[{id:'q1',kind:'password',requester_name:'פונה לדוגמה',business_name:'עסק בדיקה א',phone:'050-0000000',message:'',status:'new',created_at:'2026-10-04T06:00:00Z'}]}};
+  if(b.action==='admin_preview')return {json:{ok:true,token:'abcdefghjkmnpqrstuvwxyz23456789ABCDEFGHJKLMNPQRS',portal_url:'http://127.0.0.1:8766/portal/',preview:true,business_name:'עסק בדיקה א'}};
+  if(b.action==='dashboard')return {json:{ok:true,preview:true,business:{internal_name:'עסק בדיקה א',owner_name:'בעלים א',owner_phone:'050-0000000',city:'תל אביב'},files:[],matches:[],match_summary:{total:0,active:0,signed:0,full:0},update:null,contact:{phone:'03-0000000'}}};
   if(b.action==='admin_detail'){const a=accounts.find(x=>x.business_id===b.business_id);return {json:{ok:true,account:a,business:a.business,portal:{files:[...docs,report,...extraList]},files:[]}};}
   if(b.action==='admin_upload_url')return {json:{ok:true,file_id:'e0000000-0000-4000-8000-000000000009',path:`${b.business_id}/seller-portal-extra/e0000000-0000-4000-8000-000000000009.jpg`,token:'QA-UPLOAD-TOKEN',bucket:'business-files',content_type:'image/jpeg'}};
   if(b.action==='admin_upload_done'){extraList.push({...extras[0],id:b.file_id,name:'QA-new.jpg',mime:'image/jpeg'});return {json:{ok:true}};}
@@ -128,9 +130,22 @@ for(const [name,width,height] of [['desktop',1440,1000],['mobile-375',375,812]])
  assert.equal(await page.locator('[data-show-active] b').innerText(),'2');await page.locator('[data-show-active]').click();await page.waitForSelector('table[data-active-users]');
  assert.equal(await page.locator('table[data-active-users] tbody tr').count(),2);const t=await page.locator('table[data-active-users]').innerText();assert.ok(t.includes('עסק בדיקה א')&&t.includes('34567')&&t.includes('ממתין לסיסמה')&&!t.includes('עסק בדיקה ג'));
  await page.screenshot({path:`${shots}/admin-active-users-${name}.png`});await page.locator('#closeDialog').click();
+ assert.equal(await page.locator('[data-show-logins] b').innerText(),'4');await page.locator('[data-show-logins]').click();await page.waitForSelector('table[data-logins]');
+ assert.ok((await page.locator('table[data-logins]').innerText()).includes('עסק בדיקה א'));await page.locator('#closeDialog').click();
+ assert.equal(await page.locator('[data-show-downloads] b').innerText(),'2');await page.locator('[data-show-downloads]').click();await page.waitForSelector('table[data-downloads]');
+ assert.ok((await page.locator('table[data-downloads]').innerText()).includes('QA-valuation.pdf'));await page.locator('#closeDialog').click();
+ assert.equal(await page.locator('#accounts .admin-row').nth(2).locator('[data-preview]').count(),0,'blocked account has no preview');
+ const popupPreview=page.waitForEvent('popup');await page.locator('#accounts [data-preview]').first().click();const previewTab=await popupPreview;
+ await previewTab.waitForSelector('#previewBanner:not([hidden])');
+ assert.equal(await previewTab.locator('[data-change-password]:visible').count(),0);assert.equal(await previewTab.locator('[data-message]:visible').count(),0);
+ assert.equal(calls.filter(c=>c.action==='activity').length,0,'preview does not send activity');await previewTab.close();
+ const popupEnter=page.waitForEvent('popup');await page.locator('#previewBusiness').selectOption(BIZ);await page.locator('#previewEnter').click();const enterTab=await popupEnter;
+ await enterTab.waitForSelector('#previewBanner:not([hidden])');await enterTab.close();
+ assert.ok(calls.filter(c=>c.action==='admin_preview').every(c=>c.business_id===BIZ));
  assert.ok(await noOverflow(page),'admin overflow '+name);await page.screenshot({path:`${shots}/admin-overview-${name}.png`,fullPage:true});
- assert.ok(calls.every(c=>c.headers.authorization==='Bearer QA-ONLY-JWT'));
- console.log(`PASS admin ${name}: overview, logins/downloads, upload extra (signed URL), reset->WhatsApp, block, active users list, no overflow`);
+ assert.ok(calls.filter(c=>String(c.action).startsWith('admin_')).every(c=>c.headers.authorization==='Bearer QA-ONLY-JWT'),'admin calls keep the CRM session');
+ assert.ok(calls.filter(c=>c.action==='dashboard').every(c=>c.headers['x-seller-token']==='abcdefghjkmnpqrstuvwxyz23456789ABCDEFGHJKLMNPQRS'&&c.headers.authorization!=='Bearer QA-ONLY-JWT'),'preview uses the one-time seller token, not the admin JWT');
+ console.log(`PASS admin ${name}: overview, clickable logins/downloads, upload extra (signed URL), reset->WhatsApp, block, active users list, view-as-owner, no overflow`);
  await context.close();
 }
 // ---------- 3. Business card checkbox ----------
@@ -139,6 +154,8 @@ for(const [name,width,height] of [['desktop',1200,800],['mobile-375',375,812]]){
  const {context,page}=await newPage(width,height,async b=>{
   if(b.action==='admin_detail')return {json:{ok:true,account,business:{id:BIZ},portal:{files:[]},files:[]}};
   if(b.action==='admin_open'){account={id:'a1',business_id:BIZ,username:'23456',status:'active',pending:false,login_count:0,last_login_at:null};return {json:{ok:true,username:'23456',password:'Qa7Kd9mPx2',name:'בעלים א',phone:'050-0000000',contact_phone:'03-0000000',site:'www.bsd-bbi.co.il'}};}
+  if(b.action==='admin_preview')return {json:{ok:true,token:'abcdefghjkmnpqrstuvwxyz23456789ABCDEFGHJKLMNPQRS',portal_url:'http://127.0.0.1:8766/portal/',preview:true,business_name:'עסק בדיקה'}};
+  if(b.action==='dashboard')return {json:{ok:true,preview:true,business:{internal_name:'עסק בדיקה',owner_name:'בעלים',owner_phone:'050-0000000',city:''},files:[],matches:[],match_summary:{total:0,active:0,signed:0,full:0},update:null,contact:{phone:''}}};
   if(b.action==='admin_status'){account={...account,status:b.status};return {json:{ok:true}};}
   return {json:{ok:true}};
  },calls);
@@ -148,11 +165,13 @@ for(const [name,width,height] of [['desktop',1200,800],['mobile-375',375,812]]){
  for(const t of ['שם משתמש: 23456','סיסמה: Qa7Kd9mPx2','www.bsd-bbi.co.il','«פורטל בעלי עסקים»'])assert.ok(wa.includes(t),'card wa missing '+t);
  await page.waitForSelector('[data-portal-new]');assert.ok((await page.locator('[data-portal-invite]').inputValue()).includes('Qa7Kd9mPx2'));
  await page.waitForFunction(()=>document.querySelector('[data-portal-summary]').textContent.includes('פעיל'));assert.equal(await page.locator('#sellerPortalEnabled').isChecked(),true);
+ const cardPreview=page.waitForEvent('popup');await page.locator('[data-portal-preview]').click();const cardTab=await cardPreview;
+ await cardTab.waitForSelector('#previewBanner:not([hidden])');assert.equal(calls.filter(c=>c.action==='admin_preview').length,1);await cardTab.close();
  await page.screenshot({path:`${shots}/card-opened-${name}.png`,fullPage:true});
  assert.equal(calls.filter(c=>c.action==='admin_open').length,1);
  await page.locator('#sellerPortalEnabled').uncheck();await page.waitForFunction(()=>document.querySelector('[data-portal-summary]').textContent.includes('חסום'));
  assert.deepEqual(calls.filter(c=>c.action==='admin_status').map(c=>c.status),['blocked']);
- console.log(`PASS business card ${name}: V opens account, WhatsApp text with username+password+site button, uncheck blocks`);
+ console.log(`PASS business card ${name}: V opens account, WhatsApp text with username+password+site button, view-as-owner, uncheck blocks`);
  await context.close();
 }
 assert.deepEqual(errors,[]);console.log('PASS: no JavaScript page errors');await browser.close();server.close();
