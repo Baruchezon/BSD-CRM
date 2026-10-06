@@ -39,6 +39,37 @@ test('button: same toolbar button, renamed, opens the new modal; no new buttons'
   assert.match(help, /שליחת תקצירים אנונימיים/);
 });
 
+test('privacy scan never blocks (Baruch 06.10): warning note in the list + confirmation step, row stays selectable', () => {
+  const hits = api.scanAnonText('משחקייה בכפר קאסם עם רווח נקי של 280 אלף, ברחוב הרצל 12. לפרטים 052-1234567, yossi@example.com, www.starland.co.il. סטאר לנד', biz);
+  assert.deepEqual(arr(api.warnCategories(hits)), ['טלפון', 'מייל', 'קישור', 'שם', 'כתובת', 'עיר', 'רווח']);
+  assert.equal(api.warnNote(api.scanAnonText('העסק בכפר קאסם, רווחי מאוד', biz)), '⚠️ יש בטקסט: עיר / רווח');
+  assert.equal(api.warnNote(api.scanAnonText('משחקייה פעילה באזור המרכז.', biz)), '');
+  assert.equal(api.warnNote(['אין תקציר אנונימי']), '', 'empty text is not a content warning');
+  // list: a row is disabled only by non-content guards
+  const list = src.slice(src.indexOf('function renderBizList'), src.indexOf('function renderActions'));
+  assert.match(list, /const blocked = !info \|\| !hasAnonText\(b\) \|\| b\.listing_status === 'sold' \|\| b\.listing_status === 'removed';/);
+  assert.doesNotMatch(list, /hits\.length/, 'content findings never disable a row');
+  assert.match(list, /\$\{warnLabel\(info\)\}\$\{sourceLabel\(info\)\}/);
+  assert.doesNotMatch(code, /⛔ לא לשליחה/);
+  // prepare: no text = blocked; content = warning carried to the confirmation step
+  const prep = src.slice(src.indexOf('async function prepare'), src.indexOf('async function shareFiles'));
+  assert.match(prep, /if \(!hasAnonText\(biz\)\) throw/);
+  assert.match(prep, /const warn = warnNote\(scanAnonText\(bizAnonText\(biz\), biz\)\);/);
+  assert.doesNotMatch(prep, /if \(hits\.length\) throw/);
+  const actions = src.slice(src.indexOf('function renderActions'), src.indexOf('function onChange'));
+  assert.match(actions, /const warned = S\.prepared\.filter\(p => p\.warn\);/);
+  assert.match(actions, /\$\{warnBox\}/);
+  assert.ok(api.hasAnonText({ anon_summary: 'x' }) && !api.hasAnonText({ anon_summary: '  ' }) && !api.hasAnonText({}));
+  // non-content guards unchanged
+  assert.match(src, /const MAX_SELECTED = 10;/);
+  assert.match(src, /if \(S\.selected\.size >= MAX_SELECTED\)/);
+  assert.match(src, /if \(typeof canSend === 'function' && !canSend\(\)\)\{ say\('אין לך הרשאה/);
+  assert.match(src, /if \(!ph\.valid\) return/);
+  assert.match(src, /const ready = !buyerBlockReason\(S\.buyer\) && S\.selected\.size > 0;/);
+  assert.match(help, /⚠️ יש בטקסט: עיר \/ רווח/);
+  assert.doesNotMatch(help, /⛔ לא לשליחה/);
+});
+
 test('list: every active business with an anonymous summary (no legacy-file filter, no count limit)', () => {
   const list = [
     { id: '1', business_number: 'A1', anon_summary: 'יש', anon_presentation_path: null },
@@ -66,7 +97,7 @@ test('search box filters businesses by number / anonymous name / field / region'
   assert.match(src, /searchSelectHTML\(\{ boxId: 'anonSendBuyerSelect'/, 'buyer search box is a always-visible typing box');
 });
 
-test('privacy scan: blocks city, address, profit, phone, email, link, real name; allows region + turnover', () => {
+test('privacy scan: still detects city, address, profit, phone, email, link, real name; allows region + turnover', () => {
   assert.deepEqual(arr(api.scanAnonText('משחקייה פעילה באזור המרכז, מחזור שנתי של כ-1.2 מיליון ₪.', biz)), []);
   const has = (t, re) => assert.ok(api.scanAnonText(t, biz).some(h => re.test(h)), t);
   has('העסק נמצא בכפר קאסם', /העיר/);
@@ -101,7 +132,7 @@ test('source: latest saved PDF only when it is fresh and anonymous level 1, othe
 test('content sent = anonymous text only (never description / notes / internal summary / profit fields)', () => {
   const prep = src.slice(src.indexOf('async function buildPdfFromText'), src.indexOf('async function shareFiles'));
   assert.match(prep, /bodyEl\.textContent = normText\(biz\.anon_summary\)\.trim\(\)/);
-  assert.match(prep, /const hits = scanAnonText\(bizAnonText\(biz\), biz\);\n\s+if \(hits\.length\) throw/, 'fresh row is re-scanned before every send');
+  assert.match(prep, /if \(!hasAnonText\(biz\)\) throw[^\n]*\n\s+const warn = warnNote\(scanAnonText\(bizAnonText\(biz\), biz\)\);/, 'fresh row is re-checked (text exists) and re-scanned (warning) before every send');
   for (const field of ['short_description', 'notes', 'internal_business_summary', 'sale_reason', 'asking_price']) {
     assert.ok(!new RegExp('biz\\.' + field).test(prep), field + ' must never be used in the sent file');
   }

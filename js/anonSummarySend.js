@@ -17,8 +17,12 @@
 //  * after sending, «מרכז ההתאמות» is updated automatically for buyer+business
 //    (existing match is updated, never duplicated; new match = «תקציר נשלח»),
 //    with an activity-log row and an anon_distributions row.
-// A text that still shows the city, an address, profit, a phone, an email,
-// a link or the real name is blocked here and is never sent.
+// Privacy scan (Baruch, 06.10.2026 16:20): the scan NEVER blocks. A text that
+// shows a city, an address, profit, a phone, an email, a link or the real name
+// gets a small «⚠️ יש בטקסט: ...» note in the list and in the confirmation step;
+// the sender approves it himself at send time. Still blocked (non-content):
+// buyer with «אין הסכם», buyer without a valid phone, no permission, more than
+// 10 businesses per send, and a business with no anonymous text at all.
 // Relies on businesses.html globals: ALL_BIZ, CURRENT_PROFILE, esc, toast,
 // canSendPresentations, bsdRefreshBizRow, window.BSDAnonPdf, bsdRenderBrandedPdf.
 // ============================================================================
@@ -50,7 +54,8 @@
     return [String(v), v.toLocaleString('en-US')];
   }
 
-  // Returns the reasons a text must NOT go to a buyer (empty array = OK).
+  // Returns what the sender should check in the text (empty array = nothing found).
+  // These are WARNINGS only: they never block sending.
   function scanAnonText(text, biz){
     biz = biz || {};
     const hits = [];
@@ -77,6 +82,30 @@
     if (profit) hits.push('מופיע רווח / רווחיות');
     return Array.from(new Set(hits));
   }
+
+  // Short labels for the warning note: «עיר / רווח / כתובת / טלפון / מייל / קישור / שם».
+  function warnCategories(hits){
+    const cats = [];
+    const add = c => { if (!cats.includes(c)) cats.push(c); };
+    (hits || []).forEach(h => {
+      h = String(h || '');
+      if (!h || h === 'אין תקציר אנונימי') return;
+      if (/העיר/.test(h)) add('עיר');
+      else if (/רווח/.test(h)) add('רווח');
+      else if (/כתובת|שכונה/.test(h)) add('כתובת');
+      else if (/טלפון/.test(h)) add('טלפון');
+      else if (/מייל/.test(h)) add('מייל');
+      else if (/קישור|אתר/.test(h)) add('קישור');
+      else if (/שם/.test(h)) add('שם');
+      else add(h);
+    });
+    return cats;
+  }
+  function warnNote(hits){
+    const cats = warnCategories(hits);
+    return cats.length ? '⚠️ יש בטקסט: ' + cats.join(' / ') : '';
+  }
+  function hasAnonText(biz){ return !!normText(biz && biz.anon_summary).trim(); }
 
   function bizAnonText(biz){ return normText(biz && biz.anon_display_name).trim() + '\n' + normText(biz && biz.anon_summary).trim(); }
 
@@ -187,7 +216,7 @@
           <h3 style="margin:0;color:#0e1b34;border-right:4px solid #25D366;padding-right:10px;font-size:1.1rem;">📤 שליחת תקצירים אנונימיים לקונה</h3>
           <button type="button" data-act="close" aria-label="סגור" style="background:none;border:none;font-size:1.6rem;line-height:1;cursor:pointer;color:#0e1b34;min-width:44px;min-height:44px;">×</button>
         </div>
-        <div style="font-size:.8rem;color:#6c7488;margin-bottom:12px;line-height:1.6;">נשלח רק התקציר האנונימי כקובץ PDF. בלי תיאור פנימי, בלי הערות, בלי רווח ובלי מיקום.</div>
+        <div style="font-size:.8rem;color:#6c7488;margin-bottom:12px;line-height:1.6;">נשלח רק התקציר האנונימי כקובץ PDF, בלי תיאור פנימי ובלי הערות. אם בתקציר יש עיר, רווח או פרט מזהה, תופיע הערה ⚠️ ואתה מחליט אם לשלוח.</div>
 
         <label style="display:block;font-weight:700;font-size:.88rem;margin-bottom:4px;">1. קונה</label>
         <div id="anonSendBuyerBox" style="margin-bottom:6px;">טוען קונים...</div>
@@ -298,9 +327,14 @@
     if (S === session) renderBizList();
   }
 
+  // Non-blocking note: the business stays selectable and sendable.
+  function warnLabel(info){
+    const note = info ? warnNote(info.hits) : '';
+    return note ? `<span style="color:#8a5a00;font-weight:600;">${escHtml(note)}</span><br>` : '';
+  }
+
   function sourceLabel(info){
     if (!info) return '<span style="color:#999;">בודק...</span>';
-    if (info.hits.length) return `<span style="color:#b3402c;">⛔ לא לשליחה: ${escHtml(info.hits.join(', '))}. יש לתקן את התקציר האנונימי בכרטיס.</span>`;
     if (info.source === 'saved') return `<span style="color:#1e7b34;">📄 PDF שמור, גרסה אחרונה${info.latest && info.latest.version_number ? ' ' + escHtml(info.latest.version_number) : ''}</span>`;
     return `<span style="color:#0e5a8a;">📝 PDF יופק מהתקציר האנונימי העדכני${info.latest ? ' (ה-PDF השמור ישן)' : ''}</span>`;
   }
@@ -315,7 +349,8 @@
     if (!shown.length){ box.innerHTML = '<div style="padding:12px;color:#999;font-size:.85rem;">לא נמצאו עסקים לחיפוש הזה.</div>'; return; }
     box.innerHTML = shown.map(b => {
       const info = S.info[b.id];
-      const blocked = !info || info.hits.length > 0 || b.listing_status === 'sold' || b.listing_status === 'removed';
+      // Only non-content guards block a row (still loading / sold / not active / no anonymous text).
+      const blocked = !info || !hasAnonText(b) || b.listing_status === 'sold' || b.listing_status === 'removed';
       const checked = S.selected.has(b.id) && !blocked;
       const stamp = b.listing_status === 'sold' ? ' · נמכר' : (b.listing_status === 'removed' ? ' · לא פעיל' : '');
       return `<label style="display:flex;gap:10px;align-items:flex-start;padding:9px 2px;border-bottom:1px solid #f0ede4;cursor:${blocked ? 'default' : 'pointer'};opacity:${blocked && info ? '.75' : '1'};">
@@ -323,7 +358,7 @@
           <span style="flex:1;min-width:0;font-size:.86rem;line-height:1.55;">
             <b>${escHtml(b.business_number || '')}</b> ${escHtml(b.anon_display_name || b.field || '')}${escHtml(stamp)}
             ${b.internal_name ? `<span style="color:#999;font-size:.75rem;"> (${escHtml(b.internal_name)})</span>` : ''}
-            <br><span style="font-size:.78rem;">${sourceLabel(info)}</span>
+            <br><span style="font-size:.78rem;">${warnLabel(info)}${sourceLabel(info)}</span>
           </span>
         </label>`;
     }).join('');
@@ -344,10 +379,16 @@
     const share = canShareFiles(files);
     const touch = isTouchDevice();
     const previews = S.prepared.map((p, i) => `<a href="${p.url}" target="_blank" rel="noopener" style="display:inline-block;margin:2px 0 2px 10px;color:#0e5a8a;">👁 ${escHtml(p.file.name)}</a>`).join('');
+    // Confirmation step: content warnings are shown here; sending them is the sender's decision.
+    const warned = S.prepared.filter(p => p.warn);
+    const warnBox = warned.length ? `<div style="width:100%;background:#fff6e0;color:#8a5a00;border-radius:8px;padding:8px 12px;font-size:.82rem;line-height:1.7;margin-bottom:4px;">
+        ${warned.map(p => `<div><b>${escHtml(p.biz.business_number || p.biz.anon_display_name || 'עסק')}</b>: ${escHtml(p.warn)}</div>`).join('')}
+        <div>אפשר לפתוח את הקובץ ולבדוק. בלחיצה על שליחה אתה מאשר לשלוח כמו שהוא.</div></div>` : '';
     const phone = normalizePhone(S.buyer && S.buyer.phone);
     const chatUrl = phone.valid ? `https://wa.me/${phone.e164}?text=${encodeURIComponent(waGreeting(S.buyer))}` : '';
     box.innerHTML = `
       <div style="width:100%;font-size:.82rem;line-height:1.7;margin-bottom:4px;">קבצים מוכנים: ${previews}</div>
+      ${warnBox}
       ${share ? `<div style="width:100%;font-size:.8rem;color:#555;line-height:1.6;">בלחיצה על «שלח בוואטסאפ» נפתח חלון השיתוף: בוחרים WhatsApp ואז את ${escHtml(buyerLabel(S.buyer))}. אם הקונה לא שמור באנשי הקשר, לחצו קודם על «פתח צ'אט עם הקונה».</div>` : `<div style="width:100%;font-size:.8rem;color:#555;line-height:1.6;">בלחיצה הקובץ יורד למחשב ונפתח צ'אט וואטסאפ עם ${escHtml(buyerLabel(S.buyer))}. גוררים את הקובץ לצ'אט (או 📎 מסמך) ולוחצים שלח.</div>`}
       ${btn('back', '↩ חזרה', false)}
       ${chatUrl && share ? `<a href="${chatUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;min-height:46px;padding:0 14px;border-radius:9px;border:1px solid #b7e0c0;color:#128C4A;text-decoration:none;font-weight:700;font-size:.9rem;">💬 פתח צ'אט עם הקונה</a>` : ''}
@@ -417,8 +458,9 @@
         const label = biz.business_number || biz.anon_display_name || 'עסק';
         setStatus(`מכין את ${escHtml(label)}...`);
         // Re-check on the FRESH row: text may have changed since the list was opened.
-        const hits = scanAnonText(bizAnonText(biz), biz);
-        if (hits.length) throw new Error(`${label}: ${hits.join(', ')}. יש לתקן את התקציר האנונימי בכרטיס לפני שליחה.`);
+        // No anonymous text at all = nothing to send. Content findings are warnings only.
+        if (!hasAnonText(biz)) throw new Error(`${label}: אין תקציר אנונימי. יש לכתוב תקציר אנונימי בכרטיס לפני שליחה.`);
+        const warn = warnNote(scanAnonText(bizAnonText(biz), biz));
         let info = S.info[id] || {};
         let fresh = false;
         if (info.latest && window.BSDAnonPdf){
@@ -436,11 +478,12 @@
         }
         if (source === 'generate') blob = await buildPdfFromText(biz);
         const file = new File([blob], pdfFileName(biz), { type: 'application/pdf' });
-        out.push({ biz, source, savedFile: source === 'saved' ? info.latest : null, file, url: URL.createObjectURL(file), text: normText(biz.anon_summary).trim() });
+        out.push({ biz, source, savedFile: source === 'saved' ? info.latest : null, file, url: URL.createObjectURL(file), text: normText(biz.anon_summary).trim(), warn });
       }
       if (!S) return;
       S.prepared = out;
-      setStatus(`✅ ${out.length === 1 ? 'הקובץ מוכן' : out.length + ' קבצים מוכנים'}. אפשר לפתוח ולבדוק לפני השליחה.`);
+      const warned = out.filter(p => p.warn).length;
+      setStatus(`✅ ${out.length === 1 ? 'הקובץ מוכן' : out.length + ' קבצים מוכנים'}. אפשר לפתוח ולבדוק לפני השליחה.${warned ? ' <span style="color:#8a5a00;">⚠️ שים לב להערות למטה.</span>' : ''}`);
     } catch (e){
       out.forEach(p => { try { URL.revokeObjectURL(p.url); } catch (_e){} });
       setStatus('❌ ' + escHtml((e && e.message) || e), true);
@@ -550,7 +593,7 @@
   }
 
   window.openAnonSummarySendModal = open;
-  window.BSDAnonSend = { scanAnonText, eligibleBusinesses, bizMatchesQuery, chooseSource, pdfFileName, normalizePhone,
+  window.BSDAnonSend = { scanAnonText, warnCategories, warnNote, hasAnonText, eligibleBusinesses, bizMatchesQuery, chooseSource, pdfFileName, normalizePhone,
     planMatchWrite, waGreeting, buyerLabel, hasHebrewWord, PROFIT_WORD_RE, EARLY_STATUSES, SENT_STATUS, MATERIAL_TYPE, close,
     _recordOne: recordOne };
 })();
