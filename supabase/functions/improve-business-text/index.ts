@@ -26,8 +26,11 @@
 //
 // Called from businesses.html via:
 //   supabase.functions.invoke('improve-business-text', {
-//     body: { field_type: 'short_description' | 'notes', source_text, is_anonymous }
+//     body: { field_type: 'short_description' | 'notes', source_text, is_anonymous,
+//             extra_texts?: [{ label, text }] }   // 06.10.2026: טקסטים ישנים לאיחוד
 //   })
+// extra_texts אופציונלי (תאימות לאחור מלאה - דף ישן לא שולח אותו): טקסט קודם
+// שנשמר בכרטיס (הערות / תקציר פנימי ישן). ה-AI מאחד הכל לטקסט אחד מלא.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -85,7 +88,7 @@ const IMPROVE_TOOL = {
 // בכפתור התקציר האנונימי (generate-anonymous-card). is_anonymous נשאר בחוזה
 // לתאימות לאחור אבל לא משנה את ההנחיות.
 export function buildSystemPrompt(fieldType: 'short_description' | 'notes', _isAnonymous = false): string {
-  const fieldLabel = fieldType === 'short_description' ? 'תיאור פנימי של העסק' : 'הערות פנימיות על העסק';
+  const fieldLabel = fieldType === 'short_description' ? 'כל המידע על העסק (פנימי)' : 'הערות פנימיות על העסק';
   const rules = [
     `סדר ונסח מחדש את הטקסט בשדה "${fieldLabel}" בכרטיס עסק במערכת CRM פנימית של BSD Business Brokers Israel.`,
     'תקן שגיאות כתיב, פיסוק ודקדוק, ונסח בעברית תקינה, נקייה, ברורה ומקצועית.',
@@ -97,8 +100,32 @@ export function buildSystemPrompt(fieldType: 'short_description' | 'notes', _isA
     'לעולם אל תמציא נתונים, מספרים, יתרונות או עובדות שלא הופיעו במפורש בטקסט המקורי.',
     'אם חסר מידע או שהטקסט עמום - אל תשלים בניחוש; נסח את מה שבאמת יש.',
     'אם הטקסט המקורי ריק כמעט לגמרי או חסר תוכן מהותי - סמן insufficient_info=true ואל תמלא תוכן שלא סופק.',
+    'אם בנוסף לטקסט שבשדה מצורפים "טקסטים קודמים שנשמרו בכרטיס" - אחד את כולם לטקסט אחד מלא ומסודר: כל פרט מכל המקורות נשאר, ורק חזרה מדויקת על אותו פרט נכתבת פעם אחת. אם יש סתירה בין המקורות - כתוב את שתי הגרסאות וציין שיש לבדוק.',
   ];
   return `אתה עוזר לסוכני BSD Business Brokers Israel לסדר ולנקות טקסט פנימי.\n\nכללים מחייבים:\n${rules.map((r, i) => `${i + 1}. ${r}`).join('\n')}\n\nחובה להשתמש בכלי submit_improved_text כדי להחזיר את התשובה.`;
+}
+
+export type ExtraText = { label: string; text: string };
+
+// טקסטים ישנים לאיחוד - מסננים קלט לא תקין, עד 4 מקורות, כל אחד עד 20,000 תווים.
+export function normalizeExtraTexts(v: unknown): ExtraText[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter(x => x && typeof x === 'object' && typeof (x as any).text === 'string' && (x as any).text.trim())
+    .slice(0, 4)
+    .map(x => ({
+      label: typeof (x as any).label === 'string' && (x as any).label.trim() ? (x as any).label.trim().slice(0, 60) : 'טקסט קודם',
+      text: (x as any).text.trim().slice(0, 20000),
+    }));
+}
+
+export function buildUserPrompt(sourceText: string, extras: ExtraText[]): string {
+  let p = `הטקסט שהמשתמש הקליד כרגע בשדה (סדר, תקן ונסח - בלי להשמיט שום פרט ובלי לקצר):\n"""\n${sourceText || '(השדה ריק כרגע)'}\n"""`;
+  if (extras.length) {
+    p += `\n\nטקסטים קודמים שנשמרו בכרטיס - לאחד לתוך הטקסט האחד המלא (כל פרט נשאר):`;
+    for (const e of extras) p += `\n\n${e.label}:\n"""\n${e.text}\n"""`;
+  }
+  return p;
 }
 
 export function cleanMarkdown(t: string): string {
@@ -126,12 +153,13 @@ Deno.serve(async (req: Request) => {
     if (fieldType !== 'short_description' && fieldType !== 'notes') {
       return jsonResponse({ error: 'field_type לא תקין - צריך short_description או notes' }, 400);
     }
-    if (!sourceText) {
+    const extras = normalizeExtraTexts(body.extra_texts);
+    if (!sourceText && !extras.length) {
       return jsonResponse({ error: 'אין טקסט לשיפור - יש להזין תיאור/הערות תחילה' }, 400);
     }
 
     const systemPrompt = buildSystemPrompt(fieldType, isAnonymous);
-    const userPrompt = `הטקסט שהמשתמש הקליד כרגע בשדה (סדר, תקן ונסח - בלי להשמיט שום פרט ובלי לקצר):\n"""\n${sourceText}\n"""`;
+    const userPrompt = buildUserPrompt(sourceText, extras);
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -142,8 +170,8 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-5',
-        // 06.10.2026: 900 קטע טקסטים ארוכים - עכשיו 4000 + בדיקת stop_reason למטה.
-        max_tokens: 4000,
+        // 06.10.2026: איחוד התיבה המלאה עם טקסטים ישנים - עד 8000 + בדיקת stop_reason למטה.
+        max_tokens: 8000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
         tools: [IMPROVE_TOOL],

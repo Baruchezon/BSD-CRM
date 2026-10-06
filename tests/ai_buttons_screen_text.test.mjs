@@ -59,14 +59,15 @@ test('buttons send the screen form to the edge functions (no new buttons)', () =
   assert.match(html, /invokeAnonCardFn\(\{ business_id: bizId, form: bsdCollectAnonAiForm\(\) \}\)/);
   assert.match(html, /invokeBusinessSummaryFn\(\{ business_id: bizId, mode: 'internal_full', form: bsdCollectInternalAiForm\(\) \}\)/);
   assert.equal((html.match(/id="genAnonSummaryBtn"/g) || []).length, 1);
-  assert.equal((html.match(/id="genInternalSummaryBtn"/g) || []).length, 1);
+  // 06.10.2026 (אושר ע"י ברוך): «תקציר עסקי פנימי מלא» מוסתר - שתי תיבות בלבד, בלי כפתור נוסף.
+  assert.equal((html.match(/id="genInternalSummaryBtn"/g) || []).length, 0);
   assert.ok(!html.includes('ה-AI כתב לפי הנתונים השמורים'));
 });
 
 test('edge functions: no shortening, room for long text, truncation is an error', () => {
   const read = n => fs.readFileSync(new URL(`../supabase/functions/${n}/index.ts`, import.meta.url), 'utf8');
   const improve = read('improve-business-text');
-  assert.match(improve, /max_tokens: 4000/);
+  assert.match(improve, /max_tokens: 8000/);
   assert.match(improve, /stop_reason === 'max_tokens'/);
   assert.match(improve, /אל תקצר/);
   assert.ok(!improve.includes('תמציתי'), 'description must not ask for a concise rewrite');
@@ -74,7 +75,7 @@ test('edge functions: no shortening, room for long text, truncation is an error'
   assert.match(summary, /mode === 'short' \? 400 : 4000/);
   assert.match(summary, /stop_reason === 'max_tokens'/);
   assert.match(summary, /body\.form/);
-  const anon = read('generate-anonymous-card');
+  const anon = read('generate-anonymous-card') + fs.readFileSync(new URL('../supabase/functions/generate-anonymous-card/lib.ts', import.meta.url), 'utf8');
   assert.match(anon, /max_tokens: 3000/);
   assert.match(anon, /stop_reason === 'max_tokens'/);
   assert.match(anon, /רווחיות - אסור לחלוטין/);

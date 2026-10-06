@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610061400';
+    var PAGE_BUILD = '202610061550';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202610061400">
+<link rel="stylesheet" href="css/style.css?v=202610061550">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -493,7 +493,7 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202610061400"></script>
+<script src="js/config.js?v=202610061550"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
 <script src="js/permissions.js?v=202608251215"></script>
@@ -509,7 +509,7 @@
 <script src="js/archiveModule.js?v=20260930delete1"></script>
 <script src="js/portal-invite.js?v=20261004-2"></script>
 <script src="js/portal-business-card.js?v=20261005-2"></script>
-<script src="js/anonAgreementMark.js?v=202610061400"></script>
+<script src="js/anonAgreementMark.js?v=202610061550"></script>
 <script>
 let ALL_BIZ = [];
 let ARCHIVED_BIZ = [];
@@ -1556,7 +1556,7 @@ function openBizForm(id){
           </select>
           <div style="font-size:.72rem;color:#8a8578;margin-top:3px;">מוצגים רק מתווכים עם לפחות הסכם שנשלח לחתימה</div>
         </div>
-        <div class="field">
+        <div class="field" id="bizAnonNameLegacyField" style="display:none;"><!-- 06.10.2026: מוסתר (לא נמחק) - השם המוצג בפועל הוא «שם תצוגה אנונימי» בלשונית התקצירים -->
           <label>שם אנונימי להצגה</label>
           <div style="display:flex;gap:6px;">
             <input type="text" id="anonymous_name" value="${esc(biz?.anonymous_name)}" style="flex:1;">
@@ -1581,23 +1581,23 @@ function openBizForm(id){
         ` : ''}
 
         <div class="section-h">תיאור</div>
-        <div class="field full">
-          <label>תיאור פנימי של העסק <span style="font-weight:400;color:#8a8578;font-size:.75rem;">(חומר גלם פנימי ל-AI ולהתאמות - לא מתפרסם)</span></label>
+        <div class="field full" id="bizFullInfoField">
+          <!-- 06.10.2026 (אושר ע"י ברוך): שתי תיבות טקסט בלבד בכרטיס. זו התיבה המלאה (עמודה short_description). -->
+          <label for="short_description" style="font-weight:700;color:#0e1b34;">📋 כל המידע על העסק (פנימי) <span style="font-weight:400;color:#8a8578;font-size:.75rem;">(כותבים כאן הכל, כולל שמות ומספרים - לא מתפרסם)</span></label>
           ${biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz) ? `
           <div class="anon-one-place-note" style="background:#eef3fb;border:1px solid #c9d6ee;border-radius:8px;padding:8px 10px;margin:4px 0 8px;font-size:.78rem;color:#1c2b4a;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <span>🪪 התקציר שמתפרסם באתר, ברשימה הציבורית, בכרטיס האנונימי ובשליחה לקונים נערך <b>במקום אחד בלבד</b>: לשונית «תקצירים אנונימיים והפצה». הטקסט כאן הוא פנימי ומשמש רק כחומר גלם.</span>
+            <span>🪪 מה שמתפרסם באתר ולסוכנים המורשים הוא רק <b>«⭐ התקציר האנונימי»</b>, שה-AI כותב מתוך התיבה הזו (לשונית «תקצירים אנונימיים והפצה»).</span>
             <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;white-space:nowrap;" onclick="bsdGoToAnonSummary()">מעבר לתקציר האנונימי ←</button>
           </div>` : ''}
-          <div style="display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;">
-            <textarea id="short_description" style="flex:1;min-width:220px;">${esc(biz?.short_description)}</textarea>
-            <div style="display:flex;flex-direction:column;gap:6px;">
-              <button type="button" class="btn btn-ghost" id="aiImprove_short_description" style="white-space:nowrap;padding:0 12px;height:38px;" onclick="improveFieldWithAI('short_description')">🤖 שיפור ניסוח באמצעות AI</button>
-            </div>
+          <textarea id="short_description" class="bsd-full-info-box" rows="14" style="width:100%;box-sizing:border-box;min-height:260px;resize:vertical;white-space:pre-wrap;">${esc(biz?.short_description)}</textarea>
+          <div class="bsd-full-info-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+            <button type="button" class="btn btn-ghost" id="aiImprove_short_description" style="white-space:nowrap;padding:0 12px;min-height:40px;" onclick="improveFieldWithAI('short_description')">🤖 שיפור ניסוח באמצעות AI</button>
+            <button type="button" class="btn btn-ghost" id="bizRecordIntoFullInfo" style="white-space:nowrap;padding:0 12px;min-height:40px;" onclick="openNotesRecording({recordId:'${biz ? biz.id : 'new-' + Date.now()}', label:'${esc((biz?.internal_name || 'עסק חדש').replace(/'/g,''))}', textareaId:'short_description', currentProfile:CURRENT_PROFILE})">🎙️ הקלט הערות</button>
           </div>
           <div id="aiStatus_short_description" style="font-size:.75rem;color:#999;margin-top:4px;min-height:1.1em;"></div>
           <div id="aiEditedInfo_short_description" style="display:none;font-size:.72rem;color:#8a5a00;margin-top:2px;"></div>
           ${biz && typeof sfCanUpload === 'function' && sfCanUpload() ? `
-          <div style="margin-top:8px;">
+          <div style="display:none;margin-top:8px;"><!-- 06.10.2026: מוסתר (לא נמחק) לפי בקשת ברוך -->
             <button type="button" class="btn btn-ghost" style="font-size:.78rem;" onclick="generateAndSaveSummaryPdf('${biz.id}','short_summary','inlineShortPdfStatus')">📄 הפק PDF מהתקציר הקצר הזה</button>
             <div id="inlineShortPdfStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
           </div>` : ''}
@@ -1605,6 +1605,7 @@ function openBizForm(id){
             <span style="color:#999;">הניסוח הוחלף על ידי AI.</span>
             <a href="#" onclick="revertAiText('short_description');return false;" style="color:var(--navy,#0e1b34);text-decoration:underline;">↩ שחזר לנוסח שלפני עריכת ה-AI</a>
           </div>
+          ${bsdOldTextsFoldHtml(biz)}
         </div>
 
         <div class="section-h">סיווג ומיקום</div>
@@ -1654,19 +1655,8 @@ function openBizForm(id){
           <input type="text" id="sold_to" value="${esc(biz?.sold_to)}">
         </div>
 
-        <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
-          <span>הערות</span>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="openNotesRecording({recordId:'${biz ? biz.id : 'new-' + Date.now()}', label:'${esc((biz?.internal_name || 'עסק חדש').replace(/'/g,''))}', textareaId:'notes', currentProfile:CURRENT_PROFILE})">🎙️ הקלט הערות</button>
-            <button type="button" class="btn btn-ghost" id="aiImprove_notes" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="improveFieldWithAI('notes')">🤖 סידור וניסוח מקצועי באמצעות AI</button>
-          </div>
-        </div>
-        <div class="field full">${textareaRow('notes','הערות חופשיות', biz?.notes, 180)}</div>
-        <div id="aiStatus_notes" style="font-size:.75rem;color:#999;margin-top:-8px;margin-bottom:4px;min-height:1.1em;"></div>
-        <div id="aiEditedInfo_notes" style="display:none;font-size:.72rem;color:#8a5a00;margin-top:-2px;margin-bottom:4px;"></div>
-        <div id="aiRevertBox_notes" style="display:none;font-size:.75rem;margin-top:-2px;margin-bottom:10px;">
-          <span style="color:#999;">הניסוח הוחלף על ידי AI.</span>
-          <a href="#" onclick="revertAiText('notes');return false;" style="color:var(--navy,#0e1b34);text-decoration:underline;">↩ שחזר לנוסח שלפני עריכת ה-AI</a>
+        <div id="bizLegacyNotesHidden" style="display:none;"><!-- 06.10.2026: «הערות» מוסתר (לא נמחק). הערך נשאר בטופס כדי שהשמירה לא תיגע בו; תוכנו מוצג לקריאה תחת «כל המידע על העסק». -->
+          <textarea id="notes" readonly tabindex="-1" aria-hidden="true">${esc(biz?.notes)}</textarea>
         </div>
       </div>
 
@@ -1743,15 +1733,8 @@ function openBizForm(id){
         <button type="button" class="btn btn-ghost" style="margin-top:10px;" onclick="previewAnonCard('${biz.id}')">👁️ תצוגה מקדימה - איך זה נראה אנונימי</button>
       </div>
 
-      <div class="section-h" style="margin-top:14px;">📝 תקציר עסקי פנימי מלא</div>
-      <div class="field full" style="background:#f7f5ef;border-radius:8px;padding:10px 12px;">
-        <div style="font-size:.78rem;color:#665;margin-bottom:8px;">
-          מסמך פנימי בלבד - בניגוד לתקציר האנונימי, מותר ורצוי שיכלול פרטים מזהים (שם העסק, בעלים, טלפון, כתובת) כאשר הם קיימים. נפרד לחלוטין מהתקציר האנונימי, לעולם לא מוצג לגורם שאין לו הרשאת צפייה מלאה בעסק.
-        </div>
-        <textarea id="internal_business_summary" rows="10" placeholder="נוצר אוטומטית מנתוני העסק, או הוזן/נערך ידנית" style="width:100%;padding:8px 10px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;">${esc(biz.internal_business_summary)}</textarea>
-        <div style="font-size:.72rem;color:#999;margin-top:4px;">${biz.internal_business_summary_generated_at ? 'נוצר לאחרונה ע"י AI: ' + fmtDateTime(biz.internal_business_summary_generated_at) : 'טרם נוצר ע"י AI'} - עריכה ידנית כאן נשמרת עם כפתור "שמירה" הרגיל בתחתית הטופס.</div>
-        <button type="button" class="btn btn-ghost" style="margin-top:8px;" onclick="generateInternalSummary('${biz.id}')" id="genInternalSummaryBtn">🔄 צור תקציר עסקי מלא (AI) - לתצוגה מקדימה</button>
-        <div id="genInternalSummaryStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
+      <div id="bizLegacyInternalSummaryHidden" style="display:none;"><!-- 06.10.2026: «תקציר עסקי פנימי מלא» מוסתר (לא נמחק). תוכנו מוצג לקריאה תחת «כל המידע על העסק». -->
+        <textarea id="internal_business_summary" readonly tabindex="-1" aria-hidden="true">${esc(biz.internal_business_summary)}</textarea>
       </div>
 
       <div class="section-h" style="margin-top:14px;">📁 תיק מכירה (כולל מצגת אנונימית להעלאה)</div>
@@ -3279,7 +3262,7 @@ async function maybeAutoRefreshAnonSummary(bizId, existingBiz, payload){
 const BIZ_GUARDED_TEXT_FIELDS = ['anon_summary','anon_display_name','internal_business_summary','short_description','notes'];
 const BIZ_GUARDED_FIELD_LABELS = {
   anon_summary: 'תקציר אנונימי', anon_display_name: 'שם תצוגה אנונימי',
-  internal_business_summary: 'תקציר עסקי פנימי מלא', short_description: 'תיאור פנימי של העסק', notes: 'הערות',
+  internal_business_summary: 'תקציר עסקי פנימי מלא', short_description: 'כל המידע על העסק', notes: 'הערות',
 };
 let BIZ_FORM_BASELINE = null; // { bizId, form:{field:value as shown}, db:{field:value from server} }
 let BIZ_PENDING_CONFLICT = null;
@@ -3336,6 +3319,50 @@ function bsdAnonLeakScan(pairs, identifiers){
     ids.forEach(id => { if (lower.includes(String(id).toLowerCase())) leaks.push(`${label}: מכיל "${id}"`); });
   });
   return leaks;
+}
+
+// אזור רחב לפי עיר - העתק זהה של הרשימה ב-supabase/functions/generate-anonymous-card/lib.ts
+// (בדיקה ב-tests מוודאת ששתיהן זהות). משמש רק לבדיקת האנונימיות בשמירה ידנית.
+const BSD_REGION_MAP = /*REGION_MAP_START*/{"אזור המרכז":["תל אביב","יפו","רמת גן","גבעתיים","בני ברק","חולון","בת ים","ראשון לציון","פתח תקווה","אור יהודה","יהוד","קריית אונו","גבעת שמואל","סביון","גני תקווה","ראש העין","אלעד","שוהם","מודיעין","לוד","רמלה","באר יעקב","כפר קאסם","גבעת השלושה","כפר חב\"ד"],"אזור השרון":["נתניה","הרצליה","רעננה","כפר סבא","הוד השרון","רמת השרון","אבן יהודה","כפר יונה","טייבה","טירה","קדימה","צורן","תל מונד","פרדסיה","כוכב יאיר","צור יגאל","קלנסווה","חדרה","אור עקיבא","פרדס חנה","כרכור","גליל ים","בית יצחק","עמק חפר"],"אזור השפלה":["רחובות","נס ציונה","יבנה","גדרה","גן יבנה","מזכרת בתיה","קריית עקרון","קריית מלאכי","באר טוביה","כפר אביב"],"אזור ירושלים":["ירושלים","בית שמש","מבשרת ציון","מעלה אדומים","גבעת זאב","אבו גוש","צור הדסה","ביתר עילית","מוצא"],"אזור הצפון":["חיפה","קריית אתא","קריית ביאליק","קריית מוצקין","קריית ים","טירת כרמל","נשר","יקנעם","יוקנעם","עכו","נהריה","כרמיאל","נצרת","נוף הגליל","נצרת עילית","עפולה","טבריה","צפת","קריית שמונה","בית שאן","מגדל העמק","שפרעם","טמרה","סכנין","סח'נין","אום אל פחם","זכרון יעקב","עתלית","קצרין","מעלות תרשיחא","קריית טבעון","רמת ישי","עראבה","דלית אל כרמל"],"אזור הדרום":["באר שבע","אשדוד","אשקלון","אילת","דימונה","ערד","שדרות","נתיבות","אופקים","קריית גת","רהט","ירוחם","מצפה רמון","להבים","עומר","מיתר"]}/*REGION_MAP_END*/;
+function bsdNormalizePlace(v){
+  return String(v == null ? '' : v).replace(/["'״׳`]/g, '').replace(/[-–—_,.()]/g, ' ').replace(/קרית/g, 'קריית').replace(/תקוה/g, 'תקווה').replace(/\s+/g, ' ').trim();
+}
+function bsdDeriveRegionFromCity(city){
+  const c = bsdNormalizePlace(city);
+  if (c.length < 2) return '';
+  for (const region of Object.keys(BSD_REGION_MAP)){
+    for (const raw of BSD_REGION_MAP[region]){
+      const k = bsdNormalizePlace(raw);
+      if (c === k || c.startsWith(k + ' ')) return region;
+    }
+  }
+  return '';
+}
+function bsdEffectiveRegion(region, city){
+  const r = typeof region === 'string' ? region.trim() : '';
+  return r || bsdDeriveRegionFromCity(city);
+}
+const BSD_PROFIT_WORD_RE = /(^|[^\u0590-\u05FF])(ו|ה|ב|ל|ש|כ|וה|וב|של|שה)?רי?ווח(ים|יות|ית|יים|י|יו)?(?=$|[^\u0590-\u05FF])/;
+function bsdHasHebrewWord(text, word){
+  const esc2 = String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^\\u0590-\\u05FFa-zA-Z0-9])[ובלמהשכ]{0,2}${esc2}(?=$|[^\\u0590-\\u05FFa-zA-Z0-9])`, 'i').test(String(text || ''));
+}
+// אותם כללים כמו בבדיקת השרת באישור (localSafetyScan): עיר (אלא אם היא חלק מהאזור
+// המותר), רחוב+מספר, "שכונת", המילה "כתובת", רווח/רווחיות.
+function bsdAnonRuleScan(pairs, city, region){
+  const hits = [];
+  const c = String(city || '').trim();
+  const reg = bsdEffectiveRegion(region, city);
+  (pairs || []).forEach(([label, text]) => {
+    const t = String(text || '');
+    if (!t.trim()) return;
+    if (c.length >= 2 && !(reg && reg.includes(c)) && bsdHasHebrewWord(t, c)) hits.push(`${label}: מופיעה העיר "${c}" - מותר רק אזור${reg ? ' (למשל "' + reg + '")' : ''}`);
+    if (/(^|[^\u0590-\u05FF])(ב|ו|וב)?(רחוב|רח['׳]|שד['׳]|שדרות)\s+[^\s\d,.]{2,}(\s+[^\s\d,.]{2,})?\s+\d{1,4}(?!\d)/.test(t)) hits.push(`${label}: נראה כמו כתובת (רחוב ומספר)`);
+    if (/(^|[^\u0590-\u05FF])(ב|ו|וב)?שכונת\s+(?!מגורים)[\u0590-\u05FF]/.test(t)) hits.push(`${label}: מופיע שם שכונה`);
+    if (/(^|[^\u0590-\u05FF])(ב|ו|וב|ה)?כתובת(?=$|[^\u0590-\u05FF])/.test(t)) hits.push(`${label}: מופיעה המילה "כתובת"`);
+    if (BSD_PROFIT_WORD_RE.test(t) || /\b(profit|ebitda)\b/i.test(t)) hits.push(`${label}: מופיע רווח/רווחיות - לא מפרסמים רווח (מחזור מותר)`);
+  });
+  return hits;
 }
 
 function bsdFindCachedBiz(bizId){
@@ -3539,6 +3566,10 @@ async function bsdSaveAnonSummaryOnly(bizId){
   try {
     const pre = bsdPlanGuardedTextSave(BIZ_FORM_BASELINE && BIZ_FORM_BASELINE.bizId === bizId ? BIZ_FORM_BASELINE : null, formVals, null, null);
     if (!Object.keys(pre.send).length){ setStatus('#999', 'אין שינוי לשמור - התקציר כבר שמור כפי שהוא מוצג'); return; }
+    // 06.10.2026: אותם כללים כמו באישור ה-AI בשרת - בלי עיר/כתובת/רווח.
+    const ruleHits = bsdAnonRuleScan([['שם תצוגה אנונימי', formVals.anon_display_name], ['תקציר אנונימי', formVals.anon_summary]],
+      document.getElementById('city') ? v('city') : cached.city, document.getElementById('region') ? v('region') : cached.region);
+    if (ruleHits.length){ setStatus('#b3402c', '⚠️ לא נשמר - ' + ruleHits.join(' · ')); return; }
     const { data: latest, error: latestErr } = await window.supabaseClient.from('businesses').select('anon_display_name,anon_summary').eq('id', bizId).maybeSingle();
     if (latestErr || !latest){ setStatus('#b3402c', '❌ לא ניתן לבדוק את הנוסח השמור: ' + (latestErr ? latestErr.message : 'העסק לא נמצא')); return; }
     const plan = bsdPlanGuardedTextSave(BIZ_FORM_BASELINE && BIZ_FORM_BASELINE.bizId === bizId ? BIZ_FORM_BASELINE : null, formVals, latest, null);
@@ -3564,13 +3595,15 @@ function bsdAiFormVal(id){ const el = document.getElementById(id); return el ? e
 function bsdAiFormChecked(id){ const el = document.getElementById(id); return el ? !!el.checked : null; }
 // קלט לתקציר האנונימי: בכוונה בלי עיר, כתובת, רווחים, שמות, טלפונים והערות.
 // מחיר מבוקש רק אם "הצג מחיר" מסומן, סיבת מכירה רק אם סומנה.
+// 06.10.2026: השרת כותב מתוך «כל המידע על העסק» (description) קודם; אם אין אזור -
+// השרת גוזר אזור רחב מהעיר השמורה בלי לשלוח את העיר ל-AI.
 function bsdCollectAnonAiForm(){
   const showPrice = bsdAiFormChecked('anon_card_show_price');
   const showReason = bsdAiFormChecked('anon_card_show_reason');
   const form = {
-    anon_text: bsdAiFormVal('anon_summary'),
-    internal_summary: bsdAiFormVal('internal_business_summary'),
     description: bsdAiFormVal('short_description'),
+    internal_summary: bsdAiFormVal('internal_business_summary'),
+    anon_text: bsdAiFormVal('anon_summary'),
     field: bsdAiFormVal('field'), category: bsdAiFormVal('category'), region: bsdAiFormVal('region'),
     annual_revenue: bsdAiFormVal('annual_revenue'), years_active: bsdAiFormVal('years_active'), employees_count: bsdAiFormVal('employees_count'),
   };
@@ -3599,7 +3632,7 @@ async function generateAnonSummary(bizId){
   try {
     const data = await invokeAnonCardFn({ business_id: bizId, form: bsdCollectAnonAiForm() });
     if (!data?.anon_summary && !data?.anon_display_name){
-      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ אין מספיק מידע ליצירת תקציר אמין - כתוב טקסט בתיבת התקציר האנונימי, בתקציר העסקי המלא או בתיאור הפנימי, ונסה שוב'; }
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ אין מספיק מידע ליצירת תקציר אמין - כתוב את המידע בתיבה «📋 כל המידע על העסק» (לשונית «פרטי עסק») ונסה שוב'; }
       return;
     }
     if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = ''; }
@@ -4730,17 +4763,53 @@ function initAiEditIndicators(biz){
   });
 }
 
+// ============================================================================
+// 06.10.2026 (אושר ע"י ברוך 15:22) - שתי תיבות טקסט בכרטיס:
+//   1. «📋 כל המידע על העסק (פנימי)» = short_description, עם «🤖 שיפור ניסוח» הקיים.
+//   2. «⭐ התקציר האנונימי» = anon_summary - הטקסט היחיד שמתפרסם.
+// «הערות» ו«תקציר עסקי פנימי מלא» מוסתרים (לא נמחקו): הערכים נשארים במסד ובטופס
+// (מוסתרים), תוכנם מוצג לקריאה בקיפול מתחת לתיבה המלאה, ולחיצה על כפתור ה-AI של
+// התיבה המלאה מאחדת אותם לטקסט אחד מלא (תצוגה מקדימה לפני שמירה).
+// ============================================================================
+function bsdOldTextsFoldHtml(biz){
+  if (!biz) return '';
+  const parts = [];
+  const notes = bsdNormText(biz.notes).trim();
+  const internal = bsdNormText(biz.internal_business_summary).trim();
+  if (notes) parts.push({ label: 'הערות (שדה ישן)', text: notes });
+  if (internal) parts.push({ label: 'תקציר עסקי פנימי מלא (שדה ישן)', text: internal });
+  if (!parts.length) return '';
+  return `
+          <details id="bizOldTextsFold" class="bsd-old-texts" style="margin-top:8px;background:#faf8f2;border:1px dashed #d8d3c4;border-radius:8px;padding:6px 10px;">
+            <summary style="cursor:pointer;font-size:.8rem;color:#665;padding:4px 0;">📎 טקסט קודם שנשמר בכרטיס (לקריאה בלבד) - «🤖 שיפור ניסוח» מאחד אותו לתוך התיבה</summary>
+            ${parts.map(x => `<div style="margin-top:8px;"><div style="font-size:.74rem;font-weight:700;color:#8a8578;">${esc(x.label)}</div><div class="bsd-old-text-body" style="font-size:.82rem;white-space:pre-wrap;color:#444;background:#fff;border:1px solid #eee;border-radius:6px;padding:6px 8px;max-height:40vh;overflow-y:auto;">${esc(x.text)}</div></div>`).join('')}
+          </details>`;
+}
+
+// טקסטים ישנים (מהשדות המוסתרים) שנשלחים לאיחוד עם התיבה המלאה. טקסט שכבר מופיע
+// מילה במילה בתיבה - לא נשלח שוב.
+function bsdCollectOldTextsForMerge(boxText){
+  const box = bsdNormText(boxText);
+  const out = [];
+  [['notes', 'הערות (שדה ישן)'], ['internal_business_summary', 'תקציר עסקי פנימי מלא (שדה ישן)']].forEach(([id, label]) => {
+    const el = document.getElementById(id);
+    const t = el ? bsdNormText(el.value).trim() : '';
+    if (t && !box.includes(t)) out.push({ label, text: t });
+  });
+  return out;
+}
+
 function aiFieldLabel(fieldId){
-  return fieldId === 'short_description' ? 'תיאור פנימי של העסק' : 'הערות';
+  return fieldId === 'short_description' ? 'כל המידע על העסק' : 'הערות';
 }
 function aiButtonLabel(fieldId){
   return fieldId === 'short_description' ? '🤖 שיפור ניסוח באמצעות AI' : '🤖 סידור וניסוח מקצועי באמצעות AI';
 }
 
-async function invokeImproveTextFn(fieldType, sourceText, isAnonymous){
-  const { data, error } = await window.supabaseClient.functions.invoke('improve-business-text', {
-    body: { field_type: fieldType, source_text: sourceText, is_anonymous: isAnonymous }
-  });
+async function invokeImproveTextFn(fieldType, sourceText, isAnonymous, extraTexts){
+  const body = { field_type: fieldType, source_text: sourceText, is_anonymous: isAnonymous };
+  if (Array.isArray(extraTexts) && extraTexts.length) body.extra_texts = extraTexts;
+  const { data, error } = await window.supabaseClient.functions.invoke('improve-business-text', { body });
   if (error){
     let ctx = null;
     try { ctx = await error.context?.json?.(); } catch(_e){}
@@ -4816,23 +4885,25 @@ async function runAiImprove(fieldId){
   if (!textarea) return;
   const sourceText = (textarea.value || '').trim();
   const statusEl = document.getElementById('aiStatus_' + fieldId);
-  if (!sourceText){
+  // 06.10.2026: בתיבה המלאה - מצרפים גם טקסט ישן מהשדות המוסתרים, לאיחוד לטקסט אחד.
+  const extras = fieldId === 'short_description' ? bsdCollectOldTextsForMerge(sourceText) : [];
+  if (!sourceText && !extras.length){
     if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ יש להזין טקסט בשדה לפני השיפור.'; }
     return;
   }
   const btn = document.getElementById('aiImprove_' + fieldId);
   const isAnonymous = !!(document.getElementById('anon_card_active') && document.getElementById('anon_card_active').checked);
-  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = '🤖 מנסח מחדש... (עשוי לקחת כמה שניות)'; }
+  if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = extras.length ? '🤖 מסדר ומאחד את כל המידע לטקסט אחד... (טקסט ארוך עשוי לקחת עד דקה-שתיים)' : '🤖 מנסח מחדש... (עשוי לקחת כמה שניות)'; }
   bsdSetButtonLoading(btn, true, 'מעבד...');
   try {
-    const data = await invokeImproveTextFn(fieldId === 'short_description' ? 'short_description' : 'notes', sourceText, isAnonymous);
+    const data = await invokeImproveTextFn(fieldId === 'short_description' ? 'short_description' : 'notes', sourceText, isAnonymous, extras);
     bsdSetButtonLoading(btn, false);
     if (!data || !data.improved_text || data.insufficient_info){
       if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ ' + (data && data.notes_to_user ? data.notes_to_user : 'אין מספיק תוכן בשדה כדי לשפר את הניסוח באופן משמעותי - הוסף פרטים ונסה שוב.'); }
       return;
     }
     if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = ''; }
-    openAiTextPreview(fieldId, sourceText, data.improved_text, isAnonymous, data.notes_to_user || null);
+    openAiTextPreview(fieldId, sourceText, data.improved_text, isAnonymous, data.notes_to_user || null, extras);
   } catch (e){
     bsdSetButtonLoading(btn, false);
     const msg = e && e.message ? e.message : String(e);
@@ -4848,7 +4919,11 @@ function closeAiTextPreview(){
 
 // שלב 2: תצוגה מקדימה - טקסט מקורי + נוסח מוצע (ניתן לעריכה ידנית) + 3
 // כפתורים: אישור והחלפה / נסה ניסוח נוסף / ביטול. שום דבר לא נשמר כאן.
-function openAiTextPreview(fieldId, originalText, proposedText, isAnonymous, noteToUser){
+function openAiTextPreview(fieldId, originalText, proposedText, isAnonymous, noteToUser, extras){
+  const extraList = Array.isArray(extras) ? extras : [];
+  const originalDisplay = extraList.length
+    ? [originalText || '(התיבה הייתה ריקה)'].concat(extraList.map(x => `\n— ${x.label} —\n${x.text}`)).join('\n')
+    : originalText;
   closeAiTextPreview();
   const overlay = document.createElement('div');
   overlay.id = 'aiTextOverlay';
@@ -4861,10 +4936,10 @@ function openAiTextPreview(fieldId, originalText, proposedText, isAnonymous, not
       <h3 style="margin:0 0 4px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">תצוגה מקדימה - ${esc(aiFieldLabel(fieldId))} (AI)</h3>
       <div style="font-size:.78rem;color:#999;margin-bottom:12px;">זו טיוטה בלבד - שום דבר לא נשמר עדיין. ניתן לערוך את הנוסח המוצע למטה לפני האישור.</div>
       ${noteHtml}
-      <label style="display:block;font-size:.78rem;color:#665;">הטקסט המקורי</label>
-      <textarea readonly style="width:100%;padding:8px 10px;border:1px solid #e3e0d5;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;background:#f7f5ef;color:#665;min-height:80px;margin-bottom:12px;">${esc(originalText)}</textarea>
+      <label style="display:block;font-size:.78rem;color:#665;">${extraList.length ? 'הטקסט המקורי + טקסט קודם שאוחד' : 'הטקסט המקורי'}</label>
+      <textarea readonly style="width:100%;padding:8px 10px;border:1px solid #e3e0d5;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;background:#f7f5ef;color:#665;min-height:80px;margin-bottom:12px;">${esc(originalDisplay)}</textarea>
       <label style="display:block;font-size:.78rem;color:#665;">הנוסח המוצע (ניתן לעריכה)</label>
-      <textarea id="aiProposedText" style="width:100%;padding:8px 10px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;min-height:120px;">${esc(proposedText)}</textarea>
+      <textarea id="aiProposedText" style="width:100%;padding:8px 10px;border:1px solid #d8d3c4;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;min-height:220px;">${esc(proposedText)}</textarea>
       <div id="aiPreviewStatus" style="font-size:.78rem;color:#999;margin-top:8px;min-height:1.2em;"></div>
       <div style="display:flex;justify-content:space-between;gap:10px;margin-top:16px;flex-wrap:wrap;">
         <button type="button" class="btn btn-ghost" id="aiTryAgainBtn" onclick="tryAnotherAiPhrasing('${fieldId}', ${JSON.stringify(isAnonymous)})">🔄 נסה ניסוח נוסף</button>
@@ -4887,17 +4962,18 @@ async function tryAnotherAiPhrasing(fieldId, isAnonymous){
   const statusEl = document.getElementById('aiPreviewStatus');
   const btn = document.getElementById('aiTryAgainBtn');
   const originalText = AI_TEXT_ORIGINAL[fieldId];
-  if (!originalText) return;
+  if (originalText === undefined || originalText === null) return;
   if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = '🤖 מנסח ניסוח נוסף...'; }
   bsdSetButtonLoading(btn, true, 'מנסח...');
   try {
-    const data = await invokeImproveTextFn(fieldId === 'short_description' ? 'short_description' : 'notes', originalText, isAnonymous);
+    const extras = fieldId === 'short_description' ? bsdCollectOldTextsForMerge(originalText) : [];
+    const data = await invokeImproveTextFn(fieldId === 'short_description' ? 'short_description' : 'notes', originalText, isAnonymous, extras);
     bsdSetButtonLoading(btn, false);
     if (!data || !data.improved_text || data.insufficient_info){
       if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ ' + (data && data.notes_to_user ? data.notes_to_user : 'לא הצלחנו לייצר ניסוח חלופי - נסה שוב.'); }
       return;
     }
-    openAiTextPreview(fieldId, originalText, data.improved_text, isAnonymous, data.notes_to_user || null);
+    openAiTextPreview(fieldId, originalText, data.improved_text, isAnonymous, data.notes_to_user || null, extras);
   } catch (e){
     bsdSetButtonLoading(btn, false);
     const msg = e && e.message ? e.message : String(e);
@@ -5049,6 +5125,12 @@ async function saveBiz(e){
       };
       scanText('שם תצוגה אנונימי', manualDisplayName);
       scanText('תקציר אנונימי', manualSummary);
+      // 06.10.2026: עיר/כתובת/רווח - נבדק רק כשהמשתמש שינה את הטקסט האנונימי בטופס הזה,
+      // כדי ששמירה רגילה של שדות אחרים בעסק עם תקציר ישן לא תיחסם.
+      const anonEdited = !BIZ_FORM_BASELINE || BIZ_FORM_BASELINE.bizId !== bizId
+        || bsdNormText(manualSummary) !== (BIZ_FORM_BASELINE.form.anon_summary || '')
+        || bsdNormText(manualDisplayName) !== (BIZ_FORM_BASELINE.form.anon_display_name || '');
+      if (anonEdited) bsdAnonRuleScan([['שם תצוגה אנונימי', manualDisplayName], ['תקציר אנונימי', manualSummary]], payload.city, payload.region).forEach(h => leaks.push(h));
       if (leaks.length){
         showFormError('⚠️ התקציר/שם התצוגה האנונימי מכיל מידע מזהה: ' + leaks.join(', ') + ' - השדות האנונימיים לא נשמרו, אך שאר הטופס כן יישמר. תקן ונסה שוב להפעיל את ההפצה.');
         anonBlocked = true;
