@@ -617,6 +617,42 @@ export function buildSuggestions({ buyers = [], businesses = [], matches = [], d
 }
 function fmtDate(iso) { try { return new Date(iso).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' }); } catch (_e) { return String(iso).slice(0, 10); } }
 
+/**
+ * 06.10.2026 (אושר ע"י ברוך): סוכן שאינו אדמין/מנהל רואה בהתאמות AI רק עסקים
+ * ששוחררו אליו, לפי אותו מודל הרשאות של שאר המערכת (get_business_access_level):
+ *   'full'      - יוצר/מטפל/הרשאה מלאה מפורשת: כמו קודם (בלי טלפון בעלים).
+ *   'anonymous' - שדות אנונימיים בלבד (כמו מסך «עסקים אנונימיים»): שם תצוגה אנונימי,
+ *                 מספר עסק, תחום, עיר/אזור, מחזור, מחיר מבוקש רק אם «הצג מחיר».
+ *                 לעולם לא: שם העסק האמיתי, אתר, כתובת, רווח, טלפון. ורק אם יש
+ *                 תקציר אנונימי (בדיוק כמו ה-view businesses_anonymous_card).
+ *   'none'/אחר  - העסק לא נכלל בכלל.
+ * בעסק אנונימי גם הטקסטים הפנימיים (תיאור מלא/הערות/תקציר פנימי) לא נכנסים למנוע -
+ * ההתאמה נעשית לפי התחום והתקציר האנונימי בלבד, כך ששום מילה פנימית לא תופיע בהסבר.
+ * @param {any[]} businesses
+ * @param {Record<string,string>} levels  business_id -> access level
+ */
+export function scopeBusinessesForAgent(businesses, levels) {
+  const out = [];
+  for (const b of businesses || []) {
+    const lvl = levels ? levels[b.id] : null;
+    if (lvl === 'full') { out.push({ ...b, owner_phone: null }); continue; }
+    if (lvl !== 'anonymous') continue;
+    if (!String(b.anon_summary || '').trim()) continue;
+    const label = String(b.field || b.category || '').trim();
+    out.push({
+      ...b,
+      internal_name: null,
+      anon_display_name: String(b.anon_display_name || '').trim() || (label ? `עסק בתחום ${label}` : 'עסק למכירה'),
+      website: null, address: null, owner_phone: null,
+      operating_profit: null, net_profit: null,
+      short_description: null, notes: null, internal_business_summary: null, sale_reason: null,
+      _anon_scope: true,
+      asking_price: b.anon_card_show_price ? b.asking_price : null,
+    });
+  }
+  return out;
+}
+
 // מוסיף לכל הצעה פרטי תצוגה (שם, מספר, עיר, קישורים) - משותף לפונקציה ולבדיקות.
 // פרטי קשר (טלפון/מייל/טלפון בעל העסק) רק כש-fullAccess (מנהל/אדמין).
 /**

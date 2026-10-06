@@ -10,7 +10,7 @@
 // holding the public key. Response format for authorized callers is unchanged.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { buildSuggestions, decorateForClient, ENGINE_VERSION, MIN_SCORE } from './engine.js';
+import { buildSuggestions, decorateForClient, scopeBusinessesForAgent, ENGINE_VERSION, MIN_SCORE } from './engine.js';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
       .or('status.is.null,status.neq.סגור')
       .or('is_archived.is.null,is_archived.eq.false'),
     supabase.from('businesses')
-      .select('id, business_number, internal_name, anon_display_name, field, category, subcategory, city, region, address, asking_price, annual_revenue, operating_profit, net_profit, employees_count, years_active, short_description, sale_reason, notes, anon_summary, internal_business_summary, website, owner_phone')
+      .select('id, business_number, internal_name, anon_display_name, field, category, subcategory, city, region, address, asking_price, annual_revenue, operating_profit, net_profit, employees_count, years_active, short_description, sale_reason, notes, anon_summary, internal_business_summary, website, owner_phone, anon_card_show_price')
       .eq('listing_status', 'active')
       .or('is_archived.is.null,is_archived.eq.false'),
     supabase.from('matches').select('id, buyer_id, business_id, status, created_at'),
@@ -87,8 +87,18 @@ Deno.serve(async (req) => {
   const firstErr = buyersRes.error || bizRes.error || matchesRes.error || distRes.error;
   if (firstErr) return jsonResponse({ error: 'שגיאה בקריאת הנתונים: ' + firstErr.message }, 500);
   const buyers = buyersRes.data ?? [];
-  const businesses = bizRes.data ?? [];
-  const ids = [...buyers.map((b: any) => b.id), ...businesses.map((b: any) => b.id)];
+  let businesses = bizRes.data ?? [];
+  // 06.10.2026: סוכן (לא אדמין/מנהל) - רק עסקים ששוחררו אליו, ובעסק אנונימי רק שדות אנונימיים.
+  if (!fullAccess) {
+    const levels: Record<string, string> = {};
+    await Promise.all(businesses.map(async (b: any) => {
+      const { data: lvl, error: lvlErr } = await supabase.rpc('get_business_access_level', { biz_id: b.id, uid: userData.user.id });
+      levels[b.id] = lvlErr ? 'none' : String(lvl || 'none');
+    }));
+    businesses = scopeBusinessesForAgent(businesses, levels);
+  }
+  // הערות פנימיות של עסק אנונימי לא נשלפות בכלל (ראו scopeBusinessesForAgent)
+  const ids = [...buyers.map((b: any) => b.id), ...businesses.filter((b: any) => !b._anon_scope).map((b: any) => b.id)];
   let notes: any[] = [];
   if (ids.length) {
     const { data: n } = await supabase.from('record_notes').select('table_name, record_id, note_text').in('table_name', ['leads', 'businesses']).in('record_id', ids);
