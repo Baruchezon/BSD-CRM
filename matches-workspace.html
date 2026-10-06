@@ -82,7 +82,7 @@
   .view-toggle-btn.active{background:var(--navy);color:#fff;border-color:var(--navy);}
   .search-row{display:flex;gap:8px;flex-wrap:wrap;}
   .search-row input, .search-row select{padding:10px 14px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:13.5px;background:#fff;}
-  .search-row input#searchBox{flex:1;min-width:220px;}
+  .search-row input#searchBox{flex:1;min-width:0;width:100%;font-size:16px;}
 
   .quickviews{display:flex;gap:7px;flex-wrap:wrap;}
   .qv-chip{padding:7px 14px;border-radius:20px;border:1px solid var(--line);background:#fff;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--text);white-space:nowrap;}
@@ -296,10 +296,10 @@
       </select>
     </div>
   </div>
+  <div class="search-row">
+    <input type="text" id="searchBox" placeholder="חיפוש: שם עסק, מספר, שם קונה, מספר, טלפון, מטפל, סטטוס, הערה, משימה...">
+  </div>
   <div class="filter-panel" id="filterPanel" style="display:none;">
-    <div class="search-row">
-      <input type="text" id="searchBox" placeholder="חיפוש: שם עסק, מספר, שם קונה, מספר, טלפון, מטפל, סטטוס, הערה, משימה...">
-    </div>
     <div class="quickviews" id="quickviews"></div>
   </div>
 </div>
