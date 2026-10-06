@@ -19,7 +19,8 @@
 // Requires: ANTHROPIC_API_KEY secret (already used elsewhere in this project).
 //
 // Called from businesses.html via:
-//   supabase.functions.invoke('generate-business-summary', { body: { business_id, mode } })
+//   supabase.functions.invoke('generate-business-summary', { body: { business_id, mode, form } })
+//   (form = ערכי הטופס הנוכחיים מהמסך; שדה ריק -> הערך השמור במסד)
 //   supabase.functions.invoke('generate-business-summary', { body: { business_id, mode, action:'confirm', text } })
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -86,37 +87,86 @@ function buildFactsBlock(biz: Record<string, unknown>): string {
   return lines.join('\n');
 }
 
-async function generateSummary(biz: Record<string, unknown>, mode: Mode): Promise<{ summary_text: string | null; insufficient_info: boolean }> {
+// 06.10.2026 (בקשת ברוך): הכפתור עובד על מה שכתוב כרגע על המסך (כולל עריכות
+// שעוד לא נשמרו), ולא על מה ששמור במסד. הדפדפן שולח body.form עם ערכי הטופס;
+// שדה ריק/חסר בטופס -> נופלים לערך השמור במסד.
+export const FORM_FACT_KEYS = [
+  'internal_name', 'owner_name', 'owner_phone', 'owner_email', 'id_number', 'entity_type',
+  'field', 'category', 'subcategory', 'city', 'region', 'address', 'website',
+  'years_active', 'annual_revenue', 'operating_profit', 'net_profit', 'employees_count',
+  'asking_price', 'sale_reason', 'status', 'short_description', 'notes',
+];
+
+function isFilled(v: unknown): boolean {
+  return v !== null && v !== undefined && String(v).trim() !== '';
+}
+
+// ממזג ערכי טופס על גבי הרשומה השמורה: ערך טופס לא-ריק גובר, אחרת נשאר הערך מה-DB.
+export function mergeFormOverDb(biz: Record<string, unknown>, form: unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...biz };
+  if (!form || typeof form !== 'object') return out;
+  const f = form as Record<string, unknown>;
+  for (const k of FORM_FACT_KEYS) {
+    if (isFilled(f[k])) out[k] = typeof f[k] === 'string' ? (f[k] as string).trim() : f[k];
+  }
+  return out;
+}
+
+// הטקסט שבתיבת "תקציר עסקי פנימי מלא" עצמה: אם התיבה קיימת על המסך (נשלחה
+// מחרוזת, גם ריקה) - זה מה שקובע; רק אם הטופס לא שלח אותה בכלל - הערך השמור.
+export function pickBoxText(form: unknown, dbValue: unknown): string {
+  if (form && typeof form === 'object' && typeof (form as Record<string, unknown>).internal_business_summary === 'string') {
+    return ((form as Record<string, unknown>).internal_business_summary as string).trim();
+  }
+  return typeof dbValue === 'string' ? dbValue.trim() : '';
+}
+
+export function buildInternalPrompts(biz: Record<string, unknown>, mode: Mode, boxText: string): { systemPrompt: string; userPrompt: string } | null {
   const factsBlock = buildFactsBlock(biz);
   const freeText = [biz.short_description, biz.notes].filter(Boolean).join('\n---\n');
+  const hasBox = mode === 'internal_full' && !!boxText;
 
-  if (!factsBlock.trim() && !freeText.trim()) {
-    return { summary_text: null, insufficient_info: true };
+  if (!hasBox && !factsBlock.trim() && !freeText.trim()) return null;
+
+  let modeInstructions: string;
+  if (mode === 'short') {
+    modeInstructions = 'כתוב תקציר קצר של 2-4 שורות בלבד: במה העסק עוסק, מה היקף הפעילות (בקצרה), מה מיוחד בו, ומה הסטטוס הכללי. תמציתי ושיווקי אך מדויק.';
+  } else if (hasBox) {
+    modeInstructions = 'המשתמש כבר כתב בעצמו את התקציר העסקי הפנימי (מופיע למטה תחת "הטקסט שבתיבה"). המשימה: לסדר, לתקן כתיב ודקדוק, ולנסח אותו בצורה נקייה, מסודרת ומקצועית - בסעיפים עם כותרת קצרה לכל סעיף. חובה לשמור על כל פרט, מספר, שם, סכום ותנאי שמופיעים בטקסט שבתיבה - אסור להשמיט, לעגל או לקצר. מותר להשאיר משפטים טובים כמו שהם. אם נתון מובנה מהכרטיס (למטה) חסר בטקסט - מותר להוסיף אותו לסעיף המתאים. זהו מסמך פנימי - פרטים מזהים נשארים.';
+  } else {
+    modeInstructions = 'כתוב תקציר עסקי פנימי מלא ומפורט, בסעיפים ברורים (כותרת קצרה לכל סעיף): תחום פעילות, תיאור הפעילות, שנות פעילות, נתונים כספיים (מחזור/רווח/מחיר מבוקש) ככל שקיימים, עובדים, ציוד ונכסים, יתרונות/חוזקות, סיכונים אם ידועים, פוטנציאל, סיבת מכירה, ומצב העסק/סטטוס. השתמש בכל הפרטים שבתיאור ובהערות - אל תקצר ואל תשמיט פרטים. זהו מסמך פנימי - מותר ורצוי לכלול פרטים מזהים (שם העסק, בעלים, טלפון, כתובת) כאשר הם קיימים בנתונים.';
   }
-
-  const modeInstructions = mode === 'short'
-    ? 'כתוב תקציר קצר של 2-4 שורות בלבד: במה העסק עוסק, מה היקף הפעילות (בקצרה), מה מיוחד בו, ומה הסטטוס הכללי. תמציתי ושיווקי אך מדויק.'
-    : 'כתוב תקציר עסקי פנימי מלא ומפורט, בסעיפים ברורים (כותרת קצרה לכל סעיף): תחום פעילות, תיאור הפעילות, שנות פעילות, נתונים כספיים (מחזור/רווח/מחיר מבוקש) ככל שקיימים, עובדים, יתרונות/חוזקות, סיכונים אם ידועים, פוטנציאל, ומצב העסק/סטטוס. זהו מסמך פנימי - מותר ורצוי לכלול פרטים מזהים (שם העסק, בעלים, טלפון, כתובת) כאשר הם קיימים בנתונים.';
 
   const systemPrompt = `אתה עוזר למשרד תיווך עסקים (BSD Business Brokers Israel) לכתוב תקציר עסקי פנימי (לא אנונימי) על בסיס הנתונים שקיימים בפועל בכרטיס העסק במערכת.
 
 כללים מחייבים:
 1. השתמש רק בנתונים שסופקו לך למטה. אסור להמציא נתון שלא קיים - אם משהו חסר, פשוט השמט אותו, אל תנחש ואל תמלא בערך גנרי.
 2. ${modeInstructions}
-3. מותר להעתיק/לנסח מחדש בחופשיות מתוך התיאור/ההערות הקיימים - זה לא מסמך אנונימי ואין כאן שום מגבלת חשיפת פרטים מזהים.
+3. מותר להעתיק/לנסח מחדש בחופשיות מתוך הטקסט שסופק - זה לא מסמך אנונימי ואין כאן שום מגבלת חשיפת פרטים מזהים.
 4. אם אין כלל מספיק מידע לכתוב תקציר משמעותי - סמן insufficient_info=true והשאר summary_text ריק.
-5. כתוב טקסט רגיל בלבד - בלי סימוני Markdown (בלי **, בלי #, בלי כוכביות כלשהן). הטקסט הזה מוצג כמו שהוא בשדה טקסט רגיל ומודפס כפי שהוא ל-PDF, לא עובר רינדור של Markdown. כותרות סעיפים - פשוט שורה נפרדת עם רווח לפניה ואחריה, בלי כוכביות.
+5. כתוב טקסט רגיל בלבד - בלי סימוני Markdown (בלי **, בלי #, בלי כוכביות כלשהן). הטקסט הזה מוצג כמו שהוא בשדה טקסט רגיל ומודפס כפי שהוא ל-PDF, לא עובר רינדור של Markdown. כותרות סעיפים - פשוט שורה נפרדת עם רווח לפניה ואחריה, בלי כוכביות. רשימות - בשורות שמתחילות ב-"•".
 
 חובה להשתמש בכלי submit_business_summary כדי להחזיר את התשובה.`;
 
-  const userPrompt = `נתונים מובנים קיימים בכרטיס העסק:\n${factsBlock || '(אין נתונים מובנים)'}\n\nטקסט חופשי קיים (תיאור קצר קיים / הערות חופשיות):\n"""\n${freeText || '(אין)'}\n"""`;
+  const userPrompt = hasBox
+    ? `הטקסט שבתיבה (כפי שהמשתמש כתב אותו כרגע על המסך - זה המקור העיקרי):\n"""\n${boxText}\n"""\n\nנתונים מובנים מהכרטיס (להשלמה בלבד, אם חסרים בטקסט):\n${factsBlock || '(אין נתונים מובנים)'}`
+    : `נתונים מובנים קיימים בכרטיס העסק:\n${factsBlock || '(אין נתונים מובנים)'}\n\nטקסט חופשי קיים (תיאור פנימי / הערות):\n"""\n${freeText || '(אין)'}\n"""`;
+
+  return { systemPrompt, userPrompt };
+}
+
+async function generateSummary(biz: Record<string, unknown>, mode: Mode, boxText = ''): Promise<{ summary_text: string | null; insufficient_info: boolean }> {
+  const prompts = buildInternalPrompts(biz, mode, boxText);
+  if (!prompts) return { summary_text: null, insufficient_info: true };
+  const { systemPrompt, userPrompt } = prompts;
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-5',
-      max_tokens: mode === 'short' ? 400 : 1400,
+      // 06.10.2026: 1400 קטע תקצירים מלאים - עכשיו 4000 + בדיקת stop_reason למטה.
+      max_tokens: mode === 'short' ? 400 : 4000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       tools: [SUMMARY_TOOL],
@@ -128,6 +178,9 @@ async function generateSummary(biz: Record<string, unknown>, mode: Mode): Promis
     throw new Error(`יצירת תקציר AI נכשלה (${res.status}): ${errText.slice(0, 300)}`);
   }
   const data = await res.json();
+  if (data && data.stop_reason === 'max_tokens') {
+    throw new Error('תשובת ה-AI נחתכה באמצע (ארוכה מדי) - לא שונה כלום. נסה שוב.');
+  }
   const toolBlock = (data.content || []).find((b: { type: string }) => b.type === 'tool_use');
   if (!toolBlock || typeof toolBlock.input !== 'object' || toolBlock.input === null) {
     throw new Error('התשובה מ-Claude לא הגיעה במבנה הצפוי (tool_use חסר) - נסה שוב');
@@ -186,7 +239,9 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ text: finalText });
     }
 
-    const generated = await generateSummary(biz, mode as Mode);
+    const merged = mergeFormOverDb(biz, body.form);
+    const boxText = mode === 'internal_full' ? pickBoxText(body.form, biz.internal_business_summary) : '';
+    const generated = await generateSummary(merged, mode as Mode, boxText);
     return jsonResponse({
       text: generated.summary_text,
       warnings: generated.insufficient_info ? ['אין מספיק מידע כדי לכתוב תקציר אמין - הוסף פרטים לעסק ונסה שוב'] : [],

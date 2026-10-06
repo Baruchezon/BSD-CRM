@@ -63,7 +63,7 @@ const IMPROVE_TOOL = {
     properties: {
       improved_text: {
         type: 'string',
-        description: 'הטקסט המשופר, במילים חדשות - אך ורק על בסיס מה שכבר הופיע בטקסט המקורי, בלי שום עובדה/מספר/יתרון חדש',
+        description: 'הטקסט המסודר והמתוקן - עם כל הפרטים מהמקור, בלי קיצור, ובלי שום עובדה/מספר/יתרון חדש',
       },
       insufficient_info: {
         type: 'boolean',
@@ -71,43 +71,38 @@ const IMPROVE_TOOL = {
       },
       notes_to_user: {
         type: ['string', 'null'],
-        description: 'הערה קצרה ואופציונלית למשתמש - למשל אם היה חסר מידע חשוב שלא הושלם בניחוש, או אם משהו הושמט בכוונה בגלל דיסקרטיות',
+        description: 'הערה קצרה ואופציונלית למשתמש - למשל אם היה חסר מידע חשוב שלא הושלם בניחוש',
       },
     },
     required: ['improved_text', 'insufficient_info'],
   },
 };
 
-function buildSystemPrompt(fieldType: 'short_description' | 'notes', isAnonymous: boolean): string {
-  const commonRules = [
-    'לעולם אל תמציא נתונים, מספרים, יתרונות או עובדות שלא הופיעו במפורש בטקסט המקורי שסופק לך.',
-    'אם חסר מידע או שהטקסט המקורי עמום - אל תשלים את החסר בניחוש, פשוט נסח מחדש את מה שבאמת יש בצורה הטובה ביותר.',
-    'אם הטקסט המקורי ריק כמעט לגמרי או חסר תוכן מהותי לשיפור - סמן insufficient_info=true, ואל תמלא אותו בתוכן שלא סופק.',
-  ];
-
-  if (fieldType === 'short_description') {
-    const rules = [
-      'נסח מחדש את "תיאור קצר של העסק" עבור כרטיס עסק במערכת CRM פנימית של BSD Business Brokers Israel.',
-      'הניסוח צריך להיות תמציתי, ברור, שיווקי ומכובד - מתאים להצגת עסק בפני קונים וסוכנים.',
-      ...commonRules,
-    ];
-    if (isAnonymous) {
-      rules.push(
-        'העסק מסומן כאנונימי: אל תכלול בניסוח המשופר שם העסק, שם הבעלים, כתובת מדויקת, טלפון, אימייל, אתר אינטרנט, שם מותג ייחודי או כל פרט מזהה אחר - גם אם הם הופיעו בטקסט המקורי, השמט אותם והשאר את שאר התוכן.'
-      );
-    }
-    return `אתה עוזר לסוכני BSD Business Brokers Israel לשפר ניסוח.\n\nכללים מחייבים:\n${rules.map((r, i) => `${i + 1}. ${r}`).join('\n')}\n\nחובה להשתמש בכלי submit_improved_text כדי להחזיר את התשובה.`;
-  }
-
-  // notes
+// 06.10.2026 (בקשת ברוך): שני הכפתורים מסדרים ומנקים את הטקסט שהוקלד -
+// מתקנים כתיב ודקדוק ומנסחים בצורה מקצועית, אבל שומרים על כל פרט ולא מקצרים.
+// "תיאור פנימי של העסק" הוא שדה פנימי (לא מתפרסם), ולכן כבר לא מוחקים ממנו
+// פרטים מזהים גם כשהעסק מסומן "הכן תוכן אנונימי" - האנונימיזציה נעשית רק
+// בכפתור התקציר האנונימי (generate-anonymous-card). is_anonymous נשאר בחוזה
+// לתאימות לאחור אבל לא משנה את ההנחיות.
+export function buildSystemPrompt(fieldType: 'short_description' | 'notes', _isAnonymous = false): string {
+  const fieldLabel = fieldType === 'short_description' ? 'תיאור פנימי של העסק' : 'הערות פנימיות על העסק';
   const rules = [
-    'סדר ונסח מחדש את "הערות" הפנימיות על עסק בכרטיס עסק במערכת CRM.',
-    'תקן שגיאות כתיב ונסח בצורה ברורה ומקצועית.',
-    'אם יש בפועל יותר מנושא אחד בטקסט (למשל: רקע, נתונים פיננסיים, לקוחות, סיכונים, משימות המשך) - חלק לפי נושאים עם כותרות קצרות; אם מדובר בנושא אחד בלבד, אל תמציא חלוקה מלאכותית.',
-    'שמור על מלוא הפרטים והעובדות מהטקסט המקורי - אסור למחוק או להשמיט שום פרט, גם אם הוא נראה שולי.',
-    ...commonRules,
+    `סדר ונסח מחדש את הטקסט בשדה "${fieldLabel}" בכרטיס עסק במערכת CRM פנימית של BSD Business Brokers Israel.`,
+    'תקן שגיאות כתיב, פיסוק ודקדוק, ונסח בעברית תקינה, נקייה, ברורה ומקצועית.',
+    'שמור על כל פרט, מספר, שם, תאריך, סכום, תנאי ועובדה שמופיעים בטקסט המקורי - אסור למחוק, לאחד עד כדי איבוד מידע, לעגל או להשמיט שום פרט, גם אם הוא נראה שולי. זה שדה פנימי: גם פרטים מזהים (שמות, טלפונים, כתובות, עיר) נשארים.',
+    'אל תקצר. אורך התוצאה צריך להיות דומה לאורך המקור או ארוך ממנו מעט בגלל הסידור - לעולם לא תקציר.',
+    'אם יש בטקסט כמה נושאים (למשל: רקע, תיאור העסק, נתונים כספיים, ציוד ונכסים, עובדים, לקוחות, סיבת מכירה, משימות המשך) - סדר אותם בפסקאות לפי נושאים עם כותרת קצרה לכל נושא. אם יש נושא אחד בלבד - אל תמציא חלוקה מלאכותית.',
+    'מותר להשאיר משפטים מהמקור כפי שהם אם הם כבר טובים - המטרה היא סדר וניקיון, לא החלפת כל מילה.',
+    'כתוב טקסט רגיל בלבד, בלי סימוני Markdown (בלי **, בלי #). כותרת נושא = שורה נפרדת. רשימות - בשורות שמתחילות ב-"•".',
+    'לעולם אל תמציא נתונים, מספרים, יתרונות או עובדות שלא הופיעו במפורש בטקסט המקורי.',
+    'אם חסר מידע או שהטקסט עמום - אל תשלים בניחוש; נסח את מה שבאמת יש.',
+    'אם הטקסט המקורי ריק כמעט לגמרי או חסר תוכן מהותי - סמן insufficient_info=true ואל תמלא תוכן שלא סופק.',
   ];
-  return `אתה עוזר לסוכני BSD Business Brokers Israel לסדר הערות פנימיות.\n\nכללים מחייבים:\n${rules.map((r, i) => `${i + 1}. ${r}`).join('\n')}\n\nחובה להשתמש בכלי submit_improved_text כדי להחזיר את התשובה.`;
+  return `אתה עוזר לסוכני BSD Business Brokers Israel לסדר ולנקות טקסט פנימי.\n\nכללים מחייבים:\n${rules.map((r, i) => `${i + 1}. ${r}`).join('\n')}\n\nחובה להשתמש בכלי submit_improved_text כדי להחזיר את התשובה.`;
+}
+
+export function cleanMarkdown(t: string): string {
+  return (t || '').replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
 }
 
 Deno.serve(async (req: Request) => {
@@ -136,7 +131,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const systemPrompt = buildSystemPrompt(fieldType, isAnonymous);
-    const userPrompt = `הטקסט המקורי שהוזן על ידי המשתמש (לשימושך בלבד - אל תעתיק אותו מילה במילה, נסח מחדש):\n"""\n${sourceText}\n"""`;
+    const userPrompt = `הטקסט שהמשתמש הקליד כרגע בשדה (סדר, תקן ונסח - בלי להשמיט שום פרט ובלי לקצר):\n"""\n${sourceText}\n"""`;
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -147,7 +142,8 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-5',
-        max_tokens: 900,
+        // 06.10.2026: 900 קטע טקסטים ארוכים - עכשיו 4000 + בדיקת stop_reason למטה.
+        max_tokens: 4000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
         tools: [IMPROVE_TOOL],
@@ -159,6 +155,10 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: `שיפור הניסוח נכשל (${res.status}): ${errText.slice(0, 300)}` }, 502);
     }
     const data = await res.json();
+    if (data && data.stop_reason === 'max_tokens') {
+      // לא מחזירים טקסט חתוך בשקט
+      return jsonResponse({ error: 'הטקסט ארוך מדי וה-AI לא הספיק לסיים - לא שונה כלום. נסה לחלק את הטקסט או לנסות שוב.' }, 502);
+    }
     const toolBlock = (data.content || []).find((b: { type: string }) => b.type === 'tool_use');
     if (!toolBlock || typeof toolBlock.input !== 'object' || toolBlock.input === null) {
       return jsonResponse({ error: 'התשובה מ-Claude לא הגיעה במבנה הצפוי (tool_use חסר) - נסה שוב' }, 502);
@@ -166,7 +166,7 @@ Deno.serve(async (req: Request) => {
     const input = toolBlock.input as { improved_text?: string; insufficient_info?: boolean; notes_to_user?: string | null };
 
     return jsonResponse({
-      improved_text: typeof input.improved_text === 'string' ? input.improved_text : '',
+      improved_text: typeof input.improved_text === 'string' ? cleanMarkdown(input.improved_text) : '',
       insufficient_info: !!input.insufficient_info,
       notes_to_user: input.notes_to_user || null,
     });
