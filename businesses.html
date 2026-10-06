@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610051900';
+    var PAGE_BUILD = '202610061400';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -36,7 +36,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202610051900">
+<link rel="stylesheet" href="css/style.css?v=202610061400">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -493,7 +493,7 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202610051900"></script>
+<script src="js/config.js?v=202610061400"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
 <script src="js/permissions.js?v=202608251215"></script>
@@ -509,7 +509,7 @@
 <script src="js/archiveModule.js?v=20260930delete1"></script>
 <script src="js/portal-invite.js?v=20261004-2"></script>
 <script src="js/portal-business-card.js?v=20261005-2"></script>
-<script src="js/anonAgreementMark.js?v=202610051900"></script>
+<script src="js/anonAgreementMark.js?v=202610061400"></script>
 <script>
 let ALL_BIZ = [];
 let ARCHIVED_BIZ = [];
@@ -2817,7 +2817,7 @@ async function generateInternalSummary(bizId){
   if (btn) btn.disabled = true;
   if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = '🤖 כותב טיוטת תקציר עסקי מלא... (עשוי לקחת כמה שניות)'; }
   try {
-    const data = await invokeBusinessSummaryFn({ business_id: bizId, mode: 'internal_full' });
+    const data = await invokeBusinessSummaryFn({ business_id: bizId, mode: 'internal_full', form: bsdCollectInternalAiForm() });
     if (!data?.text){
       if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ ' + (data?.warnings?.[0] || 'אין מספיק מידע ליצירת תקציר אמין - הוסף פרטים לעסק ונסה שוב'); }
       return;
@@ -3557,6 +3557,38 @@ async function bsdSaveAnonSummaryOnly(bizId){
   }
 }
 
+// 06.10.2026 (בקשת ברוך): כפתורי ה-AI עובדים על מה שכתוב כרגע על המסך (כולל
+// עריכות שעוד לא נשמרו), לא על מה ששמור במסד. שדה שלא קיים בטופס נשלח כ-null
+// והשרת לוקח במקומו את הערך השמור.
+function bsdAiFormVal(id){ const el = document.getElementById(id); return el ? el.value : null; }
+function bsdAiFormChecked(id){ const el = document.getElementById(id); return el ? !!el.checked : null; }
+// קלט לתקציר האנונימי: בכוונה בלי עיר, כתובת, רווחים, שמות, טלפונים והערות.
+// מחיר מבוקש רק אם "הצג מחיר" מסומן, סיבת מכירה רק אם סומנה.
+function bsdCollectAnonAiForm(){
+  const showPrice = bsdAiFormChecked('anon_card_show_price');
+  const showReason = bsdAiFormChecked('anon_card_show_reason');
+  const form = {
+    anon_text: bsdAiFormVal('anon_summary'),
+    internal_summary: bsdAiFormVal('internal_business_summary'),
+    description: bsdAiFormVal('short_description'),
+    field: bsdAiFormVal('field'), category: bsdAiFormVal('category'), region: bsdAiFormVal('region'),
+    annual_revenue: bsdAiFormVal('annual_revenue'), years_active: bsdAiFormVal('years_active'), employees_count: bsdAiFormVal('employees_count'),
+  };
+  if (showPrice !== null) form.show_price = showPrice;
+  if (showReason !== null) form.show_reason = showReason;
+  if (showPrice) form.asking_price = bsdAiFormVal('asking_price');
+  if (showReason) form.sale_reason = bsdAiFormVal('sale_reason');
+  return form;
+}
+// קלט לתקציר העסקי הפנימי המלא (מסמך פנימי - כל השדות מותרים).
+function bsdCollectInternalAiForm(){
+  const form = { internal_business_summary: bsdAiFormVal('internal_business_summary') };
+  ['internal_name','owner_name','owner_phone','owner_email','id_number','field','category','subcategory','city','region','address','website',
+   'years_active','annual_revenue','operating_profit','net_profit','employees_count','asking_price','sale_reason','status','short_description','notes']
+    .forEach(id => { form[id] = bsdAiFormVal(id); });
+  return form;
+}
+
 // שלב 1: יצירת טיוטה בלבד - לעולם לא שומרת, לעולם לא משנה את הטופס האמיתי.
 // פותחת תצוגה מקדימה נפרדת שבה יש לאשר במפורש לפני שמירה (סעיף 4).
 async function generateAnonSummary(bizId){
@@ -3565,9 +3597,9 @@ async function generateAnonSummary(bizId){
   if (btn) btn.disabled = true;
   if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = '🤖 כותב טיוטת תקציר אנונימי... (עשוי לקחת כמה שניות)'; }
   try {
-    const data = await invokeAnonCardFn({ business_id: bizId });
+    const data = await invokeAnonCardFn({ business_id: bizId, form: bsdCollectAnonAiForm() });
     if (!data?.anon_summary && !data?.anon_display_name){
-      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ אין מספיק מידע ליצירת תקציר אמין - הוסף תיאור קצר או הערות לעסק ונסה שוב'; }
+      if (statusEl){ statusEl.style.color = '#b3402c'; statusEl.textContent = '⚠️ אין מספיק מידע ליצירת תקציר אמין - כתוב טקסט בתיבת התקציר האנונימי, בתקציר העסקי המלא או בתיאור הפנימי, ונסה שוב'; }
       return;
     }
     if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = ''; }
@@ -3593,10 +3625,8 @@ function openAnonDraftPreview(bizId, draft){
   const overlay = document.createElement('div');
   overlay.id = 'anonDraftOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.6);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:98;padding:40px 20px;';
-  const unsavedSrc = bsdUnsavedSourceChanges(bizId);
-  const unsavedHtml = unsavedSrc.length
-    ? `<div style="background:#fff7e0;border:1px solid #e8cf8a;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.8rem;color:#6b4e00;">ℹ️ יש בטופס שינויים שעוד לא נשמרו (${unsavedSrc.map(esc).join(', ')}) - ה-AI כתב לפי הנתונים השמורים. אפשר לתקן כאן ידנית, או לסגור, לשמור וליצור מחדש.</div>`
-    : '';
+  // 06.10.2026: ה-AI כותב לפי מה שמופיע כרגע במסך (כולל שינויים שלא נשמרו) - כבר לא צריך אזהרה על "נתונים שמורים".
+  const unsavedHtml = '';
   const concernsHtml = (draft.concerns && draft.concerns.length)
     ? `<div style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.8rem;color:#8a2c1f;">⚠️ ה-AI או הבדיקה האוטומטית סימנו חשש: ${draft.concerns.map(esc).join(' · ')} — תקן ידנית למטה לפני האישור.</div>`
     : '';
@@ -4829,7 +4859,7 @@ function openAiTextPreview(fieldId, originalText, proposedText, isAnonymous, not
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:14px;max-width:680px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
       <h3 style="margin:0 0 4px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">תצוגה מקדימה - ${esc(aiFieldLabel(fieldId))} (AI)</h3>
-      <div style="font-size:.78rem;color:#999;margin-bottom:12px;">זו טיוטה בלבד - שום דבר לא נשמר עדיין. ניתן לערוך את הנוסח המוצע למטה לפני האישור.${isAnonymous ? ' (העסק מסומן כאנונימי - הנוסח המוצע נמנע מפרטים מזהים.)' : ''}</div>
+      <div style="font-size:.78rem;color:#999;margin-bottom:12px;">זו טיוטה בלבד - שום דבר לא נשמר עדיין. ניתן לערוך את הנוסח המוצע למטה לפני האישור.</div>
       ${noteHtml}
       <label style="display:block;font-size:.78rem;color:#665;">הטקסט המקורי</label>
       <textarea readonly style="width:100%;padding:8px 10px;border:1px solid #e3e0d5;border-radius:6px;font-family:inherit;box-sizing:border-box;resize:vertical;white-space:pre-wrap;background:#f7f5ef;color:#665;min-height:80px;margin-bottom:12px;">${esc(originalText)}</textarea>
