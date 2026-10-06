@@ -1049,11 +1049,11 @@ function openReadOnly(id){
   const rows = [];
   if (CURRENT_TAB === 'business'){
     rows.push(['שם עסק', r.internal_name], ['בעלים', r.owner_name], ['טלפון', r.owner_phone],
-      ['עיר', r.city], ['תחום', r.field], ['הערות', r.notes]);
+      ['עיר', r.city], ['תחום', r.field], ['הערות', r.notes], ['🔎 חקר מקדים', r.pre_research]);
   } else if (CURRENT_TAB === 'seller'){
     const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
     rows.push(['שם', personName], ['טלפון', r.phone], ['שם העסק', r.business_name],
-      ['תחום העסק', r.business_field], ['עיר העסק', r.business_city || r.city], ['הערות', r.notes]);
+      ['תחום העסק', r.business_field], ['עיר העסק', r.business_city || r.city], ['הערות', r.notes], ['🔎 חקר מקדים', r.pre_research]);
   } else if (CURRENT_TAB === 'y2026'){
     const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
     rows.push(['שם', personName], ['סוג ליד', leadTypeLabel(r.type)], ['סטטוס', r.status || '—'],
@@ -1062,7 +1062,7 @@ function openReadOnly(id){
   } else {
     const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
     rows.push(['שם', personName], ['טלפון', r.phone], ['אזור מבוקש', r.requested_area || r.city],
-      ['תחום מבוקש', r.requested_field], ['הערות', r.notes]);
+      ['תחום מבוקש', r.requested_field], ['הערות', r.notes], ['🔎 חקר מקדים', r.pre_research]);
   }
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
@@ -1073,7 +1073,7 @@ function openReadOnly(id){
     ${rows.filter(([,v])=>v).map(([label,v]) => `
       <div style="margin-bottom:10px;">
         <div style="font-size:.75rem;color:#999;margin-bottom:2px;">${esc(label)}</div>
-        <div style="font-size:.9rem;">${esc(v)}</div>
+        <div style="font-size:.9rem;white-space:pre-wrap;word-break:break-word;">${esc(v)}</div>
       </div>`).join('')}
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="closeModal()">סגירה</button>
@@ -1479,6 +1479,11 @@ function renderWebsiteLeadConversationForm(r){
     <label class="wl-label" style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;"><span>הערות כלליות בליד</span><button type="button" class="wl-expand-btn" data-target="wlGeneralNotes" title="פתח את השדה במסך מלא לקריאה ועריכה">⛶ מסך מלא</button></label>
     <textarea id="wlGeneralNotes" class="wl-note" rows="3" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:14px;resize:vertical;">${esc(r.notes || '')}</textarea>
 
+    <!-- 06.10.2026 (בקשת ברוך): «🔎 חקר מקדים» - עמודה leads.pre_research. פנימי בלבד: לא נשלח, לא מתפרסם,
+         לא נכנס לתקציר האנונימי. עובר עם «שמור והעבר» (קונה: אותה שורה; מוכר: businesses.pre_research). -->
+    <label class="wl-label" style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;"><span>🔎 חקר מקדים</span><button type="button" class="wl-expand-btn" data-target="wlPreResearch" title="פתח את השדה במסך מלא לקריאה ועריכה">⛶ מסך מלא</button></label>
+    <textarea id="wlPreResearch" class="wl-note wl-pre-research" rows="3" data-orig="${esc(r.pre_research || '')}" placeholder="חקר שוק מקדים על הליד (פנימי בלבד - לא נשלח ולא מתפרסם)" style="width:100%;box-sizing:border-box;border:1px solid #c9d6ee;background:#f8faff;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:16px;line-height:1.45;margin-bottom:14px;resize:vertical;white-space:pre-wrap;">${esc(r.pre_research || '')}</textarea>
+
     <div class="wl-block" style="background:#f7f5ee;border:1px solid #e4dece;border-radius:10px;padding:12px;margin-bottom:10px;">
       <label for="wlTransferTarget" style="display:block;font-size:.8rem;color:#665;margin-bottom:6px;font-weight:700;">סוג הליד</label>
       <select id="wlTransferTarget" onchange="updateLeadTransferHint()" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:9px 10px;font-family:inherit;font-size:.88rem;background:#fff;">
@@ -1665,6 +1670,8 @@ async function ensureWebsiteLeadBusiness(lead, opts){
       handled_by: lead.handled_by || null, created_by: lead.created_by || CURRENT_PROFILE.id,
       anon_card_active: false, public_listing_active: false
     };
+    // «🔎 חקר מקדים» moves with the lead (internal only, never anonymous/public).
+    if (wlNormPreResearch(lead.pre_research)) expected.pre_research = lead.pre_research;
     // Admin/manager explicitly chose a separate card; the server re-checks the role.
     if (opts.allowSeparateBusiness) expected.dedupe_override_reason = 'כרטיס ליד: נבחר במפורש כרטיס עסק נפרד לבעלים שכבר יש לו כרטיס';
     const inserted = await db.from('businesses').insert(expected).select('*').single();
@@ -1679,12 +1686,18 @@ async function ensureWebsiteLeadBusiness(lead, opts){
   }
   if (!business || business.seller_id !== lead.id || business.is_archived) throw new Error('כרטיס העסק לא זמין או נמצא בארכיון. ההעברה לא אושרה.');
   const notes = websiteLeadTransferNotes(lead, business.notes);
-  if (notes !== business.notes){
-    const saved = await db.from('businesses').update({ notes }).eq('id', business.id);
+  const patch = {};
+  if (notes !== business.notes) patch.notes = notes;
+  // An existing/linked card keeps its own research; the lead's is added once (never doubled on retry).
+  const preResearch = websiteLeadTransferPreResearch(lead, business.pre_research);
+  if (wlNormPreResearch(lead.pre_research) && preResearch !== (business.pre_research ?? null)) patch.pre_research = preResearch;
+  if (Object.keys(patch).length){
+    const saved = await db.from('businesses').update(patch).eq('id', business.id);
     if (saved.error) throw new Error(saved.error.message);
   }
   const checked = await db.from('businesses').select('*').eq('id', business.id).single();
-  if (checked.error || !checked.data || checked.data.is_archived || checked.data.seller_id !== lead.id || checked.data.notes !== notes){
+  if (checked.error || !checked.data || checked.data.is_archived || checked.data.seller_id !== lead.id || checked.data.notes !== notes
+      || ('pre_research' in patch && checked.data.pre_research !== patch.pre_research)){
     throw new Error(checked.error?.message || 'כרטיס העסק לא אומת בקריאה חוזרת');
   }
   if (expected){
@@ -1743,12 +1756,39 @@ function buyerDuplicateChoice(dups){
   ]);
 }
 
-function readLeadCardPayload(){
+// «🔎 חקר מקדים» (leads.pre_research). Sent only when changed on this card, so
+// research written meanwhile (e.g. by Dana through the API) is never wiped by
+// saving an older open card. If it changed on the server too, nothing is saved.
+function wlNormPreResearch(v){ return (v === null || v === undefined) ? '' : String(v).replace(/\r\n?/g, '\n').trim(); }
+function wlPreResearchEdit(sourceRow){
+  const el = document.getElementById('wlPreResearch');
+  if (!el) return undefined;
+  const orig = wlNormPreResearch(el.dataset ? el.dataset.orig : '');
+  const mine = wlNormPreResearch(el.value);
+  if (mine === orig) return undefined;
+  if (sourceRow && Object.prototype.hasOwnProperty.call(sourceRow, 'pre_research')){
+    const server = wlNormPreResearch(sourceRow.pre_research);
+    if (server !== orig && server !== mine){
+      el.value = sourceRow.pre_research || '';
+      if (el.dataset) el.dataset.orig = sourceRow.pre_research || '';
+      throw new Error('«🔎 חקר מקדים» עודכן במקום אחר אחרי שפתחת את הכרטיס. הנוסח השמור נטען לתיבה - הוסף את השינוי שלך ושמור שוב. לא נשמר כלום.');
+    }
+  }
+  return mine || null;
+}
+function websiteLeadTransferPreResearch(lead, existing){
+  const add = wlNormPreResearch(lead && lead.pre_research);
+  const cur = wlNormPreResearch(existing);
+  if (!add || cur.includes(add)) return existing ?? null;
+  return cur ? cur + '\n\n' + add : add;
+}
+
+function readLeadCardPayload(sourceRow){
   const fullName = document.getElementById('wlName').value.trim();
   const phone = document.getElementById('wlPhone').value.trim();
   if (!fullName) throw new Error('יש למלא שם מלא');
   if (!phone) throw new Error('יש למלא טלפון');
-  return {
+  const payload = {
     full_name: fullName,
     phone,
     email: document.getElementById('wlEmail').value.trim() || null,
@@ -1764,6 +1804,9 @@ function readLeadCardPayload(){
     intake_reviewed_at: new Date().toISOString(),
     intake_reviewed_by: CURRENT_PROFILE ? CURRENT_PROFILE.id : null
   };
+  const preResearch = wlPreResearchEdit(sourceRow);
+  if (preResearch !== undefined) payload.pre_research = preResearch;
+  return payload;
 }
 
 function setLeadCardBusy(busy, primaryText){
@@ -1784,7 +1827,7 @@ async function saveLeadOnly(id){
   try {
     const source = await window.supabaseClient.from('leads').select('*').eq('id', id).single();
     if (source.error || !source.data || source.data.is_archived) throw new Error(source.error?.message || 'הליד אינו זמין לשמירה');
-    const payload = readLeadCardPayload();
+    const payload = readLeadCardPayload(source.data);
     payload.status = 'בטיפול';
     payload.website_intake_stage = 'contacted';
     // Remember the type chosen on the card; the lead stays in «לידים».
@@ -1901,7 +1944,7 @@ async function saveWebsiteLeadTransfer(id, opts){
     const source = await window.supabaseClient.from('leads').select('*').eq('id', id).single();
     if (source.error || !source.data || source.data.is_archived) throw new Error(source.error?.message || 'הליד אינו זמין להעברה');
 
-    const payload = readLeadCardPayload();
+    const payload = readLeadCardPayload(source.data);
 
     if (category === 'seller'){
       payload.type = 'seller';
