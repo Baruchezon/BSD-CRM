@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202610061550';
+    var PAGE_BUILD = '202610071530';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -30,6 +30,7 @@
 <script src="js/config.js?v=20260930archive1"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/auth.js"></script>
+<script src="js/sessionExpired.js?v=202610071530"></script>
 <script src="js/searchSelect.js?v=202608281900"></script>
 <style>
   :root{
@@ -1049,21 +1050,41 @@ function openQuickTaskModal(matchId){
       <div class="modal-body">
         <div class="field"><label>כותרת</label><input type="text" id="qtTitle" value="${esc(m.next_action || 'מעקב אחר ההתאמה')}"></div>
         <div class="field"><label>תאריך יעד</label><input type="date" id="qtDate" value="${defaultDate}"></div>
+        <div id="qtMsg" role="alert" style="display:none;margin-top:8px;padding:10px 12px;border-radius:8px;font-size:14px;line-height:1.5;background:#fdeceb;color:#8a1c12;border:1px solid #e08a80;"></div>
       </div>
       <div class="modal-foot"><button class="btn-ghost" data-close>ביטול</button><button class="btn-primary" onclick="saveQuickTask('${matchId}')">שמור</button></div>
     </div></div>`;
   document.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', ()=> document.getElementById('modalRoot').innerHTML=""));
+  // 07.10.2026: טיוטה שנשמרה כי ההתחברות פגה - חוזרת לאותם שדות
+  const draft = window.BSDSession && CURRENT_PROFILE ? BSDSession.readDraft('matches-workspace:task:' + matchId, CURRENT_PROFILE.id) : null;
+  if (draft){ BSDSession.applyFields(draft.fields); setQuickTaskMsg('↩️ שוחזר הטקסט שהקלדת לפני שההתחברות פגה. בדוק ולחץ «שמור».', true); }
+}
+function setQuickTaskMsg(text, info){
+  const el = document.getElementById('qtMsg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.display = text ? 'block' : 'none';
+  el.style.background = info ? '#eef4fb' : '#fdeceb'; el.style.color = info ? '#1d3f6e' : '#8a1c12'; el.style.borderColor = info ? '#b8cbe6' : '#e08a80';
 }
 async function saveQuickTask(matchId){
   const m = ALL_MATCHES.find(x=>x.id===matchId);
   const title = document.getElementById('qtTitle').value.trim();
   const due = document.getElementById('qtDate').value;
   if (!title){ toast('נא להזין כותרת'); return; }
-  const { data, error } = await window.supabaseClient.from('tasks').insert({
+  setQuickTaskMsg('');
+  const draftKey = 'matches-workspace:task:' + matchId;
+  const insertTask = () => window.supabaseClient.from('tasks').insert({
     title, due_date: due||null, match_id: m.id, business_id: m.business_id, buyer_id: m.buyer_id,
     assigned_to: CURRENT_PROFILE.id, source: 'matches_workspace'
   }).select().single();
-  if (error){ toast('שגיאה: '+error.message); return; }
+  // 07.10.2026: התחברות שפגה - רענון שקט וניסיון אחד; אחרת החלון נשאר עם הטקסט + הודעה
+  const res = window.BSDSession
+    ? await BSDSession.run(insertTask, { onExpired: () => BSDSession.saveDraft(draftKey, BSDSession.collectFields(['qtTitle','qtDate']), CURRENT_PROFILE && CURRENT_PROFILE.id) })
+    : await insertTask();
+  const { data, error } = res;
+  if (res.authExpired){ setQuickTaskMsg('⚠️ ' + BSDSession.MESSAGE + '. המשימה עוד לא נשמרה; הטקסט נשאר כאן. אחרי הכניסה לחץ שוב «שמור».'); return; }
+  if (error){ setQuickTaskMsg('שגיאה בשמירה — המשימה לא נשמרה (' + (error.message || 'שגיאה לא ידועה') + ').'); toast('שגיאה: '+error.message); return; }
+  if (window.BSDSession) BSDSession.clearDraft(draftKey);
   ALL_TASKS.push(data);
   document.getElementById('modalRoot').innerHTML = '';
   toast('המשימה נשמרה');

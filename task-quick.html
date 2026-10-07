@@ -68,6 +68,7 @@
 <script src="js/config.js"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/auth.js"></script>
+<script src="js/sessionExpired.js?v=202610071530"></script>
 <script src="js/permissions.js"></script>
 <script>
 const root = document.getElementById('root');
@@ -118,6 +119,15 @@ function showWriteMode(){
 }
 function showHomeButtons(){
   renderHome();
+  discardQuickDraft('task-quick:write');
+}
+// «ביטול» מפורש בזמן שמחוברים = ויתור על הטיוטה; כשההתחברות פגה הטיוטה נשמרת.
+async function discardQuickDraft(key){
+  if (window.BSDSession && (await BSDSession.sessionState()) === 'ok') BSDSession.clearDraft(key);
+}
+function cancelQuickConfirm(){
+  renderHome();
+  discardQuickDraft('task-quick:confirm');
 }
 
 async function submitWrittenText(){
@@ -150,38 +160,60 @@ async function toggleRecording(){
   }
 }
 
+// 07.10.2026: כשהשליחה נכשלת - הטקסט שנכתב חוזר לתיבה (לא נמחק), ואם ההתחברות
+// פגה מוצגת «ההתחברות פגה, התחבר מחדש» והטקסט נשמר כטיוטה במכשיר.
+function backToWriteMode(text){
+  renderHome();
+  if (input_isText(text)){ showWriteMode(); document.getElementById('writeText').value = text; }
+}
+function input_isText(text){ return typeof text === 'string' && text.length > 0; }
+function quickDraftUser(){ return CURRENT_PROFILE && CURRENT_PROFILE.id; }
+
 async function processAndShowConfirm(input){
   root.innerHTML = `<div class="loading"><div class="spinner"></div>${input.mode === 'audio' ? 'מתמלל ומחלץ פרטים...' : 'מחלץ פרטים...'}</div>`;
+  const text = input.mode === 'text' ? input.text : '';
 
-  const { data: { session } } = await window.supabaseClient.auth.getSession();
-  if (!session){ renderNoAuth(); return; }
-
-  try {
+  const callExtract = async () => {
+    const { data: { session } } = await window.supabaseClient.auth.getSession();
+    if (!session) return { data:null, error:{ name:'AuthSessionMissingError', message:'Auth session missing!' } };
     let resp;
-    if (input.mode === 'audio'){
-      const form = new FormData();
-      form.append('audio', input.blob, 'recording.webm');
-      resp = await fetch(`${window.BSD_CONFIG.SUPABASE_URL}/functions/v1/transcribe-and-extract-task`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-        body: form
-      });
-    } else {
-      resp = await fetch(`${window.BSD_CONFIG.SUPABASE_URL}/functions/v1/transcribe-and-extract-task`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: input.text })
-      });
+    try {
+      if (input.mode === 'audio'){
+        const form = new FormData();
+        form.append('audio', input.blob, 'recording.webm');
+        resp = await fetch(`${window.BSD_CONFIG.SUPABASE_URL}/functions/v1/transcribe-and-extract-task`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          body: form
+        });
+      } else {
+        resp = await fetch(`${window.BSD_CONFIG.SUPABASE_URL}/functions/v1/transcribe-and-extract-task`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: input.text })
+        });
+      }
+    } catch (err) {
+      return { data:null, error:{ message: 'שגיאת רשת: ' + (err.message || err) }, network:true };
     }
-    const result = await resp.json();
-    if (!resp.ok){ toast('שגיאה: ' + (result.error || 'לא ידועה')); renderHome(); return; }
-    EXTRACTED = result;
-    EXTRACTED._selectedMatch = null;
-    renderConfirm();
-  } catch (err) {
-    toast('שגיאת רשת: ' + (err.message || err));
-    renderHome();
+    let result = {};
+    try { result = await resp.json(); } catch (_) {}
+    if (!resp.ok) return { data:null, error:{ message: 'שגיאה: ' + (result.error || 'לא ידועה'), status: resp.status, error: result.error }, status: resp.status };
+    return { data: result, error: null };
+  };
+
+  const res = window.BSDSession
+    ? await BSDSession.run(callExtract, { onExpired: () => { if (text) BSDSession.saveDraft('task-quick:write', { writeText: text }, quickDraftUser()); },
+        detail: input.mode === 'audio' ? 'אחרי הכניסה יש להקליט שוב.' : 'הטקסט שכתבת נשמר ולא יאבד. אחרי הכניסה לחץ שוב «המשך».' })
+    : await callExtract();
+  if (res.error){
+    if (!res.authExpired) toast(res.error.message || 'שגיאה לא ידועה');
+    backToWriteMode(text);
+    return;
   }
+  EXTRACTED = res.data;
+  EXTRACTED._selectedMatch = null;
+  renderConfirm();
 }
 
 function renderConfirm(){
@@ -201,7 +233,7 @@ function renderConfirm(){
         ${allMatches.map((m,i) => `<span class="match-chip" data-idx="${i}" onclick="selectMatch(${i})">${esc(m.name)}</span>`).join('')}
       </div>` : ''}
       <div class="row-actions" style="margin-top:16px;">
-        <button type="button" class="btn btn-ghost" onclick="renderHome()">ביטול</button>
+        <button type="button" class="btn btn-ghost" onclick="cancelQuickConfirm()">ביטול</button>
         <button type="button" class="btn btn-primary" id="saveBtn" onclick="saveTask()">שמירה</button>
       </div>
     </div>
@@ -240,7 +272,6 @@ async function saveTask(){
     ({ data: { session } } = await window.supabaseClient.auth.getSession());
     if (session) break;
   }
-  if (!session){ renderNoAuth(); SAVE_IN_PROGRESS = false; return; }
 
   const payload = {
     title: document.getElementById('cTitle').value.trim() || 'משימה חדשה',
@@ -248,7 +279,7 @@ async function saveTask(){
     due_date: document.getElementById('cDate').value || null,
     due_time: document.getElementById('cTime').value || null,
     status: 'פתוחה',
-    assigned_to: session.user.id, // המשתמש המחובר עצמו - RLS אוכף את זה גם אם זה היה שגוי
+    assigned_to: session ? session.user.id : (CURRENT_PROFILE && CURRENT_PROFILE.id), // המשתמש המחובר עצמו - RLS אוכף את זה גם אם זה היה שגוי
     source: 'voice'
   };
 
@@ -259,9 +290,23 @@ async function saveTask(){
     payload.related_id = m.id;
   }
 
-  const { error } = await window.supabaseClient.from('tasks').insert(payload);
+  // 07.10.2026: בעבר, בלי session, המסך הוחלף ב"אין לך הרשאה" והטקסט אבד. עכשיו:
+  // רענון שקט וניסיון אחד; אם ההתחברות פגה - מסך האישור נשאר עם הטקסט, נשמרת
+  // טיוטה במכשיר ומוצגת «ההתחברות פגה, התחבר מחדש».
+  const insertTask = () => window.supabaseClient.from('tasks').insert(payload);
+  const res = window.BSDSession
+    ? await BSDSession.run(insertTask, { onExpired: () => BSDSession.saveDraft('task-quick:confirm',
+        BSDSession.collectFields(['cTitle','cDesc','cDate','cTime']), quickDraftUser(),
+        { extracted: EXTRACTED, matches: window._allMatches || [] }) })
+    : await insertTask();
+  const error = res.error;
   SAVE_IN_PROGRESS = false;
 
+  if (res.authExpired){
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'שמירה';
+    return;
+  }
   if (error){
     // שגיאה אמיתית בלבד - אף פעם לא מציגים הצלחה כאן, ואף פעם לא לופ: המסך
     // נשאר על האישור עם הכפתור פעיל שוב, כדי שאפשר לנסות שוב פעם אחת בלבד.
@@ -271,7 +316,29 @@ async function saveTask(){
     return;
   }
 
+  if (window.BSDSession){ BSDSession.clearDraft('task-quick:confirm'); BSDSession.clearDraft('task-quick:write'); }
   renderSavedPrompt();
+}
+
+// 07.10.2026: שחזור טיוטה שנשמרה כשההתחברות פגה (אותו מכשיר, אותו משתמש)
+function restoreQuickDraft(){
+  if (!window.BSDSession || !CURRENT_PROFILE) return false;
+  const confirmDraft = BSDSession.readDraft('task-quick:confirm', CURRENT_PROFILE.id);
+  if (confirmDraft && confirmDraft.meta && confirmDraft.meta.extracted){
+    EXTRACTED = confirmDraft.meta.extracted;
+    EXTRACTED._selectedMatch = null;
+    renderConfirm();
+    BSDSession.applyFields(confirmDraft.fields);
+    toast('↩️ שוחזר הטקסט שהקלדת לפני שההתחברות פגה. בדוק ולחץ «שמירה».');
+    return true;
+  }
+  const writeDraft = BSDSession.readDraft('task-quick:write', CURRENT_PROFILE.id);
+  if (writeDraft && writeDraft.fields && writeDraft.fields.writeText){
+    backToWriteMode(writeDraft.fields.writeText);
+    toast('↩️ שוחזר הטקסט שכתבת לפני שההתחברות פגה. לחץ «המשך».');
+    return true;
+  }
+  return false;
 }
 
 // אחרי שמירה מוצלחת: הודעה ברורה + שאלה אחת. לא עוברים ל-BSD CRM, לא למסך
@@ -309,6 +376,7 @@ function finishSession(){
   if (!CURRENT_PROFILE) return;
   if (!canQuickAddTask(CURRENT_PROFILE)){ renderNoAuth(); return; }
   renderHome();
+  restoreQuickDraft();
 })();
 </script>
 </body>

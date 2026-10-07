@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610061550';
+    var PAGE_BUILD = '202610071530';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -496,6 +496,7 @@
 <script src="js/config.js?v=202610061550"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
+<script src="js/sessionExpired.js?v=202610071530"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/push.js?v=202610051500"></script>
@@ -1856,6 +1857,7 @@ function openBizForm(id){
   if (biz) initAiEditIndicators(biz);
   // 04.10.2026: נקודת ייחוס לשמירה בלי דריסה + רענון שקט מהשרת (הרשימה עשויה להגיע ממטמון יומי)
   bsdCaptureBizFormBaseline(biz);
+  bsdRestoreBizCardDraft(biz); // 07.10.2026: טקסט שלא נשמר כי ההתחברות פגה (נחשב עריכה רגילה - נשמר ב«שמירה»)
   bsdInitPreResearchBox();
   bsdInitAnonSummaryCounter();
   if (biz) bsdRevalidateOpenBizForm(biz.id);
@@ -2772,8 +2774,57 @@ function anonFunctionErrorMessage(error, ctx){
   if (ctx?.error) msg = ctx.error + (ctx.concerns?.length ? ' — ' + ctx.concerns.join(', ') : '');
   return msg;
 }
+// 07.10.2026: כפתורי ה-AI בכרטיס העסק עוברים דרך מסלול אחד: התחברות שפגה מזוהה
+// (401 / «לא מחובר» / JWT), רענון שקט וניסיון אחד; אחרת «ההתחברות פגה, התחבר מחדש»
+// בשורת הסטטוס ובהודעה עליונה, והטקסט שהוקלד בכרטיס נשמר כטיוטה במכשיר.
+function bsdInvokeAiFn(name, options){
+  if (!window.BSDSession) return window.supabaseClient.functions.invoke(name, options);
+  return BSDSession.invoke(name, options, { onExpired: bsdSaveBizCardDraft, detail: 'הטקסט שבכרטיס לא נמחק ונשמר במכשיר. אחרי הכניסה לחץ שוב על כפתור ה-AI.' });
+}
+function bsdBizDraftKey(bizId){ return 'businesses:' + (bizId || 'new'); }
+// שומר רק תיבות טקסט שנערכו ולא נשמרו (מול נקודת הייחוס של הכרטיס), עם הערך שהיה בשרת
+// בזמן הפתיחה - כדי שבשחזור לא נדרוס טקסט שמישהו אחר שמר בינתיים.
+function bsdSaveBizCardDraft(){
+  if (!window.BSDSession) return;
+  const form = document.getElementById('bizForm');
+  if (!form) return;
+  const bizId = form.dataset.bizId || '';
+  const base = BIZ_FORM_BASELINE && BIZ_FORM_BASELINE.bizId === bizId ? BIZ_FORM_BASELINE : null;
+  const fields = {}, dbBase = {};
+  BIZ_GUARDED_TEXT_FIELDS.forEach(f => {
+    const el = document.getElementById(f);
+    if (!el) return;
+    const v = bsdNormText(el.value);
+    if (base && Object.prototype.hasOwnProperty.call(base.form, f) && v === base.form[f]) return;
+    if (!base && !v.trim()) return;
+    fields[f] = el.value;
+    dbBase[f] = base && Object.prototype.hasOwnProperty.call(base.db, f) ? base.db[f] : '';
+  });
+  BSDSession.saveDraft(bsdBizDraftKey(bizId), fields, CURRENT_PROFILE && CURRENT_PROFILE.id, { dbBase });
+}
+function bsdRestoreBizCardDraft(biz){
+  if (!window.BSDSession || !CURRENT_PROFILE) return [];
+  const key = bsdBizDraftKey(biz ? biz.id : '');
+  const draft = BSDSession.readDraft(key, CURRENT_PROFILE.id);
+  if (!draft) return [];
+  const dbBase = (draft.meta && draft.meta.dbBase) || {};
+  const restored = [];
+  Object.keys(draft.fields || {}).forEach(f => {
+    if (!BIZ_GUARDED_TEXT_FIELDS.includes(f)) return;
+    const el = document.getElementById(f);
+    if (!el) return;
+    if (biz && bsdNormText(biz[f]) !== bsdNormText(dbBase[f])) return; // הטקסט בשרת השתנה מאז - לא דורסים
+    if (bsdNormText(el.value) === bsdNormText(draft.fields[f])) return;
+    el.value = draft.fields[f];
+    if (f === 'pre_research'){ const fold = document.getElementById('bizPreResearchFold'); if (fold) fold.open = true; }
+    restored.push(BIZ_GUARDED_FIELD_LABELS[f] || f);
+  });
+  if (restored.length) BSDSession.showNotice('↩️ שוחזר טקסט שלא נשמר לפני שההתחברות פגה: ' + restored.join(', ') + '. לחץ «שמירה» כדי לשמור.', 'info', 15000);
+  else BSDSession.clearDraft(key);
+  return restored;
+}
 async function invokeAnonCardFn(body){
-  const { data, error } = await window.supabaseClient.functions.invoke('generate-anonymous-card', { body });
+  const { data, error } = await bsdInvokeAiFn('generate-anonymous-card', { body });
   if (error){
     let ctx = null;
     try { ctx = await error.context?.json?.(); } catch(_e){}
@@ -2788,7 +2839,7 @@ async function invokeAnonCardFn(body){
 // אין כאן שום כלל אנונימיזציה - מותר להשתמש בכל נתוני העסק כולל מזהים.
 // ============================================================================
 async function invokeBusinessSummaryFn(body){
-  const { data, error } = await window.supabaseClient.functions.invoke('generate-business-summary', { body });
+  const { data, error } = await bsdInvokeAiFn('generate-business-summary', { body });
   if (error){
     let ctx = null;
     try { ctx = await error.context?.json?.(); } catch(_e){}
@@ -4838,7 +4889,7 @@ function aiButtonLabel(fieldId){
 async function invokeImproveTextFn(fieldType, sourceText, isAnonymous, extraTexts){
   const body = { field_type: fieldType, source_text: sourceText, is_anonymous: isAnonymous };
   if (Array.isArray(extraTexts) && extraTexts.length) body.extra_texts = extraTexts;
-  const { data, error } = await window.supabaseClient.functions.invoke('improve-business-text', { body });
+  const { data, error } = await bsdInvokeAiFn('improve-business-text', { body });
   if (error){
     let ctx = null;
     try { ctx = await error.context?.json?.(); } catch(_e){}
@@ -5296,6 +5347,7 @@ async function saveBiz(e){
   } else {
     toast('✅ נשמר בהצלחה');
   }
+  if (window.BSDSession) BSDSession.clearDraft(bsdBizDraftKey(bizId));
   closeModal();
   await loadBusinesses();
   // 05.10.2026: התקציר נשמר בשמירה הכללית - רק הגרסה האחרונה של ה-PDF נשארת.
