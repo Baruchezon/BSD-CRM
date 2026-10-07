@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610061550';
+    var PAGE_BUILD = '202610071530';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -229,6 +229,7 @@
 <script src="js/config.js?v=20260930archive1"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
+<script src="js/sessionExpired.js?v=202610071530"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/push.js?v=202610051500"></script>
@@ -300,9 +301,11 @@ function toast(msg){
   if (!box){
     box = document.createElement('div');
     box.id = 'toastBox';
-    box.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:200;display:flex;flex-direction:column;gap:8px;max-width:380px;';
     document.body.appendChild(box);
   }
+  // 07.10.2026: ה-#toastBox שבתוך הדף היה בלי עיצוב, ולכן הודעות (גם שגיאת שמירה) הוצגו
+  // מתחת לחלון המשימה הפתוח ולא נראו בכלל. מעכשיו תמיד צף מעל החלון.
+  if (box.style.position !== 'fixed') box.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:200;display:flex;flex-direction:column;gap:8px;max-width:380px;';
   const isError = /שגיאה|error/i.test(msg);
   const el = document.createElement('div');
   el.style.cssText = `background:${isError ? '#b00020' : 'var(--navy,#0e1b34)'};color:#fff;padding:14px 18px;border-radius:10px;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.35);display:flex;align-items:flex-start;gap:10px;line-height:1.5;`;
@@ -563,8 +566,9 @@ function openTaskForm(id){
       </div>
       <div id="relatedRecordWrap"></div>
       <div id="relatedMatchStatusWrap"></div>
+      <div id="taskFormMsg" role="alert" style="display:none;margin-top:12px;padding:10px 12px;border-radius:8px;font-size:.9rem;line-height:1.5;"></div>
       <div class="modal-actions">
-        <button type="button" class="btn btn-ghost" onclick="closeModal()">ביטול</button>
+        <button type="button" class="btn btn-ghost" onclick="cancelTaskForm()">ביטול</button>
         <button type="submit" class="btn btn-primary">שמירה</button>
       </div>
     </form>
@@ -580,12 +584,67 @@ function openTaskForm(id){
     onTaskRelatedRecordChange();
   }
   document.getElementById('taskForm').addEventListener('submit', saveTask);
+  restoreTaskDraft(task ? task.id : '');
+}
+
+// ---------- התחברות שפגה בזמן שמירה (07.10.2026) ----------
+// הטקסט שהוקלד נשמר כטיוטה במכשיר (js/sessionExpired.js) ומשוחזר לאותם שדות
+// כשהחלון נפתח שוב; נמחק אחרי שמירה מוצלחת (או «ביטול» כשמחוברים).
+const TASK_DRAFT_FIELDS = ['title','description','due_date','due_time','priority','assigned_to','related_type','related_id','related_match_status'];
+function taskDraftKey(taskId){ return 'tasks:' + (taskId || 'new'); }
+function setTaskFormMsg(text, kind){
+  const el = document.getElementById('taskFormMsg');
+  if (!el) return;
+  if (!text){ el.style.display = 'none'; el.textContent = ''; return; }
+  const styles = { error:['#fdeceb','#8a1c12','#e08a80'], info:['#eef4fb','#1d3f6e','#b8cbe6'] };
+  const [bg, fg, border] = styles[kind] || styles.error;
+  el.style.background = bg; el.style.color = fg; el.style.border = '1px solid ' + border;
+  el.textContent = text;
+  el.style.display = 'block';
+}
+function saveTaskDraft(taskId){
+  if (!window.BSDSession) return;
+  BSDSession.saveDraft(taskDraftKey(taskId), BSDSession.collectFields(TASK_DRAFT_FIELDS), CURRENT_PROFILE && CURRENT_PROFILE.id);
+}
+function restoreTaskDraft(taskId){
+  if (!window.BSDSession || !CURRENT_PROFILE) return false;
+  const draft = BSDSession.readDraft(taskDraftKey(taskId), CURRENT_PROFILE.id);
+  if (!draft) return false;
+  const f = draft.fields || {};
+  const { related_type, related_id, related_match_status, ...plain } = f;
+  BSDSession.applyFields(plain);
+  if (related_type !== undefined && document.getElementById('related_type')){
+    document.getElementById('related_type').value = related_type || '';
+    onTaskRelatedTypeChange();
+    if (related_id && document.getElementById('related_id')){ document.getElementById('related_id').value = related_id; onTaskRelatedRecordChange(); }
+    if (related_match_status && document.getElementById('related_match_status')) document.getElementById('related_match_status').value = related_match_status;
+  }
+  setTaskFormMsg('↩️ שוחזר הטקסט שהקלדת לפני שההתחברות פגה. בדוק ולחץ «שמירה».', 'info');
+  return true;
+}
+function openPendingTaskDraft(){
+  if (!window.BSDSession || !CURRENT_PROFILE) return false;
+  const drafts = BSDSession.listDrafts('tasks:', CURRENT_PROFILE.id).sort((a,b) => (b.draft.savedAt||0) - (a.draft.savedAt||0));
+  for (const { key } of drafts){
+    const id = key.slice('tasks:'.length);
+    if (id === 'new'){ openTaskForm(null); return true; }
+    if (ALL_TASKS.some(t => t.id === id)){ openTaskForm(id); return true; }
+  }
+  return false;
+}
+async function cancelTaskForm(){
+  const form = document.getElementById('taskForm');
+  const key = taskDraftKey(form ? form.dataset.taskId : '');
+  closeModal();
+  // «ביטול» בזמן שמחוברים = ויתור על הטיוטה. כשההתחברות פגה - הטיוטה נשמרת.
+  if (window.BSDSession && (await BSDSession.sessionState()) === 'ok') BSDSession.clearDraft(key);
 }
 
 async function saveTask(e){
   e.preventDefault();
   const form = e.target;
   const submitBtn = form.querySelector('button[type="submit"]');
+  setTaskFormMsg('');
   bsdSetButtonLoading(submitBtn, true, 'שומר...');
   try {
   const taskId = form.dataset.taskId;
@@ -606,22 +665,40 @@ async function saveTask(e){
   // reset the reminder cycle whenever the due date/time changes, so an edited task nudges again from scratch
   const extra = { due_time: dueTime, description, last_notified_at: null, notify_count: 0 };
   const schemaMissing = (err) => err && /column|schema cache/i.test(err.message || '');
-  let error;
-  if (taskId){
-    ({ error } = await window.supabaseClient.from('tasks').update({ ...payload, ...extra }).eq('id', taskId));
-    if (error && schemaMissing(error)){
-      toast('שים לב: שעת יעד/תוכן משימה עדיין לא נשמרים — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף אותם לטבלת המשימות. שאר הנתונים נשמרו.');
-      ({ error } = await window.supabaseClient.from('tasks').update(payload).eq('id', taskId));
+  if (!taskId) payload.status = 'פתוחה';
+  const writeTask = async () => {
+    let res;
+    if (taskId){
+      res = await window.supabaseClient.from('tasks').update({ ...payload, ...extra }).eq('id', taskId);
+      if (res.error && schemaMissing(res.error)){
+        toast('שים לב: שעת יעד/תוכן משימה עדיין לא נשמרים — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף אותם לטבלת המשימות. שאר הנתונים נשמרו.');
+        res = await window.supabaseClient.from('tasks').update(payload).eq('id', taskId);
+      }
+    } else {
+      res = await window.supabaseClient.from('tasks').insert({ ...payload, ...extra });
+      if (res.error && schemaMissing(res.error)){
+        toast('שים לב: שעת יעד/תוכן משימה עדיין לא נשמרים — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף אותם לטבלת המשימות. המשימה עצמה נשמרה.');
+        res = await window.supabaseClient.from('tasks').insert(payload);
+      }
     }
-  } else {
-    payload.status = 'פתוחה';
-    ({ error } = await window.supabaseClient.from('tasks').insert({ ...payload, ...extra }));
-    if (error && schemaMissing(error)){
-      toast('שים לב: שעת יעד/תוכן משימה עדיין לא נשמרים — יש להריץ את שאילתת ה-SQL שהתקבלה כדי להוסיף אותם לטבלת המשימות. המשימה עצמה נשמרה.');
-      ({ error } = await window.supabaseClient.from('tasks').insert(payload));
-    }
+    return res;
+  };
+  // 07.10.2026: בדיקת התחברות לפני הכתיבה + רענון שקט וניסיון חוזר אחד. אם ההתחברות
+  // פגה - החלון נשאר פתוח, הטקסט במקומו ונשמר כטיוטה, ומוצגת «ההתחברות פגה, התחבר מחדש».
+  const res = window.BSDSession
+    ? await BSDSession.run(writeTask, { onExpired: () => saveTaskDraft(taskId) })
+    : await writeTask();
+  const error = res && res.error;
+  if (res && res.authExpired){
+    setTaskFormMsg('⚠️ ' + BSDSession.MESSAGE + '. המשימה עוד לא נשמרה; הטקסט נשאר כאן ונשמר במכשיר. אחרי הכניסה לחץ שוב «שמירה».');
+    return;
   }
-  if (error){ toast('שגיאה בשמירה: ' + error.message); return; }
+  if (error){
+    setTaskFormMsg('שגיאה בשמירה — המשימה לא נשמרה (' + (error.message || 'שגיאה לא ידועה') + '). הטקסט נשאר בחלון, אפשר לנסות שוב.');
+    toast('שגיאה בשמירה: ' + error.message);
+    return;
+  }
+  if (window.BSDSession) BSDSession.clearDraft(taskDraftKey(taskId));
 
   // אם המשימה קשורה להתאמה וסטטוס ההתאמה שונה בטופס — לעדכן גם את רשומת ההתאמה עצמה
   const matchStatusEl = document.getElementById('related_match_status');
@@ -708,6 +785,8 @@ async function deleteTask(id){
   document.getElementById('headerUserInfo').textContent = ((CURRENT_PROFILE.full_name && CURRENT_PROFILE.full_name.trim()) ? CURRENT_PROFILE.full_name : CURRENT_PROFILE.email) + ' · ' + new Date().toLocaleDateString('he-IL') + ' ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
   refreshNavMsgBadge();
   await loadTasks();
+  // 07.10.2026: משימה שלא נשמרה כי ההתחברות פגה - נפתחת שוב עם הטקסט ששוחזר.
+  if (!new URLSearchParams(location.search).get('open')) openPendingTaskDraft();
 })();
 </script>
 </body>
