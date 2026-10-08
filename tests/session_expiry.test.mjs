@@ -356,9 +356,13 @@ test('wiring: helper loaded on the changed pages; task dialogs + AI helpers use 
   }
   assert.match(fnSrc(bizHtml, 'saveBiz'), /BSDSession\.clearDraft\(bsdBizDraftKey\(bizId\)\)/);
   assert.match(fnSrc(bizHtml, 'openBizForm'), /bsdCaptureBizFormBaseline\(biz\);\s*bsdRestoreBizCardDraft\(biz\);/);
+  // Later deploys bump version.json and the pages they touch (08.10.2026: businesses.html).
   const ver = JSON.parse(read('version.json')).version;
-  assert.equal(ver, '202610071530');
-  for (const html of [tasksHtml, bizHtml, mwHtml]) assert.match(html, new RegExp(`PAGE_BUILD = '${ver}'`));
+  assert.ok(ver >= '202610071530');
+  for (const html of [tasksHtml, bizHtml, mwHtml]){
+    const build = (html.match(/PAGE_BUILD = '(\d{12})'/) || [])[1];
+    assert.ok(build && build >= '202610071530' && build <= ver, build);
+  }
 });
 
 test('scope: no logout change, no data write in the helper, no new buttons', () => {

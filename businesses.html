@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610071530';
+    var PAGE_BUILD = '202610080830';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -116,6 +116,17 @@
   .record-status-slot{min-width:0;}
   .record-status-slot.record-status-wide{grid-column:1 / -1;}
   .record-status-slot > span{display:block !important;width:100%;box-sizing:border-box;text-align:center;overflow:hidden;text-overflow:ellipsis;}
+  /* 08.10.2026 (בקשת ברוך): שלוש תגיות כן/לא קבועות מתחת לשם ולמספר העסק -
+     מוצג לציבור / מוצג ל-VIP / מחובר לפורטל. תצוגה בלבד, בלי כפתורים. */
+  .record-flags{display:flex;flex-wrap:wrap;gap:4px 5px;margin-top:4px;width:100%;}
+  .biz-flag{flex:1 1 auto;display:block;box-sizing:border-box;text-align:center;white-space:nowrap;border-radius:6px;padding:2px 5px;font-size:.7rem;line-height:1.5;background:#f1f0ec;color:#7a7a7a;}
+  .biz-flag b{font-weight:800;}
+  .biz-flag.is-yes{background:#e6f4ea;color:#1e7b34;font-weight:700;}
+  .biz-flag.biz-flag-vip.is-yes{background:#fff4c2;color:#715300;}
+  .biz-flag.biz-flag-portal.is-yes{background:#e8f0fe;color:#1a56db;}
+  .biz-flag.is-unknown{background:#f6f5f1;color:#aaa;}
+  .biz-flag-short{display:none;}
+  @media(max-width:700px){.biz-flag-long{display:none;}.biz-flag-short{display:inline;}}
 
   .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
   .overlay.open{display:flex;}
@@ -509,7 +520,7 @@
 <script src="js/dedupeCheckModule.js?v=20260930dup1"></script>
 <script src="js/archiveModule.js?v=20260930delete1"></script>
 <script src="js/portal-invite.js?v=20261004-2"></script>
-<script src="js/portal-business-card.js?v=20261005-2"></script>
+<script src="js/portal-business-card.js?v=20261008-1"></script>
 <script src="js/anonAgreementMark.js?v=202610061550"></script>
 <script src="js/anonSummarySend.js?v=202610061625"></script>
 <script>
@@ -654,7 +665,10 @@ function saveBusinessPageCache(){
     fileCounts: FILES_COUNT_BY_BIZ,
     extendedMeta: EXTENDED_SUMMARY_FILEMETA_BY_BIZ,
     extendedSale: EXTENDED_SUMMARY_SALEFILE_BY_BIZ,
-    vipPublications: VIP_PUBLICATION_BY_BIZ
+    vipPublications: VIP_PUBLICATION_BY_BIZ,
+    vipKnown: VIP_STATUS_KNOWN,
+    portalAccounts: PORTAL_ACCOUNT_BY_BIZ,
+    portalKnown: PORTAL_STATUS_KNOWN
   });
 }
 function restoreBusinessPageCache(){
@@ -673,6 +687,9 @@ function restoreBusinessPageCache(){
   EXTENDED_SUMMARY_FILEMETA_BY_BIZ = c.extendedMeta || {};
   EXTENDED_SUMMARY_SALEFILE_BY_BIZ = c.extendedSale || {};
   VIP_PUBLICATION_BY_BIZ = c.vipPublications || {};
+  VIP_STATUS_KNOWN = !!c.vipKnown;
+  PORTAL_ACCOUNT_BY_BIZ = c.portalAccounts || {};
+  PORTAL_STATUS_KNOWN = !!c.portalKnown;
   populateFilters();
   renderTable();
   return true;
@@ -725,7 +742,8 @@ function scheduleBusinessIndicators(){
     loadGrantCounts(gen),
     loadFilesIndicator(gen),
     loadExtendedSummaryIndicator(gen),
-    loadVipPublicationStatuses(gen)
+    loadVipPublicationStatuses(gen),
+    loadSellerPortalStatuses(gen)
   ]).then(() => {
     if (gen !== businessIndicatorGen || !BUSINESSES_DATA_READY) return;
     if (typeof renderTable === 'function' && document.getElementById('bizBody')){
@@ -744,6 +762,13 @@ function scheduleBusinessIndicators(){
 // ============================================================
 let GRANT_COUNTS = {};
 let VIP_PUBLICATION_BY_BIZ = {};
+// 08.10.2026: האם רשימת ה-VIP / הפורטל נטענה בפועל מהשרת. כל עוד לא -
+// התגית מציגה "—" ולא "לא", כדי לא להציג מידע שגוי.
+let VIP_STATUS_KNOWN = false;
+// business_id -> true לכל עסק שיש לו חשבון פורטל בעלים פעיל (seller_portal_accounts:
+// status='active' וסיסמה שהונפקה). קריאה בלבד, דרך seller-portal-api admin_overview.
+let PORTAL_ACCOUNT_BY_BIZ = {};
+let PORTAL_STATUS_KNOWN = false;
 
 async function loadVipPublicationStatuses(gen){
   if (!CURRENT_PROFILE || !['admin','manager'].includes(CURRENT_PROFILE.role)) {
@@ -756,9 +781,59 @@ async function loadVipPublicationStatuses(gen){
     if (gen != null && gen !== businessIndicatorGen) return;
     VIP_PUBLICATION_BY_BIZ = {};
     (result.business_ids || []).forEach(id => { VIP_PUBLICATION_BY_BIZ[id] = true; });
+    VIP_STATUS_KNOWN = true;
   } catch(error) {
     console.warn('[BSD VIP] טעינת סטטוסי פרסום לרשימת העסקים נכשלה', error);
   }
+}
+
+// 08.10.2026: "מחובר לפורטל" ברשימה - קריאה בלבד מ-seller-portal-api
+// (admin_overview, אותה פעולה שמסך "ניהול הפורטל" כבר משתמש בה). זמין רק
+// למנהל/מנהל מערכת, כמו השרת עצמו. לא יוצר, לא חוסם ולא משנה חשבונות.
+async function loadSellerPortalStatuses(gen){
+  if (!CURRENT_PROFILE || !['admin','manager'].includes(CURRENT_PROFILE.role)) {
+    if (gen == null || gen === businessIndicatorGen){ PORTAL_ACCOUNT_BY_BIZ = {}; PORTAL_STATUS_KNOWN = false; }
+    return;
+  }
+  if (!window.BSDSellerPortal || typeof window.BSDSellerPortal.api !== 'function') return;
+  try {
+    const result = await window.BSDSellerPortal.api('admin_overview');
+    if (gen != null && gen !== businessIndicatorGen) return;
+    const map = {};
+    (result.accounts || []).forEach(a => {
+      if (a && a.business_id && a.status === 'active' && !a.pending) map[a.business_id] = true;
+    });
+    PORTAL_ACCOUNT_BY_BIZ = map;
+    PORTAL_STATUS_KNOWN = true;
+  } catch(error) {
+    console.warn('[BSD Portal] טעינת מצב הפורטל לרשימת העסקים נכשלה', error);
+  }
+}
+
+// מוצג לציבור = בדיוק התנאי של public_business_listings (מה שהאתר מציג):
+// public_listing_active + כרטיס אנונימי פעיל + listing_status='active' + לא בארכיון.
+function isShownOnPublicSite(b){
+  return !!(b && b.public_listing_active && b.anon_card_active && b.listing_status === 'active' && !b.is_archived);
+}
+// מחובר לפורטל = חשבון פורטל פעיל + אותם תנאי כניסה שהשרת בודק (עסק לא
+// בארכיון ועם הסכם חתום). חשבון חסום/מחוק/בלי סיסמה = לא.
+function isPortalConnected(b){
+  return !!(b && PORTAL_ACCOUNT_BY_BIZ[b.id] && !b.is_archived && b.agreement_status === 'יש הסכם חתום');
+}
+function bizFlag(kind, icon, longLabel, shortLabel, value){
+  const known = value !== null;
+  const text = !known ? '—' : (value ? 'כן' : 'לא');
+  const cls = 'biz-flag biz-flag-' + kind + (!known ? ' is-unknown' : (value ? ' is-yes' : ' is-no'));
+  return `<span class="${cls}" data-flag="${kind}" title="${esc(longLabel + ': ' + (known ? text : 'לא ידוע כרגע'))}">${icon} <span class="biz-flag-long">${longLabel}</span><span class="biz-flag-short">${shortLabel}</span>: <b>${text}</b></span>`;
+}
+function businessFlagsRow(b){
+  const manager = !!(CURRENT_PROFILE && ['admin','manager'].includes(CURRENT_PROFILE.role));
+  const parts = [bizFlag('public', '🌐', 'מוצג לציבור', 'ציבור', isShownOnPublicSite(b))];
+  if (manager){
+    parts.push(bizFlag('vip', '⭐', 'מוצג ל-VIP', 'VIP', VIP_STATUS_KNOWN ? !!VIP_PUBLICATION_BY_BIZ[b.id] : null));
+    parts.push(bizFlag('portal', '🔑', 'מחובר לפורטל', 'פורטל', PORTAL_STATUS_KNOWN ? isPortalConnected(b) : null));
+  }
+  return `<div class="record-flags">${parts.join('')}</div>`;
 }
 
 function vipPublicationBadge(b){
@@ -916,7 +991,7 @@ function distributionBadge(b){
   return distributionModeBadge(b, GRANT_COUNTS[b.id] || 0);
 }
 function publicListingBadge(b){
-  return b.public_listing_active
+  return isShownOnPublicSite(b)
     ? `<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="לחץ לפרטים" style="cursor:pointer;background:#e6f4ea;color:#1e7b34;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">🌐 מופץ באתר הציבורי</span>`
     : `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">⚪ לא מופץ באתר הציבורי</span>`;
 }
@@ -936,13 +1011,12 @@ function businessIdentityCell(b, statusEmoji){
       <span class="record-title" title="${esc(b.internal_name)}">${statusEmoji}${esc(b.internal_name)}</span>
       <span class="record-number-slot">${bizNumberBadge(b)}</span>
     </div>
+    ${businessFlagsRow(b)}
     <div class="record-sub-line">${b.owner_name ? esc(b.owner_name) : '&nbsp;'}</div>
     ${codeLine}
     <div class="record-meta-line">${filesIndicatorBadge(b.id)}${noteBadge}</div>
     <div class="record-status-grid">
       <div class="record-status-slot record-status-wide">${distributionBadge(b)}</div>
-      <div class="record-status-slot">${publicListingBadge(b)}</div>
-      <div class="record-status-slot">${vipPublicationBadge(b)}</div>
       ${brokerBadge}
     </div>
   </div>`;
@@ -5701,6 +5775,15 @@ async function deleteBiz(id){
 window.addEventListener('bsd:vip-ready', async () => {
   if (!CURRENT_PROFILE || !ALL_BIZ.length || restoreBusinessPageCache()) return;
   await loadVipPublicationStatuses();
+  renderTable();
+  saveBusinessPageCache();
+});
+// 08.10.2026: כרטיס העסק קרא את מצב חשבון הפורטל - מעדכנים את התגית ברשימה.
+window.addEventListener('bsd:seller-portal-changed', event => {
+  const businessId = event.detail && event.detail.businessId;
+  if (!businessId || !PORTAL_STATUS_KNOWN) return;
+  if (event.detail.active) PORTAL_ACCOUNT_BY_BIZ[businessId] = true;
+  else delete PORTAL_ACCOUNT_BY_BIZ[businessId];
   renderTable();
   saveBusinessPageCache();
 });
