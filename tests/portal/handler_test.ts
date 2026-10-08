@@ -266,3 +266,60 @@ Deno.test('buyers table failure never blocks the documents dashboard',async()=>{
  const r=await f.request('dashboard');assert(r.status===200,'dashboard still 200: '+r.status);const d=await r.json();
  assert(d.matches.length===0&&d.matches_unavailable===true&&d.files.length>0,'files shown, buyers flagged unavailable');
 });
+Deno.test('«איפה העסק מופץ»: dashboard returns only three booleans from existing CRM fields, own business only, never blocks',async()=>{
+ const f=await fixture();
+ let d=await json(await f.request('dashboard'));
+ assert(d.distribution&&d.distribution.started===false&&!d.distribution.channels.vip&&!d.distribution.channels.agents&&!d.distribution.channels.media,'nothing ticked: not started');
+ Object.assign(f.tables.businesses[0],{distribution_status:'all_authorized',public_listing_active:true,anon_card_active:true,listing_status:'active'});
+ Object.assign(f.tables.businesses[1],{distribution_status:'all_authorized'});
+ f.tables.vip_business_publications=[{business_id:other,enabled:true}];
+ d=await json(await f.request('dashboard'));
+ assert(d.distribution.started===true&&d.distribution.channels.agents===true&&d.distribution.channels.media===true,'agents + website ticked');
+ assert(d.distribution.channels.vip===false,'another business VIP publication is not ours');
+ assert(JSON.stringify(Object.keys(d.distribution.channels).sort())==='["agents","media","vip"]','booleans only');
+ f.tables.vip_business_publications.push({business_id:biz,enabled:true});
+ f.tables.businesses[0].listing_status='sold';f.tables.businesses[0].distribution_status='selective';
+ d=await json(await f.request('dashboard'));
+ assert(d.distribution.channels.vip===true&&d.distribution.channels.media===false&&d.distribution.channels.agents===false,'VIP on; website off when not active; selective is not all agents');
+ Object.defineProperty(f.tables,'vip_business_publications',{get(){throw Error('boom');}});
+ const r=await f.request('dashboard');assert(r.status===200,'dashboard still 200');d=await r.json();
+ assert(d.files.length>0&&d.distribution.channels.vip===false&&d.distribution.channels.agents===false&&d.distribution.channels.media===false&&d.distribution.started===false,'VIP read error: never blocks; VIP «טרם בוצע»; and the error never turns anything into ✓');
+});
+Deno.test('«איפה העסק מופץ» certainty rule: missing row / null / other value / read error -> false («טרם בוצע»), never true',async()=>{
+ const f=await fixture();const B=f.tables.businesses[0];
+ const ch=async()=>{const r=await f.request('dashboard');assert(r.status===200,'dashboard '+r.status);return (await r.json()).distribution.channels;};
+ // fully ticked baseline
+ Object.assign(B,{distribution_status:'all_authorized',public_listing_active:true,anon_card_active:true,listing_status:'active',is_archived:false});
+ f.tables.vip_business_publications=[{business_id:biz,enabled:true}];
+ let c=await ch();assert(c.vip&&c.agents&&c.media,'all three ticked from real fields');
+ // missing VIP row
+ f.tables.vip_business_publications=[];c=await ch();assert(c.vip===false&&c.agents&&c.media,'no VIP row -> VIP false, others unaffected');
+ // null / non-boolean values
+ f.tables.vip_business_publications=[{business_id:biz,enabled:null}];c=await ch();assert(c.vip===false,'enabled null -> false');
+ f.tables.vip_business_publications=[{business_id:biz,enabled:'true'}];c=await ch();assert(c.vip===false,'enabled not strictly true -> false');
+ B.distribution_status=null;c=await ch();assert(c.agents===false,'distribution_status null -> false');
+ B.distribution_status='selective';c=await ch();assert(c.agents===false,'selective -> false');
+ B.distribution_status='all_authorized';
+ for(const [k,v] of [['public_listing_active',null],['anon_card_active',null],['listing_status',null],['is_archived',null],['public_listing_active','true']] as [string,any][]){
+  const keep=B[k];B[k]=v;c=await ch();assert(c.media===false,`${k}=${v} -> media false`);B[k]=keep;}
+ c=await ch();assert(c.media===true,'restored');
+ // businesses read error: agents + media false; VIP (separate read) still real
+ f.tables.vip_business_publications=[{business_id:biz,enabled:true}];
+ const real=f.tables.businesses;let calls=0;
+ Object.defineProperty(f.tables,'businesses',{configurable:true,get(){calls++;if(calls>1)throw Error('boom');return real;}});
+ const r=await f.request('dashboard');
+ assert(r.status===200,'dashboard still loads: '+r.status);const d=await r.json();assert(calls>1,'distribution read hit the error');
+ assert(d.distribution.channels.vip===true&&d.distribution.channels.agents===false&&d.distribution.channels.media===false,'businesses read error -> agents/media «טרם בוצע», VIP still real');
+});
+Deno.test('«איפה העסק מופץ» every portal, including a brand-new one, gets the section with no per-business setup',async()=>{
+ const f=await fixture();const fresh='55555555-5555-4555-8555-555555555555';
+ f.tables.businesses.push({id:fresh,internal_name:'NEW TEST BUSINESS',owner_name:'NEW OWNER',owner_phone:'050-0000002',city:'Y',is_archived:false,agreement_status:'יש הסכם חתום'});
+ const opened=await (await f.admin('admin_open',{business_id:fresh})).json();assert(opened.username,'portal opened for the new test business');
+ const login=await (await f.request('login',{username:opened.username,password:opened.password},{'x-seller-token':''})).json();
+ let d=await json(await f.seller(login.token)('dashboard'));
+ assert(d.distribution&&d.distribution.started===false&&Object.values(d.distribution.channels).every(v=>v===false),'new portal: section present, nothing ticked yet');
+ Object.assign(f.tables.businesses.at(-1),{distribution_status:'all_authorized'});
+ f.tables.vip_business_publications=[{business_id:fresh,enabled:true}];
+ d=await json(await f.seller(login.token)('dashboard'));
+ assert(d.distribution.channels.vip===true&&d.distribution.channels.agents===true&&d.distribution.channels.media===false&&d.distribution.started===true,'ticks follow the card live, on the next load');
+});
