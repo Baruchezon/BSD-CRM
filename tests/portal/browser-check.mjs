@@ -161,7 +161,12 @@ for(const [name,width,height] of [['desktop',1200,800],['mobile-375',375,812]]){
  },calls);
  await page.goto('http://127.0.0.1:8766/__card.html');await page.waitForFunction(()=>document.querySelector('[data-portal-summary]').textContent.includes('לא קיים'));
  assert.ok(await page.getByText('פתח חשבון בפורטל').isVisible());
- const popup=page.waitForEvent('popup');await page.locator('#sellerPortalEnabled').check();const tab=await popup;await tab.waitForURL(/wa\.me/);const wa=decodeURIComponent(tab.url());await tab.close();
+ await page.locator('#sellerPortalEnabled').click();await page.waitForSelector('dialog[data-portal-open-choice][open]');
+ // 08.10.2026: «פתח חשבון בפורטל» asks first: «וואטסאפ» (checked) / «מייל» (one or both), nothing is called before «פתח ושלח».
+ assert.equal(await page.locator('[data-ch-wa]').isChecked(),true);assert.equal(await page.locator('[data-ch-mail]').isChecked(),false);assert.equal(calls.filter(c=>c.action==='admin_open').length,0);
+ await page.locator('[data-ch-cancel]').click();assert.equal(await page.locator('#sellerPortalEnabled').isChecked(),false);assert.equal(calls.filter(c=>c.action==='admin_open').length,0,'cancel opens nothing');
+ await page.locator('#sellerPortalEnabled').click();await page.waitForSelector('dialog[data-portal-open-choice][open]');
+ const popup=page.waitForEvent('popup');await page.locator('[data-ch-ok]').click();const tab=await popup;await tab.waitForURL(/wa\.me/);const wa=decodeURIComponent(tab.url());await tab.close();
  for(const t of ['שם משתמש: 23456','סיסמה: Qa7Kd9mPx2','www.bsd-bbi.co.il','«פורטל בעלי עסקים»'])assert.ok(wa.includes(t),'card wa missing '+t);
  await page.waitForSelector('[data-portal-new]');assert.ok((await page.locator('[data-portal-invite]').inputValue()).includes('Qa7Kd9mPx2'));
  await page.waitForFunction(()=>document.querySelector('[data-portal-summary]').textContent.includes('פעיל'));assert.equal(await page.locator('#sellerPortalEnabled').isChecked(),true);
@@ -171,7 +176,7 @@ for(const [name,width,height] of [['desktop',1200,800],['mobile-375',375,812]]){
  assert.equal(calls.filter(c=>c.action==='admin_open').length,1);
  await page.locator('#sellerPortalEnabled').uncheck();await page.waitForFunction(()=>document.querySelector('[data-portal-summary]').textContent.includes('חסום'));
  assert.deepEqual(calls.filter(c=>c.action==='admin_status').map(c=>c.status),['blocked']);
- console.log(`PASS business card ${name}: V opens account, WhatsApp text with username+password+site button, view-as-owner, uncheck blocks`);
+ console.log(`PASS business card ${name}: V asks WhatsApp/email, cancel opens nothing, WhatsApp opens account, WhatsApp text with username+password+site button, view-as-owner, uncheck blocks`);
  await context.close();
 }
 assert.deepEqual(errors,[]);console.log('PASS: no JavaScript page errors');await browser.close();server.close();
