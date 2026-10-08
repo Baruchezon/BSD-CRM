@@ -67,4 +67,13 @@ export const PORTAL_MAIL_NAME = 'צוות BSD';
 export function portalMailFrom(override: unknown): string {
   return bsdSender(override) ?? PORTAL_MAIL_FROM_DEFAULT;
 }
+// 08.10.2026 (Baruch: see the email before it goes, see what went). The preview and the stored
+// copy are rendered by the SAME template as the real email; only the password differs: the
+// preview shows a placeholder (the real password is created only at send time) and the copy
+// kept in audit_log is masked. The real password is never stored, logged or returned.
+export const PREVIEW_PASSWORD = 'סיסמה חדשה תיווצר בעת השליחה';
+export const PREVIEW_USERNAME = 'ייווצר בעת פתיחת החשבון';
+export const MASKED_PASSWORD = '•••••••• (מוסתרת)';
+// Resend email ids (uuid-like). Used only to ask Resend for the delivery status.
+export const validResendId = (v: unknown) => /^[A-Za-z0-9_-]{1,100}$/.test(String(v ?? ''));
 export const validEmail = (v: unknown) => /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[A-Za-z]{2,}$/.test(String(v ?? '').trim());

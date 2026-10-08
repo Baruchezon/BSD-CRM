@@ -32,11 +32,13 @@ test('no email on file: email checkbox shown but disabled, with a clear Hebrew n
 });
 
 test('flow: every open-account path (card checkbox + new business) goes through the choice; WhatsApp-only = previous flow', () => {
-  assert.match(card, /if\(on&&\(!exists\(\)\|\|account\.pending\)\)\{checkbox\.checked=false;const pick=await chooseChannels\(biz,\{reserve:true\}\);if\(!pick\)\{draw\(\);return;\}/);
+  assert.match(card, /if\(on&&\(!exists\(\)\|\|account\.pending\)\)\{checkbox\.checked=false;const pick=await chooseChannels\(biz,\{reserve:true\}\);if\(!pick\)\{draw\(\);return;\}\n   if\(pick\.mail\)\{const ok=await previewAndConfirm\(biz\.id,biz,\{reserve:pick\.wa\}\);if\(!ok\)\{draw\(\);return;\}pick\.tab=ok\.tab;\}/, 'email chosen: the full email is shown and approved before anything is opened or sent');
   assert.match(card, /const openWith=async\(\{wa,mail,tab\}\)=>\{\n  if\(!mail\)return open\(tab\);/);
-  assert.match(card, /const pick=await chooseChannels\(info\);if\(!pick\)return;\n const d=await api\('admin_open',\{business_id:id\}\);/);
+  assert.match(card, /const pick=await chooseChannels\(info\);if\(!pick\)return;\n if\(pick\.mail&&!await previewAndConfirm\(id,info\)\)return;\n const d=await api\('admin_open',\{business_id:id\}\);/);
   // Email uses the existing server action only; the browser never builds the email.
-  assert.equal((card.match(/api\('admin_email_access',\{business_id:(biz\.id|id)\}\)/g) || []).length, 3);
+  // Every send (button, card checkbox, new business) goes through sendAndReport (one admin_email_access call).
+  assert.equal((card.match(/api\('admin_email_access',/g) || []).length, 1);
+  assert.equal((card.match(/sendAndReport\((biz\.id|id),/g) || []).length, 3);
   assert.ok(!/resend\.com/i.test(card));
   // The reset button keeps its old behaviour.
   assert.match(card, /'יצירת סיסמה ושליחה ב-WhatsApp':'איפוס סיסמה ושליחה ב-WhatsApp'/);

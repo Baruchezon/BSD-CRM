@@ -103,6 +103,6 @@ test('no new buttons, name search stays, tags sit right under the name and numbe
 test('portal card only announces its state; nothing else changed in its actions', () => {
   assert.match(portalCard, /bsd:seller-portal-changed/);
   const actions = [...portalCard.matchAll(/api\('(admin_\w+)'/g)].map(m => m[1]).sort();
-  assert.deepEqual([...new Set(actions)], ['admin_delete','admin_detail','admin_email_access','admin_open','admin_preview','admin_status'], 'only change since 08.10: «שליחה במייל» (admin_email_access)');
-  assert.match(biz, /js\/portal-business-card\.js\?v=20261008-4/);
+  assert.deepEqual([...new Set(actions)], ['admin_delete','admin_detail','admin_email_access','admin_email_preview','admin_email_status','admin_open','admin_preview','admin_status'], 'only changes since 08.10: «שליחה במייל» (admin_email_access) + its preview and delivery status');
+  assert.match(biz, /js\/portal-business-card\.js\?v=20261008-5/);
 });
