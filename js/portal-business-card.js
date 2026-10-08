@@ -44,7 +44,10 @@ async function mount(biz){
   controls.innerHTML=exists()?`${account.status==='active'&&eligible()?`<button type="button" data-portal-preview>צפייה כבעל העסק</button>`:''}${account.status==='active'?`<button type="button" data-portal-open>${account.pending?'יצירת סיסמה ושליחה ב-WhatsApp':'איפוס סיסמה ושליחה ב-WhatsApp'}</button><button type="button" data-portal-block>חסימת החשבון</button>`:`<button type="button" data-portal-unblock ${!eligible()?'disabled':''}>הפעלת החשבון</button>`}<button type="button" data-portal-delete>מחיקת חשבון הפורטל</button><a href="portal-admin.html?business_id=${encodeURIComponent(biz.id)}" style="align-self:center">ניהול הפורטל של העסק ←</a>`:'';
   if(busy)controls.querySelectorAll('button').forEach(b=>b.disabled=true);
  };
- const reload=async()=>{const d=await api('admin_detail',{business_id:biz.id});account=d.account;draw();};
+ const reload=async()=>{const d=await api('admin_detail',{business_id:biz.id});account=d.account;draw();
+  // 08.10.2026: lets the business list update its «מחובר לפורטל» tag (display only).
+  try{window.dispatchEvent(new CustomEvent('bsd:seller-portal-changed',{detail:{businessId:biz.id,active:!!account&&account.status==='active'&&!account.pending}}));}catch(_){}
+ };
  const open=async tab=>{const d=await api('admin_open',{business_id:biz.id});credBox.innerHTML=credentialsHtml(d);if(!sendTo(tab,d)&&invite().waUrl(d))credBox.querySelector('[data-portal-wa]')?.focus();await reload();};
  const run=async(fn,tab=null)=>{lastError='';busy=true;draw();try{await fn();}catch(e){tab?.close();lastError=e.message;}finally{busy=false;draw();}};
  checkbox.onchange=()=>{if(busy)return;const on=checkbox.checked;
