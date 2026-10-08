@@ -48,6 +48,22 @@ export function createHandler(db:any,opts:Options){
   return buildOwnerMatches({businessId:id,matches,buyers,permissions,anonSends,fullSends,files,history,notes});
  };
  const publicFile=(f:any,kind:'document'|'advertising'|'extra')=>({id:f.id,file_source:kind==='extra'?'extra':'sale',name:f.file_name,kind,bucket:kind==='document'?f.bucket:kind,type:kind==='document'?DOC_LABELS[f.bucket]:kind==='advertising'?'דוח פרסום':'קובץ נוסף',date:f.created_at,period_from:f.portal_period_from??null,period_to:f.portal_period_to??null,mime:kind==='extra'?f.mime_type:'application/pdf',size:kind==='extra'?f.size_bytes:f.file_size??null});
+ // «איפה העסק מופץ» (08.10.2026): three channels from fields staff ALREADY tick per deal in the CRM.
+ // VIP = «פרסום ללקוחות VIP» (vip_business_publications.enabled); agents = «הפצה לכל הסוכנים המורשים»
+ // (distribution_status='all_authorized'); media = live on the BSD website (same rule as public_business_listings).
+ // Booleans only: no names, prices, profit or location leave here.
+ // Computed live on every dashboard request (every portal, existing and new; no per-business setup).
+ // Certainty rule (Baruch, 08.10): a channel is true ONLY when its real field was read and is exactly the ticked value.
+ // Missing row, null, other value or a read error -> false («טרם בוצע»), never ✓. Each read is independent.
+ const ownerDistribution=async(id:string)=>{
+  const sure=async(read:()=>Promise<boolean[]>,n:number)=>{try{return await read();}catch{return Array(n).fill(false);}};
+  const [[vip],[agents,media]]=await Promise.all([
+   sure(async()=>{const v=await query(db.from('vip_business_publications').select('business_id,enabled').eq('business_id',id).maybeSingle());return [!!v&&v.business_id===id&&v.enabled===true];},1),
+   sure(async()=>{const b=await query(db.from('businesses').select('id,distribution_status,public_listing_active,anon_card_active,listing_status,is_archived').eq('id',id).maybeSingle());const own=!!b&&b.id===id;
+    return [own&&b.distribution_status==='all_authorized',own&&b.public_listing_active===true&&b.anon_card_active===true&&b.listing_status==='active'&&b.is_archived===false];},2)]);
+  const channels={vip:vip===true,agents:agents===true,media:media===true};
+  return {channels,started:channels.vip||channels.agents||channels.media};
+ };
  const publicFiles=(p:{documents:any[];reports:any[];extras:any[]})=>[...p.documents.map(f=>publicFile(f,'document')),...p.reports.map(f=>publicFile(f,'advertising')),...p.extras.map(f=>publicFile(f,'extra'))];
  // Logins and file access per account, for the admin screen.
  const accessSummary=async(accounts:any[])=>{
@@ -323,7 +339,9 @@ export function createHandler(db:any,opts:Options){
     const {is_archived:_arch,agreement_status:_agr,...safeBusiness}=business;
     // The buyers table never blocks documents: on any error the dashboard still loads, without buyers.
     let owner:any={rows:[],summary:{total:0,active:0,signed:0,full:0}};try{owner=await ownerMatches(business.id);}catch{owner.unavailable=true;}
-    return reply(200,{ok:true,preview,business:safeBusiness,files:publicFiles(await portalFiles(business.id)),matches:owner.rows,match_summary:owner.summary,...(owner.unavailable?{matches_unavailable:true}:{}),update:a.client_update?{message:a.client_update,date:a.client_updated_at}:null,contact:{phone:opts.phone}});
+    // Distribution never blocks the dashboard either: on any error all three channels are «טרם בוצע».
+    let distribution:any;try{distribution=await ownerDistribution(business.id);}catch{distribution={channels:{vip:false,agents:false,media:false},started:false};}
+    return reply(200,{ok:true,preview,business:safeBusiness,files:publicFiles(await portalFiles(business.id)),matches:owner.rows,match_summary:owner.summary,...(owner.unavailable?{matches_unavailable:true}:{}),distribution,update:a.client_update?{message:a.client_update,date:a.client_updated_at}:null,contact:{phone:opts.phone}});
    }
    if(action==='file'){
     if(!uuid(b.file_id)||!['view','download'].includes(b.mode))return reply(404,{error:'not_found'});

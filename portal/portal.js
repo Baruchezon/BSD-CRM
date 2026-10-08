@@ -46,11 +46,26 @@ function notesHtml(n){return n.length?n.map(x=>`<p class="m-note">${esc(x.text)}
 function matchesHtml(rows){if(!rows.length)return '<p class="empty">כשצוות BSD יציג את העסק לקונים מתאימים, הם יופיעו כאן עם השלב שבו כל אחד נמצא.</p>';
  return `<div class="match-table" role="table" aria-label="קונים מתעניינים"><div class="mt-head" role="row"><span role="columnheader">#</span><span role="columnheader">קונה</span><span role="columnheader">הסכם</span><span role="columnheader">שלב בתהליך</span><span role="columnheader">חומרים שנמסרו</span><span role="columnheader">עודכן</span><span role="columnheader">הערות</span></div>${rows.map(r=>`<div class="mt-row${r.stage.closed?' closed':''}" role="row"><span class="mt-ref" role="cell">${esc(r.ref)}</span><span class="mt-buyer" role="cell" data-label="קונה"><strong>${esc(r.buyer)}</strong></span><span role="cell" data-label="הסכם">${agreementHtml(r.agreement)}</span><span role="cell" data-label="שלב בתהליך"><strong class="stage-label">${esc(r.stage.label)}</strong>${progressHtml(r.stage)}</span><span role="cell" data-label="חומרים שנמסרו">${materialsHtml(r.materials)}</span><span role="cell" data-label="עודכן">${date(r.updated_at)}</span><span role="cell" data-label="הערות">${notesHtml(r.notes)}</span></div>`).join('')}</div>`;}
 function summaryHtml(s){return [['קונים שקיבלו את העסק לבדיקה',s.total],['בתהליך פעיל',s.active],['חתמו על הסכם',s.signed],['קיבלו חומרים מלאים',s.full]].map(([k,v])=>`<div><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join('');}
+// «איפה העסק מופץ» (08.10.2026): three channels ticked per deal by BSD staff in the CRM.
+// The API sends booleans only. The two texts below are Baruch's exact wording.
+const DIST_CHANNELS=[['vip','הופץ ללקוחות VIP'],['agents','הופץ לכל סוכני BSD'],['media','הופץ במערכות המדיה של BSD']];
+const DIST_FIRST='החשיפה הראשונה מתבצעת מול קונים פוטנציאליים הרשומים במאגר הקונים של החברה.';
+const DIST_PRIVACY='בכל ערוצי הפרסום החומרים מוצגים תמיד באופן אנונימי. המידע המלא והאמיתי על העסק נמסר אך ורק למי שחתם על הסכם שמירת סודיות מול החברה, ורק לאחר בחינה מעמיקה של יכולותיו ושל רצונו האמיתי לרכוש את העסק.';
+const DIST_NOT_STARTED='ההפצה עדיין לא התחילה. ברגע שתתחיל, הערוצים יסומנו כאן.';
+// Same section on every portal: always 3 channels, then ONE line, then the privacy paragraph.
+// ✓ only for a strict true from the API; anything else (missing, null, error) is «טרם בוצע».
+// The single line: first-exposure text if any channel is ✓, otherwise the not-started text.
+function distributionHtml(d){const ch=(d&&typeof d==='object'&&d.channels&&typeof d.channels==='object')?d.channels:{};
+ const on=k=>ch[k]===true,started=DIST_CHANNELS.some(([k])=>on(k));
+ return `<ul class="dist-channels">${DIST_CHANNELS.map(([k,label])=>`<li class="dist-channel ${on(k)?'on':'off'}"><span class="dist-mark" aria-hidden="true">${on(k)?'✓':''}</span><span class="dist-label">${esc(label)}</span><span class="dist-state">${on(k)?'בוצע':'טרם בוצע'}</span></li>`).join('')}</ul>`
+  +(started?`<p class="dist-first">${esc(DIST_FIRST)}</p>`:`<p class="muted dist-note">${esc(DIST_NOT_STARTED)}</p>`)
+  +`<p class="dist-privacy">${esc(DIST_PRIVACY)}</p>`;}
 async function load(){try{data=await api('dashboard');const b=data.business,by=k=>data.files.filter(f=>f.kind===k),docs=by('document'),reports=by('advertising'),extras=by('extra');
  const banner=$('previewBanner');if(banner)banner.hidden=!data.preview;document.querySelectorAll('[data-change-password],[data-message]').forEach(el=>{el.hidden=!!data.preview;});
  document.body.classList.remove('is-login');$('loginPage').hidden=true;$('dashboard').hidden=false;$('logout').hidden=false;$('businessName').textContent=b.internal_name;$('hello').textContent=b.owner_name?`שלום, ${b.owner_name}`:'ברוכים הבאים';$('businessMeta').textContent=[b.owner_name,b.owner_phone,b.city].filter(Boolean).join(' · ');
  $('docCount').textContent=docs.length||'טרם עודכנו';$('extraCount').textContent=extras.length||'אין עדיין';$('reportCount').textContent=reports.length||'טרם עודכנו';
  const matches=data.matches||[],ms=data.match_summary||{total:matches.length,active:0,signed:0,full:0};$('matchCount').textContent=ms.total||'אין עדיין';$('matchSummary').innerHTML=matches.length?summaryHtml(ms):'';$('matchList').innerHTML=data.matches_unavailable?'<p class="empty">טבלת הקונים אינה זמינה כרגע. אפשר לרענן בעוד כמה דקות או לפנות לצוות BSD.</p>':matchesHtml(matches);
+ const dist=distributionHtml(data.distribution);$('homeDistribution').innerHTML=dist;$('reportsDistribution').innerHTML=dist;
  $('documentList').innerHTML=filesHtml(docs,'document');$('extraList').innerHTML=filesHtml(extras,'extra');$('reportList').innerHTML=filesHtml(reports,'advertising');$('homeFiles').innerHTML=filesHtml(docs.slice(0,4),'document');$('homeExtras').innerHTML=filesHtml(extras.slice(0,3),'extra');
  $('businessDetails').innerHTML=[['שם העסק',b.internal_name],['איש קשר',b.owner_name],['טלפון',b.owner_phone],['מיקום',b.city]].filter(x=>x[1]).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
  $('updateMessage').textContent=data.update?.message||'ניתן לפנות לצוות BSD לקבלת מידע על תהליך מכירת העסק.';$('updateTitle').textContent=data.update?'עדכון מצוות BSD':'עדכונים אישיים יופיעו כאן';$('updateDate').textContent=date(data.update?.date);
