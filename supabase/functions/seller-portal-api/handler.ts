@@ -1,11 +1,11 @@
 import {portalDocuments,DOC_LABELS} from './latest-files.ts';
 import {buildOwnerMatches} from './matches.ts';
-import {ACCESS_EMAIL_SUBJECT,PORTAL_MAIL_NAME,accessEmailHtml,accessEmailText,bsdSender,validEmail} from './access-email.ts';
+import {ACCESS_EMAIL_SUBJECT,PORTAL_MAIL_NAME,PREVIEW_PASSWORD,PREVIEW_USERNAME,MASKED_PASSWORD,accessEmailHtml,accessEmailText,bsdSender,validEmail,validResendId} from './access-email.ts';
 import {digest,randomText,activationToken,validActivationToken,PENDING_ACTIVATION,strongPassword,hashPassword,verifyPassword,usableHash,sessionAllowed,fileAllowed,pathAllowed,clientIp,generatePassword,extraFileType,safeFileName,EXTRA_MAX_BYTES} from './security.ts';
 type Options={origins:string[];portalUrl:string;phone:string;ipSalt:string;ipHeader?:string;activationHours?:number;pruneRate?:number;site?:string;mail?:{from?:string;apiKey?:string;fetch?:typeof fetch}};
 // Rate limit ceilings per 15 minutes. Global ceilings bound abuse even if a
 // caller can rotate or spoof its address.
-const LIMITS={loginIp:30,loginUser:8,loginGlobalFailures:300,recoveryIp:5,recoveryGlobal:100,activateIp:20,activateGlobal:200,passwordChange:8,emailAccess:5};
+const LIMITS={loginIp:30,loginUser:8,loginGlobalFailures:300,recoveryIp:5,recoveryGlobal:100,activateIp:20,activateGlobal:200,passwordChange:8,emailAccess:5,emailStatus:60};
 const SIGNED='יש הסכם חתום';
 const BUCKET='business-files';
 const EXTRA_DIR='seller-portal-extra';
@@ -204,36 +204,77 @@ export function createHandler(db:any,opts:Options){
      await event(a.id,'credentials_reset',null,p.id);
      return reply(200,{ok:true,username:a.username,password,name:business.owner_name||'',phone:business.owner_phone||'',contact_phone:opts.phone,site:opts.site||'www.bsd-bbi.co.il'});
     }
-    if(action==='admin_email_access'){
+    if(action==='admin_email_access'||action==='admin_email_preview'){
      // «שליחה במייל» (08.10.2026): emails the website link, username and a NEW password to the
      // owner email stored in the CRM. The old password cannot be re-sent (only its hash exists).
      // Order: send first; the new hash is committed ONLY after the email provider accepted the
      // email, so a failed send never changes the password that works today. The plaintext lives
      // only in this request (email body); it is never stored or logged.
-     const audit=async(details:any)=>{try{await query(db.from('audit_log').insert({action:'portal_access_email',table_name:'seller_portal_accounts',record_id:business.id,actor_id:p.id,details}));}catch{}};
-     if(!a||a.status!=='active')return reply(409,{error:'account_required'});
+     // admin_email_preview (08.10.2026, Baruch): the same checks and the same template, rendered
+     // WITHOUT sending, without a new password and without touching the account or the log, so
+     // the CRM can show the full email for approval first. A separate action name (not a flag),
+     // so an older server can never mistake a preview request for a real send.
+     // Every send also goes as a BCC copy to the sender (baruch@bsd-bbi.co.il), and audit_log keeps
+     // subject + body with the password masked, for the «מיילים שנשלחו» list in the business card.
+     const preview=action==='admin_email_preview';
+     const audit=async(details:any)=>{const id=crypto.randomUUID();try{await query(db.from('audit_log').insert({id,action:'portal_access_email',table_name:'seller_portal_accounts',record_id:business.id,actor_id:p.id,details}));return id;}catch{return null;}};
+     const live=!!a&&a.status==='active';
+     if(!preview&&!live)return reply(409,{error:'account_required'});
      if(!eligible(business))return reply(409,{error:'signed_agreement_required'});
      const contact=await query(db.from('businesses').select('owner_email').eq('id',business.id).maybeSingle());
      const to=String(contact?.owner_email??'').trim();
      if(!validEmail(to))return reply(409,{error:'email_missing'});
      const from=bsdSender(opts.mail?.from);
-     if(!from||!opts.mail?.apiKey){await audit({status:'failed',to,reason:'sender_not_ready'});return reply(503,{error:'sender_not_ready'});}
+     if(!from||!opts.mail?.apiKey){if(!preview)await audit({status:'failed',to,reason:'sender_not_ready'});return reply(503,{error:'sender_not_ready'});}
+     const bcc=to.toLowerCase()===from?'':from;
+     const envelope={from:`${PORTAL_MAIL_NAME} <${from}>`,to:[to],...(bcc?{bcc:[bcc]}:{}),reply_to:from,subject:ACCESS_EMAIL_SUBJECT};
+     const render=(username:string,password:string)=>{const m={name:business.owner_name,username,password,phone:opts.phone};return {html:accessEmailHtml(m),text:accessEmailText(m)};};
+     if(preview){const c=render(live?a.username:PREVIEW_USERNAME,PREVIEW_PASSWORD);return reply(200,{ok:true,preview:true,from:envelope.from,to,bcc,reply_to:from,subject:ACCESS_EMAIL_SUBJECT,html:c.html,text:c.text,username_known:live,password_note:PREVIEW_PASSWORD});}
      if(!await attempt('email_access:business:'+business.id,LIMITS.emailAccess))return reply(429,{error:'try_later'});
      const {password,creds}=await freshCredentials();
-     const mail={name:business.owner_name,username:a.username,password,phone:opts.phone};
+     const real=render(a.username,password),masked=render(a.username,MASKED_PASSWORD);
+     const copy={subject:ACCESS_EMAIL_SUBJECT,bcc,body_text:masked.text,body_html:masked.html};
      let sent:any=null,reason='';
      try{
-      const r=await (opts.mail.fetch??fetch)('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${opts.mail.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({from:`${PORTAL_MAIL_NAME} <${from}>`,to:[to],reply_to:from,subject:ACCESS_EMAIL_SUBJECT,html:accessEmailHtml(mail),text:accessEmailText(mail)})});
+      const r=await (opts.mail.fetch??fetch)('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${opts.mail.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({...envelope,html:real.html,text:real.text})});
       const body:any=await r.json().catch(()=>({}));
       if(r.ok&&body?.id)sent=body;else reason=text(body?.message||body?.error||('http_'+r.status),300).split(password).join('***');
      }catch{reason='network_error';}
-     if(!sent){await audit({status:'failed',to,from,username:a.username,reason});return reply(502,{error:'send_failed'});}
+     if(!sent){const log_id=await audit({status:'failed',to,from,username:a.username,reason,...copy});return reply(502,{error:'send_failed',reason,log_id});}
+     const resend_id=text(sent.id,100);
      // Email accepted: the new password becomes the working one (same fields as the WhatsApp reset).
      let saved=false;for(let i=0;i<2&&!saved;i++){try{const u=await db.from('seller_portal_accounts').update({...creds,status:'active'}).eq('id',a.id);saved=!u.error;}catch{saved=false;}}
-     if(!saved){await audit({status:'sent_not_saved',to,from,username:a.username,resend_id:text(sent.id,100)});return reply(500,{error:'sent_not_saved'});}
+     if(!saved){const log_id=await audit({status:'sent_not_saved',to,from,username:a.username,resend_id,...copy});return reply(500,{error:'sent_not_saved',log_id,resend_id});}
      try{await query(db.from('seller_portal_sessions').update({revoked_at:new Date().toISOString()}).eq('account_id',a.id).is('revoked_at',null));await event(a.id,'credentials_reset',null,p.id);}catch{}
-     await audit({status:'sent',to,from,username:a.username,resend_id:text(sent.id,100)});
-     return reply(200,{ok:true,to});
+     const log_id=await audit({status:'sent',to,from,username:a.username,resend_id,...copy});
+     return reply(200,{ok:true,status:'sent',to,bcc,subject:ACCESS_EMAIL_SUBJECT,resend_id,log_id,sent_at:new Date().toISOString()});
+    }
+    if(action==='admin_email_status'){
+     // Delivery status of one portal email (08.10.2026): asks Resend for that email's last_event
+     // (sent / delivered / bounced ...). Resend answers with the whole email, password included:
+     // only last_event is read; nothing else is kept or returned. A change is recorded as a new
+     // audit_log row (portal_access_email_status); the original row is never edited.
+     if(!uuid(b.log_id))return reply(400,{error:'invalid_request'});
+     const row=await query(db.from('audit_log').select('id,record_id,details').eq('id',b.log_id).eq('action','portal_access_email').eq('record_id',business.id).maybeSingle());
+     if(!row)return reply(404,{error:'not_found'});
+     const rid=String(row.details?.resend_id??'');
+     if(!validResendId(rid))return reply(409,{error:'no_resend_id'});
+     if(!opts.mail?.apiKey)return reply(503,{error:'sender_not_ready'});
+     if(!await attempt('email_status:business:'+business.id,LIMITS.emailStatus))return reply(429,{error:'try_later'});
+     let last_event='',reason='';
+     try{
+      const r=await (opts.mail.fetch??fetch)('https://api.resend.com/emails/'+encodeURIComponent(rid),{method:'GET',headers:{Authorization:`Bearer ${opts.mail.apiKey}`}});
+      const body:any=await r.json().catch(()=>({}));
+      const ev=String(body?.last_event??'').trim().toLowerCase();
+      if(r.ok&&/^[a-z_]{1,40}$/.test(ev))last_event=ev;else reason=r.ok?'no_status':'http_'+r.status;
+     }catch{reason='network_error';}
+     if(!last_event)return reply(502,{error:'status_unavailable',reason});
+     const checked_at=new Date().toISOString();
+     try{
+      const prev=(await query(db.from('audit_log').select('details,occurred_at').eq('action','portal_access_email_status').eq('record_id',business.id).order('occurred_at',{ascending:false}).limit(500))).filter((x:any)=>x.details?.log_id===row.id).sort((x:any,y:any)=>String(y.details?.checked_at??'').localeCompare(String(x.details?.checked_at??'')))[0];
+      if(prev?.details?.last_event!==last_event)await query(db.from('audit_log').insert({action:'portal_access_email_status',table_name:'seller_portal_accounts',record_id:business.id,actor_id:p.id,details:{log_id:row.id,resend_id:rid,last_event,checked_at}}));
+     }catch{}
+     return reply(200,{ok:true,log_id:row.id,last_event,checked_at});
     }
     if(action==='admin_upload_url'){
      // Extra files (images, Office, etc.) go straight from the CRM browser to a

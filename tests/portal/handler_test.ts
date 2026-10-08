@@ -325,9 +325,9 @@ Deno.test('«איפה העסק מופץ» every portal, including a brand-new on
 });
 
 // «שליחה במייל» (08.10.2026): new password per send, Resend mocked, commit only after the email was accepted.
-async function mailFixture(opts:{from?:string;apiKey?:string;respond?:(req:any)=>Response|Promise<Response>}={}){
+async function mailFixture(opts:{from?:string;apiKey?:string;respond?:(req:any)=>Response|Promise<Response>;status?:(url:string)=>Response|Promise<Response>}={}){
  const calls:any[]=[];
- const f=await fixture({mail:{from:opts.from??'baruch@bsd-bbi.co.il',apiKey:opts.apiKey??'test-key',fetch:async(url:string,init:any)=>{const body=JSON.parse(init.body);calls.push({url,headers:init.headers,body});return opts.respond?opts.respond(body):new Response(JSON.stringify({id:'re_test_1'}),{status:200});}}});
+ const f=await fixture({mail:{from:opts.from??'baruch@bsd-bbi.co.il',apiKey:opts.apiKey??'test-key',fetch:async(url:string,init:any)=>{const body=init.body?JSON.parse(init.body):null;calls.push({url,method:init.method,headers:init.headers,body});if(init.method==='GET')return opts.status?opts.status(url):new Response(JSON.stringify({object:'email',id:url.split('/').pop(),last_event:'delivered',html:'<b>FULL EMAIL WITH PASSWORD</b>',text:'FULL EMAIL WITH PASSWORD'}),{status:200});return opts.respond?opts.respond(body):new Response(JSON.stringify({id:'re_test_1'}),{status:200});}}});
  f.tables.businesses[0].owner_email='owner@example.com';
  f.tables.audit_log=[];
  return {...f,calls};
@@ -400,4 +400,64 @@ Deno.test('email access: sender defaults to baruch@bsd-bbi.co.il; SELLER_PORTAL_
  const hsrc=await Deno.readTextFile(new URL('../../supabase/functions/seller-portal-api/handler.ts',import.meta.url));
  assert(!/env\.get\(\s*['"]RESEND_FROM_EMAIL/.test(idx)&&!/RESEND_FROM_EMAIL/.test(hsrc),'shared RESEND_FROM_EMAIL never read');
  assert(/mail:\{from:portalMailFrom\(Deno\.env\.get\('SELLER_PORTAL_MAIL_FROM'\)\),apiKey:\(Deno\.env\.get\('RESEND_API_KEY'\)\|\|''\)\.trim\(\)\}/.test(idx),'index wiring');
+});
+
+// 08.10.2026 (Baruch): preview before sending, BCC copy, masked copy in the log, delivery status.
+Deno.test('email preview: same template as the real email, nothing sent, no new password, nothing logged',async()=>{
+ const {PREVIEW_PASSWORD,MASKED_PASSWORD}=await import('../../supabase/functions/seller-portal-api/access-email.ts');
+ const f=await mailFixture();const acc=f.tables.seller_portal_accounts[0],oldHash=acc.password_hash;
+ assert((await f.request('admin_email_preview',{business_id:biz},{authorization:'Bearer agent','x-seller-token':''})).status===403,'agent forbidden');
+ assert((await f.request('admin_email_preview',{business_id:biz},{'x-seller-token':'test-token'})).status===401,'seller token cannot preview');
+ const r=await f.admin('admin_email_preview',{business_id:biz,owner_email:'evil@example.com'});assert(r.status===200,'preview '+r.status);const d=await r.json();
+ assert(d.preview===true&&d.from==='צוות BSD <baruch@bsd-bbi.co.il>'&&d.to==='owner@example.com'&&d.bcc==='baruch@bsd-bbi.co.il'&&d.subject==='האזור האישי שלך ב-BSD: פרטי כניסה','envelope');
+ assert(d.text.includes('שם משתמש: 23456')&&d.text.includes('סיסמה: '+PREVIEW_PASSWORD)&&d.html.includes(PREVIEW_PASSWORD)&&d.username_known===true,'username + placeholder');
+ assert(f.calls.length===0&&acc.password_hash===oldHash&&f.tables.audit_log.length===0,'nothing sent, changed or logged');
+ assert((await f.request('login',{username:'23456',password:'Correct234!'},{'x-seller-token':''})).status===200,'old password still works');
+ // The real email is the same template: only the password differs.
+ const sent=await (await f.admin('admin_email_access',{business_id:biz})).json();const m=f.calls[0].body,password=pw(m.text);
+ assert(m.html.split(password).join(PREVIEW_PASSWORD)===d.html&&m.text.split(password).join(PREVIEW_PASSWORD)===d.text,'preview == real email');
+ assert(m.subject===d.subject&&JSON.stringify(m.bcc)==='["baruch@bsd-bbi.co.il"]'&&JSON.stringify(m.to)==='["owner@example.com"]','BCC copy to the sender');
+ const log=f.tables.audit_log.at(-1);
+ assert(sent.ok&&sent.status==='sent'&&sent.log_id===log.id&&sent.resend_id==='re_test_1'&&sent.bcc==='baruch@bsd-bbi.co.il','response carries log id + resend id');
+ assert(log.details.subject===d.subject&&log.details.bcc==='baruch@bsd-bbi.co.il'&&log.details.body_text===m.text.split(password).join(MASKED_PASSWORD)&&log.details.body_html===m.html.split(password).join(MASKED_PASSWORD),'masked copy stored');
+ assert(!JSON.stringify(f.tables).includes(password)&&!JSON.stringify(sent).includes(password),'plaintext never stored or returned');
+});
+Deno.test('email preview: account not opened yet shows a username placeholder; same refusals as sending',async()=>{
+ const {PREVIEW_USERNAME}=await import('../../supabase/functions/seller-portal-api/access-email.ts');
+ let f=await mailFixture();f.tables.seller_portal_accounts.splice(0,1);
+ let d=await (await f.admin('admin_email_preview',{business_id:biz})).json();assert(d.ok&&d.username_known===false&&d.text.includes('שם משתמש: '+PREVIEW_USERNAME),'no account yet');
+ assert(f.tables.seller_portal_accounts.every((x:any)=>x.business_id!==biz),'preview never opens an account');
+ f=await mailFixture();f.tables.seller_portal_accounts[0].status='deleted';d=await (await f.admin('admin_email_preview',{business_id:biz})).json();assert(d.text.includes(PREVIEW_USERNAME),'deleted account gets a new username on opening');
+ f=await mailFixture();f.tables.businesses[0].owner_email='bad';assert((await json(await f.admin('admin_email_preview',{business_id:biz}))).error==='email_missing','email_missing');
+ f=await mailFixture();f.tables.businesses[0].agreement_status='אין הסכם';assert((await f.admin('admin_email_preview',{business_id:biz})).status===409,'signed agreement');
+ f=await mailFixture({apiKey:''});assert((await json(await f.admin('admin_email_preview',{business_id:biz}))).error==='sender_not_ready'&&f.tables.audit_log.length===0,'sender not ready, not logged');
+ f=await mailFixture();for(let i=0;i<8;i++)assert((await f.admin('admin_email_preview',{business_id:biz})).status===200,'preview does not use the send limit');
+ assert((await f.admin('admin_email_access',{business_id:biz})).status===200,'send still allowed after previews');
+ f=await mailFixture();f.tables.businesses[0].owner_email='Baruch@bsd-bbi.co.il';d=await (await f.admin('admin_email_preview',{business_id:biz})).json();assert(d.bcc==='','no BCC when the owner email is the sender');
+});
+Deno.test('email failure answers with the reason and the log id; copy logged masked',async()=>{
+ const f=await mailFixture({respond:()=>new Response(JSON.stringify({message:'The bsd-bbi.co.il domain is not verified.'}),{status:403})});
+ const r=await f.admin('admin_email_access',{business_id:biz});const d=await r.json();const log=f.tables.audit_log.at(-1);
+ assert(r.status===502&&d.error==='send_failed'&&d.reason==='The bsd-bbi.co.il domain is not verified.'&&d.log_id===log.id,'reason + log id');
+ const password=pw(f.calls[0].body.text);assert(log.details.body_text&&!log.details.body_text.includes(password)&&!JSON.stringify(f.tables).includes(password),'masked');
+});
+Deno.test('email status: asks Resend for that email only, returns last_event only, records changes as new rows',async()=>{
+ let event='sent';
+ const f=await mailFixture({status:(url)=>new Response(JSON.stringify({id:url.split('/').pop(),last_event:event,html:'SECRET-HTML',text:'SECRET-TEXT',to:['owner@example.com']}),{status:200})});
+ const sent=await (await f.admin('admin_email_access',{business_id:biz})).json();const original=JSON.stringify(f.tables.audit_log[0]);
+ assert((await f.request('admin_email_status',{business_id:biz,log_id:sent.log_id},{authorization:'Bearer agent','x-seller-token':''})).status===403,'agent forbidden');
+ let r=await f.admin('admin_email_status',{business_id:biz,log_id:sent.log_id});let d=await r.json();
+ const get=f.calls.at(-1);assert(get.method==='GET'&&get.url==='https://api.resend.com/emails/re_test_1'&&get.headers.Authorization==='Bearer test-key','GET that email');
+ assert(r.status===200&&d.last_event==='sent'&&d.log_id===sent.log_id&&!JSON.stringify(d).includes('SECRET'),'only last_event returned');
+ const rows=()=>f.tables.audit_log.filter((x:any)=>x.action==='portal_access_email_status');
+ assert(rows().length===1&&rows()[0].details.log_id===sent.log_id&&rows()[0].details.last_event==='sent'&&!JSON.stringify(rows()).includes('SECRET'),'recorded');
+ await f.admin('admin_email_status',{business_id:biz,log_id:sent.log_id});assert(rows().length===1,'same status not recorded twice');
+ event='delivered';d=await (await f.admin('admin_email_status',{business_id:biz,log_id:sent.log_id})).json();assert(d.last_event==='delivered'&&rows().length===2,'change recorded');
+ assert(JSON.stringify(f.tables.audit_log[0])===original,'original send row never edited');
+ assert((await f.admin('admin_email_status',{business_id:other,log_id:sent.log_id})).status===404,'another business cannot read it');
+ assert((await f.admin('admin_email_status',{business_id:biz,log_id:'nope'})).status===400,'bad id');
+ f.tables.audit_log.push({id:'99999999-9999-4999-8999-999999999999',action:'portal_access_email',record_id:biz,details:{status:'failed',to:'x@y.com'}});
+ assert((await json(await f.admin('admin_email_status',{business_id:biz,log_id:'99999999-9999-4999-8999-999999999999'}))).error==='no_resend_id','failed send has no status');
+ const g=await mailFixture({status:()=>new Response('{"message":"not found"}',{status:404})});const s2=await (await g.admin('admin_email_access',{business_id:biz})).json();
+ r=await g.admin('admin_email_status',{business_id:biz,log_id:s2.log_id});assert(r.status===502&&(await r.json()).error==='status_unavailable','provider error');
 });
