@@ -22,14 +22,14 @@ function mock(tables:Record<string,any[]>,objects:Record<string,string>={}){
  const q:any={select:()=>q,eq:(k:string,v:any)=>{filters.push(r=>r[k]===v);return q;},neq:(k:string,v:any)=>{filters.push(r=>r[k]!==v);return q;},is:(k:string,v:any)=>{filters.push(r=>r[k]==v);return q;},in:(k:string,v:any[])=>{filters.push(r=>v.includes(r[k]));return q;},gte:(k:string,v:any)=>{filters.push(r=>r[k]>=v);return q;},lte:(k:string,v:any)=>{filters.push(r=>r[k]<=v);return q;},order:()=>q,limit:(n:number)=>{limit=n;return q;},maybeSingle:()=>{single=true;return q;},single:()=>{single=true;return q;},insert:(v:any)=>{operation='insert';value=v;return q;},update:(v:any)=>{operation='update';value=v;return q;},upsert:(v:any)=>{operation='insert';value=v;return q;},then:(resolve:any,reject:any)=>{try{let found=rows.filter(r=>filters.every(f=>f(r))).slice(0,limit);if(operation==='insert'){if(table==='seller_portal_accounts'&&rows.some(r=>r.username===value.username))return Promise.resolve({data:null,error:{code:'23505'}}).then(resolve,reject);const r={id:crypto.randomUUID(),created_at:new Date().toISOString(),last_activity_at:new Date().toISOString(),...value};rows.push(r);found=[r];}if(operation==='update')found.forEach(r=>Object.assign(r,value));return Promise.resolve({data:single?found[0]||null:found,error:null}).then(resolve,reject);}catch(e){return Promise.reject(e).then(resolve,reject);}}};return q;};return db;
 }
 const doc=(id:string,business_id:string,category:string,document_type:string|null,created_at:string,extra:any={})=>({id,business_id,category,document_type,status:'active',deleted_at:null,portal_visible:false,portal_kind:'document',file_type:'application/pdf',file_name:`${category}-${document_type}-${created_at.slice(0,10)}.pdf`,storage_path:`${business_id}/sale-file/${category}/${id}.pdf`,created_at,...extra});
-async function fixture(){
+async function fixture(extra:any={}){
  const tables:any={businesses:[{id:biz,internal_name:'TEST BUSINESS',owner_name:'TEST OWNER',owner_phone:'050-0000000',city:'TEST',is_archived:false,agreement_status:'יש הסכם חתום'},{id:other,internal_name:'OTHER TEST',owner_name:'OTHER OWNER',owner_phone:'050-0000001',city:'X',is_archived:false,agreement_status:'יש הסכם חתום'}],
   seller_portal_accounts:[{id:'account',business_id:biz,username:'23456',status:'active',password_hash:await hashPassword('Correct234!'),must_change_password:false},{id:'account-b',business_id:other,username:'34567',status:'active',password_hash:await hashPassword('OtherPass234'),must_change_password:false}],
   seller_portal_sessions:[{id:'session',account_id:'account',token_hash:await digest('test-token'),expires_at:new Date(Date.now()+3600000).toISOString(),last_activity_at:new Date().toISOString()},{id:'session-b',account_id:'account-b',token_hash:await digest('token-b'),expires_at:new Date(Date.now()+3600000).toISOString(),last_activity_at:new Date().toISOString()}],
   business_sale_files:[doc(file,biz,'exec_summary','anonymous_summary','2026-09-01T00:00:00Z'),doc('44444444-4444-4444-4444-444444444444',other,'exec_summary','anonymous_summary','2026-09-01T00:00:00Z',{portal_visible:true})],
   seller_portal_files:[],matches:[],profiles:[{id:'admin',role:'admin',status:'active'},{id:'agent',role:'agent',status:'active'}]};
  const objects:Record<string,string>={};for(const f of tables.business_sale_files)objects[f.storage_path]=PDF;
- const handle=createHandler(mock(tables,objects),{origins:['https://preview.test'],portalUrl:'https://preview.test/portal/',phone:'054-0000000',ipSalt:'test-only-salt',pruneRate:0});
+ const handle=createHandler(mock(tables,objects),{origins:['https://preview.test'],portalUrl:'https://preview.test/portal/',phone:'054-0000000',ipSalt:'test-only-salt',pruneRate:0,...extra});
  const request=(action:string,payload={},headers={})=>handle(new Request('https://api.test',{method:'POST',headers:{'Content-Type':'application/json','origin':'https://preview.test','x-seller-token':'test-token',...headers},body:JSON.stringify({action,...payload})}));
  const admin=(action:string,payload={})=>request(action,payload,{authorization:'Bearer admin','x-seller-token':''});
  const seller=(token:string)=>(action:string,payload={})=>request(action,payload,{'x-seller-token':token});
@@ -322,4 +322,82 @@ Deno.test('«איפה העסק מופץ» every portal, including a brand-new on
  f.tables.vip_business_publications=[{business_id:fresh,enabled:true}];
  d=await json(await f.seller(login.token)('dashboard'));
  assert(d.distribution.channels.vip===true&&d.distribution.channels.agents===true&&d.distribution.channels.media===false&&d.distribution.started===true,'ticks follow the card live, on the next load');
+});
+
+// «שליחה במייל» (08.10.2026): new password per send, Resend mocked, commit only after the email was accepted.
+async function mailFixture(opts:{from?:string;apiKey?:string;respond?:(req:any)=>Response|Promise<Response>}={}){
+ const calls:any[]=[];
+ const f=await fixture({mail:{from:opts.from??'baruch@bsd-bbi.co.il',apiKey:opts.apiKey??'test-key',fetch:async(url:string,init:any)=>{const body=JSON.parse(init.body);calls.push({url,headers:init.headers,body});return opts.respond?opts.respond(body):new Response(JSON.stringify({id:'re_test_1'}),{status:200});}}});
+ f.tables.businesses[0].owner_email='owner@example.com';
+ f.tables.audit_log=[];
+ return {...f,calls};
+}
+const pw=(text:string)=>(/סיסמה: (\S+)/.exec(text)||[])[1];
+Deno.test('email access: admin only; owner email from the DB; new password emailed, then committed; old one stops; nothing secret logged',async()=>{
+ const f=await mailFixture();const acc=f.tables.seller_portal_accounts[0],oldHash=acc.password_hash;
+ assert((await f.request('admin_email_access',{business_id:biz},{authorization:'Bearer agent','x-seller-token':''})).status===403,'agent forbidden');
+ assert((await f.request('admin_email_access',{business_id:biz},{'x-seller-token':'test-token'})).status===401,'seller token cannot send');
+ const r=await f.admin('admin_email_access',{business_id:biz,to:'evil@example.com',owner_email:'evil@example.com'});assert(r.status===200,'sent '+r.status);
+ assert(f.calls.length===1&&f.calls[0].url==='https://api.resend.com/emails','one Resend call');
+ const m=f.calls[0].body;assert(m.from==='צוות BSD <baruch@bsd-bbi.co.il>'&&m.reply_to==='baruch@bsd-bbi.co.il','sender');
+ assert(JSON.stringify(m.to)==='["owner@example.com"]','to = owner email from the DB, never from the request');
+ const password=pw(m.text);assert(password&&strongPassword(password)&&m.html.includes(password)&&m.text.includes('שם משתמש: 23456'),'username + new password in the email');
+ assert(m.text.includes('«פורטל בעלי עסקים»')&&m.text.includes('צוות BSD')&&m.text.includes('https://www.bsd-bbi.co.il/')&&!m.text.includes('מטעמי אבטחה'),'Baruch wording');
+ assert(acc.password_hash!==oldHash&&await verifyPassword(password,acc.password_hash),'new hash committed');
+ assert((await f.request('login',{username:'23456',password:'Correct234!'},{'x-seller-token':''})).status===401,'old password stops');
+ assert((await f.request('login',{username:'23456',password},{'x-seller-token':''})).status===200,'new password works');
+ assert(f.tables.seller_portal_sessions.filter((x:any)=>x.account_id==='account'&&!x.preview).slice(0,1).every((x:any)=>x.revoked_at),'old sessions revoked');
+ const log=f.tables.audit_log.at(-1);assert(log.action==='portal_access_email'&&log.record_id===biz&&log.actor_id==='admin'&&log.details.status==='sent'&&log.details.to==='owner@example.com'&&log.details.resend_id==='re_test_1','audit row');
+ const everything=JSON.stringify(f.tables);assert(!everything.includes(password),'plaintext never stored or logged');
+});
+Deno.test('email access: send failure never changes the working password; failure is logged without the password',async()=>{
+ for(const respond of [()=>new Response(JSON.stringify({message:'The bsd-bbi.co.il domain is not verified.'}),{status:403}),()=>{throw new Error('network');},()=>new Response('{}',{status:200})]){
+  const f=await mailFixture({respond});const acc=f.tables.seller_portal_accounts[0],oldHash=acc.password_hash;
+  const r=await f.admin('admin_email_access',{business_id:biz});assert(r.status===502&&(await r.json()).error==='send_failed','send_failed');
+  assert(acc.password_hash===oldHash,'hash unchanged');
+  assert((await f.request('login',{username:'23456',password:'Correct234!'},{'x-seller-token':''})).status===200,'old password still works');
+  const log=f.tables.audit_log.at(-1);assert(log.details.status==='failed'&&log.details.reason,'failure logged');
+  const password=pw(f.calls[0]?.text??'');assert(!password||!JSON.stringify(f.tables).includes(password),'no plaintext');
+ }
+});
+Deno.test('email access: sender must be on bsd-bbi.co.il and a key must exist, else refuse before generating anything',async()=>{
+ for(const o of [{from:'onboarding@resend.dev'},{from:'BSD <noreply@gmail.com>'},{from:''},{apiKey:''}]){
+  const f=await mailFixture(o as any);const oldHash=f.tables.seller_portal_accounts[0].password_hash;
+  const r=await f.admin('admin_email_access',{business_id:biz});assert(r.status===503&&(await r.json()).error==='sender_not_ready',JSON.stringify(o));
+  assert(f.calls.length===0&&f.tables.seller_portal_accounts[0].password_hash===oldHash,'nothing sent, nothing changed');
+ }
+ const ok=await mailFixture({from:'BSD Team <Baruch@BSD-BBI.co.il>'});assert((await ok.admin('admin_email_access',{business_id:biz})).status===200,'display-name form accepted');
+});
+Deno.test('email access: no email / no account / no signed agreement / rate limit',async()=>{
+ let f=await mailFixture();f.tables.businesses[0].owner_email='not an email';
+ let r=await f.admin('admin_email_access',{business_id:biz});assert(r.status===409&&(await r.json()).error==='email_missing'&&f.calls.length===0,'email_missing');
+ f=await mailFixture();f.tables.seller_portal_accounts[0].status='blocked';assert((await f.admin('admin_email_access',{business_id:biz})).status===409,'blocked account');
+ f=await mailFixture();f.tables.businesses[0].agreement_status='אין הסכם';assert((await f.admin('admin_email_access',{business_id:biz})).status===409,'no signed agreement');
+ f=await mailFixture();for(let i=0;i<5;i++)assert((await f.admin('admin_email_access',{business_id:biz})).status===200,'send '+i);
+ r=await f.admin('admin_email_access',{business_id:biz});assert(r.status===429&&f.calls.length===5,'6th within the window is refused');
+});
+Deno.test('email access: email accepted but saving the new password fails -> old password keeps working, admin told to resend',async()=>{
+ let broken=false;
+ const f=await mailFixture({respond:()=>{broken=true;return new Response(JSON.stringify({id:'re_x'}),{status:200});}});
+ const accounts=f.tables.seller_portal_accounts,oldHash=accounts[0].password_hash;
+ Object.defineProperty(f.tables,'seller_portal_accounts',{configurable:true,get(){if(broken)throw Error('db down');return accounts;}});
+ const r=await f.admin('admin_email_access',{business_id:biz});assert(r.status===500&&(await r.json()).error==='sent_not_saved','sent_not_saved');
+ assert(accounts[0].password_hash===oldHash,'old password still the working one');
+ assert(f.tables.audit_log.at(-1).details.status==='sent_not_saved','logged');
+});
+Deno.test('WhatsApp reset still issues a strong password through the shared helper',async()=>{
+ const f=await fixture();const d=await (await f.admin('admin_open',{business_id:biz})).json();assert(strongPassword(d.password)&&d.password.length===10,'unchanged behaviour');
+});
+
+Deno.test('email access: sender defaults to baruch@bsd-bbi.co.il; SELLER_PORTAL_MAIL_FROM overrides only with @bsd-bbi.co.il',async()=>{
+ const {portalMailFrom,PORTAL_MAIL_FROM_DEFAULT,PORTAL_MAIL_NAME}=await import('../../supabase/functions/seller-portal-api/access-email.ts');
+ assert(PORTAL_MAIL_FROM_DEFAULT==='baruch@bsd-bbi.co.il'&&PORTAL_MAIL_NAME==='צוות BSD','default sender');
+ for(const v of [undefined,null,'','  ','onboarding@resend.dev','BSD <noreply@bsd-crm.co.il>','baruch@bsd-bbi.co.il.evil.com','x@sub.bsd-bbi.co.il','not an email'])
+  assert(portalMailFrom(v)==='baruch@bsd-bbi.co.il','ignored override '+String(v));
+ assert(portalMailFrom('office@bsd-bbi.co.il')==='office@bsd-bbi.co.il','bsd override');
+ assert(portalMailFrom('BSD <Office@BSD-BBI.co.il>')==='office@bsd-bbi.co.il','named bsd override');
+ const idx=await Deno.readTextFile(new URL('../../supabase/functions/seller-portal-api/index.ts',import.meta.url));
+ const hsrc=await Deno.readTextFile(new URL('../../supabase/functions/seller-portal-api/handler.ts',import.meta.url));
+ assert(!/env\.get\(\s*['"]RESEND_FROM_EMAIL/.test(idx)&&!/RESEND_FROM_EMAIL/.test(hsrc),'shared RESEND_FROM_EMAIL never read');
+ assert(/mail:\{from:portalMailFrom\(Deno\.env\.get\('SELLER_PORTAL_MAIL_FROM'\)\),apiKey:\(Deno\.env\.get\('RESEND_API_KEY'\)\|\|''\)\.trim\(\)\}/.test(idx),'index wiring');
 });

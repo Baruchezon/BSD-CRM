@@ -85,8 +85,11 @@ test('buyers list: phone search without dashes / with +972, name search unchange
   assert.deepEqual(buyersList(ROWS, { search: '0501111111' }), []); // open enquiry without agreement stays in the leads list only
 });
 
-test('build bumped on every touched page and version.json', () => {
+test('build bumped on every touched page and version.json (later builds may move a page further)', () => {
   const v = JSON.parse(read('version.json')).version;
-  for (const f of ['leads.html', 'businesses.html', 'leads-hub.html', 'matches-workspace.html'])
-    assert.match(read(f), new RegExp(`var PAGE_BUILD = '${v}';`), f);
+  assert.ok(v >= '202610081400', 'version.json');
+  for (const f of ['leads.html', 'businesses.html', 'leads-hub.html', 'matches-workspace.html']){
+    const b = read(f).match(/var PAGE_BUILD = '(\d{12})';/)[1];
+    assert.ok(b >= '202610081400' && b <= v, f + ' ' + b);
+  }
 });

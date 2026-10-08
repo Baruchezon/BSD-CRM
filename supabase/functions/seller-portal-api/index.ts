@@ -1,5 +1,6 @@
 import {createClient} from 'npm:@supabase/supabase-js@2.95.3';
 import {createHandler} from './handler.ts';
+import {portalMailFrom} from './access-email.ts';
 const required=(key:string)=>{const v=Deno.env.get(key);if(!v)throw new Error(`Missing ${key}`);return v;};
 const optional=(key:string,fallback:string)=>Deno.env.get(key)||fallback;
 // Public, non-secret production defaults. Each one can be overridden with an
@@ -7,6 +8,8 @@ const optional=(key:string,fallback:string)=>Deno.env.get(key)||fallback;
 const PORTAL_ORIGINS='https://baruchezon.github.io';
 const PORTAL_URL='https://baruchezon.github.io/BSD-CRM/portal/';
 const PORTAL_PHONE='054-2424999';
+// «שליחה במייל» sender: baruch@bsd-bbi.co.il (access-email.ts). SELLER_PORTAL_MAIL_FROM may only override it
+// with another @bsd-bbi.co.il address. RESEND_FROM_EMAIL is shared by other functions and is never read here.
 const serviceKey=required('SUPABASE_SERVICE_ROLE_KEY');
 const db=createClient(required('SUPABASE_URL'),serviceKey,{auth:{persistSession:false,autoRefreshToken:false}});
 // Salt for the hashed rate-limit keys (client addresses are never stored in
@@ -21,4 +24,4 @@ async function derivedSalt(secret:string):Promise<string>{
 const ipSalt=Deno.env.get('SELLER_PORTAL_IP_SALT')||await derivedSalt(serviceKey);
 // Custom seller sessions and CRM JWTs are both checked in handler. Gateway verify_jwt=false is required.
 // SELLER_PORTAL_IP_HEADER: header the gateway sets and callers cannot forge (default cf-connecting-ip).
-Deno.serve(createHandler(db,{origins:optional('SELLER_PORTAL_ORIGINS',PORTAL_ORIGINS).split(',').map(s=>s.trim()).filter(Boolean),portalUrl:optional('SELLER_PORTAL_URL',PORTAL_URL),phone:optional('SELLER_PORTAL_PHONE',PORTAL_PHONE),ipSalt,ipHeader:Deno.env.get('SELLER_PORTAL_IP_HEADER')??'cf-connecting-ip',activationHours:Number(Deno.env.get('SELLER_PORTAL_ACTIVATION_HOURS')||24)}));
+Deno.serve(createHandler(db,{origins:optional('SELLER_PORTAL_ORIGINS',PORTAL_ORIGINS).split(',').map(s=>s.trim()).filter(Boolean),portalUrl:optional('SELLER_PORTAL_URL',PORTAL_URL),phone:optional('SELLER_PORTAL_PHONE',PORTAL_PHONE),ipSalt,ipHeader:Deno.env.get('SELLER_PORTAL_IP_HEADER')??'cf-connecting-ip',activationHours:Number(Deno.env.get('SELLER_PORTAL_ACTIVATION_HOURS')||24),mail:{from:portalMailFrom(Deno.env.get('SELLER_PORTAL_MAIL_FROM')),apiKey:(Deno.env.get('RESEND_API_KEY')||'').trim()}}));
