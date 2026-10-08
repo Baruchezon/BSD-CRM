@@ -205,7 +205,7 @@ test('business card save: pre_research is a guarded text field (sent only if cha
 // ---------------------------------------------------------------- privacy
 test('privacy: pre_research appears only in the three internal cards, the migration and this test', () => {
   const allowed = new Set(['leads-hub.html', 'leads.html', 'businesses.html', 'migrations/2026-10-06_pre_research.sql',
-    'migrations/2026-10-06_pre_research_rollback.sql', 'tests/pre_research.test.mjs']);
+    'migrations/2026-10-06_pre_research_rollback.sql', 'tests/pre_research.test.mjs', 'tests/research_in_card.test.mjs']);
   const hits = [];
   const walk = dir => { for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes:true })){
     const rel = dir ? dir + '/' + e.name : e.name;

@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202610071530';
+    var PAGE_BUILD = '202610081400';
     window.PAGE_BUILD = PAGE_BUILD;
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -32,6 +32,7 @@
 <script src="js/auth.js"></script>
 <script src="js/sessionExpired.js?v=202610071530"></script>
 <script src="js/searchSelect.js?v=202608281900"></script>
+<script src="js/bsd-search.js?v=202610081400"></script>
 <style>
   :root{
     --navy:#0e1b34; --navy-light:#16264a; --gold:#c9a24b; --gold-light:#e8cf8a;
@@ -643,12 +644,19 @@ function matchSearchHay(m){
     .filter(Boolean).join(" ").toLowerCase();
 }
 
+// 08.10.2026: טלפון נמצא גם בלי מקפים/רווחים/+972 (js/bsd-search.js).
+function matchPhoneHit(m, q){
+  if (!window.BSDSearch) return false;
+  const { rec: cp } = counterpartyOf(m);
+  return BSDSearch.phoneMatch(q, [cp?.phone, cp?.phone2]);
+}
+
 function filteredMatches(){
   const q = searchTerm.trim().toLowerCase();
   return ALL_MATCHES.filter(m=>{
     if (statFilter && matchStatBucket(m) !== statFilter) return false;
     if (activeQuickView && !matchMatchesQuickView(m, activeQuickView)) return false;
-    if (q && !matchSearchHay(m).includes(q)) return false;
+    if (q && !matchSearchHay(m).includes(q) && !matchPhoneHit(m, q)) return false;
     return true;
   });
 }

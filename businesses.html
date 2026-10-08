@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610080830';
+    var PAGE_BUILD = '202610081400';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -512,6 +512,7 @@
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/push.js?v=202610051500"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
+<script src="js/bsd-search.js?v=202610081400"></script>
 <script src="js/standaloneRecording.js?v=202608251215"></script>
 <script src="js/pdfPipeline.js?v=202608291000"></script>
 <script src="js/saleFileModule2.js?v=202610051200"></script>
@@ -1233,7 +1234,7 @@ function renderTable(){
       const hay = [b.internal_name, b.owner_name, b.owner_phone, b.city, b.field, b.category, b.subcategory, b.status, String(b.asking_price||''),
         b.short_description, b.sale_reason, b.region, b.address, b.source, b.notes, b.id_number, b.entity_type, b.removal_reason, b.sold_to,
         b.business_number, b.business_number ? b.business_number.replace(/^BSD-B-/,'') : '', bizNumDigits, BROKER_NAME_BY_ID[b.referred_by_broker_id]||''].join(' ').toLowerCase();
-      if (!hay.includes(search)) return false;
+      if (!hay.includes(search) && !(window.BSDSearch && BSDSearch.phoneMatch(search, [b.owner_phone]))) return false;
     }
     return true;
   });
@@ -1619,6 +1620,7 @@ function openBizForm(id){
           ${(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin' && biz?.internal_code) ? `<div style="margin-top:4px;font-size:.68rem;color:#aaa;">מזהה טכני (מנהל בלבד): ${esc(biz.internal_code)}</div>` : ''}
         </div>
         ${biz?.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 עסק זה נמצא בארכיון${biz.archive_reason ? ' — סיבה: '+esc(biz.archive_reason) : ''}${canRestoreBiz(biz) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${biz.id}')">↩️ שחזר מהארכיון</button>` : ''}${canManageBiz(biz) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#a33;" onclick="deleteBiz('${biz.id}')">🗑️ מחיקה סופית</button>` : ''}</div>` : (biz && canManageBiz(biz) ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveBiz('${biz.id}')">📁 העבר לארכיון</button></div>` : '')}
+        ${biz ? bsdPreResearchViewHtml(biz) : ''}
         ${fieldRow('internal_name','שם העסק (פנימי)', biz?.internal_name)}
         <div class="field full" style="background:#f7f0ff;border:1px solid #e0cdfa;border-radius:8px;padding:10px 12px;">
           <label style="font-weight:700;color:#5a2f9e;">🔵 הגיע ממתווך / סוכן (אופציונלי)</label>
@@ -1933,6 +1935,7 @@ function openBizForm(id){
   bsdCaptureBizFormBaseline(biz);
   bsdRestoreBizCardDraft(biz); // 07.10.2026: טקסט שלא נשמר כי ההתחברות פגה (נחשב עריכה רגילה - נשמר ב«שמירה»)
   bsdInitPreResearchBox();
+  if (biz) bsdLoadResearchFiles(biz.id);
   bsdInitAnonSummaryCounter();
   if (biz) bsdRevalidateOpenBizForm(biz.id);
 }
@@ -2890,7 +2893,7 @@ function bsdRestoreBizCardDraft(biz){
     if (biz && bsdNormText(biz[f]) !== bsdNormText(dbBase[f])) return; // הטקסט בשרת השתנה מאז - לא דורסים
     if (bsdNormText(el.value) === bsdNormText(draft.fields[f])) return;
     el.value = draft.fields[f];
-    if (f === 'pre_research'){ const fold = document.getElementById('bizPreResearchFold'); if (fold) fold.open = true; }
+    if (f === 'pre_research'){ const fold = document.getElementById('bizPreResearchFold'); if (fold) fold.open = true; if (typeof bsdSyncPreResearchView === 'function') bsdSyncPreResearchView(); }
     restored.push(BIZ_GUARDED_FIELD_LABELS[f] || f);
   });
   if (restored.length) BSDSession.showNotice('↩️ שוחזר טקסט שלא נשמר לפני שההתחברות פגה: ' + restored.join(', ') + '. לחץ «שמירה» כדי לשמור.', 'info', 15000);
@@ -3535,7 +3538,7 @@ async function bsdRevalidateOpenBizForm(bizId){
     if (bsdNormText(el.value) !== BIZ_FORM_BASELINE.form[f]) return; // המשתמש כבר הקליד - בדיקת השמירה תטפל
     el.value = fresh[f] || '';
     bsdSetBizBaselineField(bizId, f, el.value, fresh[f]);
-    if (f === 'pre_research' && el.value.trim()){ const fold = document.getElementById('bizPreResearchFold'); if (fold) fold.open = true; }
+    if (f === 'pre_research'){ if (typeof bsdSyncPreResearchView === 'function') bsdSyncPreResearchView(); if (el.value.trim()){ const fold = document.getElementById('bizPreResearchFold'); if (fold) fold.open = true; } }
     updated.push(BIZ_GUARDED_FIELD_LABELS[f] || f);
   });
   if (updated.length){
@@ -4929,10 +4932,45 @@ function bsdPreResearchFoldHtml(biz){
           </details>`;
 }
 
+// 08.10.2026 (בקשת ברוך): «🔎 חקר מקדים» של דנה מוצג תמיד בראש כרטיס העסק (לשונית
+// «פרטי עסק», מתחת לזיהוי) - תצוגה בלבד, בלי כפתורים, מתוך businesses.pre_research של
+// אותה שורה. אותה הרשאת צפייה כמו הקיפול הקיים. קבצי «חקר שוק» של העסק
+// (business_sale_files.business_id + document_type='market_research', קישור ודאי) -
+// שמות בלבד, למנהל/אדמין בלבד; הקבצים עצמם בלשונית «מסמכים וקבצים».
+function bsdPreResearchViewBody(text){
+  const t = text == null ? '' : String(text).trim();
+  return t ? esc(t) : '<span style="color:#8a8578;font-size:.85rem;">עדיין אין חקר מקדים בכרטיס הזה.</span>';
+}
+function bsdPreResearchViewHtml(biz){
+  const staff = !!(CURRENT_PROFILE && ['admin','manager'].includes(CURRENT_PROFILE.role));
+  return `<div class="field full bsd-research-view" id="bizPreResearchView" style="background:#f6f8fc;border:1px solid #d3dcec;border-radius:8px;padding:10px 12px;box-sizing:border-box;min-width:0;">
+          <div style="font-weight:700;color:#1c2b4a;font-size:.9rem;">🔎 חקר מקדים <span style="font-weight:400;color:#8a8578;font-size:.75rem;">(פנימי בלבד · לעריכה: «חקר מקדים» מתחת לתיבת «כל המידע על העסק»)</span></div>
+          <div class="bsd-research-text" id="bizPreResearchViewText" style="margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-size:.95rem;line-height:1.5;color:#1c2b4a;max-height:42vh;overflow-y:auto;">${bsdPreResearchViewBody(biz && biz.pre_research)}</div>
+          ${staff ? '<div id="bizResearchFiles" style="margin-top:6px;font-size:.8rem;color:#5b6b85;overflow-wrap:anywhere;"></div>' : ''}
+        </div>`;
+}
+function bsdSyncPreResearchView(){
+  const box = document.getElementById('pre_research'), view = document.getElementById('bizPreResearchViewText');
+  if (box && view) view.innerHTML = bsdPreResearchViewBody(box.value);
+}
+async function bsdLoadResearchFiles(bizId){
+  const el = document.getElementById('bizResearchFiles');
+  if (!el || !bizId || !window.supabaseClient) return;
+  try {
+    const { data, error } = await window.supabaseClient.from('business_sale_files')
+      .select('file_name, created_at').eq('business_id', bizId).eq('document_type', 'market_research')
+      .eq('status', 'active').is('deleted_at', null).order('created_at', { ascending: false });
+    const form = document.getElementById('bizForm');
+    if (error || !data || !data.length || !form || form.dataset.bizId !== bizId) return;
+    el.innerHTML = '📎 קבצי חקר שוק בכרטיס (בלשונית «מסמכים וקבצים»): ' + data.map(f => '<b>' + esc(f.file_name || 'קובץ') + '</b>').join(' · ');
+  } catch (e) { /* תצוגה בלבד - כשל טעינה לא משפיע על הכרטיס */ }
+}
+
 // התיבה גדלה לפי התוכן (עד 60% מגובה המסך) - גם כשהקיפול נפתח. תצוגה בלבד, לא נוגע בשמירה.
 function bsdInitPreResearchBox(){
   const box = document.getElementById('pre_research');
   if (!box) return;
+  box.addEventListener('input', bsdSyncPreResearchView);
   const grow = () => { if (!box.getClientRects().length) return; box.style.height = 'auto'; box.style.height = Math.min(box.scrollHeight + 2, Math.max(220, Math.round(window.innerHeight * 0.6))) + 'px'; };
   box.addEventListener('input', grow);
   const fold = document.getElementById('bizPreResearchFold');
