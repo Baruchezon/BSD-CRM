@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610061550';
+    var PAGE_BUILD = '202610081400';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -261,6 +261,7 @@
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/archiveModule.js?v=20260930delete1"></script>
 <script src="js/leadLifecycle.js?v=20260930"></script>
+<script src="js/bsd-search.js?v=202610081400"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/push.js?v=202610051500"></script>
 <script>
@@ -562,7 +563,7 @@ async function renderY2026ReviewTable(){
   let rows = Y2026_REVIEW_ROWS.filter(r => {
     if (search){
       const hay = [r.full_name, r.phone, r.email, r.message_content, r.raw_purpose].join(' ').toLowerCase();
-      if (!hay.includes(search)) return false;
+      if (!hay.includes(search) && !(window.BSDSearch && BSDSearch.phoneMatch(search, [r.phone]))) return false;
     }
     if (fClass && normalizeClassification(r.classification) !== fClass) return false;
     if (fNeedsReview && normalizeClassification(r.classification) !== 'unclassified') return false;
@@ -968,7 +969,7 @@ function renderTable(){
     if (!search) return true;
     const hay = [r.full_name, r.first_name, r.last_name, r.phone, r.city, r.internal_name, r.owner_name,
       r.owner_phone, r.requested_field, r.requested_area, r.business_name, r.business_field, r.business_city, r.notes].join(' ').toLowerCase();
-    return hay.includes(search);
+    return hay.includes(search) || (window.BSDSearch && BSDSearch.phoneMatch(search, [r.phone, r.phone2, r.owner_phone]));
   });
 
   const body = document.getElementById('leadsBody');
