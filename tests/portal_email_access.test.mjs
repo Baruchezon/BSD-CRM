@@ -57,6 +57,6 @@ test('log: existing audit_log (no new table), last attempt shown in the card', (
 
 test('no other new buttons; cache-busted', () => {
   assert.equal((card.match(/data-portal-email /g) || []).length, 1, 'one «שליחה במייל» button');
-  assert.equal((card.match(/<button/g) || []).length, 10, 'existing 7 + email button + confirm «שליחה»/«ביטול»');
-  assert.match(biz, /js\/portal-business-card\.js\?v=20261008-3/);
+  assert.equal((card.match(/<button/g) || []).length, 12, 'existing 7 + email button + confirm «שליחה»/«ביטול» + open-account choice «פתח ושלח»/«ביטול»');
+  assert.match(biz, /js\/portal-business-card\.js\?v=20261008-4/);
 });

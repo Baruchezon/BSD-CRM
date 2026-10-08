@@ -52,7 +52,45 @@ function credentialsHtml(d){
  <textarea data-portal-invite rows="9" readonly style="width:100%;font-size:.85rem">${esc(text)}</textarea>
  <p style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0">${wa?`<a data-portal-wa href="${esc(wa)}" target="_blank" rel="noopener" style="display:inline-block;padding:8px 14px;border-radius:8px;background:#128c4a;color:#fff;text-decoration:none;font-weight:700">פתיחה ב-WhatsApp לשליחה</a>`:'<span style="color:#a33">אין בכרטיס טלפון ישראלי תקין. אפשר להעתיק את ההודעה ולשלוח ידנית.</span>'}<button type="button" data-portal-copy>העתקת ההודעה</button></p></div>`;
 }
-function markup(biz){return `<section id="sellerPortalCard" class="field full" style="padding:14px;border:1px solid #c9a854;border-radius:10px;background:#fffdf5"><h3 class="section-h">פורטל בעלי עסקים</h3><label style="display:flex;gap:8px;align-items:center;font-weight:700"><input type="checkbox" id="sellerPortalEnabled" style="width:auto">פתח חשבון בפורטל</label><p data-portal-summary role="status" style="margin:6px 0">${biz?'טוען את מצב חשבון הפורטל...':'לאחר שמירת עסק פעיל עם הסכם חתום ייווצרו שם משתמש וסיסמה, ותיפתח הודעת WhatsApp מוכנה לשליחה.'}</p><div data-portal-credentials></div><div data-portal-controls style="display:flex;gap:8px;flex-wrap:wrap"></div><p data-portal-email-log role="status" style="margin:6px 0;font-size:.85rem" hidden></p><small>מחיקת חשבון הפורטל משאירה את כרטיס העסק ואת הקבצים שלו. העברה לארכיון או ביטול ההסכם חוסמים את הגישה אוטומטית.</small></section>`;}
+// 08.10.2026 (בקשת ברוך, תיקון): «פתח חשבון בפורטל» first asks HOW to send the login details:
+// checkboxes «וואטסאפ» (checked by default) and «מייל» (one or both), then «פתח ושלח» / «ביטול».
+// Same code for every business card (old, new, without an account) and for a new business saved
+// with the box checked. WhatsApp alone = exactly the previous flow. «מייל» = the existing server
+// action admin_email_access (sender baruch@bsd-bbi.co.il, owner email from the DB). Nothing is sent
+// before «פתח ושלח»; WhatsApp is always sent by hand.
+function channelChoiceHtml(biz){
+ const email=String(biz?.owner_email??'').trim(),ok=validEmail(email);
+ const box='display:flex;gap:10px;align-items:center;min-height:44px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;margin:0 0 8px;cursor:pointer;font-weight:700';
+ const cb='width:22px;height:22px;flex:0 0 auto;margin:0';
+ return `<h3 style="margin:0 0 6px">פתיחת חשבון בפורטל</h3>
+ <p style="margin:0 0 12px;line-height:1.5">איך לשלוח לבעל העסק את פרטי הכניסה?${biz?.internal_name?` <span style="color:#555">(${esc(biz.internal_name)})</span>`:''}</p>
+ <label style="${box}"><input type="checkbox" data-ch-wa checked style="${cb}"><span>וואטסאפ<small style="display:block;font-weight:400;color:#555">הודעה מוכנה נפתחת ב-WhatsApp לשליחה על ידך</small></span></label>
+ <label style="${box}${ok?'':';opacity:.75;cursor:default'}"><input type="checkbox" data-ch-mail ${ok?'':'disabled aria-describedby="portalChoiceMailNote"'} style="${cb}"><span>מייל${ok?`<small style="display:block;font-weight:400;color:#555;overflow-wrap:anywhere">יישלח אל <span dir="ltr">${esc(email)}</span> מהכתובת <span dir="ltr" style="white-space:nowrap">baruch@bsd-bbi.co.il</span></small>`:`<small id="portalChoiceMailNote" data-ch-mail-note style="display:block;font-weight:400;color:#a33">אין מייל בכרטיס. כדי לשלוח במייל, ממלאים «אימייל הבעלים» ושומרים את הכרטיס.</small>`}</span></label>
+ <p data-ch-none role="alert" style="margin:0 0 8px;color:#a33;font-size:.9rem" hidden>יש לבחור וואטסאפ, מייל או את שניהם.</p>
+ <p style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 0"><button type="button" data-ch-ok style="min-height:44px;padding:8px 18px;font-weight:700;background:#0f2a44;color:#fff;border:0;border-radius:8px">פתח ושלח</button><button type="button" data-ch-cancel style="min-height:44px;padding:8px 18px">ביטול</button></p>`;
+}
+// Resolves {wa,mail,tab} after «פתח ושלח», or null on «ביטול»/Esc. With reserve, the WhatsApp tab is
+// reserved inside that click (as before), so the browser does not block it.
+function chooseChannels(biz,{reserve=false}={}){return new Promise(resolve=>{
+ const dialog=document.createElement('dialog');dialog.setAttribute('data-portal-open-choice','');dialog.style.cssText='max-width:440px;width:calc(100% - 32px);max-height:calc(100% - 32px);overflow:auto;padding:20px;direction:rtl;border-radius:12px;border:1px solid #c9a854;box-sizing:border-box';
+ dialog.innerHTML=channelChoiceHtml(biz);let pick=null;
+ const wa=dialog.querySelector('[data-ch-wa]'),mail=dialog.querySelector('[data-ch-mail]'),none=dialog.querySelector('[data-ch-none]'),okBtn=dialog.querySelector('[data-ch-ok]');
+ const sync=()=>{const any=wa.checked||(mail.checked&&!mail.disabled);okBtn.disabled=!any;none.hidden=any;};
+ dialog.addEventListener('change',sync);
+ dialog.addEventListener('click',e=>{
+  if(e.target.closest('[data-ch-ok]')){const w=wa.checked,m=mail.checked&&!mail.disabled;if(!w&&!m){sync();return;}pick={wa:w,mail:m,tab:w&&reserve?reserveTab():null};dialog.close();}
+  else if(e.target.closest('[data-ch-cancel]'))dialog.close();});
+ dialog.onclose=()=>{dialog.remove();resolve(pick);};document.body.append(dialog);dialog.showModal();});}
+// WhatsApp text when the password went by email: same text, the password line points to the email.
+function mailNoticeData(d,to){return {...d,password:`נשלחה אליך במייל${to?' ('+to+')':''}`};}
+function mailSentHtml(d,to,wa){
+ const link=wa?invite().waUrl(mailNoticeData(d,to)):'';
+ return `<div data-portal-mail-sent style="margin:10px 0;padding:12px;border:1px solid #1e6b45;border-radius:10px;background:#f2fbf5">
+ <p style="margin:0 0 6px"><b>החשבון מוכן.</b> שם משתמש: <b dir="ltr">${esc(d.username)}</b></p>
+ <p style="margin:0;line-height:1.6">פרטי הכניסה (שם משתמש וסיסמה) נשלחו במייל אל <b dir="ltr">${esc(to)}</b> מהכתובת <span dir="ltr">baruch@bsd-bbi.co.il</span>.</p>
+ ${wa?`<p style="margin:8px 0 0">${link?`<a data-portal-wa href="${esc(link)}" target="_blank" rel="noopener" style="display:inline-block;padding:8px 14px;border-radius:8px;background:#128c4a;color:#fff;text-decoration:none;font-weight:700">פתיחה ב-WhatsApp לשליחה</a>`:'<span style="color:#a33">אין בכרטיס טלפון ישראלי תקין לשליחה ב-WhatsApp.</span>'}</p>`:''}</div>`;
+}
+function markup(biz){return `<section id="sellerPortalCard" class="field full" style="padding:14px;border:1px solid #c9a854;border-radius:10px;background:#fffdf5"><h3 class="section-h">פורטל בעלי עסקים</h3><label style="display:flex;gap:8px;align-items:center;font-weight:700"><input type="checkbox" id="sellerPortalEnabled" style="width:auto">פתח חשבון בפורטל</label><p data-portal-summary role="status" style="margin:6px 0">${biz?'טוען את מצב חשבון הפורטל...':'לאחר שמירת עסק פעיל עם הסכם חתום תופיע בחירה: שליחת פרטי הכניסה בוואטסאפ, במייל או בשניהם.'}</p><div data-portal-credentials></div><div data-portal-controls style="display:flex;gap:8px;flex-wrap:wrap"></div><p data-portal-email-log role="status" style="margin:6px 0;font-size:.85rem" hidden></p><small>מחיקת חשבון הפורטל משאירה את כרטיס העסק ואת הקבצים שלו. העברה לארכיון או ביטול ההסכם חוסמים את הגישה אוטומטית.</small></section>`;}
 // Opens a blank tab synchronously (inside the click) so the browser allows it,
 // then points it at wa.me once the server answered.
 function reserveTab(){const w=window.open('about:blank','_blank');if(w){try{w.opener=null;w.document.body.innerHTML='<p dir="rtl" style="font-family:Arial;padding:30px">מכין את הודעת ה-WhatsApp...</p>';}catch(_){}}return w;}
@@ -67,7 +105,7 @@ async function mount(biz){
  const exists=()=>!!account&&account.status!=='deleted';
  const draw=()=>{
   if(!busy)checkbox.checked=exists()&&account.status==='active';checkbox.disabled=busy||!eligible();
-  let s='לא קיים חשבון פורטל. סימון V יוצר שם משתמש וסיסמה ופותח הודעת WhatsApp מוכנה.';
+  let s='לא קיים חשבון פורטל. סימון V פותח בחירה: שליחת פרטי הכניסה בוואטסאפ, במייל או בשניהם.';
   if(exists()){s='שם משתמש: '+account.username+' · '+(account.status==='active'?(account.pending?'ממתין לסיסמה (נפתח בשיטה הקודמת)':'פעיל'):account.status==='archived'?'חסום עקב ארכיון':'חסום');if(!account.pending)s+=' · '+(account.last_login_at?'כניסה אחרונה '+when(account.last_login_at)+' · '+account.login_count+' כניסות':'טרם נכנס');}
   if(!eligible())s+=' · הגישה אפשרית רק לעסק פעיל עם הסכם חתום';
   summary.textContent=lastError||s;summary.style.color=lastError?'#a33':'';
@@ -82,9 +120,19 @@ async function mount(biz){
   try{window.dispatchEvent(new CustomEvent('bsd:seller-portal-changed',{detail:{businessId:biz.id,active:!!account&&account.status==='active'&&!account.pending}}));}catch(_){}
  };
  const open=async tab=>{const d=await api('admin_open',{business_id:biz.id});credBox.innerHTML=credentialsHtml(d);if(!sendTo(tab,d)&&invite().waUrl(d))credBox.querySelector('[data-portal-wa]')?.focus();await reload();};
+ // «מייל» chosen: open the account, then the existing email action sends the login details. If the
+ // email fails, the password from the opening stays the working one and is shown (WhatsApp fallback).
+ const openWith=async({wa,mail,tab})=>{
+  if(!mail)return open(tab);
+  const d=await api('admin_open',{business_id:biz.id});
+  let to='';try{to=(await api('admin_email_access',{business_id:biz.id})).to||String(biz.owner_email||'').trim();}
+  catch(e){credBox.innerHTML=credentialsHtml(d);if(wa){if(!sendTo(tab,d)&&invite().waUrl(d))credBox.querySelector('[data-portal-wa]')?.focus();}await reload();lastError=e.message;return;}
+  credBox.innerHTML=mailSentHtml(d,to,wa);if(wa){const link=invite().waUrl(mailNoticeData(d,to));if(tab&&link)tab.location.replace(link);else tab?.close();}
+  await reload();
+ };
  const run=async(fn,tab=null)=>{lastError='';busy=true;draw();try{await fn();}catch(e){tab?.close();lastError=e.message;}finally{busy=false;draw();}};
- checkbox.onchange=()=>{if(busy)return;const on=checkbox.checked;
-  if(on&&(!exists()||account.pending)){const tab=reserveTab();run(()=>open(tab),tab);}
+ checkbox.onchange=async()=>{if(busy)return;const on=checkbox.checked;
+  if(on&&(!exists()||account.pending)){checkbox.checked=false;const pick=await chooseChannels(biz,{reserve:true});if(!pick){draw();return;}checkbox.checked=true;run(()=>openWith(pick),pick.tab);}
   else if(on)run(async()=>{await api('admin_status',{business_id:biz.id,status:'active'});await reload();});
   else run(async()=>{await api('admin_status',{business_id:biz.id,status:'blocked'});credBox.replaceChildren();await reload();});
  };
@@ -104,11 +152,16 @@ async function mount(biz){
 }
 // New business saved with the box checked: open the account and show the ready message.
 async function afterSave(id,requested){
- if(!requested)return;const d=await api('admin_open',{business_id:id});
+ if(!requested)return;
+ let info={};try{const r=await window.supabaseClient.from('businesses').select('internal_name,owner_email').eq('id',id).maybeSingle();info=r.data||{};}catch(_){info={};}
+ const pick=await chooseChannels(info);if(!pick)return;
+ const d=await api('admin_open',{business_id:id});
+ let body=credentialsHtml(d);
+ if(pick.mail){try{const to=(await api('admin_email_access',{business_id:id})).to||String(info.owner_email||'').trim();body=mailSentHtml(d,to,pick.wa);}catch(e){body=`<p role="alert" style="color:#a33;margin:0 0 6px">${esc(e.message)}</p>`+credentialsHtml(d);}}
  const dialog=document.createElement('dialog');dialog.style.cssText='max-width:520px;width:calc(100% - 32px);padding:22px;direction:rtl;border-radius:12px';
- dialog.innerHTML=`<h3 style="margin-top:0">העסק נשמר ונפתח חשבון בפורטל</h3>${credentialsHtml(d)}<p><button type="button" data-close>סגירה</button></p>`;
+ dialog.innerHTML=`<h3 style="margin-top:0">העסק נשמר ונפתח חשבון בפורטל</h3>${body}<p><button type="button" data-close>סגירה</button></p>`;
  dialog.addEventListener('click',async e=>{if(e.target.closest('[data-close]'))dialog.close();if(e.target.closest('[data-portal-copy]')){try{await navigator.clipboard.writeText(dialog.querySelector('textarea').value);e.target.textContent='ההודעה הועתקה';}catch(_){}}});
  dialog.onclose=()=>dialog.remove();document.body.append(dialog);dialog.showModal();
 }
-window.BSDSellerPortal={markup,mount,afterSave,api,emailState,emailConfirmHtml,emailLogText,validEmail};
+window.BSDSellerPortal={markup,mount,afterSave,api,emailState,emailConfirmHtml,emailLogText,validEmail,channelChoiceHtml,mailNoticeData};
 })();
