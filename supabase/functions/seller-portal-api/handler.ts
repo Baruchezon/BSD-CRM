@@ -1,10 +1,11 @@
 import {portalDocuments,DOC_LABELS} from './latest-files.ts';
 import {buildOwnerMatches} from './matches.ts';
+import {ACCESS_EMAIL_SUBJECT,PORTAL_MAIL_NAME,accessEmailHtml,accessEmailText,bsdSender,validEmail} from './access-email.ts';
 import {digest,randomText,activationToken,validActivationToken,PENDING_ACTIVATION,strongPassword,hashPassword,verifyPassword,usableHash,sessionAllowed,fileAllowed,pathAllowed,clientIp,generatePassword,extraFileType,safeFileName,EXTRA_MAX_BYTES} from './security.ts';
-type Options={origins:string[];portalUrl:string;phone:string;ipSalt:string;ipHeader?:string;activationHours?:number;pruneRate?:number;site?:string};
+type Options={origins:string[];portalUrl:string;phone:string;ipSalt:string;ipHeader?:string;activationHours?:number;pruneRate?:number;site?:string;mail?:{from?:string;apiKey?:string;fetch?:typeof fetch}};
 // Rate limit ceilings per 15 minutes. Global ceilings bound abuse even if a
 // caller can rotate or spoof its address.
-const LIMITS={loginIp:30,loginUser:8,loginGlobalFailures:300,recoveryIp:5,recoveryGlobal:100,activateIp:20,activateGlobal:200,passwordChange:8};
+const LIMITS={loginIp:30,loginUser:8,loginGlobalFailures:300,recoveryIp:5,recoveryGlobal:100,activateIp:20,activateGlobal:200,passwordChange:8,emailAccess:5};
 const SIGNED='יש הסכם חתום';
 const BUCKET='business-files';
 const EXTRA_DIR='seller-portal-extra';
@@ -17,6 +18,8 @@ const eligible=(b:any)=>!!b&&!b.is_archived&&b.agreement_status===SIGNED;
 export function createHandler(db:any,opts:Options){
  const dummyHash=hashPassword('fixed-dummy-password-never-a-credential');
  const query=async(q:any)=>{const r=await q;if(r.error)throw new Error('database_error');return r.data;};
+ // One place that issues a new random password + its PBKDF2 hash (used by «איפוס סיסמה ושליחה ב-WhatsApp» and «שליחה במייל»).
+ const freshCredentials=async()=>{const password=generatePassword();return {password,creds:{password_hash:await hashPassword(password),must_change_password:false,temporary_expires_at:null,activation_token_hash:null,activation_expires_at:null}};};
  const event=async(account_id:string|null,event_type:string,file_id:string|null=null,actor_id:string|null=null,meta_file_id:string|null=null,extra_file_id:string|null=null)=>query(db.from('seller_portal_events').insert({account_id,event_type,file_id,actor_id,meta_file_id,...(extra_file_id?{extra_file_id}:{})}));
  // Legacy (v1) helpers, kept only so the previous admin screen keeps working until the new CRM pages are live.
  const normalize=(f:any,source='sale')=>source==='sale'?{...f,file_source:source}:{...f,file_source:source,file_name:f.display_name||f.original_filename,status:'active',deleted_at:null,document_type:f.category,portal_kind:'document'};
@@ -181,8 +184,7 @@ export function createHandler(db:any,opts:Options){
      // One-click account opening / password reset. The random password is returned
      // once for the WhatsApp text and stored only as a PBKDF2 hash.
      if(!eligible(business))return reply(409,{error:'signed_agreement_required'});
-     const password=generatePassword();
-     const creds={password_hash:await hashPassword(password),must_change_password:false,temporary_expires_at:null,activation_token_hash:null,activation_expires_at:null};
+     const {password,creds}=await freshCredentials();
      if(a){
       const restore=a.status==='deleted';let saved=false;
       for(let i=0;i<(restore?20:1);i++){
@@ -201,6 +203,37 @@ export function createHandler(db:any,opts:Options){
      }
      await event(a.id,'credentials_reset',null,p.id);
      return reply(200,{ok:true,username:a.username,password,name:business.owner_name||'',phone:business.owner_phone||'',contact_phone:opts.phone,site:opts.site||'www.bsd-bbi.co.il'});
+    }
+    if(action==='admin_email_access'){
+     // «שליחה במייל» (08.10.2026): emails the website link, username and a NEW password to the
+     // owner email stored in the CRM. The old password cannot be re-sent (only its hash exists).
+     // Order: send first; the new hash is committed ONLY after the email provider accepted the
+     // email, so a failed send never changes the password that works today. The plaintext lives
+     // only in this request (email body); it is never stored or logged.
+     const audit=async(details:any)=>{try{await query(db.from('audit_log').insert({action:'portal_access_email',table_name:'seller_portal_accounts',record_id:business.id,actor_id:p.id,details}));}catch{}};
+     if(!a||a.status!=='active')return reply(409,{error:'account_required'});
+     if(!eligible(business))return reply(409,{error:'signed_agreement_required'});
+     const contact=await query(db.from('businesses').select('owner_email').eq('id',business.id).maybeSingle());
+     const to=String(contact?.owner_email??'').trim();
+     if(!validEmail(to))return reply(409,{error:'email_missing'});
+     const from=bsdSender(opts.mail?.from);
+     if(!from||!opts.mail?.apiKey){await audit({status:'failed',to,reason:'sender_not_ready'});return reply(503,{error:'sender_not_ready'});}
+     if(!await attempt('email_access:business:'+business.id,LIMITS.emailAccess))return reply(429,{error:'try_later'});
+     const {password,creds}=await freshCredentials();
+     const mail={name:business.owner_name,username:a.username,password,phone:opts.phone};
+     let sent:any=null,reason='';
+     try{
+      const r=await (opts.mail.fetch??fetch)('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${opts.mail.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({from:`${PORTAL_MAIL_NAME} <${from}>`,to:[to],reply_to:from,subject:ACCESS_EMAIL_SUBJECT,html:accessEmailHtml(mail),text:accessEmailText(mail)})});
+      const body:any=await r.json().catch(()=>({}));
+      if(r.ok&&body?.id)sent=body;else reason=text(body?.message||body?.error||('http_'+r.status),300).split(password).join('***');
+     }catch{reason='network_error';}
+     if(!sent){await audit({status:'failed',to,from,username:a.username,reason});return reply(502,{error:'send_failed'});}
+     // Email accepted: the new password becomes the working one (same fields as the WhatsApp reset).
+     let saved=false;for(let i=0;i<2&&!saved;i++){try{const u=await db.from('seller_portal_accounts').update({...creds,status:'active'}).eq('id',a.id);saved=!u.error;}catch{saved=false;}}
+     if(!saved){await audit({status:'sent_not_saved',to,from,username:a.username,resend_id:text(sent.id,100)});return reply(500,{error:'sent_not_saved'});}
+     try{await query(db.from('seller_portal_sessions').update({revoked_at:new Date().toISOString()}).eq('account_id',a.id).is('revoked_at',null));await event(a.id,'credentials_reset',null,p.id);}catch{}
+     await audit({status:'sent',to,from,username:a.username,resend_id:text(sent.id,100)});
+     return reply(200,{ok:true,to});
     }
     if(action==='admin_upload_url'){
      // Extra files (images, Office, etc.) go straight from the CRM browser to a
