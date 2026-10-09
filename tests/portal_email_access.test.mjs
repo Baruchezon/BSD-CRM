@@ -30,7 +30,7 @@ test('button for an active account (also before a first password); disabled with
 });
 
 test('before sending: the FULL email from the server preview (from, to, BCC, subject, body), new-password warning, escapes everything', () => {
-  const d = { from: 'צוות BSD <baruch@bsd-bbi.co.il>', to: 'owner@example.com', bcc: 'baruch@bsd-bbi.co.il', subject: 'האזור האישי שלך ב-BSD: פרטי כניסה', html: '<p>שלום "בעלים"</p><b>סיסמה חדשה תיווצר בעת השליחה</b>', password_note: 'סיסמה חדשה תיווצר בעת השליחה', username_known: true };
+  const d = { from: 'צוות BSD <info@bsd-bbi.co.il>', to: 'owner@example.com', bcc: 'baruch@bsd-bbi.co.il', subject: 'האזור האישי שלך ב-BSD: פרטי כניסה', html: '<p>שלום "בעלים"</p><b>סיסמה חדשה תיווצר בעת השליחה</b>', password_note: 'סיסמה חדשה תיווצר בעת השליחה', username_known: true };
   const h = P.emailPreviewHtml(d, { internal_name: 'עסק <b>בדיקה</b>' });
   assert.ok(h.includes('עסק &lt;b&gt;בדיקה&lt;/b&gt;') && h.includes('owner@example.com') && h.includes('baruch@bsd-bbi.co.il') && h.includes('עותק מוסתר (BCC)') && h.includes('האזור האישי שלך ב-BSD: פרטי כניסה'));
   assert.match(h, /<iframe data-email-body sandbox="" title="תוכן המייל" srcdoc="&lt;p&gt;שלום &quot;בעלים&quot;&lt;\/p&gt;/, 'body shown as the owner gets it, in a sandboxed frame');
@@ -59,5 +59,5 @@ test('log: existing audit_log (no new table); every portal email listed in the c
 test('no other new buttons; cache-busted', () => {
   assert.equal((card.match(/data-portal-email /g) || []).length, 1, 'one «שליחה במייל» button');
   assert.equal((card.match(/<button/g) || []).length, 17, 'existing 7 + email button + preview «אישור ושליחה»/«ביטול» + open-account choice «פתח ושלח»/«ביטול» + «סגירה» (preview error, result, view) + list «רענון מצב»/«צפייה במייל»');
-  assert.match(biz, /js\/portal-business-card\.js\?v=20261008-5/);
+  assert.match(biz, /js\/portal-business-card\.js\?v=20261009-1/);
 });

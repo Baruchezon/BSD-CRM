@@ -17,7 +17,7 @@ test('choice: WhatsApp checked by default, email checkbox with destination and s
   const h = P.channelChoiceHtml({ internal_name: 'עסק <b>א</b>', owner_email: ' owner@example.com ' });
   assert.match(h, /<input type="checkbox" data-ch-wa checked/);
   assert.match(h, /<input type="checkbox" data-ch-mail {2}style/);
-  assert.ok(h.includes('וואטסאפ') && h.includes('מייל') && h.includes('owner@example.com') && h.includes('baruch@bsd-bbi.co.il'));
+  assert.ok(h.includes('וואטסאפ') && h.includes('מייל') && h.includes('owner@example.com') && h.includes('info@bsd-bbi.co.il'));
   assert.ok(h.includes('עסק &lt;b&gt;א&lt;/b&gt;'));
   assert.match(h, /data-ch-ok[^>]*>פתח ושלח<\/button>/);
   assert.match(h, /data-ch-cancel[^>]*>ביטול<\/button>/);

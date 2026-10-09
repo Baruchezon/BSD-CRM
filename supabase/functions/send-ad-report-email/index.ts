@@ -11,8 +11,12 @@ function cleanEnv(v) {
 const SUPABASE_URL = cleanEnv(Deno.env.get("SUPABASE_URL"));
 const SERVICE_ROLE_KEY = cleanEnv(Deno.env.get("SB_SERVICE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
 const RESEND_API_KEY = cleanEnv(Deno.env.get("RESEND_API_KEY"));
-const FROM_EMAIL_RAW = (Deno.env.get("RESEND_FROM_EMAIL") || "BSD Business Brokers <noreply@bsd-bbi.co.il>").trim();
-const FROM_EMAIL = FROM_EMAIL_RAW;
+// 09.10.2026 (Baruch): every email from BSD systems goes out as «צוות BSD <info@bsd-bbi.co.il>»
+// with replies to info@bsd-bbi.co.il. Fixed in code on purpose: the shared RESEND_FROM_EMAIL
+// secret is no longer read (it was unset/onboarding@resend.dev, which Resend only lets send
+// to the account owner).
+const MAIL_FROM = "צוות BSD <info@bsd-bbi.co.il>";
+const MAIL_REPLY_TO = "info@bsd-bbi.co.il";
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
@@ -65,7 +69,8 @@ Deno.serve(async (req) => {
     }
 
     const payload = {
-      from: FROM_EMAIL,
+      from: MAIL_FROM,
+      reply_to: MAIL_REPLY_TO,
       to: [to.trim()],
       subject,
       html

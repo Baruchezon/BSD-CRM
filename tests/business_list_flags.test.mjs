@@ -104,5 +104,5 @@ test('portal card only announces its state; nothing else changed in its actions'
   assert.match(portalCard, /bsd:seller-portal-changed/);
   const actions = [...portalCard.matchAll(/api\('(admin_\w+)'/g)].map(m => m[1]).sort();
   assert.deepEqual([...new Set(actions)], ['admin_delete','admin_detail','admin_email_access','admin_email_preview','admin_email_status','admin_open','admin_preview','admin_status'], 'only changes since 08.10: «שליחה במייל» (admin_email_access) + its preview and delivery status');
-  assert.match(biz, /js\/portal-business-card\.js\?v=20261008-5/);
+  assert.match(biz, /js\/portal-business-card\.js\?v=20261009-1/);
 });

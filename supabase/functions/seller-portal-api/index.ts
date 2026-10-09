@@ -8,7 +8,7 @@ const optional=(key:string,fallback:string)=>Deno.env.get(key)||fallback;
 const PORTAL_ORIGINS='https://baruchezon.github.io';
 const PORTAL_URL='https://baruchezon.github.io/BSD-CRM/portal/';
 const PORTAL_PHONE='054-2424999';
-// «שליחה במייל» sender: baruch@bsd-bbi.co.il (access-email.ts). SELLER_PORTAL_MAIL_FROM may only override it
+// «שליחה במייל» sender: info@bsd-bbi.co.il, BCC baruch@bsd-bbi.co.il (access-email.ts). SELLER_PORTAL_MAIL_FROM may only override it
 // with another @bsd-bbi.co.il address. RESEND_FROM_EMAIL is shared by other functions and is never read here.
 const serviceKey=required('SUPABASE_SERVICE_ROLE_KEY');
 const db=createClient(required('SUPABASE_URL'),serviceKey,{auth:{persistSession:false,autoRefreshToken:false}});

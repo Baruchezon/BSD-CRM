@@ -116,7 +116,8 @@ Deno.serve(async (req) => {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: 'BSD CRM <onboarding@resend.dev>',
+        from: 'צוות BSD <info@bsd-bbi.co.il>', // 09.10.2026 (Baruch): all BSD system emails from info@
+        reply_to: 'info@bsd-bbi.co.il',
         to: [reportToEmail],
         subject: `התאמות AI חכמות - ${dateStr} (${suggestions.length} הצעות חדשות)`,
         html
