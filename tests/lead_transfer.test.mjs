@@ -290,3 +290,15 @@ test('manual «ליד חדש» form lets you set the type (קונה default, or 
  assert.match(html,/<select id="manualType"><option value="buyer">קונה<\/option><option value="seller">מוכר<\/option><\/select>/);
  assert.match(html,/type:\(document\.getElementById\('manualType'\) \|\| \{\}\)\.value === 'seller' \? 'seller' : 'buyer'/);
 });
+test('«מצב טיפול»: a changed value is written with «שמור והעבר» (buyer and seller) and with «שמור»; unchanged is not sent',async()=>{
+ for(const category of ['buyer','seller']){
+  const h=harness({category});h.fields.wlHandlingStatus={value:'לחזור עם תשובה',dataset:{orig:'לא טופל'},disabled:false};
+  h.lead.handling_status='לא טופל';await h.run();
+  assert.equal(h.lead.handling_status,'לחזור עם תשובה',category);assert.equal(h.fields.wlSaveError.style.display,'none');
+  assert.equal(h.tables.businesses.some(b=>'handling_status' in b),false,'business card untouched');
+ }
+ const s=harness({category:'buyer'});s.fields.wlHandlingStatus={value:'טופל',dataset:{orig:'סטנד ביי'},disabled:false};s.lead.handling_status='סטנד ביי';
+ await s.ctx.saveLeadOnly(s.lead.id);assert.equal(s.lead.handling_status,'טופל');assert.equal(s.lead.website_intake_stage,'contacted');
+ const u=harness({category:'buyer'});u.fields.wlHandlingStatus={value:'לא טופל',dataset:{orig:'לא טופל'},disabled:false};u.lead.handling_status='טופל';
+ await u.run();assert.equal(u.lead.handling_status,'טופל','unchanged select never overwrites a value saved elsewhere');
+});
