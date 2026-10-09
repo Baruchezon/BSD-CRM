@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610081400';
+    var PAGE_BUILD = '202610091100';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -1053,7 +1053,7 @@ function openReadOnly(id){
       ['עיר', r.city], ['תחום', r.field], ['הערות', r.notes], ['🔎 חקר מקדים', r.pre_research]);
   } else if (CURRENT_TAB === 'seller'){
     const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
-    rows.push(['שם', personName], ['טלפון', r.phone], ['שם העסק', r.business_name],
+    rows.push(['שם', personName], ['מצב טיפול', leadHandlingStatusValue(r)], ['טלפון', r.phone], ['שם העסק', r.business_name],
       ['תחום העסק', r.business_field], ['עיר העסק', r.business_city || r.city], ['הערות', r.notes], ['🔎 חקר מקדים', r.pre_research]);
   } else if (CURRENT_TAB === 'y2026'){
     const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
@@ -1062,7 +1062,7 @@ function openReadOnly(id){
       ['תאריך קליטה', fmtDateTime(r.created_at)], ['הערות', r.notes]);
   } else {
     const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
-    rows.push(['שם', personName], ['טלפון', r.phone], ['אזור מבוקש', r.requested_area || r.city],
+    rows.push(['שם', personName], ['מצב טיפול', leadHandlingStatusValue(r)], ['טלפון', r.phone], ['אזור מבוקש', r.requested_area || r.city],
       ['תחום מבוקש', r.requested_field], ['הערות', r.notes], ['🔎 חקר מקדים', r.pre_research]);
   }
   const modal = document.getElementById('modalBox');
@@ -1432,6 +1432,8 @@ function renderWebsiteLeadConversationForm(r){
       <span>סטטוס: <b>${esc(r.status || 'חדש')}</b></span>
     </div>
 
+    ${leadHandlingStatusFieldHtml(r)}
+
     <div class="wl-block" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;">
       <div>
         <label style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;">שם מלא</label>
@@ -1757,6 +1759,34 @@ function buyerDuplicateChoice(dups){
   ]);
 }
 
+// 09.10.2026 (בקשת ברוך): «מצב טיפול» - עמודה leads.handling_status (ברירת מחדל «לא טופל»,
+// גם ללידים קיימים). רשימה נפתחת בלבד, בלי כפתור חדש: נשמרת דרך «שמור» / «שמור והעבר».
+// נשלחת לשרת רק אם שונתה בכרטיס, כדי לא לדרוס שינוי שנעשה במקום אחר בינתיים.
+const LEAD_HANDLING_STATUSES = ['לא טופל', 'טופל', 'סטנד ביי', 'לחזור עם תשובה'];
+const LEAD_HANDLING_DEFAULT = 'לא טופל';
+function leadHandlingStatusValue(r){
+  const v = r && r.handling_status;
+  return LEAD_HANDLING_STATUSES.includes(v) ? v : LEAD_HANDLING_DEFAULT;
+}
+function leadHandlingStatusFieldHtml(r){
+  const cur = leadHandlingStatusValue(r);
+  return `<div class="wl-block" style="background:#f4f7fb;border:1px solid #d3dcec;border-radius:10px;padding:10px 12px;margin-bottom:12px;box-sizing:border-box;max-width:100%;">
+      <label for="wlHandlingStatus" style="display:block;font-size:.8rem;color:#665;margin-bottom:6px;font-weight:700;">מצב טיפול</label>
+      <select id="wlHandlingStatus" data-orig="${esc(cur)}" style="width:100%;max-width:100%;box-sizing:border-box;border:1px solid #d8d3c4;border-radius:8px;padding:9px 10px;min-height:44px;font-family:inherit;font-size:16px;background:#fff;">
+        ${LEAD_HANDLING_STATUSES.map(s => `<option value="${esc(s)}" ${s === cur ? 'selected' : ''}>${esc(s)}</option>`).join('')}
+      </select>
+    </div>`;
+}
+// undefined = not changed on this card (nothing is sent).
+function leadHandlingStatusEdit(){
+  const el = document.getElementById('wlHandlingStatus');
+  if (!el) return undefined;
+  const v = el.value;
+  if (!LEAD_HANDLING_STATUSES.includes(v)) throw new Error('יש לבחור «מצב טיפול» מהרשימה');
+  const orig = (el.dataset && el.dataset.orig) || LEAD_HANDLING_DEFAULT;
+  return v === orig ? undefined : v;
+}
+
 // «🔎 חקר מקדים» (leads.pre_research). Sent only when changed on this card, so
 // research written meanwhile (e.g. by Dana through the API) is never wiped by
 // saving an older open card. If it changed on the server too, nothing is saved.
@@ -1807,6 +1837,8 @@ function readLeadCardPayload(sourceRow){
   };
   const preResearch = wlPreResearchEdit(sourceRow);
   if (preResearch !== undefined) payload.pre_research = preResearch;
+  const handlingStatus = leadHandlingStatusEdit();
+  if (handlingStatus !== undefined) payload.handling_status = handlingStatus;
   return payload;
 }
 
@@ -1815,7 +1847,9 @@ function setLeadCardBusy(busy, primaryText){
   const transfer = document.getElementById('wlSaveBtn');
   const agreement = document.getElementById('wlAgreementBtn');
   const target = document.getElementById('wlTransferTarget');
+  const handling = document.getElementById('wlHandlingStatus');
   if (saveOnly) saveOnly.disabled = busy;
+  if (handling) handling.disabled = busy;
   if (transfer){ transfer.disabled = busy; if (primaryText) transfer.textContent = primaryText; }
   if (agreement) agreement.disabled = busy;
   if (target) target.disabled = busy;
