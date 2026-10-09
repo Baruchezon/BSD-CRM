@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610081700';
+    var PAGE_BUILD = '202610091200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -513,7 +513,7 @@
 <script src="js/push.js?v=202610051500"></script>
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/bsd-search.js?v=202610081400"></script>
-<script src="js/standaloneRecording.js?v=202608251215"></script>
+<script src="js/standaloneRecording.js?v=20261009-1"></script>
 <script src="js/pdfPipeline.js?v=202608291000"></script>
 <script src="js/saleFileModule2.js?v=202610051200"></script>
 <script src="js/notesRecording.js?v=2"></script>
@@ -2405,7 +2405,7 @@ async function openSendAnonModal(bizId, file){
     </div>
     <div class="field full" style="margin-bottom:10px;">
       <label>תוכן ההודעה</label>
-      <textarea id="sendAnonBody" rows="4" style="width:100%;">שלום,\n\n${isPrimary ? 'מצורף תקציר ראשוני אנונימי בנוגע לעסק המדובר.' : 'מצורף חומר אנונימי בנוגע לעסק המדובר.'}\n\nמספר עסק\n${biz && biz.business_number ? esc(biz.business_number) : ''}\n\nבברכה,\n${(CURRENT_PROFILE && CURRENT_PROFILE.full_name) || 'BSD Business Brokers Israel'}</textarea>
+      <textarea id="sendAnonBody" rows="4" style="width:100%;">שלום,\n\n${isPrimary ? 'מצורף תקציר ראשוני אנונימי בנוגע לעסק המדובר.' : 'מצורף חומר אנונימי בנוגע לעסק המדובר.'}\n\nמספר עסק\n${biz && biz.business_number ? esc(biz.business_number) : ''}</textarea>
     </div>
     <div id="sendAnonStatus" style="min-height:20px;margin-bottom:8px;font-size:.85rem;font-weight:600;"></div>
     <div class="modal-actions">
@@ -4487,7 +4487,7 @@ async function openSendFilesToBuyer(bizId){
     </div>
     <div class="field full" style="margin-bottom:10px;">
       <label>תוכן ההודעה</label>
-      <textarea id="sendFilesBody" rows="4" style="width:100%;">שלום,\n\nמצורפים הקבצים הבאים${biz ? ' בנוגע ל' + biz.internal_name : ''}.\n\nבברכה,\n${(CURRENT_PROFILE && CURRENT_PROFILE.full_name) || 'BSD Business Brokers Israel'}</textarea>
+      <textarea id="sendFilesBody" rows="4" style="width:100%;">שלום,\n\nמצורפים הקבצים הבאים${biz ? ' בנוגע ל' + biz.internal_name : ''}.</textarea>
     </div>
 
     <div id="sendFilesStatus" style="min-height:20px;margin-bottom:8px;font-size:.85rem;font-weight:600;"></div>

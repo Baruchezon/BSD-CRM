@@ -162,7 +162,7 @@ function buildEmailHtml(list: any[], stats: any, dateStr: string) {
     <div style="border:1px solid #eee;border-top:none;border-radius:0 0 10px 10px;padding:20px 24px;">
       <p style="color:#555;font-size:14px;">נבדקו ${stats.buyers} קונים פעילים מול ${stats.businesses} עסקים פעילים. מוצגות רק הצעות חדשות (שעדיין אינן התאמה במערכת) מ-50% ומעלה: ${list.length} הצעות.</p>
       ${rows || '<p style="color:#999;">אין הצעות חדשות כרגע.</p>'}
-      <p style="color:#999;font-size:11px;margin-top:24px;">ברוך איזון | BSD Business Brokers Israel | bsd-bbi.co.il</p>
+      <div dir="rtl" style="margin-top:24px;padding-top:12px;border-top:1px solid #e3d9bf;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#1f2d3d;text-align:right"><b>צוות BSD</b><br><span style="color:#8a6d1f">BSD Business Brokers Israel · מחברים עסקים להזדמנויות</span><br><span dir="ltr"><a href="mailto:info@bsd-bbi.co.il" style="color:#0f5ea8;text-decoration:none">info@bsd-bbi.co.il</a> | <a href="https://www.bsd-bbi.co.il/" style="color:#0f5ea8;text-decoration:none">www.bsd-bbi.co.il</a></span></div>
     </div>
   </div>`;
 }

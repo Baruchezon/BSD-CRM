@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610081400';
+    var PAGE_BUILD = '202610091200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -269,7 +269,7 @@
 <script src="js/permissions.js?v=202608251709"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/push.js?v=202610051500"></script>
-<script src="js/standaloneRecording.js?v=202608251709"></script>
+<script src="js/standaloneRecording.js?v=20261009-1"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/searchSelect.js?v=202608281530"></script>
 <script src="js/bsd-search.js?v=202610081400"></script>

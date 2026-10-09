@@ -23,7 +23,7 @@
           <div id="bsdRecPtMeta" style="font-size:12px;color:#5c5648;margin-bottom:22px;"></div>
           <div id="bsdRecPtBody" style="font-size:14px;line-height:1.8;"></div>
           <div style="margin-top:30px;border-top:1px solid #e8dfc4;padding-top:12px;font-size:11px;color:#5c5648;text-align:center;">
-            Baruch Ezon &nbsp;·&nbsp; BSD Business Brokers Israel &nbsp;·&nbsp; 054-2424999 &nbsp;·&nbsp; baruch@bsd-bbi.co.il &nbsp;·&nbsp; bsd-bbi.co.il
+            Baruch Ezon &nbsp;·&nbsp; BSD Business Brokers Israel &nbsp;·&nbsp; 054-2424999 &nbsp;·&nbsp; info@bsd-bbi.co.il &nbsp;·&nbsp; bsd-bbi.co.il
           </div>
         </div>
       </div>`;

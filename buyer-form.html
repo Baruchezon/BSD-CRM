@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610061550';
+    var PAGE_BUILD = '202610091200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
@@ -217,7 +217,7 @@
     <div id="pt_meta" style="font-size:12px;color:#5c5648;margin-bottom:22px;"></div>
     <div id="pt_body" style="font-size:14px;line-height:1.7;"></div>
     <div style="margin-top:30px;border-top:1px solid #e8dfc4;padding-top:12px;font-size:11px;color:#5c5648;text-align:center;">
-      Baruch Ezon · BSD Business Brokers Israel · 054-2424999 · baruch@bsd-bbi.co.il · bsd-bbi.co.il
+      Baruch Ezon · BSD Business Brokers Israel · 054-2424999 · info@bsd-bbi.co.il · bsd-bbi.co.il
     </div>
   </div>
 </div>
