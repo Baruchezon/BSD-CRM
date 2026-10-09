@@ -1,6 +1,6 @@
 import {portalDocuments,DOC_LABELS} from './latest-files.ts';
 import {buildOwnerMatches} from './matches.ts';
-import {ACCESS_EMAIL_SUBJECT,PORTAL_MAIL_NAME,PREVIEW_PASSWORD,PREVIEW_USERNAME,MASKED_PASSWORD,accessEmailHtml,accessEmailText,bsdSender,validEmail,validResendId} from './access-email.ts';
+import {ACCESS_EMAIL_SUBJECT,PORTAL_MAIL_NAME,PORTAL_MAIL_BCC,PREVIEW_PASSWORD,PREVIEW_USERNAME,MASKED_PASSWORD,accessEmailHtml,accessEmailText,bsdSender,validEmail,validResendId} from './access-email.ts';
 import {digest,randomText,activationToken,validActivationToken,PENDING_ACTIVATION,strongPassword,hashPassword,verifyPassword,usableHash,sessionAllowed,fileAllowed,pathAllowed,clientIp,generatePassword,extraFileType,safeFileName,EXTRA_MAX_BYTES} from './security.ts';
 type Options={origins:string[];portalUrl:string;phone:string;ipSalt:string;ipHeader?:string;activationHours?:number;pruneRate?:number;site?:string;mail?:{from?:string;apiKey?:string;fetch?:typeof fetch}};
 // Rate limit ceilings per 15 minutes. Global ceilings bound abuse even if a
@@ -214,7 +214,8 @@ export function createHandler(db:any,opts:Options){
      // WITHOUT sending, without a new password and without touching the account or the log, so
      // the CRM can show the full email for approval first. A separate action name (not a flag),
      // so an older server can never mistake a preview request for a real send.
-     // Every send also goes as a BCC copy to the sender (baruch@bsd-bbi.co.il), and audit_log keeps
+     // Every send also goes as a BCC copy to baruch@bsd-bbi.co.il (PORTAL_MAIL_BCC; the sender is
+     // info@bsd-bbi.co.il since 09.10.2026, replies go to the sender), and audit_log keeps
      // subject + body with the password masked, for the «מיילים שנשלחו» list in the business card.
      const preview=action==='admin_email_preview';
      const audit=async(details:any)=>{const id=crypto.randomUUID();try{await query(db.from('audit_log').insert({id,action:'portal_access_email',table_name:'seller_portal_accounts',record_id:business.id,actor_id:p.id,details}));return id;}catch{return null;}};
@@ -226,7 +227,7 @@ export function createHandler(db:any,opts:Options){
      if(!validEmail(to))return reply(409,{error:'email_missing'});
      const from=bsdSender(opts.mail?.from);
      if(!from||!opts.mail?.apiKey){if(!preview)await audit({status:'failed',to,reason:'sender_not_ready'});return reply(503,{error:'sender_not_ready'});}
-     const bcc=to.toLowerCase()===from?'':from;
+     const bcc=to.toLowerCase()===PORTAL_MAIL_BCC?'':PORTAL_MAIL_BCC;
      const envelope={from:`${PORTAL_MAIL_NAME} <${from}>`,to:[to],...(bcc?{bcc:[bcc]}:{}),reply_to:from,subject:ACCESS_EMAIL_SUBJECT};
      const render=(username:string,password:string)=>{const m={name:business.owner_name,username,password,phone:opts.phone};return {html:accessEmailHtml(m),text:accessEmailText(m)};};
      if(preview){const c=render(live?a.username:PREVIEW_USERNAME,PREVIEW_PASSWORD);return reply(200,{ok:true,preview:true,from:envelope.from,to,bcc,reply_to:from,subject:ACCESS_EMAIL_SUBJECT,html:c.html,text:c.text,username_known:live,password_note:PREVIEW_PASSWORD});}

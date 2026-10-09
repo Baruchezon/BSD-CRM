@@ -38,7 +38,12 @@ function cleanEnv(v: string | undefined): string {
 }
 
 const RESEND_API_KEY = cleanEnv(Deno.env.get('RESEND_API_KEY'));
-const RESEND_FROM_EMAIL = cleanEnv(Deno.env.get('RESEND_FROM_EMAIL')) || 'onboarding@resend.dev';
+// 09.10.2026 (Baruch): every email from BSD systems goes out as «צוות BSD <info@bsd-bbi.co.il>»
+// with replies to info@bsd-bbi.co.il. Fixed in code on purpose: the shared RESEND_FROM_EMAIL
+// secret is no longer read (it was unset/onboarding@resend.dev, which Resend only lets send
+// to the account owner).
+const MAIL_FROM = 'צוות BSD <info@bsd-bbi.co.il>';
+const MAIL_REPLY_TO = 'info@bsd-bbi.co.il';
 const SIGNED_URL_SECONDS = 60 * 60 * 24 * 7; // שבוע - זהה לקבוע הקיים (SF_SIGNED_URL_SECONDS) בצד הלקוח
 const SALE_FILE_BUCKET = 'business-files';
 
@@ -284,9 +289,10 @@ Deno.serve(async (req: Request) => {
       if (actorProfile) actorLabel = actorProfile.full_name || actorProfile.email || actorId;
     } catch (_e) { /* לא חוסם */ }
 
-    const replyTo = (body && body.reply_to) ? String(body.reply_to) : undefined;
+    // Replies always go to info@ (09.10.2026); the caller's reply_to is no longer used.
+    const replyTo = MAIL_REPLY_TO;
 
-    log('resend_call_start', { to: buyer.email, from: RESEND_FROM_EMAIL });
+    log('resend_call_start', { to: buyer.email, from: MAIL_FROM });
     let resp: Response;
     try {
       // 03.09.2026: זה ה-await החיצוני הכי חשוד לתקיעה ללא סוף (קריאת רשת
@@ -300,7 +306,7 @@ Deno.serve(async (req: Request) => {
         headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
-          from: `BSD Business Brokers Israel <${RESEND_FROM_EMAIL}>`,
+          from: MAIL_FROM,
           to: [buyer.email],
           subject: finalSubject,
           text: bodyText,

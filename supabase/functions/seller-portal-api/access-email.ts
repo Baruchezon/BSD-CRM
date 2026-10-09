@@ -58,12 +58,16 @@ export function bsdSender(from: unknown): string | null {
   const addr = (m ? m[1] : String(from ?? '').trim()).toLowerCase();
   return /^[a-z0-9._%+-]+@bsd-bbi\.co\.il$/.test(addr) ? addr : null;
 }
-// Sender of «שליחה במייל» (Baruch, 08.10.2026): baruch@bsd-bbi.co.il by default, a
-// domain verified in Resend on 08.10.2026. Deliberately NOT read from RESEND_FROM_EMAIL
+// Sender of «שליחה במייל»: info@bsd-bbi.co.il (Baruch, 09.10.2026: every email from BSD
+// systems goes out as «צוות BSD <info@bsd-bbi.co.il>», replies to info@). The domain was
+// verified in Resend on 08.10.2026. Deliberately NOT read from RESEND_FROM_EMAIL
 // (shared by other functions). SELLER_PORTAL_MAIL_FROM may override it, but only with
 // an @bsd-bbi.co.il address; anything else is ignored and the default is used.
-export const PORTAL_MAIL_FROM_DEFAULT = 'baruch@bsd-bbi.co.il';
+export const PORTAL_MAIL_FROM_DEFAULT = 'info@bsd-bbi.co.il';
 export const PORTAL_MAIL_NAME = 'צוות BSD';
+// Every portal email also goes as a hidden copy (BCC) to Baruch's BSD mailbox
+// (Baruch, 08.10.2026, unchanged on 09.10.2026 when the sender moved to info@).
+export const PORTAL_MAIL_BCC = 'baruch@bsd-bbi.co.il';
 export function portalMailFrom(override: unknown): string {
   return bsdSender(override) ?? PORTAL_MAIL_FROM_DEFAULT;
 }

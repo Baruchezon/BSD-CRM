@@ -3,7 +3,12 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RESEND_API_KEY = (Deno.env.get("RESEND_API_KEY") || "").trim();
-const RESEND_FROM_EMAIL = (Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev").trim();
+// 09.10.2026 (Baruch): every email from BSD systems goes out as «צוות BSD <info@bsd-bbi.co.il>»
+// with replies to info@bsd-bbi.co.il. Fixed in code on purpose: the shared RESEND_FROM_EMAIL
+// secret is no longer read (it was unset/onboarding@resend.dev, which Resend only lets send
+// to the account owner).
+const MAIL_FROM = "צוות BSD <info@bsd-bbi.co.il>";
+const MAIL_REPLY_TO = "info@bsd-bbi.co.il";
 const INTERNAL_EMAIL = "baruch.ezon@gmail.com";
 const BUCKET = "business-files";
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
@@ -69,13 +74,14 @@ async function sendMail(opts: {
 }) {
   if (!RESEND_API_KEY) throw new Error("RESEND_API_KEY is not configured");
   const payload: Record<string, unknown> = {
-    from: `BSD Business Brokers Israel <${RESEND_FROM_EMAIL}>`,
+    from: MAIL_FROM,
     to: [INTERNAL_EMAIL],
     subject: opts.subject,
     text: opts.bodyText,
     attachments: [{ filename: opts.filename, content: opts.pdfBase64 }],
   };
-  if (opts.replyTo) payload.reply_to = opts.replyTo;
+  // Internal notice to Baruch: «reply» goes to the signer when known, otherwise to info@.
+  payload.reply_to = opts.replyTo || MAIL_REPLY_TO;
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {

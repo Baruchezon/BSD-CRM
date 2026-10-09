@@ -6,7 +6,7 @@
 (()=>{'use strict';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const when=v=>v?new Date(v).toLocaleString('he-IL',{timeZone:'Asia/Jerusalem',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
-const ERRORS={email_missing:'אין מייל תקין בכרטיס העסק',sender_not_ready:'שליחת מיילים מהכתובת baruch@bsd-bbi.co.il עדיין לא הופעלה. המייל לא נשלח והסיסמה לא השתנתה',send_failed:'המייל לא נשלח והסיסמה לא השתנתה. אפשר לנסות שוב או לשלוח ב-WhatsApp',sent_not_saved:'המייל נשלח אבל הסיסמה החדשה לא נשמרה. הסיסמה הקודמת עדיין עובדת. יש ללחוץ שוב על «שליחה במייל»',try_later:'נשלחו כמה מיילים ברצף. אפשר לנסות שוב בעוד רבע שעה',invalid_action:'הפעולה עדיין לא הופעלה בשרת. המייל לא נשלח',signed_agreement_required:'נדרש עסק פעיל עם הסכם חתום',account_required:'אין חשבון פורטל לעסק זה',status_unavailable:'לא הצלחנו לבדוק כרגע את מצב המסירה. אפשר לנסות שוב בעוד רגע',no_resend_id:'למייל הזה אין מספר שליחה, ולכן אין מצב מסירה',not_found:'הרשומה לא נמצאה',preview_unavailable:'החשבון אינו פתוח לצפייה. נדרש חשבון פורטל פעיל לעסק עם הסכם חתום'};
+const ERRORS={email_missing:'אין מייל תקין בכרטיס העסק',sender_not_ready:'שליחת מיילים מהכתובת info@bsd-bbi.co.il עדיין לא הופעלה. המייל לא נשלח והסיסמה לא השתנתה',send_failed:'המייל לא נשלח והסיסמה לא השתנתה. אפשר לנסות שוב או לשלוח ב-WhatsApp',sent_not_saved:'המייל נשלח אבל הסיסמה החדשה לא נשמרה. הסיסמה הקודמת עדיין עובדת. יש ללחוץ שוב על «שליחה במייל»',try_later:'נשלחו כמה מיילים ברצף. אפשר לנסות שוב בעוד רבע שעה',invalid_action:'הפעולה עדיין לא הופעלה בשרת. המייל לא נשלח',signed_agreement_required:'נדרש עסק פעיל עם הסכם חתום',account_required:'אין חשבון פורטל לעסק זה',status_unavailable:'לא הצלחנו לבדוק כרגע את מצב המסירה. אפשר לנסות שוב בעוד רגע',no_resend_id:'למייל הזה אין מספר שליחה, ולכן אין מצב מסירה',not_found:'הרשומה לא נמצאה',preview_unavailable:'החשבון אינו פתוח לצפייה. נדרש חשבון פורטל פעיל לעסק עם הסכם חתום'};
 async function api(action,payload={}){
  const url=window.BSD_CONFIG.SELLER_PORTAL_API_URL;if(!url)throw Error('שירות הפורטל טרם הופעל. פרטי העסק נשמרים כרגיל');
  const {data:{session}}=await window.supabaseClient.auth.getSession();if(!session)throw Error('יש להתחבר למערכת');
@@ -17,7 +17,7 @@ async function api(action,payload={}){
 const invite=()=>window.BSDPortalInvite;
 // 08.10.2026 (בקשת ברוך): «שליחה במייל» of the portal login details to the card's owner email.
 // Confirm first (business, owner, email, new-password warning). The server issues a NEW password,
-// emails the website link + «פורטל בעלי עסקים» button + username + password from baruch@bsd-bbi.co.il,
+// emails the website link + «פורטל בעלי עסקים» button + username + password from info@bsd-bbi.co.il,
 // and only then makes the new password the working one. Every attempt is logged in audit_log
 // (action portal_access_email, never the password).
 const EMAIL_LOG_ACTION='portal_access_email';
@@ -50,7 +50,7 @@ function reasonText(reason){
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const row=(k,v)=>`<p style="margin:0;padding:6px 0;border-bottom:1px solid #eee;text-align:right;line-height:1.5"><span style="color:#555">${esc(k)}:</span> <b style="overflow-wrap:anywhere">${v}</b></p>`;
 const ltr=v=>`<span dir="ltr" style="unicode-bidi:isolate">${esc(v)}</span>`;
-// «צוות BSD <baruch@bsd-bbi.co.il>»: Hebrew name, then the address left-to-right.
+// «צוות BSD <info@bsd-bbi.co.il>»: Hebrew name, then the address left-to-right.
 const fromHtml=v=>{const m=/^(.*?)\s*<([^<>]+)>\s*$/.exec(String(v||''));return m?`${esc(m[1])} ${ltr('<'+m[2]+'>')}`:ltr(v);};
 // The email body in a fully sandboxed frame (no scripts, no forms), exactly as the HTML the owner gets.
 const bodyFrame=(html,h)=>`<iframe data-email-body sandbox="" title="תוכן המייל" srcdoc="${esc(html)}" style="display:block;width:100%;height:${h};border:1px solid #d5dbe3;border-radius:8px;background:#f3f5f8"></iframe>`;
@@ -152,7 +152,7 @@ function credentialsHtml(d){
 // checkboxes «וואטסאפ» (checked by default) and «מייל» (one or both), then «פתח ושלח» / «ביטול».
 // Same code for every business card (old, new, without an account) and for a new business saved
 // with the box checked. WhatsApp alone = exactly the previous flow. «מייל» = the existing server
-// action admin_email_access (sender baruch@bsd-bbi.co.il, owner email from the DB). Nothing is sent
+// action admin_email_access (sender info@bsd-bbi.co.il, BCC baruch@bsd-bbi.co.il, owner email from the DB). Nothing is sent
 // before «פתח ושלח»; WhatsApp is always sent by hand.
 function channelChoiceHtml(biz){
  const email=String(biz?.owner_email??'').trim(),ok=validEmail(email);
@@ -161,7 +161,7 @@ function channelChoiceHtml(biz){
  return `<h3 style="margin:0 0 6px">פתיחת חשבון בפורטל</h3>
  <p style="margin:0 0 12px;line-height:1.5">איך לשלוח לבעל העסק את פרטי הכניסה?${biz?.internal_name?` <span style="color:#555">(${esc(biz.internal_name)})</span>`:''}</p>
  <label style="${box}"><input type="checkbox" data-ch-wa checked style="${cb}"><span>וואטסאפ<small style="display:block;font-weight:400;color:#555">הודעה מוכנה נפתחת ב-WhatsApp לשליחה על ידך</small></span></label>
- <label style="${box}${ok?'':';opacity:.75;cursor:default'}"><input type="checkbox" data-ch-mail ${ok?'':'disabled aria-describedby="portalChoiceMailNote"'} style="${cb}"><span>מייל${ok?`<small style="display:block;font-weight:400;color:#555;overflow-wrap:anywhere">יישלח אל <span dir="ltr">${esc(email)}</span> מהכתובת <span dir="ltr" style="white-space:nowrap">baruch@bsd-bbi.co.il</span></small>`:`<small id="portalChoiceMailNote" data-ch-mail-note style="display:block;font-weight:400;color:#a33">אין מייל בכרטיס. כדי לשלוח במייל, ממלאים «אימייל הבעלים» ושומרים את הכרטיס.</small>`}</span></label>
+ <label style="${box}${ok?'':';opacity:.75;cursor:default'}"><input type="checkbox" data-ch-mail ${ok?'':'disabled aria-describedby="portalChoiceMailNote"'} style="${cb}"><span>מייל${ok?`<small style="display:block;font-weight:400;color:#555;overflow-wrap:anywhere">יישלח אל <span dir="ltr">${esc(email)}</span> מהכתובת <span dir="ltr" style="white-space:nowrap">info@bsd-bbi.co.il</span></small>`:`<small id="portalChoiceMailNote" data-ch-mail-note style="display:block;font-weight:400;color:#a33">אין מייל בכרטיס. כדי לשלוח במייל, ממלאים «אימייל הבעלים» ושומרים את הכרטיס.</small>`}</span></label>
  <p data-ch-none role="alert" style="margin:0 0 8px;color:#a33;font-size:.9rem" hidden>יש לבחור וואטסאפ, מייל או את שניהם.</p>
  <p style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 0"><button type="button" data-ch-ok style="min-height:44px;padding:8px 18px;font-weight:700;background:#0f2a44;color:#fff;border:0;border-radius:8px">פתח ושלח</button><button type="button" data-ch-cancel style="min-height:44px;padding:8px 18px">ביטול</button></p>`;
 }
@@ -184,7 +184,7 @@ function mailSentHtml(d,to,wa){
  const link=wa?invite().waUrl(mailNoticeData(d,to)):'';
  return `<div data-portal-mail-sent style="margin:10px 0;padding:12px;border:1px solid #1e6b45;border-radius:10px;background:#f2fbf5">
  <p style="margin:0 0 6px"><b>החשבון מוכן.</b> שם משתמש: <b dir="ltr">${esc(d.username)}</b></p>
- <p style="margin:0;line-height:1.6">פרטי הכניסה (שם משתמש וסיסמה) נשלחו במייל אל <b dir="ltr">${esc(to)}</b> מהכתובת <span dir="ltr">baruch@bsd-bbi.co.il</span>.</p>
+ <p style="margin:0;line-height:1.6">פרטי הכניסה (שם משתמש וסיסמה) נשלחו במייל אל <b dir="ltr">${esc(to)}</b> מהכתובת <span dir="ltr">info@bsd-bbi.co.il</span>.</p>
  ${wa?`<p style="margin:8px 0 0">${link?`<a data-portal-wa href="${esc(link)}" target="_blank" rel="noopener" style="display:inline-block;padding:8px 14px;border-radius:8px;background:#128c4a;color:#fff;text-decoration:none;font-weight:700">פתיחה ב-WhatsApp לשליחה</a>`:'<span style="color:#a33">אין בכרטיס טלפון ישראלי תקין לשליחה ב-WhatsApp.</span>'}</p>`:''}</div>`;
 }
 function markup(biz){return `<section id="sellerPortalCard" class="field full" style="padding:14px;border:1px solid #c9a854;border-radius:10px;background:#fffdf5"><h3 class="section-h">פורטל בעלי עסקים</h3><label style="display:flex;gap:8px;align-items:center;font-weight:700"><input type="checkbox" id="sellerPortalEnabled" style="width:auto">פתח חשבון בפורטל</label><p data-portal-summary role="status" style="margin:6px 0">${biz?'טוען את מצב חשבון הפורטל...':'לאחר שמירת עסק פעיל עם הסכם חתום תופיע בחירה: שליחת פרטי הכניסה בוואטסאפ, במייל או בשניהם.'}</p><div data-portal-credentials></div><div data-portal-controls style="display:flex;gap:8px;flex-wrap:wrap"></div><div data-portal-email-list></div><small>מחיקת חשבון הפורטל משאירה את כרטיס העסק ואת הקבצים שלו. העברה לארכיון או ביטול ההסכם חוסמים את הגישה אוטומטית.</small></section>`;}

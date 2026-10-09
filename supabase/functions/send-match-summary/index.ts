@@ -36,7 +36,12 @@ function cleanEnv(v: string | undefined): string {
 }
 
 const RESEND_API_KEY = cleanEnv(Deno.env.get('RESEND_API_KEY'));
-const RESEND_FROM_EMAIL = cleanEnv(Deno.env.get('RESEND_FROM_EMAIL')) || 'onboarding@resend.dev';
+// 09.10.2026 (Baruch): every email from BSD systems goes out as «צוות BSD <info@bsd-bbi.co.il>»
+// with replies to info@bsd-bbi.co.il. Fixed in code on purpose: the shared RESEND_FROM_EMAIL
+// secret is no longer read (it was unset/onboarding@resend.dev, which Resend only lets send
+// to the account owner).
+const MAIL_FROM = 'צוות BSD <info@bsd-bbi.co.il>';
+const MAIL_REPLY_TO = 'info@bsd-bbi.co.il';
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -56,7 +61,7 @@ async function sendMailViaResend(opts: {
 }) {
   const attachments = (opts.attachments || []).filter(a => a && a.base64 && a.filename);
   const payload: Record<string, unknown> = {
-    from: `BSD Business Brokers Israel <${RESEND_FROM_EMAIL}>`,
+    from: MAIL_FROM,
     to: [opts.to],
     subject: opts.subject,
     // עברית מוצגת נכון בשני הפורמטים בלי שום קידוד ידני - Resend שולח
@@ -65,7 +70,8 @@ async function sendMailViaResend(opts: {
     text: opts.bodyText || undefined,
     html: opts.htmlBody || undefined,
   };
-  if (opts.replyTo) payload.reply_to = opts.replyTo;
+  // Replies always go to info@ (09.10.2026); the caller's reply_to is no longer used.
+  payload.reply_to = MAIL_REPLY_TO;
   if (attachments.length) {
     // Resend מקבל attachments כ-base64 ישירות עם שם קובץ יוניקוד רגיל -
     // לא צריך את כל ה-RFC 2231 filename*=UTF-8'' הידני שהיה ב-SMTP; ה-API
@@ -92,8 +98,22 @@ async function sendMailViaResend(opts: {
     // נרשמת ל-Resend. מעבירים את זה כמו שהוא הלאה כדי שהמשתמש יראה סיבה
     // אמיתית ולא הודעה גנרית.
     const detail = (respBody && (respBody.message || respBody.error)) || `HTTP ${resp.status}`;
-    throw new Error(`שליחה דרך Resend נכשלה: ${detail}`);
+    // 30.09.2026: עד עכשיו כשל של Resend לא נרשם בכלל בלוג הפונקציה (רק 500 ריק
+    // בלוג ה-gateway) - רושמים את השגיאה האמיתית של הספק (בלי תוכן המייל).
+    const toDomain = String(opts.to || '').split('@')[1] || '?';
+    const fromDomain = 'bsd-bbi.co.il';
+    console.error('resend_send_failed', JSON.stringify({
+      status: resp.status, name: respBody?.name, message: detail, from_domain: fromDomain, to_domain: toDomain,
+    }));
+    // המקרה הידוע: חשבון Resend במצב בדיקה (דומיין השולח לא מאומת) - Resend
+    // מאפשר אז לשלוח רק לכתובת בעל החשבון. מוסיפים הסבר בעברית למשתמש.
+    const unverifiedDomain = /verify a domain|testing emails|domain is not verified/i.test(String(detail));
+    const hint = unverifiedDomain
+      ? ' | הסבר: דומיין השולח לא מאומת ב-Resend, ולכן אפשר לשלוח רק לכתובת בעל חשבון ה-Resend. יש לאמת את bsd-bbi.co.il ב-Resend (Domains) ולהגדיר את ה-Secret RESEND_FROM_EMAIL לכתובת בדומיין הזה.'
+      : '';
+    throw new Error(`שליחה דרך Resend נכשלה: ${detail}${hint}`);
   }
+  console.log('resend_send_ok', JSON.stringify({ id: respBody?.id, to_domain: String(opts.to || '').split('@')[1] || '?' }));
 }
 
 Deno.serve(async (req: Request) => {
@@ -145,6 +165,7 @@ Deno.serve(async (req: Request) => {
       status: 200, headers: { ...corsHeaders(), 'Content-Type': 'application/json' }
     });
   } catch (e) {
+    console.error('send-match-summary failed:', e instanceof Error ? e.message : String(e));
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), {
       status: 500, headers: { ...corsHeaders(), 'Content-Type': 'application/json' }
     });
