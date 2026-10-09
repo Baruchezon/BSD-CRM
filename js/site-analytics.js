@@ -27,7 +27,7 @@
     try{
       const q=new URLSearchParams(location.search);
       const out={};
-      [['utm_source','utm_source'],['utm_medium','utm_medium'],['utm_campaign','utm_campaign']].forEach(([key,param])=>{const v=q.get(param);if(v)out[key]=v.slice(0,120)});
+      [['utm_source','utm_source'],['utm_medium','utm_medium'],['utm_campaign','utm_campaign'],['utm_content','utm_content'],['utm_term','utm_term']].forEach(([key,param])=>{const v=q.get(param);if(v)out[key]=v.slice(0,120)});
       return out;
     }catch(e){return {}}
   }
