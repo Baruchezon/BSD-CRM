@@ -1,10 +1,11 @@
 // Seller-portal login email (08.10.2026, Baruch's wording decision): link to the BSD
 // website, press the «פורטל בעלי עסקים» button, username and the NEW password issued
-// for this send. Signed «צוות BSD». Built only in memory for one send; never stored or logged.
+// for this send. Ends with the approved BSD signature (Baruch, 09.10.2026: «צוות BSD /
+// BSD Business Brokers Israel · מחברים עסקים להזדמנויות / info@bsd-bbi.co.il | www.bsd-bbi.co.il», no logo).
+// Built only in memory for one send; never stored or logged.
 export const ACCESS_EMAIL_SUBJECT = 'האזור האישי שלך ב-BSD: פרטי כניסה';
 const SITE = 'www.bsd-bbi.co.il';
 const SITE_URL = 'https://www.bsd-bbi.co.il/';
-const LOGO_URL = 'https://baruchezon.github.io/BSD-CRM/portal/logo.png';
 type Data = {name?: string | null; username: string; password: string; phone?: string | null};
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]!));
 export function accessEmailText(d: Data): string {
@@ -27,6 +28,7 @@ export function accessEmailText(d: Data): string {
     'בברכה,',
     'צוות BSD',
     'BSD Business Brokers Israel · מחברים עסקים להזדמנויות',
+    'info@bsd-bbi.co.il | www.bsd-bbi.co.il',
   ].join('\n');
 }
 export function accessEmailHtml(d: Data): string {
@@ -37,8 +39,7 @@ export function accessEmailHtml(d: Data): string {
 <body style="margin:0;padding:0;background:#f3f5f8">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f5f8;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" dir="rtl" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;border-top:5px solid #c9a854;font-family:Arial,Helvetica,sans-serif;text-align:right">
-<tr><td style="padding:22px 26px 6px"><img src="${LOGO_URL}" alt="BSD Business Brokers Israel" width="110" style="display:block;border:0;max-width:110px;height:auto"></td></tr>
-<tr><td style="padding:6px 26px 0"><h1 style="margin:0 0 6px;font-size:21px;color:#0f2a44">${name ? `שלום ${esc(name)},` : 'שלום,'}</h1>
+<tr><td style="padding:22px 26px 0"><h1 style="margin:0 0 6px;font-size:21px;color:#0f2a44">${name ? `שלום ${esc(name)},` : 'שלום,'}</h1>
 <p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#1f2d3d">תודה על האמון ועל שיתוף הפעולה. פתחנו עבורך אזור אישי מאובטח ב-BSD, שבו אפשר לראות את המסמכים, העדכונים ודוחות הפרסום של העסק שלך, וגם איפה העסק מופץ.</p></td></tr>
 <tr><td style="padding:0 26px"><div style="background:#f7f9fb;border:1px solid #e3e8ee;border-radius:12px;padding:14px 16px">
 <p style="margin:0 0 6px;font-weight:700;color:#0f2a44;font-size:15px">איך נכנסים</p>
@@ -48,8 +49,7 @@ export function accessEmailHtml(d: Data): string {
 <tr><td align="center" style="padding:18px 26px 6px"><a href="${SITE_URL}" style="display:inline-block;background:#0f2a44;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:12px 28px;border-radius:10px">לאתר BSD</a></td></tr>
 <tr><td style="padding:10px 26px 0"><p style="margin:0;font-size:14px;line-height:1.7;color:#4a5a6a">הפרטים אישיים, נא לא להעביר אותם לאחרים. אפשר להחליף את הסיסמה בכל עת בתוך האזור האישי («החלפת סיסמה»).</p>
 <p style="margin:10px 0 0;font-size:14px;line-height:1.7;color:#4a5a6a">אם הכניסה לא מצליחה, נשמח לעזור${phone ? ` בטלפון <a href="tel:${phone}" dir="ltr" style="color:#0f5ea8;white-space:nowrap">${phone}</a>` : ''}.</p></td></tr>
-<tr><td style="padding:18px 26px 22px"><p style="margin:0;font-size:15px;color:#1f2d3d">בברכה,<br><b>צוות BSD</b><br><span style="color:#8a6d1f">BSD Business Brokers Israel · מחברים עסקים להזדמנויות</span></p></td></tr>
-<tr><td style="background:#0f2a44;padding:12px 26px;text-align:center"><span style="color:#d9c48a;font-size:12px">ליווי אישי. דיסקרטיות. שקיפות. · <a href="${SITE_URL}" style="color:#ffffff">${SITE}</a></span></td></tr>
+<tr><td style="padding:18px 26px 22px"><p style="margin:0;font-size:15px;line-height:1.6;color:#1f2d3d">בברכה,<br><b>צוות BSD</b><br><span style="color:#8a6d1f">BSD Business Brokers Israel · מחברים עסקים להזדמנויות</span><br><span dir="ltr"><a href="mailto:info@bsd-bbi.co.il" style="color:#0f5ea8;text-decoration:none">info@bsd-bbi.co.il</a> | <a href="${SITE_URL}" style="color:#0f5ea8;text-decoration:none">${SITE}</a></span></p></td></tr>
 </table></td></tr></table></body></html>`;
 }
 // Sender must be an address on the BSD domain (never Resend's shared test sender).

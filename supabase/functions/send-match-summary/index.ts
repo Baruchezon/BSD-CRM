@@ -42,6 +42,31 @@ const RESEND_API_KEY = cleanEnv(Deno.env.get('RESEND_API_KEY'));
 // to the account owner).
 const MAIL_FROM = 'צוות BSD <info@bsd-bbi.co.il>';
 const MAIL_REPLY_TO = 'info@bsd-bbi.co.il';
+// 09.10.2026 (Baruch): every BSD email ends with the approved signature, no logo.
+// Appended here once, at the very end (after any summary/links the CRM adds); skipped when the
+// body already carries it (e.g. a template that already ends with it).
+const SIGNATURE_MARK = 'info@bsd-bbi.co.il | www.bsd-bbi.co.il';
+const SIGNATURE_TEXT = 'בברכה,\nצוות BSD\nBSD Business Brokers Israel · מחברים עסקים להזדמנויות\n' + SIGNATURE_MARK;
+const SIGNATURE_HTML = '<div dir="rtl" style="margin-top:22px;padding-top:12px;border-top:1px solid #e3d9bf;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1f2d3d;text-align:right">'
+  + 'בברכה,<br><b>צוות BSD</b><br><span style="color:#8a6d1f">BSD Business Brokers Israel · מחברים עסקים להזדמנויות</span><br>'
+  + '<span dir="ltr"><a href="mailto:info@bsd-bbi.co.il" style="color:#0f5ea8;text-decoration:none">info@bsd-bbi.co.il</a> | <a href="https://www.bsd-bbi.co.il/" style="color:#0f5ea8;text-decoration:none">www.bsd-bbi.co.il</a></span></div>';
+const escHtml = (v: string) => v.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+export function signedText(bodyText: string): string {
+  if (!bodyText) return '';
+  return bodyText.includes(SIGNATURE_MARK) ? bodyText : bodyText.replace(/\s+$/, '') + '\n\n' + SIGNATURE_TEXT;
+}
+// Text-only sends also get a Hebrew right-to-left HTML part (same words, links clickable).
+export function signedHtml(htmlBody: string, bodyText: string): string {
+  if (htmlBody) {
+    if (htmlBody.includes(SIGNATURE_MARK)) return htmlBody;
+    return /<\/body>/i.test(htmlBody) ? htmlBody.replace(/<\/body>/i, SIGNATURE_HTML + '</body>') : htmlBody + SIGNATURE_HTML;
+  }
+  if (!bodyText) return '';
+  const has = bodyText.includes(SIGNATURE_MARK);
+  const linked = escHtml(bodyText.replace(/\s+$/, '')).replace(/https?:\/\/[^\s<]+/g, (u) => `<a href="${u}" dir="ltr">${u}</a>`);
+  return '<div dir="rtl" style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#1f2d3d;text-align:right;white-space:pre-wrap">'
+    + linked + '</div>' + (has ? '' : SIGNATURE_HTML);
+}
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -67,8 +92,8 @@ async function sendMailViaResend(opts: {
     // עברית מוצגת נכון בשני הפורמטים בלי שום קידוד ידני - Resend שולח
     // הכל כ-UTF-8 תקין מהצד שלו; זה מה שמחליף את כל טיפול ה-RFC 2047/
     // base64 הידני שהיה נחוץ בגרסת ה-SMTP הגולמית.
-    text: opts.bodyText || undefined,
-    html: opts.htmlBody || undefined,
+    text: signedText(opts.bodyText) || undefined,
+    html: signedHtml(opts.htmlBody || '', opts.bodyText) || undefined,
   };
   // Replies always go to info@ (09.10.2026); the caller's reply_to is no longer used.
   payload.reply_to = MAIL_REPLY_TO;
