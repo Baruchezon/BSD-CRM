@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>BSD CRM - יומן אבחון מקומי</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f6f4ee;color:#1c2333;margin:0;padding:16px;}
+h1{font-size:1.1rem;margin:0 0 6px;} p{font-size:.85rem;color:#555;margin:4px 0 12px;}
+button{background:#0e1b34;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:.9rem;margin:0 0 8px 8px;}
+.row{background:#fff;border-radius:8px;padding:8px 10px;margin:6px 0;font-size:.78rem;direction:ltr;text-align:left;word-break:break-word;}
+.bad{border-left:4px solid #b3402c;} .warn{border-left:4px solid #c9a24b;}
+</style>
+</head>
+<body>
+<h1>יומן אבחון מקומי (קופסה שחורה)</h1>
+<p>הנתונים נשמרים רק בדפדפן הזה ולא נשלחים לשום מקום. אין בהם שמות, טלפונים, מיילים או סיסמאות. אחרי תקיעה ועצירה כפויה של Chrome, פתחו את הדף הזה ולחצו "העתק" כדי לשלוח את היומן לבדיקה.</p>
+<button id="copyBtn">העתק את היומן</button><button id="clearBtn" style="background:#888;">נקה יומן</button>
+<div id="summary" class="row"></div>
+<div id="list"></div>
+<script>
+(function(){
+  var list = []; try { list = JSON.parse(localStorage.getItem('bsd-blackbox-v1') || '[]'); } catch(e){}
+  function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function fmt(t){ try { return new Date(t).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' }); } catch(e){ return t; } }
+  var abrupt = list.filter(function(e){ return e.ev === 'prev_not_closed'; }).length;
+  var errs = list.filter(function(e){ return /error|rejection/.test(e.ev); }).length;
+  var longT = list.filter(function(e){ return e.ev === 'long_task'; }).length;
+  document.getElementById('summary').textContent = 'events: ' + list.length + ' | abrupt ends: ' + abrupt + ' | errors: ' + errs + ' | long tasks: ' + longT;
+  document.getElementById('list').innerHTML = list.slice().reverse().map(function(e){
+    var cls = e.ev === 'prev_not_closed' ? 'bad' : (/error|rejection|long_task/.test(e.ev) ? 'warn' : '');
+    var rest = Object.keys(e).filter(function(k){ return ['t','ev'].indexOf(k) < 0; }).map(function(k){ return k + '=' + e[k]; }).join(' ');
+    return '<div class="row ' + cls + '"><b>' + esc(fmt(e.t)) + ' ' + esc(e.ev) + '</b> ' + esc(rest) + '</div>';
+  }).join('');
+  document.getElementById('copyBtn').onclick = function(){
+    var text = JSON.stringify(list);
+    (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(function(){ alert('הועתק'); }, function(){ prompt('העתיקו ידנית:', text); });
+  };
+  document.getElementById('clearBtn').onclick = function(){ if (confirm('לנקות את היומן?')){ localStorage.removeItem('bsd-blackbox-v1'); location.reload(); } };
+})();
+</script>
+</body>
+</html>

@@ -448,12 +448,18 @@ async function checkStalePage(opts){
     if (typeof window.PAGE_BUILD !== 'string') return;
     const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
-    const { version } = await res.json();
-    if (!version || version === window.PAGE_BUILD) {
-      sessionStorage.removeItem('bsdReloadedFor');
-      return;
-    }
-    if (sessionStorage.getItem('bsdReloadedFor') === version) return; // already tried
+    const raw = (await res.json()).version;
+    const version = String(raw || '').replace(/\D/g, '');
+    if (!version || version === window.PAGE_BUILD) return;
+    // 10.10.2026 (staging): one shared guard with the inline check in each page's <head>
+    // (same key, per page + per device). Before this, the inline check and this function
+    // each reloaded once per NEW TAB whenever PAGE_BUILD wasn't bumped for a deploy -
+    // measured in emulation: opening app.html = 3 full page loads. Now: at most one
+    // reload per page per deploy on this device; never reloads if storage is blocked.
+    const guardKey = 'bsd_ver_reload_guard:' + (location.pathname.split('/').pop() || 'index');
+    let guard = null;
+    try { guard = localStorage.getItem(guardKey); } catch(_) { try { guard = sessionStorage.getItem(guardKey); } catch(__) { return; } }
+    if (guard === version) return; // already reloaded once for this deploy
     // 25.08.2026: this function now also runs periodically (see setInterval
     // below) for tabs left open a long time, not just once on load. A forced
     // reload mid-work would abort whatever the user is doing (an open modal,
@@ -466,8 +472,8 @@ async function checkStalePage(opts){
       const overlay = document.getElementById('overlay');
       if (overlay && overlay.classList.contains('open')) return; // try again next interval
     }
-    sessionStorage.setItem('bsdReloadedFor', version);
-    location.reload(true);
+    try { localStorage.setItem(guardKey, version); } catch(_) { try { sessionStorage.setItem(guardKey, version); } catch(__) { return; } }
+    location.reload();
   } catch(e) { /* offline or blocked - carry on with what we have */ }
 }
 checkStalePage();

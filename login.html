@@ -28,7 +28,8 @@
   }
   .login-card button.pwd-toggle-btn:hover{ background:none !important; }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/bsdBlackBox.js?v=20261010"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
 </head>
 <body>
 
@@ -111,7 +112,22 @@ function showQuickUnlockGate(){
   // fingerprint scan every single time - fire it automatically as soon as
   // this gate screen appears. The button stays visible as a manual retry
   // for when the auto-attempt fails or gets dismissed.
-  attemptQuickUnlock();
+  // 10.10.2026 (staging): open the system fingerprint sheet automatically only when this
+  // tab is really in front and focused. Starting a WebAuthn request while Chrome is still
+  // restoring the tab (return from background / cold start) is a known fragile path on
+  // Android; otherwise wait for the tab to become visible, or for a tap on the button.
+  function autoUnlockWhenReady(){
+    if (document.visibilityState === 'visible' && document.hasFocus()){ attemptQuickUnlock(); return; }
+    const onReady = function(){
+      if (document.visibilityState !== 'visible') return;
+      document.removeEventListener('visibilitychange', onReady);
+      window.removeEventListener('focus', onReady);
+      setTimeout(attemptQuickUnlock, 300);
+    };
+    document.addEventListener('visibilitychange', onReady);
+    window.addEventListener('focus', onReady);
+  }
+  autoUnlockWhenReady();
 }
 
 // זיכרון אימיילים קודמים (לא סיסמאות!) - מציג רשימת השלמה אוטומטית של הדפדפן
