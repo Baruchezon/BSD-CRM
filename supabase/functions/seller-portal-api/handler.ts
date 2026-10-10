@@ -1,4 +1,5 @@
-import {portalDocuments,DOC_LABELS} from './latest-files.ts';
+import {portalDocuments,DOC_LABELS,REPORTS_LABEL} from './latest-files.ts';
+import {MR_CATEGORY,MR_DIR,MR_MAX_BYTES,MR_MAX_RAW,validPeriod,decodeBase64,sha256Hex,isPdfBytes,publishShape} from './marketing-reports.ts';
 import {buildOwnerMatches} from './matches.ts';
 import {ACCESS_EMAIL_SUBJECT,PORTAL_MAIL_NAME,PORTAL_MAIL_BCC,PREVIEW_PASSWORD,PREVIEW_USERNAME,MASKED_PASSWORD,accessEmailHtml,accessEmailText,bsdSender,validEmail,validResendId} from './access-email.ts';
 import {digest,randomText,activationToken,validActivationToken,PENDING_ACTIVATION,strongPassword,hashPassword,verifyPassword,usableHash,sessionAllowed,fileAllowed,pathAllowed,clientIp,generatePassword,extraFileType,safeFileName,EXTRA_MAX_BYTES} from './security.ts';
@@ -27,7 +28,7 @@ export function createHandler(db:any,opts:Options){
  // v2: what a seller sees. Every query is filtered by the seller's own business id,
  // and every storage path is re-checked to start with "{business_id}/".
  const portalFiles=async(id:string)=>{
-  const sale=await query(db.from('business_sale_files').select('id,business_id,category,document_type,file_name,file_type,file_size,storage_path,status,deleted_at,created_at,portal_visible,portal_kind,portal_period_from,portal_period_to').eq('business_id',id));
+  const sale=await query(db.from('business_sale_files').select('id,business_id,category,document_type,file_name,file_type,file_size,storage_path,status,deleted_at,created_at,portal_visible,portal_kind,portal_period_from,portal_period_to,version_number,version_group_id').eq('business_id',id));
   const {documents,reports}=portalDocuments(sale,id);
   const extras=(await query(db.from('seller_portal_files').select('id,business_id,storage_path,file_name,mime_type,size_bytes,status,created_at').eq('business_id',id).eq('status','active'))).filter((f:any)=>f.business_id===id&&pathAllowed(f.storage_path,id)).sort((a:any,b:any)=>(Date.parse(b.created_at)||0)-(Date.parse(a.created_at)||0));
   return {documents,reports,extras};
@@ -50,7 +51,7 @@ export function createHandler(db:any,opts:Options){
   const files=fileIds.length?await query(db.from('business_sale_files').select('id,business_id,category,document_type,file_name').eq('business_id',id).in('id',fileIds)):[];
   return buildOwnerMatches({businessId:id,matches,buyers,permissions,anonSends,fullSends,files,history,notes});
  };
- const publicFile=(f:any,kind:'document'|'advertising'|'extra')=>({id:f.id,file_source:kind==='extra'?'extra':'sale',name:f.file_name,kind,bucket:kind==='document'?f.bucket:kind,type:kind==='document'?DOC_LABELS[f.bucket]:kind==='advertising'?'דוח פרסום':'קובץ נוסף',date:f.created_at,period_from:f.portal_period_from??null,period_to:f.portal_period_to??null,mime:kind==='extra'?f.mime_type:'application/pdf',size:kind==='extra'?f.size_bytes:f.file_size??null});
+ const publicFile=(f:any,kind:'document'|'advertising'|'extra')=>({id:f.id,file_source:kind==='extra'?'extra':'sale',name:f.file_name,kind,bucket:kind==='document'?f.bucket:kind,type:kind==='document'?DOC_LABELS[f.bucket]:kind==='advertising'?REPORTS_LABEL:'קובץ נוסף',date:f.created_at,period_from:f.portal_period_from??null,period_to:f.portal_period_to??null,mime:kind==='extra'?f.mime_type:'application/pdf',size:kind==='extra'?f.size_bytes:f.file_size??null});
  // «איפה העסק מופץ» (08.10.2026): three channels from fields staff ALREADY tick per deal in the CRM.
  // VIP = «פרסום ללקוחות VIP» (vip_business_publications.enabled); agents = «הפצה לכל הסוכנים המורשים»
  // (distribution_status='all_authorized'); media = live on the BSD website (same rule as public_business_listings).
@@ -66,6 +67,14 @@ export function createHandler(db:any,opts:Options){
     return [own&&b.distribution_status==='all_authorized',own&&b.public_listing_active===true&&b.anon_card_active===true&&b.listing_status==='active'&&b.is_archived===false];},2)]);
   const channels={vip:vip===true,agents:agents===true,media:media===true};
   return {channels,started:channels.vip||channels.agents||channels.media};
+ };
+ // The ONE lookup used by the seller `file` action (and re-used in-process by verify_marketing_report):
+ // a file is served only if it is in the business's own portal lists and its path is under "{business_id}/".
+ const sellerFile=async(businessId:string,fileId:string,source?:string)=>{
+  const portal=await portalFiles(businessId);const extra=source==='extra';
+  const f=extra?portal.extras.find((x:any)=>x.id===fileId):[...portal.documents,...portal.reports].find((x:any)=>x.id===fileId);
+  if(!f||f.business_id!==businessId||!pathAllowed(f.storage_path,businessId))return null;
+  return {f,extra,portal};
  };
  const publicFiles=(p:{documents:any[];reports:any[];extras:any[]})=>[...p.documents.map(f=>publicFile(f,'document')),...p.reports.map(f=>publicFile(f,'advertising')),...p.extras.map(f=>publicFile(f,'extra'))];
  // Logins and file access per account, for the admin screen.
@@ -96,10 +105,14 @@ export function createHandler(db:any,opts:Options){
   if(req.method==='OPTIONS')return new Response(null,{status:204,headers});
   if(req.method!=='POST')return reply(405,{error:'method_not_allowed'});
   try{
-   const raw=await req.text();if(raw.length>16000)return reply(413,{error:'too_large'});
+   // Bodies over 16 KB are accepted only for publish_marketing_report (PDF up to 16 MB as base64) from a bearer-authenticated caller.
+   if(Number(req.headers.get('content-length')||0)>MR_MAX_RAW){await req.body?.cancel().catch(()=>{});return reply(413,{error:'too_large'});}
+   const raw=await req.text(),bearer=(req.headers.get('authorization')||'').startsWith('Bearer ');
+   if(raw.length>16000&&(!bearer||raw.length>MR_MAX_RAW))return reply(413,{error:'too_large'});
    let b:any;try{b=JSON.parse(raw);}catch{return reply(400,{error:'invalid_request'});}
    if(!b||typeof b!=='object')return reply(400,{error:'invalid_request'});
    const action=text(b.action,40);
+   if(raw.length>16000&&action!=='publish_marketing_report')return reply(413,{error:'too_large'});
    const ip=clientIp(req,opts.ipHeader??'cf-connecting-ip');
    const attempt=async(scope:string,max:number)=>query(db.rpc('seller_portal_take_attempt',{p_key:await digest(opts.ipSalt+scope),p_max:max}));
    const exceeded=async(scope:string,max:number)=>query(db.rpc('seller_portal_attempts_exceeded',{p_key:await digest(opts.ipSalt+scope),p_max:max}));
@@ -377,6 +390,95 @@ export function createHandler(db:any,opts:Options){
     }else return reply(400,{error:'invalid_action'});
     await event(a.id,action,null,p.id);return reply(200,{ok:true});
    }
+   if(action==='publish_marketing_report'||action==='verify_marketing_report'){
+    // Automatic weekly marketing reports (spec G2/G3). Only an active CRM profile with
+    // can_publish_marketing_reports=true (the dedicated reports bot) may call these two actions.
+    // Writes use the function's service role; the caller never gets storage or table rights.
+    const auth=req.headers.get('authorization')||'';
+    const r=await db.auth.getUser(auth.startsWith('Bearer ')?auth.slice(7):'');
+    if(r.error||!r.data?.user)return reply(401,{error:'unauthorized'});
+    const p=await query(db.from('profiles').select('id,role,status,can_publish_marketing_reports').eq('id',r.data.user.id).maybeSingle());
+    if(!p||p.status!=='active'||p.role==='viewer'||p.can_publish_marketing_reports!==true)return reply(403,{error:'forbidden'});
+    const runKey=(row:any)=>({business_id:row.business_id,period_from:row.period_from,period_to:row.period_to,report_type:'weekly'});
+    const saveRun=async(values:any)=>{try{await query(db.from('marketing_report_runs').upsert({...values,updated_at:new Date().toISOString()},{onConflict:'business_id,period_from,period_to,report_type'}));return true;}catch{return false;}};
+    const storedSha=async(path:string)=>{const d=await db.storage.from(BUCKET).download(path);if(d.error||!d.data)return null;const bytes=new Uint8Array(await d.data.arrayBuffer());return {bytes,sha:await sha256Hex(bytes)};};
+    if(action==='publish_marketing_report'){
+     const shape=publishShape(b);if(!shape.ok)return reply(400,{error:'invalid_request'});const v=shape.v;
+     // 1) business exists and the display number belongs to this internal id
+     const business=await query(db.from('businesses').select('id,business_number,is_archived,agreement_status').eq('id',v.business_id).maybeSingle());
+     if(!business||business.id!==v.business_id||business.business_number!==v.business_number)return reply(409,{error:'business_mismatch'});
+     // 2) not archived, signed agreement (same rule as portal login)
+     if(!eligible(business))return reply(409,{error:'not_eligible'});
+     // 3) an active seller-portal account
+     const acct=await query(db.from('seller_portal_accounts').select('id,business_id,status').eq('business_id',business.id).maybeSingle());
+     if(acct?.status==='blocked')return reply(409,{error:'blocked_portal'});
+     if(!acct||acct.business_id!==business.id||acct.status!=='active')return reply(409,{error:'no_active_portal'});
+     // 4) Friday..Thursday period
+     if(!validPeriod(v.period_from,v.period_to))return reply(400,{error:'bad_period'});
+     // 5) real PDF, size limit, sha256 matches the bytes
+     const bytes=decodeBase64(v.pdf_base64);
+     if(!bytes||bytes.length>MR_MAX_BYTES||!isPdfBytes(bytes)||await sha256Hex(bytes)!==v.sha256)return reply(400,{error:'invalid_pdf'});
+     // 6) idempotency against the newest live version of this business+period (never overwrite or delete)
+     const versions=async()=>(await query(db.from('business_sale_files').select('id,business_id,storage_path,version_number,version_group_id,status,deleted_at,created_at').eq('business_id',business.id).eq('portal_kind','advertising').eq('document_type','activity_report').eq('portal_period_from',v.period_from).eq('portal_period_to',v.period_to)))
+      .filter((f:any)=>f.business_id===business.id&&f.status==='active'&&!f.deleted_at&&pathAllowed(f.storage_path,business.id)).sort((x:any,y:any)=>(y.version_number||1)-(x.version_number||1));
+     const duplicateOf=async(list:any[])=>{const last=list[0];if(!last)return null;const s=await storedSha(last.storage_path);return s&&s.sha===v.sha256?last:null;};
+     let list=await versions();let dup=await duplicateOf(list);
+     if(dup)return reply(200,{ok:true,duplicate:true,file_id:dup.id,storage_path:dup.storage_path,version_number:dup.version_number,sha256:v.sha256});
+     const latest=list[0];
+     const version_number=latest?(latest.version_number||1)+1:1,version_group_id=latest?(latest.version_group_id||latest.id):crypto.randomUUID();
+     const id=crypto.randomUUID(),path=`${business.id}/${MR_DIR}/${crypto.randomUUID()}.pdf`;
+     const up=await db.storage.from(BUCKET).upload(path,new Blob([bytes as BlobPart],{type:'application/pdf'}),{contentType:'application/pdf',upsert:false});
+     if(up.error)return reply(503,{error:'storage_error'});
+     const ins=await db.from('business_sale_files').insert({id,business_id:business.id,category:MR_CATEGORY,file_name:v.file_name,storage_path:path,file_type:'application/pdf',file_size:bytes.length,confidentiality_level:2,uploaded_by:p.id,status:'active',source:'auto_generated',document_type:'activity_report',version_number,version_group_id,portal_visible:true,portal_kind:'advertising',portal_period_from:v.period_from,portal_period_to:v.period_to}).select('id').single();
+     if(ins.error){
+      // Same rule as portal-ad-reports.js: never leave an object without its row.
+      await db.storage.from(BUCKET).remove([path]);
+      if(ins.error.code==='23505'){list=await versions();dup=await duplicateOf(list);if(dup)return reply(200,{ok:true,duplicate:true,file_id:dup.id,storage_path:dup.storage_path,version_number:dup.version_number,sha256:v.sha256});return reply(409,{error:'conflict_retry'});}
+      throw Error('database_error');
+     }
+     let audited=true;
+     try{await query(db.from('audit_log').insert({action:'marketing_report_published',table_name:'business_sale_files',record_id:business.id,actor_id:p.id,details:{file_id:id,period_from:v.period_from,period_to:v.period_to,report_type:v.report_type,version_number,sha256:v.sha256}}));}catch{audited=false;}
+     await saveRun({...runKey({business_id:business.id,period_from:v.period_from,period_to:v.period_to}),sale_file_id:id,sha256:v.sha256,pdf_status:'stored',portal_status:'uploaded_unverified',checks:{posts_in_period:v.posts_in_period,verify:null},last_verified_at:null,last_error:audited?null:'audit_log_failed'});
+     return reply(200,{ok:true,duplicate:false,file_id:id,storage_path:path,version_number,sha256:v.sha256});
+    }
+    // verify_marketing_report: the six checks; the box counts a report as delivered only when all six are true.
+    if(!uuid(b.business_id)||!uuid(b.file_id))return reply(400,{error:'invalid_request'});
+    const bid=String(b.business_id).toLowerCase(),fid=String(b.file_id).toLowerCase();
+    const row=await query(db.from('business_sale_files').select('id,business_id,category,document_type,file_name,file_type,storage_path,status,deleted_at,created_at,confidentiality_level,version_number,version_group_id,portal_visible,portal_kind,portal_period_from,portal_period_to').eq('id',fid).maybeSingle());
+    if(!row)return reply(404,{error:'not_found'});
+    const run=await query(db.from('marketing_report_runs').select('*').eq('business_id',bid).eq('period_from',row.portal_period_from).eq('period_to',row.portal_period_to).eq('report_type','weekly').maybeSingle()).catch(()=>null);
+    const checks:any[]=[];const add=(n:number,name:string,ok:boolean,detail:any={})=>checks.push({check:n,name,ok,...detail});
+    // 1) object exists under "<business_id>/", sha256 of the stored bytes (and equal to the published sha256, when known)
+    const inPath=pathAllowed(row.storage_path,bid)&&String(row.storage_path).startsWith(`${bid}/${MR_DIR}/`);
+    const stored=inPath?await storedSha(row.storage_path):null;
+    add(1,'storage_object',!!stored&&isPdfBytes(stored.bytes)&&(!run?.sha256||run.sha256===stored.sha),{sha256:stored?.sha??null,reason:!inPath?'path_outside_business':!stored?'object_missing':!isPdfBytes(stored.bytes)?'not_pdf':run?.sha256&&run.sha256!==stored.sha?'sha256_mismatch':null});
+    // 2) the DB row
+    const bad=Object.entries({business_id:row.business_id===bid,category:row.category===MR_CATEGORY,document_type:row.document_type==='activity_report',portal_kind:row.portal_kind==='advertising',portal_visible:row.portal_visible===true,status:row.status==='active'&&!row.deleted_at,confidentiality_level:row.confidentiality_level===2,version:Number(row.version_number)>=1}).filter(([,ok])=>!ok).map(([k])=>k);
+    add(2,'db_row',!bad.length,{version_number:row.version_number,reason:bad.length?'row_fields:'+bad.join(','):null});
+    // 3) the owner's list shows it, newest period first
+    const ownerPortal=await portalFiles(bid);const idx=ownerPortal.reports.findIndex((x:any)=>x.id===fid);
+    const newestFirst=idx>=0&&ownerPortal.reports.slice(0,idx).every((x:any)=>String(x.portal_period_to)>String(row.portal_period_to));
+    add(3,'owner_list',newestFirst,{position:idx,reason:idx<0?'not_listed_for_owner':!newestFirst?'not_newest_for_its_period':null});
+    // 4) owner download through the same code path as the seller `file` action; the owner must be able to log in
+    const business=await query(db.from('businesses').select('id,is_archived,agreement_status').eq('id',bid).maybeSingle());
+    const acct=await query(db.from('seller_portal_accounts').select('id,status').eq('business_id',bid).maybeSingle());
+    const own=await sellerFile(bid,fid);let ownSha:string|null=null;
+    if(own){const s=await storedSha(own.f.storage_path);if(s&&isPdfBytes(s.bytes))ownSha=s.sha;}
+    const canLogin=!!acct&&acct.status==='active'&&eligible(business);
+    add(4,'owner_download',!!ownSha&&ownSha===stored?.sha&&canLogin,{sha256:ownSha,reason:!canLogin?'owner_cannot_log_in':!own?'not_served_to_owner':!ownSha?'download_failed':ownSha!==stored?.sha?'sha256_mismatch':null});
+    // 5) cross-tenant: every OTHER active portal account gets 404 and does not see it in its list
+    const others=(await query(db.from('seller_portal_accounts').select('id,business_id,status').eq('status','active'))).filter((a:any)=>a.business_id&&a.business_id!==bid);
+    const leaks:string[]=[];
+    for(const o of others){const hit=await sellerFile(o.business_id,fid);const listed=hit?true:publicFiles(await portalFiles(o.business_id)).some(x=>x.id===fid);if(hit||listed)leaks.push(o.id);}
+    add(5,'cross_tenant',!leaks.length,{accounts_checked:others.length,reason:leaks.length?'visible_to_other_accounts:'+leaks.length:null});
+    // 6) no public link: bucket still private; this path never creates signed or public URLs
+    const bucket=await db.storage.getBucket(BUCKET);
+    const priv=!bucket.error&&bucket.data?.public===false;
+    add(6,'no_public_link',priv,{bucket_public:bucket.data?.public??null,signed_urls_created:0,reason:priv?null:bucket.error?'bucket_unreadable':'bucket_is_public'});
+    const ok=checks.every(c=>c.ok),now=new Date().toISOString();
+    await saveRun({...runKey({business_id:bid,period_from:row.portal_period_from,period_to:row.portal_period_to}),sale_file_id:row.id,sha256:run?.sha256??stored?.sha??null,pdf_status:stored?'stored':'missing',portal_status:ok?'uploaded_verified':'verify_failed',checks:{posts_in_period:run?.checks?.posts_in_period??null,verify:checks},last_verified_at:now,last_error:ok?null:checks.filter(c=>!c.ok).map(c=>`${c.check}:${c.reason}`).join('; ')});
+    return reply(200,{ok,file_id:fid,verified_at:now,checks});
+   }
    const token=req.headers.get('x-seller-token')||'';
    if(!token)return reply(401,{error:'unauthorized'});
    const s=await query(db.from('seller_portal_sessions').select('*').eq('token_hash',await digest(token)).maybeSingle());
@@ -420,10 +522,9 @@ export function createHandler(db:any,opts:Options){
    }
    if(action==='file'){
     if(!uuid(b.file_id)||!['view','download'].includes(b.mode))return reply(404,{error:'not_found'});
-    const portal=await portalFiles(business.id);
-    const extra=b.file_source==='extra';
-    const f=extra?portal.extras.find((x:any)=>x.id===b.file_id):[...portal.documents,...portal.reports].find((x:any)=>x.id===b.file_id);
-    if(!f||f.business_id!==business.id||!pathAllowed(f.storage_path,business.id))return reply(404,{error:'not_found'});
+    const found=await sellerFile(business.id,b.file_id,b.file_source);
+    if(!found)return reply(404,{error:'not_found'});
+    const {f,extra}=found;
     // Stream the original file through the authenticated API. Never expose a bearer storage URL.
     const r=await db.storage.from(BUCKET).download(f.storage_path);if(r.error||!r.data)return reply(404,{error:'not_found'});
     const bytes=await r.data.arrayBuffer();
