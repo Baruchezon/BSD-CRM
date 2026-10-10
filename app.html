@@ -9,15 +9,21 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610061550';
+    var PAGE_BUILD = '202610101234';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
-    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
+    // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
+    // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
+    // device, not on every new tab. Shared with checkStalePage() in js/auth.js.
+    var guardKey = 'bsd_ver_reload_guard:' + (location.pathname.split('/').pop() || 'index');
+    function readGuard(){ try { return localStorage.getItem(guardKey); } catch(e){ try { return sessionStorage.getItem(guardKey); } catch(e2){ return 'storage-blocked'; } } }
+    function writeGuard(v){ try { localStorage.setItem(guardKey, v); return true; } catch(e){ try { sessionStorage.setItem(guardKey, v); return true; } catch(e2){ return false; } } }
+    var loopGuard = readGuard();
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
       .then(function(r){ return r.json(); })
       .then(function(v){
         var serverBuild = (v.version || '').replace(/\D/g,'');
         if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
-          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
+          if (!writeGuard(serverBuild)) return; // never reload if we can't remember that we did
           var url = new URL(location.href);
           url.searchParams.set('_cb', Date.now());
           location.replace(url.toString());
@@ -45,7 +51,8 @@
   // כדי לזהות במדויק הזמנה/איפוס סיסמה שנחתו כאן במקום בדף הייעודי.
   window.__authHashSnapshot = window.location.hash || '';
 </script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/bsdBlackBox.js?v=20261010"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
   .welcome{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;margin-bottom:22px;}
@@ -921,7 +928,9 @@ function checkVersionNotice(){
 function initTasksPopupWatcher(profile){
   TASKS_POPUP_PROFILE = profile;
   checkTasksPopup();
-  setInterval(checkTasksPopup, 60 * 1000);
+  // 10.10.2026 (staging): no polling while the tab is in the background (Chrome Android
+  // batches throttled timers and fires them together on return to the browser).
+  setInterval(() => { if (!document.hidden) checkTasksPopup(); }, 60 * 1000);
 }
 
 // ============================================================
@@ -1097,9 +1106,9 @@ window.bsdOnLeadPush = function(){ if (CURRENT_PROFILE) checkNewLeadPopup(CURREN
   checkVersionNotice();
   checkNewMessagesPopup(profile);
   checkNewLeadPopup(profile);
-  setInterval(() => checkNewLeadPopup(profile), 60 * 1000);
+  setInterval(() => { if (!document.hidden) checkNewLeadPopup(profile); }, 60 * 1000);
   refreshNavMsgBadge();
-  setInterval(refreshNavMsgBadge, 60 * 1000);
+  setInterval(() => { if (!document.hidden) refreshNavMsgBadge(); }, 60 * 1000);
 })();
 </script>
 </body>

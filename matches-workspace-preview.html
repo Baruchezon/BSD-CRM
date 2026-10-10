@@ -4,15 +4,21 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202610061550';
+    var PAGE_BUILD = '202610101234';
     window.PAGE_BUILD = PAGE_BUILD;
-    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
+    // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
+    // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
+    // device, not on every new tab. Shared with checkStalePage() in js/auth.js.
+    var guardKey = 'bsd_ver_reload_guard:' + (location.pathname.split('/').pop() || 'index');
+    function readGuard(){ try { return localStorage.getItem(guardKey); } catch(e){ try { return sessionStorage.getItem(guardKey); } catch(e2){ return 'storage-blocked'; } } }
+    function writeGuard(v){ try { localStorage.setItem(guardKey, v); return true; } catch(e){ try { sessionStorage.setItem(guardKey, v); return true; } catch(e2){ return false; } } }
+    var loopGuard = readGuard();
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
       .then(function(r){ return r.json(); })
       .then(function(v){
         var serverBuild = (v.version || '').replace(/\D/g,'');
         if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
-          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
+          if (!writeGuard(serverBuild)) return; // never reload if we can't remember that we did
           var url = new URL(location.href);
           url.searchParams.set('_cb', Date.now());
           location.replace(url.toString());
@@ -26,7 +32,7 @@
 <title>מרכז ההתאמות | BSD CRM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
 <script src="js/config.js"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/auth.js"></script>

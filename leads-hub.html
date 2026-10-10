@@ -9,15 +9,21 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610091100';
+    var PAGE_BUILD = '202610101234';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
-    var loopGuard = sessionStorage.getItem('bsd_ver_reload_guard');
+    // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
+    // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
+    // device, not on every new tab. Shared with checkStalePage() in js/auth.js.
+    var guardKey = 'bsd_ver_reload_guard:' + (location.pathname.split('/').pop() || 'index');
+    function readGuard(){ try { return localStorage.getItem(guardKey); } catch(e){ try { return sessionStorage.getItem(guardKey); } catch(e2){ return 'storage-blocked'; } } }
+    function writeGuard(v){ try { localStorage.setItem(guardKey, v); return true; } catch(e){ try { sessionStorage.setItem(guardKey, v); return true; } catch(e2){ return false; } } }
+    var loopGuard = readGuard();
     fetch('version.json?t=' + Date.now(), {cache:'no-store'})
       .then(function(r){ return r.json(); })
       .then(function(v){
         var serverBuild = (v.version || '').replace(/\D/g,'');
         if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
-          sessionStorage.setItem('bsd_ver_reload_guard', serverBuild);
+          if (!writeGuard(serverBuild)) return; // never reload if we can't remember that we did
           var url = new URL(location.href);
           url.searchParams.set('_cb', Date.now());
           location.replace(url.toString());
@@ -37,7 +43,8 @@
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="css/style.css?v=202610061550">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/bsdBlackBox.js?v=20261010"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
   .nav{display:flex;gap:6px;}
