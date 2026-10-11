@@ -59,5 +59,5 @@ test('log: existing audit_log (no new table); every portal email listed in the c
 test('no other new buttons; cache-busted', () => {
   assert.equal((card.match(/data-portal-email /g) || []).length, 1, 'one «שליחה במייל» button');
   assert.equal((card.match(/<button/g) || []).length, 17, 'existing 7 + email button + preview «אישור ושליחה»/«ביטול» + open-account choice «פתח ושלח»/«ביטול» + «סגירה» (preview error, result, view) + list «רענון מצב»/«צפייה במייל»');
-  assert.match(biz, new RegExp('js/portal-business-card\\.js\\?v=' + JSON.parse(read('version.json')).version));
+  { const cb = (biz.match(/js\/portal-business-card\.js\?v=(\d{12})/) || [])[1]; assert.ok(cb && cb >= '202610110550' && cb <= JSON.parse(read('version.json')).version, 'portal-business-card cache-bust ' + cb); } // later builds may bump version.json further
 });

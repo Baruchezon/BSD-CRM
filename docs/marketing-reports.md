@@ -1,4 +1,4 @@
-# Weekly marketing reports in the seller portal (branch feat/portal-marketing-reports, NOT deployed)
+# Weekly marketing reports in the seller portal (approved by Baruch 11.10.2026; deployed in stages, see PR)
 Spec: /workspace/bsd-reports/eldad-portal-reports-spec.md (Baruch's directive 10.10.2026 22:12).
 
 ## What changes
@@ -24,3 +24,8 @@ Spec: /workspace/bsd-reports/eldad-portal-reports-spec.md (Baruch's directive 10
 ## Tests
 `deno test -A tests/portal/marketing_reports_test.ts` (unit) and the local end-to-end stack in /workspace/bsd-reports/eldad-local
 (Postgres 17 with the production schema mirror, PostgREST 12, storage emulator, this handler) — see ELDAD-RESULTS.md.
+
+## Profile permission guard (approved 11.10.2026)
+`supabase/migrations/20261011094500_profiles_permission_fields_guard.sql`: `protect_profile_privileged_fields()` now keeps role, status,
+internal_code, document_access_level, must_change_password and every `can_*` column unchanged unless the caller is an admin or the
+service role. Self-edits of name/phone/city/company/job title/licence and login counters still work. Rollback: `docs/profiles-permission-guard-rollback.sql`.

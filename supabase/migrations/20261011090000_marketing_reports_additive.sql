@@ -1,7 +1,7 @@
 -- Weekly marketing reports in the seller portal (spec /workspace/bsd-reports/eldad-portal-reports-spec.md §2 G4, 10.10.2026).
 -- ADDITIVE ONLY: one partial unique index, three new nullable/defaulted columns, one new table, one new guard trigger.
 -- No existing row, column, constraint, policy or function is changed. Rollback: docs/marketing-reports-rollback.sql.
--- NOT applied to production. Requires Baruch's written approval.
+-- Approved in writing by Baruch 11.10.2026 06:44; applied to production 11.10.2026 via apply_migration (name marketing_reports_additive).
 
 -- 1) one row per business / period / version for marketing reports (0 advertising rows exist today, so it builds without conflicts)
 create unique index if not exists bsf_marketing_report_uniq on public.business_sale_files
