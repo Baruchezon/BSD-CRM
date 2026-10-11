@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610101234';
+    var PAGE_BUILD = '202610111900';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -73,6 +73,14 @@
   tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
   tbody tr:hover{background:#faf8f2;}
   .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
+  /* 11.10.2026 (בקשת ברוך): «מוכר עסק» / «קונה עסק» / «לא ידוע» על כל ליד */
+  .side-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.74rem;font-weight:800;white-space:nowrap;line-height:1.4;border:none;font-family:inherit;}
+  select.side-badge{cursor:pointer;-webkit-appearance:none;appearance:none;padding-left:20px;background-repeat:no-repeat;background-position:left 7px center;background-size:8px 5px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23ffffff'/%3E%3C/svg%3E");}
+  select.side-badge.side-unknown{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23444444'/%3E%3C/svg%3E");}
+  select.side-badge option{background:#fff;color:#1c2333;}
+  .side-seller{background-color:#F26B1D;color:#fff;}
+  .side-buyer{background-color:#0B1B3A;color:#fff;}
+  .side-unknown{background-color:#dcdcdc;color:#444;}
   .primary-name{font-weight:700;color:var(--navy);}
   .sub-name{font-size:.75rem;color:#888;margin-top:2px;}
   .row-menu-btn{border:1.5px solid #d8d3c4;background:#f7f5ee;color:#333;cursor:pointer;font-size:1.1rem;font-weight:700;padding:2px 8px;border-radius:8px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.15);}
@@ -941,19 +949,20 @@ function rowNameCell(r){
     return `<div class="primary-name">${esc(bizName)}</div><div class="sub-name">${esc(r.owner_name||'—')}</div>`;
   }
   const personName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || '—';
+  const side = `<div style="margin-top:4px;" onclick="event.stopPropagation()">${leadSideBadge(r, { editable: canEditRecord(r.created_by) })}</div>`;
   if (CURRENT_TAB === 'y2026'){
-    const badges = [`<span class="badge" style="background:#eee6d4;color:#665;">${esc(leadTypeLabel(r.type))}</span>`];
+    const badges = [];
     if (r.status) badges.push(`<span class="badge" style="background:#eaf1fb;color:#2b5fa3;">${esc(r.status)}</span>`);
-    return `<div class="primary-name">${esc(personName)}</div><div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">${badges.join('')}</div>`;
+    return `<div class="primary-name">${esc(personName)}</div>${side}${badges.length ? `<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">${badges.join('')}</div>` : ''}`;
   }
   if (CURRENT_TAB === 'seller' && r.website_intake_stage){
-    return `<div class="primary-name">${esc(personName)}</div><div style="margin-top:4px;">${websiteStatusBadge(r)}</div>`;
+    return `<div class="primary-name">${esc(personName)}</div>${side}<div style="margin-top:4px;">${websiteStatusBadge(r)}</div>`;
   }
   if (CURRENT_TAB === 'seller' && r.business_name){
-    return `<div class="primary-name">${esc(personName)}</div><div class="sub-name">${esc(r.business_name)}</div>`;
+    return `<div class="primary-name">${esc(personName)}</div>${side}<div class="sub-name">${esc(r.business_name)}</div>`;
   }
   const badge = ratingBadge(r);
-  return `<div class="primary-name">${esc(personName)}</div>${badge ? `<div style="margin-top:4px;" onclick="event.stopPropagation()">${badge}</div>` : ''}`;
+  return `<div class="primary-name">${esc(personName)}</div>${side}${badge ? `<div style="margin-top:4px;" onclick="event.stopPropagation()">${badge}</div>` : ''}`;
 }
 function rowCityCell(r){
   if (CURRENT_TAB === 'business') return esc(r.city || '—');
@@ -1060,16 +1069,16 @@ function openReadOnly(id){
       ['עיר', r.city], ['תחום', r.field], ['הערות', r.notes], ['🔎 חקר מקדים', r.pre_research]);
   } else if (CURRENT_TAB === 'seller'){
     const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
-    rows.push(['שם', personName], ['מצב טיפול', leadHandlingStatusValue(r)], ['טלפון', r.phone], ['שם העסק', r.business_name],
+    rows.push(['שם', personName], ['מוכר או קונה', leadSideLabel(leadSide(r))], ['מצב טיפול', leadHandlingStatusValue(r)], ['טלפון', r.phone], ['שם העסק', r.business_name],
       ['תחום העסק', r.business_field], ['עיר העסק', r.business_city || r.city], ['הערות', r.notes], ['🔎 חקר מקדים', r.pre_research]);
   } else if (CURRENT_TAB === 'y2026'){
     const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
-    rows.push(['שם', personName], ['סוג ליד', leadTypeLabel(r.type)], ['סטטוס', r.status || '—'],
+    rows.push(['שם', personName], ['מוכר או קונה', leadSideLabel(leadSide(r))], ['סטטוס', r.status || '—'],
       ['טלפון', r.phone], ['עיר / אזור', r.business_city || r.requested_area || r.city],
       ['תאריך קליטה', fmtDateTime(r.created_at)], ['הערות', r.notes]);
   } else {
     const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
-    rows.push(['שם', personName], ['מצב טיפול', leadHandlingStatusValue(r)], ['טלפון', r.phone], ['אזור מבוקש', r.requested_area || r.city],
+    rows.push(['שם', personName], ['מוכר או קונה', leadSideLabel(leadSide(r))], ['מצב טיפול', leadHandlingStatusValue(r)], ['טלפון', r.phone], ['אזור מבוקש', r.requested_area || r.city],
       ['תחום מבוקש', r.requested_field], ['הערות', r.notes], ['🔎 חקר מקדים', r.pre_research]);
   }
   const modal = document.getElementById('modalBox');
@@ -1096,7 +1105,7 @@ function openAddChoice(){
     <form onsubmit="event.preventDefault();saveManualLead()">
       <div class="field"><label>שם מלא</label><input id="manualName" required maxlength="200"></div>
       <div class="field"><label>טלפון</label><input id="manualPhone" type="tel" dir="ltr" required></div>
-      <div class="field"><label>סוג הליד</label><select id="manualType"><option value="buyer">קונה</option><option value="seller">מוכר</option></select></div>
+      <div class="field"><label>מוכר או קונה?</label><select id="manualType" required><option value="" selected disabled>בחר: מוכר עסק או קונה עסק</option><option value="seller">מוכר עסק</option><option value="buyer">קונה עסק</option></select></div>
       <div class="field"><label>אימייל</label><input id="manualEmail" type="email" dir="ltr"></div>
       <div class="field"><label>תוכן הפנייה</label><textarea id="manualNotes" rows="4"></textarea></div>
       <div id="manualError" role="alert" style="color:#a02c1d"></div>
@@ -1113,8 +1122,10 @@ async function saveManualLead(){
     const name = document.getElementById('manualName').value.trim();
     const phone = document.getElementById('manualPhone').value.trim();
     if (!name || !phone) throw new Error('יש למלא שם וטלפון');
+    const side = (document.getElementById('manualType') || {}).value || '';
+    if (side !== 'seller' && side !== 'buyer') throw new Error('יש לבחור אם זה מוכר עסק או קונה עסק');
     const { data, error } = await window.supabaseClient.from('leads').insert({
-      type:(document.getElementById('manualType') || {}).value === 'seller' ? 'seller' : 'buyer', full_name:name, phone,
+      type:side, lead_side:side, lead_side_source:'manual_form', full_name:name, phone,
       email:document.getElementById('manualEmail').value.trim() || null,
       notes:document.getElementById('manualNotes').value.trim() || null,
       source:'הזנה ידנית', website_intake_stage:'new', status:'חדש',
@@ -1432,7 +1443,7 @@ function renderWebsiteLeadConversationForm(r){
   const modal = document.getElementById('modalBox');
   modal.style.maxWidth = '760px';
   modal.innerHTML = `
-    <h3>כרטיס ליד — ${esc(personName)}</h3>
+    <h3>כרטיס ליד — ${esc(personName)} ${leadSideBadge(r, { editable:false })}</h3>
     <div style="font-size:.76rem;color:#777;margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;">
       <span>מקור: <b>${esc(r.source || 'לא ידוע')}</b></span>
       <span>נקלט: <b>${fmtDateTime(r.created_at)}</b></span>
@@ -1523,11 +1534,73 @@ function renderWebsiteLeadConversationForm(r){
 
 // The lead's own type decides where «שמור והעבר» moves it. It is preselected
 // from the record and can be corrected on the card before saving.
+// 11.10.2026: a website lead whose side is not known (form gave no clear
+// seller/buyer purpose) is not preselected - same «לא ידוע» as its badge.
 function leadCardTypeValue(r){
   if (!r) return '';
+  const side = leadSide(r);
+  if (side) return side;
+  if (leadIsWebsite(r)) return '';
   if (r.type === 'seller') return 'seller';
   if (r.type === 'buyer' || r.type === 'partner') return 'buyer';
   return '';
+}
+
+// ============================================================
+// 11.10.2026 (בקשת ברוך): «מוכר עסק» / «קונה עסק» / «לא ידוע» על כל ליד
+// (ידניים ומהאתר) ובכרטיס הליד. מקור האמת: leads.lead_side (seller/buyer/null).
+// leads.type לבדו לא אמין בלידים מהאתר: כשהטופס לא אמר מוכר/קונה, השרת שם
+// type='buyer' רק כי השדה חובה. סדר הקביעה, בלי ניחוש מטקסט חופשי:
+//  1. lead_side שנשמר (טופס האתר, טופס ידני, כרטיס הליד, או לחיצה על התגית)
+//  2. ליד מהאתר: מטרת הפנייה שסומנה בטופס (website_purpose_guess נבנה ממנה)
+//  3. ליד שהוזן ע"י אדם (לא מהאתר): type שנבחר בהזנה. «הזנה ידנית» ישנה עם
+//     «קונה» לא נספרת - בטופס הישן «קונה» היה ברירת מחדל ולא בחירה.
+// ============================================================
+function leadIsWebsite(r){ return /אתר|site123|website/i.test((r && r.source) || ''); }
+function leadSide(r){
+  if (!r) return null;
+  if (r.lead_side === 'seller' || r.lead_side === 'buyer') return r.lead_side;
+  if (leadIsWebsite(r)){
+    const g = String(r.website_purpose_guess || '').replace(/\s*\(ניחוש\)\s*$/, '').trim();
+    if (g === 'מעוניין למכור עסק') return 'seller';
+    if (g === 'מחפש לקנות עסק') return 'buyer';
+    return null;
+  }
+  if (r.source === 'הזנה ידנית') return r.type === 'seller' ? 'seller' : null;
+  if (r.type === 'seller' || r.type === 'buyer') return r.type;
+  return null;
+}
+function leadSideLabel(side){ return side === 'seller' ? 'מוכר עסק' : side === 'buyer' ? 'קונה עסק' : 'לא ידוע'; }
+function leadSideBadge(r, opts){
+  const side = leadSide(r);
+  const cls = 'side-badge side-' + (side || 'unknown');
+  if (!opts || !opts.editable){
+    return `<span class="${cls}" title="מוכר או קונה">${leadSideLabel(side)}</span>`;
+  }
+  // One click: the badge itself is a small dropdown. Choosing writes leads.lead_side only.
+  return `<select class="${cls}" title="לחץ כדי לקבוע מוכר או קונה" aria-label="מוכר או קונה" onclick="event.stopPropagation()" onchange="event.stopPropagation();quickSetLeadSide('${esc(r.id)}', this.value, this)">
+    ${side ? '' : '<option value="" selected disabled>לא ידוע</option>'}
+    <option value="seller" ${side === 'seller' ? 'selected' : ''}>מוכר עסק</option>
+    <option value="buyer" ${side === 'buyer' ? 'selected' : ''}>קונה עסק</option>
+  </select>`;
+}
+async function quickSetLeadSide(leadId, side, el){
+  if (side !== 'seller' && side !== 'buyer') return;
+  if (el) el.disabled = true;
+  try {
+    const { data, error } = await window.supabaseClient.from('leads')
+      .update({ lead_side: side, lead_side_source: 'badge' }).eq('id', leadId).select('id, lead_side');
+    if (error) throw new Error(error.message);
+    if (!data || data.length !== 1 || data[0].lead_side !== side) throw new Error('אין הרשאה לעדכן את הליד הזה, או שהשינוי לא נשמר');
+    for (const list of [ALL_MANUAL, ALL_SELLERS, ALL_LEADS_2026]){
+      const rec = (list || []).find(x => x.id === leadId);
+      if (rec){ rec.lead_side = side; rec.lead_side_source = 'badge'; }
+    }
+    toast('נשמר: ' + leadSideLabel(side));
+  } catch (e) {
+    toast('שגיאה בעדכון מוכר/קונה: ' + e.message);
+  }
+  renderTable();
 }
 function updateLeadTransferHint(){
   const sel = document.getElementById('wlTransferTarget');
@@ -1876,6 +1949,7 @@ async function saveLeadOnly(id){
     const chosenType = (document.getElementById('wlTransferTarget') || {}).value || '';
     if (chosenType === 'seller' && source.data.type !== 'seller') payload.type = 'seller';
     if (chosenType === 'buyer' && source.data.type !== 'buyer' && source.data.type !== 'partner') payload.type = 'buyer';
+    if ((chosenType === 'seller' || chosenType === 'buyer') && source.data.lead_side !== chosenType){ payload.lead_side = chosenType; payload.lead_side_source = 'lead_card'; }
     setLeadCardBusy(true, 'שומר...');
     const saved = await window.supabaseClient.from('leads').update(payload).eq('id', id);
     if (saved.error) throw new Error(saved.error.message);
@@ -1990,6 +2064,7 @@ async function saveWebsiteLeadTransfer(id, opts){
 
     if (category === 'seller'){
       payload.type = 'seller';
+      if (source.data.lead_side !== 'seller'){ payload.lead_side = 'seller'; payload.lead_side_source = 'lead_card'; }
       payload.status = 'הועבר למוכר';
       payload.website_intake_stage = null;
       destination = await ensureWebsiteLeadBusiness({ ...source.data, ...payload }, opts);
@@ -1999,6 +2074,7 @@ async function saveWebsiteLeadTransfer(id, opts){
         if (dups.length) throw buyerDuplicateChoice(dups);
       }
       payload.type = 'buyer';
+      if (source.data.lead_side !== 'buyer'){ payload.lead_side = 'buyer'; payload.lead_side_source = 'lead_card'; }
       payload.status = 'הועבר לקונה';
       payload.website_intake_stage = null;
       payload.requested_field = source.data.requested_field || payload.business_field || null;

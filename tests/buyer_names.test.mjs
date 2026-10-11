@@ -22,7 +22,7 @@ test('full-name-only buyer opens with a populated name and preserves it on save'
  assert.equal(vm.runInNewContext(expression,{lead:null,pf:{first_name:'חדש'}}),'חדש');
 });
 test('lead hub and matching labels include buyer names',()=>{
- const hub=extract(read('leads-hub.html'),'function rowNameCell(','function rowCityCell(',{esc,CURRENT_TAB:'buyer',ratingBadge:()=>''});
+ const hub=extract(read('leads-hub.html'),'function rowNameCell(','function rowCityCell(',{esc,CURRENT_TAB:'buyer',ratingBadge:()=>'',leadSideBadge:()=>'',canEditRecord:()=>false});
  assert.ok(hub.rowNameCell({full_name:'ישראל ישראלי'}).includes('ישראל ישראלי'));
  assert.ok(hub.rowNameCell({first_name:'ישראל',last_name:'ישראלי'}).includes('ישראל ישראלי'));
  const matches=extract(read('matches-workspace.html'),'function counterpartyLabelHtml(','function saveMatchesPageCache(',{esc,counterpartyOf:m=>({rec:m,isBroker:false})});
