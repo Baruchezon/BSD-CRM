@@ -6,7 +6,7 @@ go-live steps in [GO-LIVE.md](GO-LIVE.md) are approved by Baruch. The existing 0
 | Item | Value |
 |---|---|
 | Number | +972 77-444-6707 (Extra Mobile), phone_number_id `1346024128597094`, Meta status "pending registration" |
-| Sender display name | `BSD Business Brokers Israel` (earlier draft: «BSD מכירת עסקים» - Baruch to confirm, see GO-LIVE §0) |
+| Sender display name | `BSD מכירת עסקים` (Baruch, 11.10.2026). Template footer stays `BSD Business Brokers Israel` |
 | Graph API | v23.0 (secret `WHATSAPP_GRAPH_VERSION` to change) |
 
 ## Parts
@@ -64,8 +64,11 @@ go-live steps in [GO-LIVE.md](GO-LIVE.md) are approved by Baruch. The existing 0
 * RLS: admin/manager see everything (incl. unlinked conversations); other active roles see conversations of cards they
   may open (`has_full_business_access`, lead owner/handler/view grant, broker viewer); viewer sees nothing. Users cannot
   insert/delete messages or conversations directly; writes go through the edge functions / RPCs.
-* Storage: restrictive policies on `business-files/whatsapp-inbound|outbound/…` (read only with conversation access,
-  no direct writes), because the existing `storage_select` policy lets any active user read the whole bucket.
+* Storage: restrictive policies on `business-files/whatsapp-inbound|outbound/…`. Read requires conversation access,
+  because the existing `storage_select` policy lets any active user read the whole bucket. CRM users cannot insert
+  or update objects in those folders. Delete of them stays with admin/manager through the existing
+  `business_files_admin_manager_full` policy (they can already open every conversation); an agent's delete policy
+  requires a business UUID as the first folder, so it does not match these paths.
 * Linking: unique live phone match → linked automatically (`auto_phone`); several → `ambiguous` with candidates (a
   person picks); a link is never overwritten by the webhook.
 

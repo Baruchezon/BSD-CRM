@@ -4,8 +4,9 @@ Nothing below has been done. Order matters; each step is reversible as noted.
 
 ## 0. Decisions for Baruch
 
-* **Display name**: `BSD Business Brokers Israel` (used in the template footer) vs the earlier «BSD מכירת עסקים».
-  Meta reviews the display name; it must match the business / website.
+* **Display name** (decided, Baruch 11.10.2026): `BSD מכירת עסקים`. Approve this name on the WhatsApp Business
+  account before submitting templates; Meta reviews it against the business and the website. The 12 template
+  footers stay `BSD Business Brokers Israel`.
 * Pilot business (one card) and the date to start `dry_run`.
 * Utility templates require opt-in (`WHATSAPP_REQUIRE_OPT_IN_UTILITY=true`, default). Existing cards have no opt-in
   yet, so a first message to a client who never wrote to 077 needs the opt-in box ticked on the card (after the client
@@ -39,7 +40,7 @@ Nothing below has been done. Order matters; each step is reversible as noted.
 | 5 | Re-deploy `complete-signed-agreement` with the signed-copy hook. Note: the live v6 imports its code from GitHub commit `edfba4b`; the new deploy must point at the merge commit, so review `git diff edfba4b <merge> -- supabase/functions/complete-signed-agreement` first. With `WHATSAPP_MODE=off` the hook returns immediately | `supabase functions deploy complete-signed-agreement` | re-deploy v6 (pin `edfba4b`) |
 | 6 | Register the number (needs PIN + payment method) | `curl -X POST https://graph.facebook.com/v23.0/1346024128597094/register -H "Authorization: Bearer $WHATSAPP_TOKEN" -H 'Content-Type: application/json' -d '{"messaging_product":"whatsapp","pin":"<6 digits>"}'` | `/deregister` |
 | 7 | Webhook: App → WhatsApp → Configuration: callback `https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/whatsapp-webhook`, verify token = `WHATSAPP_VERIFY_TOKEN`, subscribe field **messages**; then `POST /<WABA_ID>/subscribed_apps` | Meta UI + curl | unsubscribe |
-| 8 | Submit the 12 templates (display name approved first) | `WHATSAPP_WABA_ID=… WHATSAPP_TOKEN=… WHATSAPP_APP_ID=… deno run -A scripts/whatsapp/submit-templates.ts --submit` | delete template in WhatsApp Manager |
+| 8 | Submit the 12 templates (display name `BSD מכירת עסקים` approved first; footers stay `BSD Business Brokers Israel`) | `WHATSAPP_WABA_ID=… WHATSAPP_TOKEN=… WHATSAPP_APP_ID=… deno run -A scripts/whatsapp/submit-templates.ts --submit` | delete template in WhatsApp Manager |
 | 9 | `WHATSAPP_MODE=dry_run`, `BSD_CONFIG.WHATSAPP_API_UI=true` (CRM commit), test business on channel `api` → run TEST-PLAN §B | | mode `off`, flag false |
 | 10 | bsd-contracts PR merge (077 button appears only with `waApi=1`; signing pages pass `rid`; fixes broker `brokerId` bug - see below) | GitHub merge | revert PR |
 | 11 | `WHATSAPP_MODE=live`, one real business on `api` (pilot) | | card back to `personal` / mode `dry_run` |

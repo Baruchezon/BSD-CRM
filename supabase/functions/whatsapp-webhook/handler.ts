@@ -7,7 +7,7 @@
 //   (candidates kept, a human picks); none -> unlinked. A received PDF is NEVER turned into a signed agreement
 //   here: confirming it is a human action in the CRM card («אשר כהסכם חתום»). Never sends a message.
 import {
-  cleanFreeText, cleanParam, graphGet, hmacSha256Hex, isStopMessage, MAX_INBOUND_BYTES, nextStatus, OPT_OUT_PAYLOAD, safeFilename,
+  allowedMediaUrl, cleanFreeText, cleanParam, graphGet, hmacSha256Hex, isStopMessage, MAX_INBOUND_BYTES, nextStatus, OPT_OUT_PAYLOAD, safeFilename,
   sha256Base64, storageSafeName, timingSafeEqual, toE164, type WaConfig,
 } from '../_shared/whatsapp.ts';
 
@@ -60,9 +60,11 @@ export function createWebhookHandler(deps: WebhookDeps) {
     try {
       const meta = await graphGet(deps.cfg, deps.fetch, encodeURIComponent(String(media.id)));
       if (!meta.ok || !meta.body?.url) throw new Error('media lookup ' + meta.status);
+      const mediaUrl = String(meta.body.url);
+      if (!allowedMediaUrl(mediaUrl)) throw new Error('media url host not allowed');
       const size = Number(meta.body.file_size || 0);
       if (size > maxBytes) throw new Error('media too large ' + size);
-      const r = await deps.fetch(String(meta.body.url), { headers: { Authorization: 'Bearer ' + deps.cfg.token } });
+      const r = await deps.fetch(mediaUrl, { headers: { Authorization: 'Bearer ' + deps.cfg.token } });
       if (!r.ok) throw new Error('media download ' + r.status);
       const bytes = new Uint8Array(await r.arrayBuffer());
       if (bytes.length > maxBytes) throw new Error('media too large ' + bytes.length);

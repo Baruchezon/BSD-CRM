@@ -81,7 +81,16 @@ select pg_temp.ok((select unread_count = 0 from whatsapp_conversations), 'mark r
 do $$ begin update businesses set whatsapp_channel = 'api' where id = '10000000-0000-4000-8000-000000000001';
   raise exception 'FAIL: agent switched channel'; exception when raise_exception then
   if sqlerrm like 'FAIL%' then raise; end if; raise notice 'ok - agent cannot switch a card to the API channel'; end $$;
+do $$ begin
+  insert into leads (id, type, full_name, phone, created_by, whatsapp_channel)
+  values ('20000000-0000-4000-8000-000000000099','buyer','חדש','050-9998877','00000000-0000-4000-8000-00000000000b','api');
+  raise exception 'FAIL: agent created a card on the API channel';
+exception when raise_exception then
+  if sqlerrm like 'FAIL%' then raise; end if; raise notice 'ok - agent cannot create a card already on the API channel'; end $$;
 select pg_temp.as_user('00000000-0000-4000-8000-00000000000a');
+insert into leads (id, type, full_name, phone, created_by, whatsapp_channel)
+  values ('20000000-0000-4000-8000-000000000098','buyer','מנהל','050-9998876','00000000-0000-4000-8000-00000000000a','api');
+select pg_temp.ok((select whatsapp_channel = 'api' from leads where id = '20000000-0000-4000-8000-000000000098'), 'admin can create a card on the API channel');
 select wa_set_record_channel('businesses', '10000000-0000-4000-8000-000000000001', 'api');
 select pg_temp.ok((select whatsapp_channel = 'api' from businesses where id = '10000000-0000-4000-8000-000000000001'), 'admin switches the pilot business to api');
 
@@ -117,5 +126,7 @@ set role authenticated;
 select pg_temp.as_user('00000000-0000-4000-8000-00000000000c');
 update leads set whatsapp_opt_in = true where id = '20000000-0000-4000-8000-000000000001';
 select pg_temp.ok((select not whatsapp_opt_in and whatsapp_opt_out_at is not null from leads where id = '20000000-0000-4000-8000-000000000001'), 'opt-out wins: a card cannot re-enable a removed number');
+update leads set whatsapp_marketing_opt_in_at = '1999-01-01' where id = '20000000-0000-4000-8000-000000000002';
+select pg_temp.ok((select whatsapp_marketing_opt_in_at is null from leads where id = '20000000-0000-4000-8000-000000000002'), 'marketing opt-in timestamp is server-side only');
 reset role;
 \echo ALL WHATSAPP DB ASSERTIONS PASSED

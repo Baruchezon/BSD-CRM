@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cleanParam, hmacSha256Hex, isStopMessage, nextStatus, readConfig, safeFilename, safeTextParam, storageSafeName, templatePayload, toE164,
+import { allowedMediaUrl, cleanParam, hmacSha256Hex, isStopMessage, nextStatus, readConfig, safeFilename, safeTextParam, storageSafeName, templatePayload, toE164,
   windowOpen } from '../../supabase/functions/_shared/whatsapp.ts';
 import { TEMPLATES } from '../../supabase/functions/_shared/whatsapp-templates.ts';
 
@@ -36,6 +36,15 @@ Deno.test('filenames: safe display name + ASCII storage key', () => {
   assert.equal(safeFilename(''), 'file');
   assert.equal(storageSafeName('הסכם חתום.PDF'), 'file.pdf');
   assert.equal(storageSafeName('Signed agreement v2.pdf'), 'Signed-agreement-v2.pdf');
+});
+Deno.test('media download URLs stay on Meta hosts (the system-user token is attached)', () => {
+  assert.equal(allowedMediaUrl('https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1'), true);
+  assert.equal(allowedMediaUrl('https://scontent.xx.fbcdn.net/v/t1/file'), true);
+  assert.equal(allowedMediaUrl('https://graph.facebook.com/v23.0/1'), true);
+  assert.equal(allowedMediaUrl('https://evil.example/steal'), false);
+  assert.equal(allowedMediaUrl('https://lookaside.fbsbx.com.evil.example/x'), false);
+  assert.equal(allowedMediaUrl('http://lookaside.fbsbx.com/x'), false);
+  assert.equal(allowedMediaUrl('https://user:tok@lookaside.fbsbx.com/x'), false);
 });
 Deno.test('STOP words (Hebrew + English), not ordinary text', () => {
   for (const w of ['הסר', 'הסר אותי', 'STOP', 'להסרה.']) assert.ok(isStopMessage(w), w);

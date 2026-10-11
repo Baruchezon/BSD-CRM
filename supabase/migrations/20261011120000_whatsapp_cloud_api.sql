@@ -123,7 +123,14 @@ $$;
 create or replace function public.bsd_whatsapp_channel_guard()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
-  -- Only admin/manager (or the service role, auth.uid() null) may switch a record between 054 and the API.
+  -- Only admin/manager (or the service role, auth.uid() null) may put a record on the API channel.
+  -- INSERT is included: a new card must not be created already on 'api' by an agent.
+  if tg_op = 'INSERT' then
+    if new.whatsapp_channel is distinct from 'personal' and auth.uid() is not null and not public.is_admin_or_manager(auth.uid()) then
+      raise exception 'רק מנהל יכול להעביר כרטיס לערוץ וואטסאפ אחר';
+    end if;
+    return new;
+  end if;
   if new.whatsapp_channel is distinct from old.whatsapp_channel and auth.uid() is not null and not public.is_admin_or_manager(auth.uid()) then
     raise exception 'רק מנהל יכול להעביר כרטיס לערוץ וואטסאפ אחר';
   end if;
@@ -132,20 +139,20 @@ end;
 $$;
 
 drop trigger if exists trg_leads_consent_whatsapp on public.leads;
-create trigger trg_leads_consent_whatsapp before insert or update of whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_out_at, whatsapp_consent_source, whatsapp_marketing_opt_in, phone, phone2
+create trigger trg_leads_consent_whatsapp before insert or update of whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_out_at, whatsapp_consent_source, whatsapp_marketing_opt_in, whatsapp_marketing_opt_in_at, phone, phone2
   on public.leads for each row execute function public.bsd_whatsapp_consent_stamp();
 drop trigger if exists trg_businesses_consent_whatsapp on public.businesses;
-create trigger trg_businesses_consent_whatsapp before insert or update of whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_out_at, whatsapp_consent_source, whatsapp_marketing_opt_in, owner_phone
+create trigger trg_businesses_consent_whatsapp before insert or update of whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_out_at, whatsapp_consent_source, whatsapp_marketing_opt_in, whatsapp_marketing_opt_in_at, owner_phone
   on public.businesses for each row execute function public.bsd_whatsapp_consent_stamp();
 drop trigger if exists trg_brokers_consent_whatsapp on public.brokers;
-create trigger trg_brokers_consent_whatsapp before insert or update of whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_out_at, whatsapp_consent_source, whatsapp_marketing_opt_in, phone
+create trigger trg_brokers_consent_whatsapp before insert or update of whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_out_at, whatsapp_consent_source, whatsapp_marketing_opt_in, whatsapp_marketing_opt_in_at, phone
   on public.brokers for each row execute function public.bsd_whatsapp_consent_stamp();
 drop trigger if exists trg_leads_whatsapp_channel_guard on public.leads;
-create trigger trg_leads_whatsapp_channel_guard before update of whatsapp_channel on public.leads for each row execute function public.bsd_whatsapp_channel_guard();
+create trigger trg_leads_whatsapp_channel_guard before insert or update of whatsapp_channel on public.leads for each row execute function public.bsd_whatsapp_channel_guard();
 drop trigger if exists trg_businesses_whatsapp_channel_guard on public.businesses;
-create trigger trg_businesses_whatsapp_channel_guard before update of whatsapp_channel on public.businesses for each row execute function public.bsd_whatsapp_channel_guard();
+create trigger trg_businesses_whatsapp_channel_guard before insert or update of whatsapp_channel on public.businesses for each row execute function public.bsd_whatsapp_channel_guard();
 drop trigger if exists trg_brokers_whatsapp_channel_guard on public.brokers;
-create trigger trg_brokers_whatsapp_channel_guard before update of whatsapp_channel on public.brokers for each row execute function public.bsd_whatsapp_channel_guard();
+create trigger trg_brokers_whatsapp_channel_guard before insert or update of whatsapp_channel on public.brokers for each row execute function public.bsd_whatsapp_channel_guard();
 
 -- 5) Conversations (one per phone number) ------------------------------------------------------------------
 create table if not exists public.whatsapp_conversations (

@@ -10,7 +10,7 @@
 //   WHATSAPP_APP_ID             Meta App id (only for DOCUMENT header examples via the Resumable Upload API)
 //   WHATSAPP_SHORT_LINK_BASE    fixed URL-button prefix, MUST equal the secret used by whatsapp-send
 //   WHATSAPP_HEADER_SAMPLE_PDF  path to a sample PDF used as the DOCUMENT header example (default BSD-training-brochure.pdf)
-import { lintTemplate, submissionPayload, TEMPLATES } from '../../supabase/functions/_shared/whatsapp-templates.ts';
+import { DISPLAY_NAME, lintTemplate, submissionPayload, TEMPLATES } from '../../supabase/functions/_shared/whatsapp-templates.ts';
 
 const args = new Set(Deno.args);
 const submit = args.has('--submit');
@@ -40,7 +40,7 @@ const handle = submit && needsDoc ? await headerHandle() : undefined;
 const payloads = defs.map(t => submissionPayload(t, base, handle));
 
 if (!submit) {
-  await Deno.writeTextFile('docs/whatsapp/templates.json', JSON.stringify({ generated_from: 'supabase/functions/_shared/whatsapp-templates.ts', short_link_base: base, templates: payloads }, null, 2) + '\n');
+  await Deno.writeTextFile('docs/whatsapp/templates.json', JSON.stringify({ generated_from: 'supabase/functions/_shared/whatsapp-templates.ts', display_name: DISPLAY_NAME, short_link_base: base, templates: payloads }, null, 2) + '\n');
   console.log(`DRY RUN: ${payloads.length} templates linted OK, payloads written to docs/whatsapp/templates.json (nothing sent).`);
   Deno.exit(0);
 }

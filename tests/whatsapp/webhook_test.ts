@@ -28,8 +28,8 @@ function mkStore(matches: { kind: any; id: string; is_archived: boolean }[] = []
   return s;
 }
 async function sha(bytes: Uint8Array) { const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as BufferSource)); let x = ''; d.forEach(b => x += String.fromCharCode(b)); return btoa(x); }
-const graph = async (opts: { sha?: string; fail?: boolean } = {}) => fakeFetch(async (url) => {
-  if (url.startsWith('https://graph.facebook.com/v23.0/MEDIA1')) return new Response(JSON.stringify({ url: 'https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1', mime_type: 'application/pdf', sha256: opts.sha ?? await sha(PDF), file_size: PDF.length }));
+const graph = async (opts: { sha?: string; fail?: boolean; mediaUrl?: string } = {}) => fakeFetch(async (url) => {
+  if (url.startsWith('https://graph.facebook.com/v23.0/MEDIA1')) return new Response(JSON.stringify({ url: opts.mediaUrl ?? 'https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1', mime_type: 'application/pdf', sha256: opts.sha ?? await sha(PDF), file_size: PDF.length }));
   if (url.startsWith('https://lookaside.fbsbx.com/')) return opts.fail ? new Response('x', { status: 404 }) : new Response(PDF as BodyInit);
   return new Response('{}', { status: 404 });
 });
@@ -92,6 +92,15 @@ Deno.test('webhook: inbound PDF downloaded (Bearer, sha256 checked) into busines
   assert.equal((g.calls[1].init!.headers as any).Authorization, 'Bearer tok');
   assert.equal(m.agreement_confirmed_at, undefined, 'webhook never confirms an agreement');
   assert.ok(!('agreement_status' in m));
+});
+Deno.test('webhook: media URL outside Meta hosts is not fetched (token stays on Meta)', async () => {
+  const s = mkStore(); const g = await graph({ mediaUrl: 'https://evil.example/steal-token' });
+  const r = await post(handler(s as any, g.f), envelope(msg({ type: 'document', document: { id: 'MEDIA1', filename: 'a.pdf' } })));
+  assert.equal(r.status, 200);
+  assert.equal(s.uploads.length, 0);
+  assert.equal(s.messages[0].processing_status, 'failed');
+  assert.ok(g.calls.every(c => !c.url.includes('evil.example')));
+  assert.equal(g.calls.length, 1);
 });
 Deno.test('webhook: sha256 mismatch / download failure -> stored as failed, no upload, still 200', async () => {
   for (const g of [await graph({ sha: 'AAAA' }), await graph({ fail: true })]) {

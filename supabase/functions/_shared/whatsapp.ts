@@ -152,6 +152,14 @@ export async function graphPost(cfg: WaConfig, f: typeof fetch, path: string, pa
     return { ok: r.ok, status: r.status, body };
   } finally { clearTimeout(t); }
 }
+// Graph media URLs are on Meta's hosts. The download sends the permanent system-user token, so anything else is refused.
+export function allowedMediaUrl(raw: string): boolean {
+  let u: URL;
+  try { u = new URL(raw); } catch { return false; }
+  if (u.protocol !== 'https:' || u.username || u.password) return false;
+  const h = u.hostname.toLowerCase();
+  return h === 'lookaside.fbsbx.com' || h === 'graph.facebook.com' || h.endsWith('.fbcdn.net');
+}
 export async function graphGet(cfg: WaConfig, f: typeof fetch, path: string, timeoutMs = 15000) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), timeoutMs);

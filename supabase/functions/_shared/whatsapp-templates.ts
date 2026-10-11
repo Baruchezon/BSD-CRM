@@ -1,10 +1,12 @@
 // BSD WhatsApp Cloud API - message templates (single source of truth).
 // Used by: whatsapp-send (building the send payload), scripts/whatsapp/submit-templates.mjs (Graph API
 // submission), the CRM template picker (via whatsapp-send action list_templates), and the tests.
-// Rules: Hebrew (language "he"), no passwords / prices / phone numbers in any template, the sender display
-// name is «BSD Business Brokers Israel» (shown by WhatsApp, also used as the footer).
+// Rules: Hebrew (language "he"), no passwords / prices / phone numbers in any template.
+// WhatsApp display name (Meta business profile, shown above every message): «BSD מכירת עסקים».
+// Template footer (the line under the message body): «BSD Business Brokers Israel».
 // Marketing templates start with the word «פרסומת» and carry a removal option (Israeli spam law, section 30A).
 
+export const DISPLAY_NAME = 'BSD מכירת עסקים';
 export const TEMPLATE_FOOTER = 'BSD Business Brokers Israel';
 export const OPT_OUT_PAYLOAD = 'BSD_OPT_OUT';
 export const OPT_OUT_TEXT = 'הסר אותי';

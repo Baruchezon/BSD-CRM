@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { lintTemplate, OPT_OUT_PAYLOAD, renderTemplateText, submissionPayload, TEMPLATE_FOOTER, TEMPLATES } from '../../supabase/functions/_shared/whatsapp-templates.ts';
+import { DISPLAY_NAME, lintTemplate, OPT_OUT_PAYLOAD, renderTemplateText, submissionPayload, TEMPLATE_FOOTER, TEMPLATES } from '../../supabase/functions/_shared/whatsapp-templates.ts';
 
 Deno.test('templates: exactly the 12 planned Hebrew templates', () => {
   assert.equal(Object.keys(TEMPLATES).length, 12);
@@ -7,6 +7,7 @@ Deno.test('templates: exactly the 12 planned Hebrew templates', () => {
     assert.equal(t.language, 'he');
     assert.equal(t.footer, TEMPLATE_FOOTER);
     assert.equal(TEMPLATE_FOOTER, 'BSD Business Brokers Israel');
+    assert.equal(DISPLAY_NAME, 'BSD מכירת עסקים');
   }
 });
 Deno.test('templates: pass Meta lint (sequential vars, not at start/end, lengths, buttons)', () => {
