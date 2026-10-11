@@ -8,6 +8,8 @@ export const DOC_ORDER = ['anonymous_summary', 'full_summary', 'valuation', 'mar
 export const DOC_LABELS: Record<string, string> = {
   anonymous_summary: 'תקציר אנונימי', full_summary: 'תקציר מלא', valuation: 'הערכת שווי', market_research: 'חקר שוק'
 };
+// Portal section and file-type label for advertising (marketing) reports (Baruch, 10.10.2026).
+export const REPORTS_LABEL = 'דוחות פעילות שיווקית';
 export function documentBucket(f: any): string | null {
   if (!f) return null;
   if (f.category === 'anon_presentation') return 'anonymous_summary';
@@ -20,9 +22,13 @@ const isPdf = (f: any) => f.file_type === 'application/pdf' || /\.pdf$/i.test(f.
 const live = (f: any, businessId: string) => !!f && f.business_id === businessId && f.status === 'active' && !f.deleted_at
   && isPdf(f) && pathAllowed(f.storage_path, businessId);
 const newest = (a: any, b: any) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0) || String(b.id).localeCompare(String(a.id));
-// rows: business_sale_files rows of ONE business. Advertising reports are still
-// published explicitly from the CRM (portal_visible + portal_kind='advertising');
-// as before, the newest published report is shown.
+const version = (f: any) => Number(f.version_number) || 1;
+// Marketing reports: newest period first; inside one version group the highest version wins.
+const reportOrder = (a: any, b: any) => String(b.portal_period_to || '').localeCompare(String(a.portal_period_to || ''))
+  || String(b.portal_period_from || '').localeCompare(String(a.portal_period_from || '')) || version(b) - version(a) || newest(a, b);
+// rows: business_sale_files rows of ONE business. Since 10.10.2026 ALL published advertising
+// reports (portal_visible + portal_kind='advertising') are listed, newest period first, one entry
+// per version_group_id (latest version wins; older versions stay in DB/storage, never deleted).
 export function portalDocuments(rows: any[], businessId: string) {
   const sorted = (rows || []).filter(f => live(f, businessId)).sort(newest);
   const documents: any[] = [];
@@ -30,6 +36,10 @@ export function portalDocuments(rows: any[], businessId: string) {
     const f = sorted.find(x => x.portal_kind !== 'advertising' && documentBucket(x) === bucket);
     if (f) documents.push({...f, bucket});
   }
-  const report = sorted.find(x => x.portal_kind === 'advertising' && x.portal_visible === true);
-  return {documents, reports: report ? [{...report, bucket: 'advertising'}] : []};
+  const seen = new Set<string>(); const reports: any[] = [];
+  for (const r of sorted.filter(x => x.portal_kind === 'advertising' && x.portal_visible === true).sort(reportOrder)) {
+    const group = String(r.version_group_id || r.id); if (seen.has(group)) continue;
+    seen.add(group); reports.push({...r, bucket: 'advertising'});
+  }
+  return {documents, reports};
 }

@@ -1,0 +1,34 @@
+<!doctype html><html lang="he" dir="rtl"><head><script>
+(function(){
+  try{
+    var PAGE_BUILD = '202610110700';
+    window.PAGE_BUILD = PAGE_BUILD;
+    // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
+    // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
+    // device, not on every new tab. Shared with checkStalePage() in js/auth.js.
+    var guardKey = 'bsd_ver_reload_guard:' + (location.pathname.split('/').pop() || 'index');
+    function readGuard(){ try { return localStorage.getItem(guardKey); } catch(e){ try { return sessionStorage.getItem(guardKey); } catch(e2){ return 'storage-blocked'; } } }
+    function writeGuard(v){ try { localStorage.setItem(guardKey, v); return true; } catch(e){ try { sessionStorage.setItem(guardKey, v); return true; } catch(e2){ return false; } } }
+    var loopGuard = readGuard();
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          if (!writeGuard(serverBuild)) return; // never reload if we can't remember that we did
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="referrer" content="no-referrer"><title>BSD | דוחות פעילות שיווקית – סטטוס</title><link rel="icon" href="portal/logo.png"><link rel="stylesheet" href="portal/portal.css?v=20261008-1">
+<style>.mr-table{width:100%;border-collapse:collapse;font-size:14px}.mr-table th,.mr-table td{padding:8px 10px;border-bottom:1px solid #e3dccb;text-align:right;vertical-align:top}.mr-table th{background:#f6f1e4;font-weight:700}.mr-ok{color:#1d6b3a;font-weight:700}.mr-warn{color:#8a5a00;font-weight:700}.mr-bad{color:#a12222;font-weight:700}
+@media (max-width:760px){.mr-table thead{display:none}.mr-table tr{display:block;border:1px solid #e3dccb;border-radius:10px;margin:0 0 12px;padding:6px 0;background:#fff}.mr-table td{display:flex;justify-content:space-between;gap:12px;border:0;padding:5px 12px}.mr-table td::before{content:attr(data-label);font-weight:700;color:#5b5446}}</style></head><body>
+<header class="top"><a class="brand" href="app.html"><img src="portal/logo.png" alt="BSD"><span><b>BSD</b><small>דוחות פעילות שיווקית</small></span></a><a href="app.html" style="color:white">חזרה למערכת</a></header>
+<main class="content" style="max-width:1200px;margin:auto"><h1>דוחות פעילות שיווקית – סטטוס</h1><p class="muted">מצב הדוח השבועי האחרון של כל עסק: הפקת PDF, העלאה לפורטל ו-6 בדיקות האימות. המסך לקריאה בלבד ומתעדכן מהמערכת האוטומטית.</p>
+<section class="panel"><div id="mrBody">טוען...</div></section></main><div id="status" role="status"></div>
+<script src="js/bsdBlackBox.js?v=20261010"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script><script src="js/config.js"></script><script src="js/supabaseClient.js"></script><script src="js/marketing-reports.js?v=20261011-1" defer></script></body></html>
