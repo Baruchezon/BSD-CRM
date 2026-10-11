@@ -273,6 +273,8 @@
 <script src="js/config.js?v=202610061550"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
+<script src="js/whatsapp-api.js?v=202610111200"></script>
+<script src="js/whatsapp-card.js?v=202610111200"></script>
 <script src="js/permissions.js?v=202608251709"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/push.js?v=202610051500"></script>
@@ -947,7 +949,9 @@ function agreementBanner(status, agreementNumber, tableName, recordId, pdfPath, 
     : (s === 'יש הסכם חתום'
         ? `<div class="agr-note" style="margin-top:6px;color:#8a6d1f;">⚠️ מסומן כחתום, אך קובץ ה-PDF החתום עדיין לא נשמר במערכת</div>`
         : '');
-  return uploadWidget + statusLine + pdfLine;
+  // WhatsApp 077 section (empty while BSD_CONFIG.WHATSAPP_API_UI is false)
+  const waSlot = window.BSDWhatsAppCard ? window.BSDWhatsAppCard.slot(tableName, recordId) : '';
+  return uploadWidget + statusLine + pdfLine + waSlot;
 }
 
 async function _agreementSignedUrl(tableName, recordId, download){
@@ -1658,6 +1662,8 @@ async function sendAgreementForLead(id){
     phone: l.phone || '',
     biz: bizField
   });
+  // WhatsApp 077: cards switched to the API channel get the «שלח מ-077» button in admin-prep (054 button unchanged)
+  if (window.BSD_CONFIG.WHATSAPP_API_UI === true && l.whatsapp_channel === 'api'){ params.set('waApi', '1'); params.set('recordTable', 'leads'); }
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
 }
 

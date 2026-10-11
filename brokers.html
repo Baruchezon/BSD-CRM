@@ -205,6 +205,8 @@
 <script src="js/config.js?v=20260930archive1"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
+<script src="js/whatsapp-api.js?v=202610111200"></script>
+<script src="js/whatsapp-card.js?v=202610111200"></script>
 <script src="js/permissions.js?v=202608251709"></script>
 <script>
 let ALL_BROKERS = [];
@@ -390,6 +392,8 @@ function brokerAgreementBanner(b){
   } else if (s === 'יש הסכם חתום'){
     html += `<div class="agr-note" style="margin-top:6px;color:#8a6d1f;">⚠️ מסומן כחתום, אך קובץ ה-PDF החתום עדיין לא נשמר במערכת</div>`;
   }
+  // WhatsApp 077 section (empty while BSD_CONFIG.WHATSAPP_API_UI is false)
+  if (window.BSDWhatsAppCard) html += window.BSDWhatsAppCard.slot('brokers', b.id);
   return html;
 }
 
@@ -416,6 +420,8 @@ async function sendAgreementForBroker(id){
     commissionType: existingType,
     pct: String(existingPct)
   });
+  // WhatsApp 077: cards switched to the API channel get the «שלח מ-077» button in admin-prep (054 button unchanged)
+  if (window.BSD_CONFIG.WHATSAPP_API_UI === true && b.whatsapp_channel === 'api'){ params.set('waApi', '1'); params.set('recordTable', 'brokers'); }
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
   toast('נפתח ממשק הכנת ההסכם');
 }

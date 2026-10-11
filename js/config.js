@@ -9,6 +9,20 @@ window.BSD_CONFIG = {
   ORG_NAME: "BSD Business Brokers Israel",
   VIP_API_URL: "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/vip-api"
 };
+// WhatsApp Cloud API (077-444-6707). false = nothing of the new WhatsApp UI is shown (inbox link, card section).
+// Switch to true only after Baruch's go-live approval (docs/whatsapp/GO-LIVE.md). The 054 wa.me buttons are separate.
+window.BSD_CONFIG.WHATSAPP_API_UI = false;
+(function whatsappInboxLink(){
+  function install(){
+    if (window.BSD_CONFIG.WHATSAPP_API_UI !== true) return;
+    const nav = document.querySelector('.bsd-header .nav-rows .nav:last-child');
+    if (!nav || nav.querySelector('[data-wa-inbox]')) return;
+    const a = document.createElement('a'); a.href = 'whatsapp-inbox.html'; a.dataset.waInbox = '1'; a.textContent = '🟢 WhatsApp 077';
+    a.style.cssText = 'color:#9be7b4;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;';
+    nav.insertBefore(a, nav.firstChild);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once:true }); else install();
+})();
 // Seller portal API (production). Admin actions require an active admin/manager CRM session.
 window.BSD_CONFIG.SELLER_PORTAL_API_URL = 'https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/seller-portal-api';
 
