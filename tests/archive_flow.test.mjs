@@ -45,7 +45,19 @@ for(const biz of [true,false]){
   h.setBehavior('zero');await h.restore();assert.equal(h.archived().length,1);
   h.setBehavior('ok');await h.restore();assert.equal(h.active().length,1);assert.equal(h.archived().length,0);
   assert.equal(h.active()[0].archive_reason,null);
-  if(biz)assert.equal(h.active()[0].listing_status,'active');
+  const restoredWrite=h.writes.at(-1);
+  assert.equal(restoredWrite.values.is_archived,false);
+  if(biz){
+    assert.equal(h.active()[0].listing_status,'active');
+    assert.equal(restoredWrite.values.listing_status,'active');
+    assert.equal(restoredWrite.values.removal_reason,null);
+    assert.equal(restoredWrite.values.sold_to,null);
+    assert.equal(h.messages.at(-1),'שוחזר לרשימת העסקים');
+  } else {
+    assert.equal(restoredWrite.values.website_intake_stage,null);
+    assert.equal(h.active()[0].website_intake_stage,null);
+    assert.equal(h.messages.at(-1),'שוחזר לרשימת הקונים');
+  }
  });
  test((biz?'business':'buyer')+' does not archive without manage permission',async()=>{
   const h=harness(biz);h.s.CURRENT_PROFILE={id:'someone-else',role:'agent'};

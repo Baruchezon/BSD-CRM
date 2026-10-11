@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610101234';
+    var PAGE_BUILD = '202610112100';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -119,6 +119,15 @@
   .proportional-table th, .proportional-table td{overflow-wrap:break-word;}
   @media (max-width: 700px){ .proportional-table{table-layout:auto;min-width:0;} }
   .empty-row td{text-align:center;color:#999;padding:30px;}
+  .archive-strips{display:flex;flex-direction:column;gap:4px;}
+  .archive-strip{display:flex;align-items:center;gap:8px;box-sizing:border-box;height:36px;min-height:36px;max-height:36px;padding:0 8px;background:#fff;border:1px solid #e6e1d4;border-radius:8px;font-size:.82rem;overflow:hidden;white-space:nowrap;}
+  .archive-strip-name{font-weight:800;color:var(--navy);overflow:hidden;text-overflow:ellipsis;flex:0 1 220px;min-width:72px;background:none;border:none;padding:0;font-family:inherit;font-size:inherit;cursor:pointer;text-align:right;}
+  .archive-strip-meta{color:#5c574c;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;min-width:0;}
+  .archive-strip-date{flex:0 0 auto;color:#3d4a63;}
+  .archive-strip .badge{flex:0 0 auto;}
+  .archive-strip-actions{flex:0 0 auto;display:flex;align-items:center;gap:4px;}
+  .archive-strip-actions .btn{padding:2px 8px;font-size:.75rem;line-height:1.4;height:26px;}
+  .archive-strip-empty{height:36px;line-height:36px;text-align:center;color:#999;background:#fff;border:1px solid #e6e1d4;border-radius:8px;}
 
   .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:40px 20px;}
   .overlay.open{display:flex;}
@@ -213,12 +222,12 @@
     </div>
   </div>
 
-  <div class="lead-type-tabs" style="display:flex;gap:8px;margin-bottom:16px;border-bottom:2px solid #eee6d4;">
+  <div class="lead-type-tabs" id="leadTypeTabs" style="display:flex;gap:8px;margin-bottom:16px;border-bottom:2px solid #eee6d4;">
     <button type="button" id="tabBuyerBtn" class="lead-type-tab active" onclick="switchLeadTypeTab('buyer')" style="padding:12px 22px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:.95rem;font-weight:700;color:#8a8578;border-bottom:3px solid var(--gold);margin-bottom:-2px;">🧍 קונים</button>
     <button type="button" id="tabPartnerBtn" class="lead-type-tab" onclick="switchLeadTypeTab('partner')" style="padding:12px 22px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:.95rem;font-weight:700;color:#8a8578;border-bottom:3px solid transparent;margin-bottom:-2px;">🤝 משקיעים/שותפות</button>
   </div>
 
-  <div class="filters">
+  <div class="filters" id="leadsFilters">
     <input type="text" id="fSearch" placeholder="חיפוש לפי שם, טלפון, עיר, תחום, הערות...">
     <select id="fType">
       <option value="all">כל הסוגים</option>
@@ -242,7 +251,8 @@
     </select>
   </div>
 
-  <div class="table-scroll-wrap" style="position:relative;">
+  <div id="leadArchiveStrips" class="archive-strips" hidden></div>
+  <div class="table-scroll-wrap" id="leadsTableWrap" style="position:relative;">
   <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
   <table class="proportional-table records-table">
     <colgroup>
@@ -285,7 +295,7 @@
 <script src="js/pdfPipeline.js?v=202608291000"></script>
 <script src="js/dedupeCheckModule.js?v=20260930dup1"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
-<script src="js/archiveModule.js?v=20260930delete1"></script>
+<script src="js/archiveModule.js?v=202610112100"></script>
 <script>
 let ALL_LEADS = [];
 let ARCHIVED_LEADS = [];
@@ -782,8 +792,14 @@ function switchLeadTypeTab(type){
 }
 
 function leadHasSignedAgreement(l){ return !!l && (l.agreement_status === 'יש הסכם חתום' || l.agreement_signed === true); }
+function leadVisibleOnBuyersList(l){
+  if (!l || l.is_archived || l.type === 'seller') return false;
+  if ((l.website_intake_stage === 'new' || l.website_intake_stage === 'contacted' || l.website_intake_stage === 'training') && !leadHasSignedAgreement(l)) return false;
+  return l.type === 'buyer' || l.type === 'partner';
+}
 function renderTable(){
   if (typeof LEAD_VIEW_MODE !== 'undefined' && LEAD_VIEW_MODE === 'archive'){ renderArchiveLeadsTable(); return; }
+  syncLeadArchiveChrome();
   const search = document.getElementById('fSearch').value.trim().toLowerCase();
   const type = document.getElementById('fType').value;
   const agreement = document.getElementById('fAgreement').value;
@@ -793,9 +809,8 @@ function renderTable(){
   let rows = ALL_LEADS.filter(l=>{
     // 08.10.2026 (בקשת ברוך): קונה עם הסכם חתום מופיע תמיד ברשימת הקונים, גם אם
     // הכרטיס עדיין מסומן כפנייה חדשה מהאתר. תצוגה בלבד - לא משנה את הנתונים.
-    if ((l.website_intake_stage === 'new' || l.website_intake_stage === 'contacted' || l.website_intake_stage === 'training') && !leadHasSignedAgreement(l)) return false;
     // Seller-type leads are not the businesses list. This screen is buyers and investors.
-    if (l.type === 'seller') return false;
+    if (!leadVisibleOnBuyersList(l)) return false;
     if (type !== 'all' && l.type !== type) return false;
     if (agreement !== 'all' && (l.agreement_status || 'אין הסכם') !== agreement) return false;
     if (createdBy !== 'all' && l.created_by !== createdBy) return false;
@@ -1808,8 +1823,24 @@ async function restoreLeadFromArchive(id){
     ALL_LEADS = [row, ...ALL_LEADS.filter(item => item.id !== id)];
     closeModal();
     saveLeadsPageCache();
+    const typeSel = document.getElementById('fType');
+    if (typeSel) typeSel.value = row.type === 'partner' ? 'partner' : 'buyer';
+    const search = document.getElementById('fSearch');
+    if (search) search.value = '';
+    const agreement = document.getElementById('fAgreement');
+    if (agreement) agreement.value = 'all';
+    const createdBy = document.getElementById('fCreatedBy');
+    if (createdBy) createdBy.value = 'all';
+    const buyerBtn = document.getElementById('tabBuyerBtn');
+    const partnerBtn = document.getElementById('tabPartnerBtn');
+    if (buyerBtn && partnerBtn && typeSel){
+      buyerBtn.style.borderBottomColor = typeSel.value === 'buyer' ? 'var(--gold)' : 'transparent';
+      buyerBtn.style.color = typeSel.value === 'buyer' ? 'var(--navy)' : '#8a8578';
+      partnerBtn.style.borderBottomColor = typeSel.value === 'partner' ? 'var(--gold)' : 'transparent';
+      partnerBtn.style.color = typeSel.value === 'partner' ? 'var(--navy)' : '#8a8578';
+    }
     setLeadViewMode('active');
-    toast('שוחזר מהארכיון');
+    toast(row.type === 'partner' ? 'שוחזר לרשימת המשקיעים' : 'שוחזר לרשימת הקונים');
   } catch (error){
     toast('שגיאה בשחזור: ' + error.message);
   }
@@ -1843,6 +1874,17 @@ async function deleteLead(id){
 }
 // מסך ארכיון אמיתי (סעיף 5 בהנחיה) - טאב נפרד עם כל השדות הנדרשים.
 let LEAD_VIEW_MODE = 'active';
+function syncLeadArchiveChrome(){
+  const archive = LEAD_VIEW_MODE === 'archive';
+  const tableWrap = document.getElementById('leadsTableWrap');
+  const strips = document.getElementById('leadArchiveStrips');
+  const filters = document.getElementById('leadsFilters');
+  const tabs = document.getElementById('leadTypeTabs');
+  if (tableWrap) tableWrap.hidden = archive;
+  if (strips) strips.hidden = !archive;
+  if (filters) filters.hidden = archive;
+  if (tabs) tabs.hidden = archive;
+}
 function setLeadViewMode(mode){
   LEAD_VIEW_MODE = mode;
   const archBtn = document.getElementById('leadViewArchiveBtn');
@@ -1855,29 +1897,27 @@ function setLeadViewMode(mode){
   renderTable();
 }
 function renderArchiveLeadsTable(){
-  const body = document.getElementById('leadsBody');
+  syncLeadArchiveChrome();
+  const body = document.getElementById('leadArchiveStrips');
   if (!body) return;
   const rows = ARCHIVED_LEADS.filter(l => l.type !== 'seller');
-  if (!rows.length){ body.innerHTML = '<tr class="empty-row"><td colspan="10">אין רשומות בארכיון</td></tr>'; return; }
+  if (!rows.length){ body.innerHTML = '<div class="archive-strip-empty">אין רשומות בארכיון</div>'; return; }
   body.innerHTML = rows.map(l => {
     const personName = l.full_name || [l.first_name,l.last_name].filter(Boolean).join(' ') || (l.business_name||'—');
-    return `
-    <tr>
-      <td data-label="שם">${esc(personName)}</td>
-      <td data-label="סוג">${esc(l.type||'—')}</td>
-      <td data-label="טלפון" dir="ltr">${l.phone ? fmtPhone(l.phone) : '—'}</td>
-      <td data-label="הוזן ע&quot;י">${l.created_by ? esc(userName(l.created_by)) : 'לא ידוע'}</td>
-      <td data-label="הועבר ע&quot;י">${l.archived_by ? esc(userName(l.archived_by)) : '—'}</td>
-      <td data-label="סטטוס הסכם קודם">${agreementBadge(l.agreement_status)}</td>
-      <td data-label="נוצר">${fmtDate(l.created_at)}</td>
-      <td data-label="תאריך העברה">${fmtDate(l.archived_at)}</td>
-      <td data-label="סיבה">${esc(l.archive_reason||'—')}</td>
-      <td data-label="פעולות" style="white-space:nowrap;">
-        <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="openLeadForm('${l.id}')">✏️ ערוך</button>
-        ${canRestoreLead(l) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="restoreLeadFromArchive('${l.id}')">↩️ שחזר מהארכיון</button>` : ''}
-        ${canDeleteLead(l) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;color:#a33;" onclick="deleteLead('${l.id}')">🗑️ מחיקה סופית</button>` : ''}
-      </td>
-    </tr>`;
+    const typeBadge = l.type === 'partner'
+      ? '<span class="badge badge-partner">שותפות/השקעה</span>'
+      : '<span class="badge badge-buyer">קונה</span>';
+    const info = [l.phone ? fmtPhone(l.phone) : '', l.city || l.requested_area || '', l.archive_reason || ''].filter(Boolean).join(' · ');
+    return `<div class="archive-strip">
+      <button type="button" class="archive-strip-name" onclick="openLeadForm('${l.id}')">${esc(personName)}</button>
+      ${typeBadge}
+      <span class="archive-strip-date">${fmtDate(l.archived_at)}</span>
+      <span class="archive-strip-meta">${esc(info || '—')}</span>
+      <span class="archive-strip-actions">
+        ${canRestoreLead(l) ? `<button type="button" class="btn btn-ghost" onclick="restoreLeadFromArchive('${l.id}')">↩️ שחזר</button>` : ''}
+        ${canDeleteLead(l) ? `<button type="button" class="btn btn-ghost" style="color:#a33;" onclick="deleteLead('${l.id}')">🗑️</button>` : ''}
+      </span>
+    </div>`;
   }).join('');
 }
 

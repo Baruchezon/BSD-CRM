@@ -50,12 +50,13 @@ test('every list loads js/bsd-search.js and adds phone matching as an extra OR (
 function buyersList(rows, { search = '', type = 'all', agreement = 'all', createdBy = 'all' } = {}){
   const src = read('leads.html');
   const helper = src.match(/function leadHasSignedAgreement\(l\)\{[^\n]*\}/)[0];
+  const visible = src.match(/function leadVisibleOnBuyersList\(l\)\{[\s\S]*?\n\}/)[0];
   const start = src.indexOf('let rows = ALL_LEADS.filter(l=>{');
   const end = src.indexOf('\n  });', start);
   const body = src.slice(start, end + 6);
   const c = { ALL_LEADS: rows, search: search.trim().toLowerCase(), type, agreement, createdBy, window: { BSDSearch: S }, BSDSearch: S, out: null };
   vm.createContext(c);
-  vm.runInContext(`${helper}\n${body}\nout = rows;`, c);
+  vm.runInContext(`${helper}\n${visible}\n${body}\nout = rows;`, c);
   return c.out.map(r => r.id);
 }
 const base = { type: 'buyer', is_archived: false, website_intake_stage: null, agreement_status: 'אין הסכם' };

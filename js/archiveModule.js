@@ -21,7 +21,16 @@ async function updateArchiveRecord(table, id, archived, reason){
   if (archived){
     values.archive_reason = String(reason || '').trim();
     if (!values.archive_reason) throw new Error('נדרשת סיבה להעברה לארכיון');
+  } else if (table === 'leads'){
+    // קונים ומשקיעים hides new/contacted/training rows that have no signed
+    // agreement. Archive only flips is_archived, so a restore that leaves the
+    // intake stage set drops the buyer out of both lists. Clear it here.
+    // The DB trigger still clears archived_at, archived_by and archive_reason.
+    values.website_intake_stage = null;
   } else if (table === 'businesses'){
+    // enforce_business_archive_integrity re-archives a row whose listing_status
+    // is removed/sold. Restore must put it back to an active listing or the
+    // same UPDATE silently keeps is_archived true.
     Object.assign(values, { listing_status:'active', removal_reason:null, sold_to:null });
   }
   const { data, error } = await window.supabaseClient.from(table)
