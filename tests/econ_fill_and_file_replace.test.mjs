@@ -160,12 +160,11 @@ test('a gap does not count as a year with data; fewer than 3 full years use what
   assert.equal(two.yearLabels.annual_revenue, 'ממוצע 2 שנים (2024–2025)');
 });
 
-test('years label is painted next to the finance fields; it is not stored on the business', () => {
+test('years label is painted next to the finance fields; the module never writes businesses itself', () => {
   assert.match(html, /id="bizFinanceHeading"/);
   assert.match(src, /_econHint/);
-  assert.match(src, /paintHints\(res\)/);
-  assert.match(src, /paintHints\(null\)/);
-  assert.doesNotMatch(src, /\.from\('businesses'\)\.(update|upsert|insert)/, 'the years label is not written to businesses');
+  assert.match(src, /repaint\(bizId\)/);
+  assert.doesNotMatch(src, /\.from\('businesses'\)\.(update|upsert|insert)/, 'saving happens only through the normal card save');
   assert.doesNotMatch(src, /econ_years|finance_years_label/);
 });
 

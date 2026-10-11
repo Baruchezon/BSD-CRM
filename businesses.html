@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610111700';
+    var PAGE_BUILD = '202610111800';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -531,8 +531,8 @@
 <script src="js/bsd-search.js?v=202610081400"></script>
 <script src="js/standaloneRecording.js?v=20261009-1"></script>
 <script src="js/pdfPipeline.js?v=202608291000"></script>
-<script src="js/saleFileModule2.js?v=202610111700"></script>
-<script src="js/econAnalysisFill.js?v=202610111700"></script>
+<script src="js/saleFileModule2.js?v=202610111800"></script>
+<script src="js/econAnalysisFill.js?v=202610111800"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
 <script src="js/dedupeCheckModule.js?v=20260930dup1"></script>
@@ -1976,6 +1976,8 @@ function openBizForm(id){
   if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadSaleFileModule(biz.id);
   if (biz && biz.anon_summary && biz.anon_summary_generated_at) refreshAnonStaleWarning(biz);
   if (biz) initAiEditIndicators(biz);
+  // 11.10.2026: «ממוצע N שנים (...)» השמור (financials_avg_meta) - מוצג ליד השדות הכספיים בכל פתיחה
+  if (biz && window.BSDEconFill) window.BSDEconFill.initCard(biz);
   // 04.10.2026: נקודת ייחוס לשמירה בלי דריסה + רענון שקט מהשרת (הרשימה עשויה להגיע ממטמון יומי)
   bsdCaptureBizFormBaseline(biz);
   bsdRestoreBizCardDraft(biz); // 07.10.2026: טקסט שלא נשמר כי ההתחברות פגה (נחשב עריכה רגילה - נשמר ב«שמירה»)
@@ -3572,6 +3574,7 @@ async function bsdRefreshBizRow(bizId){
 // אחרי פתיחת כרטיס: אם בשרת יש נוסח חדש יותר לשדה טקסט שהמשתמש עוד לא נגע בו - מעדכנים בשקט.
 async function bsdRevalidateOpenBizForm(bizId){
   const fresh = await bsdRefreshBizRow(bizId);
+  if (fresh && window.BSDEconFill && document.getElementById('bizForm')?.dataset.bizId === bizId) window.BSDEconFill.refreshSaved(bizId, fresh);
   if (!fresh || !BIZ_FORM_BASELINE || BIZ_FORM_BASELINE.bizId !== bizId) return;
   const form = document.getElementById('bizForm');
   if (!form || form.dataset.bizId !== bizId) return;
@@ -5415,6 +5418,10 @@ async function saveBiz(e){
 
   if (!payload.internal_name){ showFormError('שם העסק הוא שדה חובה - השמירה לא בוצעה'); return; }
 
+  // 11.10.2026: תווית «ממוצע N שנים (...)» של השדות הכספיים - נשלחת רק אם השתנתה
+  // (מילוי מהניתוח הכלכלי, או עריכה ידנית של שדה שמוחקת רק את התווית שלו).
+  if (bizId && window.BSDEconFill) Object.assign(payload, window.BSDEconFill.savePatch(bizId));
+
   // 04.10.2026 - בלי דריסה: שדות טקסט ארוכים (תקציר אנונימי, שם תצוגה, תקציר פנימי,
   // תיאור, הערות) נשלחים רק אם שונו בטופס הזה. אם שונו גם בשרת מאז שהטופס נפתח
   // (אישור AI, משתמש אחר, עדכון ידני) - לא נשמר כלום ומוצגת בחירה למשתמש.
@@ -5479,6 +5486,7 @@ async function saveBiz(e){
     showFormError('❌ שגיאה בשמירה: ' + error.message); return;
   }
   AI_EDIT_PENDING = {}; AI_EDIT_REVERTED = {}; // נשמרו בהצלחה - לא צריך לשלוח שוב
+  if (bizId && window.BSDEconFill) window.BSDEconFill.forget(bizId);
   BIZ_FORM_BASELINE = null; BIZ_PENDING_CONFLICT = null;
   const nowAnonActive = (document.getElementById('anon_card_active') && !anonBlocked) ? cb('anon_card_active') : wasAnonActive;
   // סעיף 1 באפיון: עסק שכבר היה מופץ (wasAnonActive=true, כלומר התוכן
