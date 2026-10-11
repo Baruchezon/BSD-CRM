@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610112000';
+    var PAGE_BUILD = '202610112100';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -402,6 +402,15 @@
     .biz-vip-inline{margin-inline-start:8px;padding-inline-start:8px;}
     .biz-tabpanes .section-h{font-size:1.05rem;padding:8px 12px;margin:16px 0 10px;}
   }
+  .archive-strips{display:flex;flex-direction:column;gap:4px;}
+  .archive-strip{display:flex;align-items:center;gap:8px;box-sizing:border-box;height:36px;min-height:36px;max-height:36px;padding:0 8px;background:#fff;border:1px solid #e6e1d4;border-radius:8px;font-size:.82rem;overflow:hidden;white-space:nowrap;}
+  .archive-strip-name{font-weight:800;color:var(--navy);overflow:hidden;text-overflow:ellipsis;flex:0 1 220px;min-width:72px;background:none;border:none;padding:0;font-family:inherit;font-size:inherit;cursor:pointer;text-align:right;}
+  .archive-strip-meta{color:#5c574c;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;min-width:0;}
+  .archive-strip-date{flex:0 0 auto;color:#3d4a63;}
+  .archive-strip .badge{flex:0 0 auto;}
+  .archive-strip-actions{flex:0 0 auto;display:flex;align-items:center;gap:4px;}
+  .archive-strip-actions .btn{padding:2px 8px;font-size:.75rem;line-height:1.4;height:26px;}
+  .archive-strip-empty{height:36px;line-height:36px;text-align:center;color:#999;background:#fff;border:1px solid #e6e1d4;border-radius:8px;}
 </style>
 </head>
 <body>
@@ -474,7 +483,7 @@
   </div>
 
   <div id="mineBizSection">
-  <div class="filters">
+  <div class="filters" id="bizFilters">
     <input type="text" id="fSearch" placeholder="חיפוש לפי שם עסק, עיר, תחום, מחיר, תיאור...">
     <select id="fStatus"><option value="all">כל הסטטוסים</option></select>
     <select id="fField"><option value="all">כל התחומים</option></select>
@@ -494,7 +503,8 @@
     </select>
   </div>
 
-  <div class="table-scroll-wrap" style="position:relative;">
+  <div id="bizArchiveStrips" class="archive-strips" hidden></div>
+  <div class="table-scroll-wrap" id="bizTableWrap" style="position:relative;">
   <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
   <table class="records-table">
     <thead>
@@ -536,7 +546,7 @@
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=202608300456"></script>
 <script src="js/dedupeCheckModule.js?v=20260930dup1"></script>
-<script src="js/archiveModule.js?v=20260930delete1"></script>
+<script src="js/archiveModule.js?v=202610112100"></script>
 <script src="js/portal-invite.js?v=20261004-2"></script>
 <script src="js/portal-business-card.js?v=202610110550"></script>
 <script src="js/anonAgreementMark.js?v=202610061550"></script>
@@ -1261,6 +1271,7 @@ async function manualAgreementRefreshAfterUpload(tableName, recordId){
 
 function renderTable(){
   if (typeof BIZ_VIEW_MODE !== 'undefined' && BIZ_VIEW_MODE === 'archive'){ renderArchiveTable(); return; }
+  if (typeof syncBizArchiveChrome === 'function') syncBizArchiveChrome();
   const search = document.getElementById('fSearch').value.trim().toLowerCase();
   const status = document.getElementById('fStatus').value;
   const field = document.getElementById('fField').value;
@@ -5765,14 +5776,29 @@ async function restoreBizFromArchive(id){
     ALL_BIZ = [row, ...ALL_BIZ.filter(item => item.id !== id)];
     closeModal();
     saveBusinessPageCache();
+    const search = document.getElementById('fSearch');
+    if (search) search.value = '';
+    ['fStatus','fField','fAgreement','fCreatedBy'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = 'all';
+    });
     setBizViewMode('active');
-    toast('שוחזר מהארכיון');
+    toast('שוחזר לרשימת העסקים');
   } catch (error){
     toast('שגיאה בשחזור: ' + error.message);
   }
 }
 // מסך ארכיון אמיתי (סעיף 5 בהנחיה) - טאב נפרד עם כל השדות הנדרשים, לא alert().
 let BIZ_VIEW_MODE = 'active';
+function syncBizArchiveChrome(){
+  const archive = BIZ_VIEW_MODE === 'archive';
+  const tableWrap = document.getElementById('bizTableWrap');
+  const strips = document.getElementById('bizArchiveStrips');
+  const filters = document.getElementById('bizFilters');
+  if (tableWrap) tableWrap.hidden = archive;
+  if (strips) strips.hidden = !archive;
+  if (filters) filters.hidden = archive;
+}
 function setBizViewMode(mode){
   BIZ_VIEW_MODE = mode;
   const archBtn = document.getElementById('bizViewArchiveBtn');
@@ -5786,29 +5812,28 @@ function setBizViewMode(mode){
 }
 function openArchiveView(){ setBizViewMode('archive'); }
 function renderArchiveTable(){
-  const body = document.getElementById('bizBody');
-  if (!ARCHIVED_BIZ.length){ body.innerHTML = '<tr class="empty-row"><td colspan="13">אין עסקים בארכיון</td></tr>'; return; }
-  body.innerHTML = ARCHIVED_BIZ.map(b => `
-    <tr>
-      <td data-label="שם פנימי"><b>${esc(b.internal_name||'—')}</b>${bizNumberBadge(b)}</td>
-      <td data-label="טלפון בעלים" dir="ltr">${b.owner_phone ? fmtPhone(b.owner_phone) : '—'}</td>
-      <td data-label="תחום">${esc(b.field||'—')}</td>
-      <td data-label="עיר">${esc(b.city||'—')}</td>
-      <td data-label="מחיר מבוקש">${fmtMoney(b.asking_price)}</td>
-      <td data-label="סטטוס מכירה"><span class="badge">${esc(b.listing_status === 'sold' ? 'נמכר' : b.listing_status === 'removed' ? 'לא פעיל' : 'פעיל')}</span></td>
-      <td data-label="הוזן ע&quot;י">${b.created_by ? esc(userName(b.created_by)) : 'לא ידוע'}</td>
-      <td data-label="הועבר ע&quot;י">${b.archived_by ? esc(userName(b.archived_by)) : '—'}</td>
-      <td data-label="סטטוס הסכם">${agreementBadge(b.agreement_status)}</td>
-      <td data-label="תקצירים">—</td>
-      <td data-label="נוצר">${fmtDate(b.created_at)}</td>
-      <td data-label="תאריך העברה">${fmtDate(b.archived_at)}</td>
-      <td data-label="פעולות" style="white-space:nowrap;">
-        <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="openBizForm('${b.id}')">✏️ ערוך</button>
-        ${canRestoreBiz(b) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${b.id}')">↩️ שחזר מהארכיון</button>` : ''}
-        ${canManageBiz(b) ? `<button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;color:#a33;" onclick="deleteBiz('${b.id}')">🗑️ מחיקה סופית</button>` : ''}
-        ${b.archive_reason ? `<div style="font-size:.7rem;color:#888;margin-top:2px;">סיבה: ${esc(b.archive_reason)}</div>` : ''}
-      </td>
-    </tr>`).join('');
+  syncBizArchiveChrome();
+  const body = document.getElementById('bizArchiveStrips');
+  if (!body) return;
+  if (!ARCHIVED_BIZ.length){ body.innerHTML = '<div class="archive-strip-empty">אין עסקים בארכיון</div>'; return; }
+  body.innerHTML = ARCHIVED_BIZ.map(b => {
+    const badge = b.listing_status === 'sold'
+      ? '<span class="badge">נמכר</span>'
+      : b.listing_status === 'removed'
+      ? '<span class="badge">לא פעיל</span>'
+      : '<span class="badge">עסק</span>';
+    const info = [b.field || '', b.city || '', b.owner_phone ? fmtPhone(b.owner_phone) : '', b.archive_reason || ''].filter(Boolean).join(' · ');
+    return `<div class="archive-strip">
+      <button type="button" class="archive-strip-name" onclick="openBizForm('${b.id}')">${esc(b.internal_name||'—')}</button>
+      ${badge}
+      <span class="archive-strip-date">${fmtDate(b.archived_at)}</span>
+      <span class="archive-strip-meta">${esc(info || '—')}</span>
+      <span class="archive-strip-actions">
+        ${canRestoreBiz(b) ? `<button type="button" class="btn btn-ghost" onclick="restoreBizFromArchive('${b.id}')">↩️ שחזר</button>` : ''}
+        ${canManageBiz(b) ? `<button type="button" class="btn btn-ghost" style="color:#a33;" onclick="deleteBiz('${b.id}')">🗑️</button>` : ''}
+      </span>
+    </div>`;
+  }).join('');
 }
 // תיקון 25.08.2026: הבדיקה חייבת לעבור דרך RPC ולא ספירה ישירה מהלקוח.
 // נבדק בפועל: tasks_select חושף שורות רק ל-admin ולמשתמש שהמשימה שויכה
