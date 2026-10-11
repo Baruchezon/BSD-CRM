@@ -309,8 +309,8 @@ function sfFileRow(f, canManage, bizId, categoryKey){
       <span style="display:flex;gap:4px;flex-wrap:wrap;">
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="viewSaleFile('${f.id}','${esc(f.storage_path)}')">👁️ צפייה</button>
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="downloadSaleFile('${esc(f.storage_path)}','${esc(f.file_name.replace(/'/g,''))}')">📂 הורדה</button>
+        ${canManage ? `<button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="replaceSaleFile('${f.id}','${bizId}','${categoryKey}')" title="העלאת קובץ חדש במקום זה - הישן יוסר מהתיק ומהפורטל">🔄 החלף בקובץ חדש</button>` : ''}
         ${canManage && !isAuto ? `
-        <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="replaceSaleFile('${f.id}','${bizId}','${categoryKey}')">🔄 גרסה חדשה</button>
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="renameSaleFile('${f.id}','${esc(f.file_name.replace(/'/g,''))}')">✏️ שינוי שם</button>
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="changeSaleFileCategory('${f.id}','${sfBucketKeyForFile(f)}')">🔀 שינוי קטגוריה</button>` : ''}
         ${canManage ? `<button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;color:#b3402c;" onclick="deleteSaleFile('${f.id}')">מחק</button>` : ''}
@@ -318,10 +318,22 @@ function sfFileRow(f, canManage, bizId, categoryKey){
     </div>`;
 }
 
-// Replace a file with a new version - reuses the same version_group_id
-// mechanism already used for auto-generated summaries, so the new version
-// becomes primary and the old one moves into the same "🕘 היסטוריית גרסאות"
-// expandable history that already existed - no new UI mechanism.
+// Replace a file with a new version (11.10.2026, Baruch): works for EVERY file
+// in the list - also documents that came from «יצירת מסמכים ותיק מכירה» or from
+// the PDF generators (source='auto_generated'), which previously had no replace
+// action at all. The new file joins the old one's version_group_id (version+1),
+// keeps the old row's category/document_type/confidentiality, and the old row
+// is then soft-deleted (status='deleted' - same as «מחק»; the bytes stay in
+// storage and the row can be restored by setting status back to 'active').
+// The seller portal shows only the newest active PDF per document type, so it
+// switches to the new file immediately. For an anonymous summary that is
+// published in VIP, VIP is re-pointed to the new file BEFORE the old one is
+// retired; if that fails the old file is kept so VIP never points at nothing.
+async function sfVipStatusFor(bizId){
+  if (typeof window.BSDVIPAdminApi !== 'function' || !sfIsAdminOrManager()) return null;
+  try { return await window.BSDVIPAdminApi('admin_business_status', { business_id: bizId }); } catch (_e){ return null; }
+}
+
 async function replaceSaleFile(fileId, bizId, categoryKey){
   if (!sfCanUpload()){ toast('אין לך הרשאת העלאת קבצים'); return; }
   const oldFile = sfAllActiveFiles().find(f => f.id === fileId);
@@ -332,13 +344,15 @@ async function replaceSaleFile(fileId, bizId, categoryKey){
     const rawFile = input.files[0];
     if (!rawFile) return;
     if (rawFile.size > SALE_FILE_MAX_MB * 1024 * 1024){ toast(`הקובץ גדול מדי (מקסימום ${SALE_FILE_MAX_MB}MB)`); return; }
+    if (!confirm(`להחליף את "${oldFile.file_name}" בקובץ "${rawFile.name}"?\n\nהקובץ הישן יוסר מתיק המכירה ומפורטל בעל העסק, והחדש יוצג במקומו.\n(הקובץ הישן נשמר בגיבוי וניתן לשחזר אותו.)`)) return;
+    toast('מעלה את הקובץ החדש...');
     try {
       const groupId = oldFile.version_group_id || crypto.randomUUID();
       const { data: versionNum, error: verErr } = await window.supabaseClient.rpc('allocate_sale_file_version', { p_group_id: groupId });
       if (verErr) throw new Error('שגיאה בהקצאת מספר גרסה: ' + verErr.message);
       if (!oldFile.version_group_id){
         await window.supabaseClient.from('business_sale_files')
-          .update({ version_group_id: groupId, version_number: 1 }).eq('id', fileId);
+          .update({ version_group_id: groupId, version_number: oldFile.version_number || 1 }).eq('id', fileId);
       }
       const cat = sfCategoryMeta(categoryKey);
       const extMatch = rawFile.name.match(/\.[A-Za-z0-9]+$/);
@@ -348,15 +362,39 @@ async function replaceSaleFile(fileId, bizId, categoryKey){
       const { error: upErr } = await bsdUploadFile(SALE_FILE_BUCKET, path, rawFile, { contentType: rawFile.type || undefined });
       if (upErr) throw new Error('שגיאה בהעלאת הקובץ: ' + upErr.message);
       const { error: dbErr } = await window.supabaseClient.from('business_sale_files').insert({
-        business_id: bizId, category: cat.dbCategory, document_type: cat.dbDocumentType,
+        business_id: bizId,
+        category: oldFile.category || cat.dbCategory,
+        document_type: oldFile.category ? (oldFile.document_type || null) : cat.dbDocumentType,
         file_name: rawFile.name, storage_path: path,
         file_type: rawFile.type || safeExt, file_size: rawFile.size,
-        confidentiality_level: cat.confidentiality, uploaded_by: CURRENT_PROFILE.id,
+        confidentiality_level: oldFile.confidentiality_level || cat.confidentiality, uploaded_by: CURRENT_PROFILE.id,
         version_group_id: groupId, version_number: versionNum,
       });
       if (dbErr) throw new Error('הקובץ הועלה אך רישום נכשל: ' + dbErr.message);
-      toast('גרסה חדשה נשמרה');
-      await sfLogAudit(bizId, 'replace_sale_file', { old_file_id: fileId, new_version: versionNum, category: categoryKey });
+      const { data: newRows } = await window.supabaseClient.from('business_sale_files').select('id').eq('storage_path', path).limit(1);
+      const newId = newRows && newRows[0] ? newRows[0].id : null;
+
+      // VIP safety: never retire the file VIP is currently showing.
+      let keepOld = '';
+      if (oldFile.document_type === 'anonymous_summary' || sfBucketKeyForFile(oldFile) === 'anonymous_summary'){
+        const st = await sfVipStatusFor(bizId);
+        const pub = st && st.publication;
+        if (pub && pub.enabled && pub.anonymous_file_id === fileId){
+          try {
+            if (!newId) throw new Error('לא נמצא מזהה הקובץ החדש');
+            await window.BSDVIPAdminApi('admin_publish_business', { business_id: bizId, enabled: true, anonymous_file_id: newId });
+            window.dispatchEvent(new CustomEvent('bsd:vip-publication-changed', { detail: { businessId: bizId, enabled: true } }));
+          } catch (e){ keepOld = 'ה-VIP עדיין מציג את הקובץ הישן ולכן הוא לא הוסר: ' + ((e && e.message) || e); }
+        }
+      }
+      let retired = false;
+      if (!keepOld){
+        const { error: delErr } = await window.supabaseClient.from('business_sale_files')
+          .update({ status: 'deleted', deleted_at: new Date().toISOString() }).eq('id', fileId).eq('business_id', bizId);
+        if (delErr) keepOld = 'הקובץ הישן לא הוסר: ' + delErr.message; else retired = true;
+      }
+      toast(keepOld ? ('⚠️ הקובץ החדש נשמר. ' + keepOld) : '✓ הקובץ הוחלף - בפורטל מוצג עכשיו הקובץ החדש');
+      await sfLogAudit(bizId, 'replace_sale_file', { old_file_id: fileId, old_file_name: oldFile.file_name, new_file_id: newId, new_file_name: rawFile.name, new_version: versionNum, category: categoryKey, old_retired: retired, note: keepOld || null });
       await loadSaleFileModule(bizId);
       openSaleFileCategory(bizId, categoryKey);
     } catch (e) {
@@ -529,9 +567,17 @@ async function changeSaleFileCategory(fileId, currentBucketKey){
 }
 
 async function deleteSaleFile(fileId){
-  if (!confirm('למחוק קובץ זה מתיק המכירה?')) return;
   // שולפים את שם הקובץ לפני המחיקה כדי שהתיעוד יהיה קריא (לא רק מזהה טכני)
   const fileBeingDeleted = sfAllActiveFiles().find(f => f.id === fileId);
+  if (!confirm(`למחוק את "${fileBeingDeleted ? fileBeingDeleted.file_name : 'הקובץ'}" מתיק המכירה?\n\nהקובץ יוסר גם מפורטל בעל העסק. (נשמר בגיבוי וניתן לשחזר.)`)) return;
+  // 11.10.2026: לא מוחקים תקציר אנונימי שה-VIP מציג כרגע - אחרת ב-VIP נשאר קישור שבור.
+  if (fileBeingDeleted && sfBucketKeyForFile(fileBeingDeleted) === 'anonymous_summary'){
+    const st = await sfVipStatusFor(SF_CURRENT_BIZ);
+    if (st && st.publication && st.publication.enabled && st.publication.anonymous_file_id === fileId){
+      toast('⚠️ הקובץ הזה מוצג כרגע ב-VIP - השתמש ב«🔄 החלף בקובץ חדש» במקום מחיקה');
+      return;
+    }
+  }
   const { error } = await window.supabaseClient.from('business_sale_files')
     .update({ status: 'deleted', deleted_at: new Date().toISOString() }).eq('id', fileId);
   if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
