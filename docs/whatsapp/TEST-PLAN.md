@@ -2,14 +2,14 @@
 
 ## A. Automated (run on the branch, no network, no production)
 
-| Suite | Command | Result 11.10.2026 |
+| Suite | Command | Result 11.10.2026 (review re-run) |
 |---|---|---|
-| Edge functions (Deno) | `cd tests/whatsapp && deno test -q .` | 56 passed |
-| DB migration + RLS + rollback (local Postgres 17, stub of the prod objects) | `PGHOST=… PGPORT=… PGUSER=postgres tests/whatsapp/db/run-db-test.sh` | 37 assertions passed, rollback removes every object, re-apply clean (twice) |
+| Edge functions (Deno) | `cd tests/whatsapp && deno test -q .` | 58 passed (56 from the original patch + media-host allowlist + refusal to fetch a non-Meta media URL) |
+| DB migration + RLS + rollback (local Postgres 16, stub of the prod objects) | `PGHOST=… PGPORT=… PGUSER=postgres tests/whatsapp/db/run-db-test.sh` | 40 assertions passed, rollback removes every object, re-apply clean (twice) |
 | CRM UI helpers + "hidden by default" contract | `node --test tests/whatsapp_ui.test.mjs` | 7 passed |
 | Existing CRM tests (regression) | `node --test tests/*.test.mjs` | 245/245 passed (238 existing + 7 new) |
-| Template lint + payloads | `deno run -A scripts/whatsapp/submit-templates.ts` | 12/12 OK (dry run, nothing sent) |
-| Type check | `deno check supabase/functions/{whatsapp-send,whatsapp-webhook,go}/index.ts` | clean (complete-signed-agreement keeps its 9 pre-existing supabase-js typing warnings, same count as main) |
+| Template lint + payloads | `deno run -A scripts/whatsapp/submit-templates.ts` | 12/12 OK (dry run, nothing sent). `display_name` is `BSD מכירת עסקים`; footers stay `BSD Business Brokers Israel` |
+| Type check | `deno check supabase/functions/{whatsapp-send,whatsapp-webhook,go}/index.ts` | clean (complete-signed-agreement keeps its 9 pre-existing supabase-js typing errors, same count as the original patch) |
 
 What the suites cover: modes off/simulate/dry_run/live; card channel flag; phone must belong to the card; dry-run
 allow-list; 24h window; opt-out list / card opt-out / marketing / utility consent; idempotency; per-user and daily
@@ -19,7 +19,8 @@ GET verify, text, buttons, media download + sha256 + storage path, failures, dup
 kept, STOP/opt-out button, status ordering, foreign phone_number_id, retry on DB error; short links (302, 410, 404,
 foreign host, HEAD); signed copy (inert when off/personal, template outside window, document inside, sent once);
 RLS per role, storage restrictive policies, direct writes blocked, «אשר כהסכם חתום» only after the existing save,
-consent stamps server-side, opt-out wins.
+consent stamps server-side (including a forged marketing timestamp), opt-out wins, an agent cannot create a card
+already on the API channel, media download URLs must be Meta hosts.
 
 ## B. Staging on production infrastructure (after Baruch approves GO-LIVE steps 1-6) - mode `dry_run`
 
