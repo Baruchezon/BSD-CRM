@@ -73,6 +73,102 @@ test('checkbox: admin/manager only, placed under the finance fields, asking pric
   assert.doesNotMatch(src.replace(/\/\/.*$/gm, ''), /asking_price/);
 });
 
+test('filled averages round DOWN to 2 significant digits; under 100 and losses keep the sign', () => {
+  const r2 = E.roundDown2Sig;
+  assert.equal(r2(431759), 430000);
+  assert.equal(r2(2332974), 2300000);
+  assert.equal(r2(3837919), 3800000);
+  assert.equal(r2(335589), 330000);
+  assert.equal(r2(240342), 240000);
+  assert.equal(r2(95400), 95000);
+  assert.equal(r2(100), 100);
+  assert.equal(r2(101), 100);
+  assert.equal(r2(95), 95);
+  assert.equal(r2(7), 7);
+  assert.equal(r2(0), 0);
+  assert.equal(r2(-11376), -11000);
+  assert.equal(r2(-335589), -330000);
+  assert.equal(r2(-95), -95);
+  assert.equal(r2(-101), -100);
+});
+
+test('years label: contiguous span, a gap is listed, one year is singular', () => {
+  assert.equal(E.yearsLabel([2025, 2023, 2024]), 'ממוצע 3 שנים (2023–2025)');
+  assert.equal(E.yearsLabel([2024, 2025]), 'ממוצע 2 שנים (2024–2025)');
+  assert.equal(E.yearsLabel([2025]), 'ממוצע שנה (2025)');
+  assert.equal(E.yearsLabel([2025, 2022, 2023]), 'ממוצע 3 שנים (2022, 2023, 2025)');
+});
+
+const WIDE = [40, 110, 180, 250, 320, 390];
+function wideRow(y, labelWords, cells, p = 1){
+  const out = []; let x = 620;
+  labelWords.forEach(w => { x -= 30; out.push({ p, x, y, w: 25, s: w }); });
+  cells.forEach((c, i) => { if (c === null) return; String(c).split(' ').forEach((part, k, arr) => out.push({ p, x: WIDE[i] - 40 + k * 3 - (arr.length - 1 - k) * 4, y, w: 40 - k, s: part })); });
+  return out;
+}
+function wideHeader(y, years, extra){
+  const out = [{ p: 1, x: 600, y, w: 22, s: 'סעיף' }];
+  years.forEach((yr, i) => out.push({ p: 1, x: WIDE[i] - 23, y, w: 23, s: String(yr) }));
+  if (extra) out.push({ p: 1, x: WIDE[extra.col] - 60, y, w: 30, s: extra.s });
+  return out;
+}
+
+test('only the last 3 full years are averaged, then rounded down; preview shows exact and filled', () => {
+  const items = [
+    ...wideHeader(600, [2026, 2025, 2024, 2023, 2022, 2021], { col: 0, s: 'אינדיק' }),
+    ...wideRow(575, ['הכנסות'], ['9,000,000', '463,518', '431,759', '400,000', '999,999', '100,000']),
+    ...wideRow(550, ['רווח', 'הפעלה'], ['—', '(11,376)', '—', '—', '—', '—']),
+    ...wideRow(525, ['רווח', 'נקי'], ['—', '95', '—', '—', '—', '—']),
+  ];
+  const r = E.parseFinanceTable(items);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.rows.revenue.used.map(u => u.year), [2023, 2024, 2025], '2026 indicative and 2021–2022 older than the last 3 are out');
+  assert.equal(r.exactAverages.annual_revenue, 431759);
+  assert.equal(r.averages.annual_revenue, 430000);
+  assert.equal(r.yearLabels.annual_revenue, 'ממוצע 3 שנים (2023–2025)');
+  assert.ok(r.rows.revenue.skipped.some(s => s.year === 2022 && /3 השנים האחרונות/.test(s.why)));
+  assert.ok(r.rows.revenue.skipped.some(s => s.year === 2026 && /אינדיקטיבית/.test(s.why)));
+  assert.equal(r.exactAverages.operating_profit, -11376);
+  assert.equal(r.averages.operating_profit, -11000);
+  assert.equal(r.yearLabels.operating_profit, 'ממוצע שנה (2025)');
+  assert.equal(r.exactAverages.net_profit, 95);
+  assert.equal(r.averages.net_profit, 95, 'under 100 the integer average is written as-is');
+  const preview = E.previewHtml({ file_name: 'synth.pdf', created_at: null }, r);
+  assert.match(preview, /ממוצע 3 שנים \(2023–2025\)/);
+  assert.match(preview, /ממוצע 431,759 → יוזן 430,000/);
+  assert.match(preview, /2023: 400,000/);
+  assert.match(preview, /2024: 431,759/);
+  assert.match(preview, /2025: 463,518/);
+  assert.match(preview, /יוזן ‎-11,000|יוזן -11,000/);
+});
+
+test('a gap does not count as a year with data; fewer than 3 full years use what exists', () => {
+  const gapped = E.parseFinanceTable([
+    ...wideHeader(600, [2025, 2024, 2023, 2022, 2021]),
+    ...wideRow(575, ['הכנסות'], ['500,000', '—', '300,000', '200,000', '100,000']),
+  ]);
+  assert.deepEqual(gapped.rows.revenue.used.map(u => u.year), [2022, 2023, 2025]);
+  assert.equal(gapped.exactAverages.annual_revenue, 333333);
+  assert.equal(gapped.averages.annual_revenue, 330000);
+  assert.equal(gapped.yearLabels.annual_revenue, 'ממוצע 3 שנים (2022, 2023, 2025)');
+  const two = E.parseFinanceTable([
+    ...header(600, [2025, 2024, 2023]),
+    ...row(575, ['סה"כ', 'הכנסות'], ['200,000', '100,000', '—']),
+  ]);
+  assert.deepEqual(two.rows.revenue.used.map(u => u.year), [2024, 2025]);
+  assert.equal(two.averages.annual_revenue, 150000);
+  assert.equal(two.yearLabels.annual_revenue, 'ממוצע 2 שנים (2024–2025)');
+});
+
+test('years label is painted next to the finance fields; it is not stored on the business', () => {
+  assert.match(html, /id="bizFinanceHeading"/);
+  assert.match(src, /_econHint/);
+  assert.match(src, /paintHints\(res\)/);
+  assert.match(src, /paintHints\(null\)/);
+  assert.doesNotMatch(src, /\.from\('businesses'\)\.(update|upsert|insert)/, 'the years label is not written to businesses');
+  assert.doesNotMatch(src, /econ_years|finance_years_label/);
+});
+
 test('sale files: replace is offered on every managed row (also generated docs) and retires the old row softly', () => {
   assert.match(sale, /\$\{canManage \? `<button[^`]*replaceSaleFile\([^`]*🔄 החלף בקובץ חדש<\/button>` : ''\}/);
   const fn = sale.slice(sale.indexOf('async function replaceSaleFile'), sale.indexOf('// דחיסת תמונה'));

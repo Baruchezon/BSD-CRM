@@ -11,10 +11,16 @@
 // There is no structured copy of the analysis anywhere (the generator writes only
 // a PDF), so the table is read from the PDF text with pdf.js, by position.
 // Rules: מחיר מבוקש is never touched. Empty / zero / "—" years are skipped, and
-// columns marked as partial/indicative/estimated are excluded. A field whose row
+// columns marked as partial/indicative/estimated are excluded. Only the 3 most
+// recent years that still have a real number are averaged (fewer, if fewer exist).
+// The number written into the field is that average rounded DOWN to 2 significant
+// digits (magnitude; under 100 the integer average is kept). A field whose row
 // is missing in the analysis is left as it is. Nothing is saved here: the values
 // are shown with the years used, and Baruch confirms by pressing the normal save.
-// Unticking restores what was in the fields before. Admin/manager only.
+// The years label is shown next to each filled field and in the section heading
+// while the card is open. businesses has no meta column for it, so it is not
+// written to the database and does not survive a reload. Unticking restores what
+// was in the fields before. Admin/manager only.
 // ============================================================
 (function(){
   const PDFJS_VER = '4.10.38';
@@ -26,6 +32,34 @@
   ];
   const YEAR_RE = /^(19[89]\d|20[0-4]\d)$/;
   const HEADER_NOISE_RE = /^(\(|\)|\*+|\.|,|:|-|–|₪|ש|ח|"|״|'|׳|ש"ח|ש״ח)$/;
+  const FINANCE_HEADING = 'נתונים כספיים';
+
+  // Integer shekels. |n| < 100 stays as that integer. Otherwise keep the first
+  // two digits and zero the rest (floor of the magnitude — a loss of -11,376
+  // becomes -11,000, never -12,000).
+  function roundDown2Sig(n){
+    if (n === null || n === undefined || !isFinite(Number(n))) return n;
+    const sign = Number(n) < 0 ? -1 : 1;
+    let abs = Math.abs(Math.trunc(Number(n)));
+    if (abs < 100) return sign * abs;
+    let factor = 1;
+    while (abs >= 100){
+      abs = Math.floor(abs / 10);
+      factor *= 10;
+    }
+    return sign * abs * factor;
+  }
+
+  // [2023, 2024, 2025] → «ממוצע 3 שנים (2023–2025)». A gap is listed, not spanned.
+  function yearsLabel(years){
+    const ys = (years || []).map(Number).filter(y => isFinite(y)).sort((a, b) => a - b);
+    const n = ys.length;
+    if (!n) return '';
+    if (n === 1) return 'ממוצע שנה (' + ys[0] + ')';
+    const contiguous = ys.every((y, i) => i === 0 || y === ys[i - 1] + 1);
+    const span = contiguous ? (ys[0] + '–' + ys[n - 1]) : ys.join(', ');
+    return 'ממוצע ' + n + ' שנים (' + span + ')';
+  }
 
   function normLabel(tokens){
     // RTL words come out in visual order, so brackets are mirrored: swap them back.
@@ -116,20 +150,33 @@
         included: !c.extra.some(x => /[\u0590-\u05FFa-zA-Z]/.test(x)),
         note: c.extra.join(' '),
       })).sort((a, b) => a.year - b.year);
-      const result = { ok: true, page: header.p, years, rows: {}, averages: {} };
+      const result = { ok: true, page: header.p, years, rows: {}, averages: {}, exactAverages: {}, yearLabels: {} };
       for (const f of FIELDS){
         const r = picked[f.row];
         if (!r){ result.rows[f.row] = null; continue; }
-        const used = [], skipped = [];
+        const eligible = [], skipped = [];
         years.forEach(y => {
           const cell = r.byYear[y.year] || {};
           if (!y.included) skipped.push({ year: y.year, text: cell.text || '', why: 'עמודה חלקית/אינדיקטיבית' + (y.note ? ' - «' + y.note + '»' : '') });
           else if (cell.value === null || cell.value === undefined) skipped.push({ year: y.year, text: cell.text || '', why: 'אין נתון' });
           else if (cell.value === 0) skipped.push({ year: y.year, text: cell.text, why: 'אפס' });
-          else used.push({ year: y.year, value: cell.value });
+          else eligible.push({ year: y.year, value: cell.value });
         });
+        eligible.sort((a, b) => b.year - a.year);
+        const used = eligible.slice(0, 3).sort((a, b) => a.year - b.year);
+        eligible.slice(3).forEach(u => skipped.push({ year: u.year, text: String(u.value), why: 'מעבר ל-3 השנים האחרונות' }));
+        skipped.sort((a, b) => a.year - b.year);
         result.rows[f.row] = { label: r.label, used, skipped };
-        result.averages[f.key] = used.length ? Math.round(used.reduce((s, u) => s + u.value, 0) / used.length) : null;
+        if (!used.length){
+          result.averages[f.key] = null;
+          result.exactAverages[f.key] = null;
+          result.yearLabels[f.key] = '';
+          continue;
+        }
+        const exact = Math.round(used.reduce((s, u) => s + u.value, 0) / used.length);
+        result.exactAverages[f.key] = exact;
+        result.averages[f.key] = roundDown2Sig(exact);
+        result.yearLabels[f.key] = yearsLabel(used.map(u => u.year));
       }
       return result;
     }
@@ -180,6 +227,32 @@
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  function paintHints(res){
+    FIELDS.forEach(f => {
+      const el = document.getElementById(f.key);
+      if (!el) return;
+      const text = (res && res.yearLabels && res.yearLabels[f.key]) || '';
+      const label = el.parentElement && el.parentElement.querySelector('label');
+      let hint = document.getElementById(f.key + '_econHint');
+      if (!text || !label){
+        if (hint) hint.remove();
+        return;
+      }
+      if (!hint){
+        hint = document.createElement('span');
+        hint.id = f.key + '_econHint';
+        hint.style.cssText = 'font-weight:500;color:#5a6172;font-size:.78rem;margin-inline-start:6px;';
+        label.appendChild(hint);
+      }
+      hint.textContent = text;
+    });
+    const heading = document.getElementById('bizFinanceHeading');
+    if (!heading) return;
+    const labels = FIELDS.map(f => res && res.yearLabels && res.yearLabels[f.key]).filter(Boolean);
+    const same = labels.length > 0 && labels.every(l => l === labels[0]);
+    heading.textContent = same ? (FINANCE_HEADING + ' · ' + labels[0]) : FINANCE_HEADING;
+  }
+
   function previewHtml(file, res){
     const created = file.created_at ? new Date(file.created_at).toLocaleDateString('he-IL') : '';
     const lines = FIELDS.map(f => {
@@ -188,7 +261,8 @@
       if (!r.used.length) return `<li><b>${f.label}:</b> אין שנים עם נתון («${escH(r.label)}») - השדה לא שונה.</li>`;
       const used = r.used.map(u => `${u.year}: ${fmt(u.value)}`).join(' · ');
       const skipped = r.skipped.length ? `<br><span style="color:#8a93ab;">לא נכללו: ${r.skipped.map(s => `${s.year} (${escH(s.why)})`).join(' · ')}</span>` : '';
-      return `<li><b>${f.label} = ${fmt(res.averages[f.key])} ₪</b> - ממוצע ${r.used.length} שנים (${r.used.map(u => u.year).join(', ')})<br><span style="color:#5a6172;">«${escH(r.label)}» - ${used}</span>${skipped}</li>`;
+      const years = res.yearLabels[f.key] ? escH(res.yearLabels[f.key]) : ('ממוצע ' + r.used.length + ' שנים');
+      return `<li><b>${f.label}</b> — ${years}<br>ממוצע ${fmt(res.exactAverages[f.key])} → יוזן ${fmt(res.averages[f.key])}<br><span style="color:#5a6172;">«${escH(r.label)}» - ${used}</span>${skipped}</li>`;
     }).join('');
     return `<div style="font-weight:700;margin-bottom:4px;">מתוך: ${escH(file.file_name)}${created ? ' (' + created + ')' : ''}</div>
       <ul style="margin:0;padding-inline-start:18px;line-height:1.7;">${lines}</ul>
@@ -200,6 +274,7 @@
     const say = (html, color) => { if (box){ box.style.display = 'block'; box.style.color = color || '#0e1b34'; box.innerHTML = html; } };
     if (!checkbox.checked){
       if (BEFORE[bizId]){ FIELDS.forEach(f => { if (f.key in BEFORE[bizId]) setField(f.key, BEFORE[bizId][f.key]); }); delete BEFORE[bizId]; }
+      paintHints(null);
       if (box){ box.style.display = 'none'; box.innerHTML = ''; }
       return;
     }
@@ -222,6 +297,7 @@
       });
       if (!Object.keys(before).length){ checkbox.checked = false; say('⚠️ בניתוח לא נמצאו שנים עם נתונים לחישוב. לא שונה דבר.<br>' + previewHtml(file, res), '#b3402c'); return; }
       BEFORE[bizId] = before;
+      paintHints(res);
       say(previewHtml(file, res));
     } catch (e){
       checkbox.checked = false;
@@ -247,5 +323,5 @@
     </div>`;
   }
 
-  window.BSDEconFill = { parseFinanceTable, parseMoney, rowKind, toggle, rowHtml, latestAnalysisFile };
+  window.BSDEconFill = { parseFinanceTable, parseMoney, rowKind, toggle, rowHtml, latestAnalysisFile, roundDown2Sig, yearsLabel, previewHtml };
 })();
