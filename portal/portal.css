@@ -75,4 +75,9 @@
 .dist-first{margin:0 0 12px;padding:12px 16px;border-radius:10px;background:#eef4f8;border-right:4px solid var(--blue);font-weight:700;color:var(--navy)}
 .dist-privacy{margin:0;font-size:15px;color:var(--muted);line-height:1.75}
 .dist-note{margin:0 0 12px}
-@media(max-width:1050px){.dist-channels{grid-template-columns:1fr;gap:9px}.dist-channel{padding:12px 14px}}
+.dist-channel.on.has-report{display:block;padding:0;border:0;background:transparent}
+.dist-channel-btn{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;column-gap:12px;align-items:center;width:100%;margin:0;padding:14px 16px;border:1px solid #a9d6bb;border-radius:12px;background:linear-gradient(160deg,#f2faf5,#e6f4ec);color:inherit;font:inherit;text-align:right;min-height:0;cursor:pointer;box-shadow:none}
+.dist-channel-btn:hover,.dist-channel-btn:focus-visible{filter:none;border-color:#1e7b4f}
+.dist-reports{margin:0 0 16px}
+.dist-reports .file-row:first-child{border-top:0;padding-top:4px}
+@media(max-width:1050px){.dist-channels{grid-template-columns:1fr;gap:9px}.dist-channel{padding:12px 14px}.dist-channel-btn{padding:12px 14px}}

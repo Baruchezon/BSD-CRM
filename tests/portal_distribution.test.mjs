@@ -18,11 +18,19 @@ const FIRST = 'החשיפה הראשונה מתבצעת מול קונים פוט
 const PRIVACY = 'בכל ערוצי הפרסום החומרים מוצגים תמיד באופן אנונימי. המידע המלא והאמיתי על העסק נמסר אך ורק למי שחתם על הסכם שמירת סודיות מול החברה, ורק לאחר בחינה מעמיקה של יכולותיו ושל רצונו האמיתי לרכוש את העסק.';
 
 function renderer() {
-  const start = js.indexOf('const DIST_CHANNELS=');
+  // filesHtml + the real period formatter, without the portal's sessionStorage startup.
+  const start = js.indexOf('const EMPTY=');
   const end = js.indexOf('async function load(){');
-  assert.ok(start > 0 && end > start, 'renderer block found');
-  const ctx = { esc: v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) };
+  const periodStart = js.indexOf('const period=');
+  const periodEnd = js.indexOf('let activePage=');
+  assert.ok(start > 0 && end > start && periodStart > 0 && periodEnd > periodStart, 'renderer block found');
+  const ctx = {
+    esc: v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
+    date: v => v ? new Date(v).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' }) : '',
+    viewable: f => !!f && (f.mime === 'application/pdf' || /^image\/(jpeg|png|webp|gif)$/.test(f.mime || '')),
+  };
   vm.createContext(ctx);
+  vm.runInContext(js.slice(periodStart, periodEnd) + 'this.period=period;', ctx);
   vm.runInContext(js.slice(start, end) + ';this.distributionHtml=distributionHtml;', ctx);
   return ctx.distributionHtml;
 }
@@ -53,7 +61,7 @@ test('shared page for every portal: home + reports containers, no inline styles 
   assert.ok(html.includes('id="homeDistribution"') && html.includes('id="reportsDistribution"'));
   assert.ok(!/style="/.test(html.slice(html.indexOf('id="dashboard"'))), 'no inline style attributes in the dashboard');
   assert.ok(!/style="/.test(js.slice(js.indexOf('const DIST_CHANNELS='), js.indexOf('async function load(){'))));
-  assert.ok(html.includes('portal.js?v=20261011-1') && html.includes('portal.css?v=20261008-1'));
+  assert.ok(html.includes('portal.js?v=20261011-2') && html.includes('portal.css?v=20261011-2'));
   assert.ok(/@media\(max-width:1050px\)\{\.dist-channels\{grid-template-columns:1fr/.test(css), 'tablet/phone: one channel per row');
 });
 
@@ -86,8 +94,44 @@ test('uniform on every portal: same structure/wording/order for all 8 channel co
   assert.equal((html.match(/id="homeDistribution"/g) || []).length, 1);
   assert.ok(html.indexOf('id="updateTitle"') < html.indexOf('id="homeDistribution"') && html.indexOf('id="homeDistribution"') < html.indexOf('id="homeFiles"'));
   assert.ok(html.indexOf('id="reportList"') < html.indexOf('id="reportsDistribution"'));
-  // no per-business branching in the renderer or the call site
+  // no per-business branching in the renderer or the call site.
+  // File ids from the dashboard payload are allowed; business identity is not.
   const block = js.slice(js.indexOf('const DIST_CHANNELS='), js.indexOf('async function load(){'));
-  assert.ok(!/business_number|internal_name|\.id\b|username/.test(block));
-  assert.ok(/const dist=distributionHtml\(data\.distribution\);\$\('homeDistribution'\)\.innerHTML=dist;\$\('reportsDistribution'\)\.innerHTML=dist;/.test(js));
+  assert.ok(!/business_number|internal_name|username|business_id|\.business\b/.test(block));
+  assert.ok(/const dist=distributionHtml\(data\.distribution,reports\);\$\('homeDistribution'\)\.innerHTML=dist;\$\('reportsDistribution'\)\.innerHTML=dist;/.test(js));
+});
+
+test('media channel shows advertising PDFs (view + download) and opens the newest report', () => {
+  const render = renderer();
+  const older = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', kind: 'advertising', name: 'דוח ישן', mime: 'application/pdf', date: '2026-10-20T00:00:00Z', period_from: '2026-09-01', period_to: '2026-09-07' };
+  const newer = { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', kind: 'advertising', name: 'דוח חדש <script>', mime: 'application/pdf', date: '2026-10-02T00:00:00Z', period_from: '2026-10-09', period_to: '2026-10-15' };
+  const doc = { id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3', kind: 'document', name: 'תקציר', mime: 'application/pdf', date: '2026-10-30T00:00:00Z' };
+  const mediaOn = { channels: { vip: false, agents: true, media: true } };
+  const out = render(mediaOn, [older, doc, newer]);
+  assert.ok(out.includes('class="dist-reports"'), 'file list under the distribution section');
+  assert.ok(out.indexOf('dist-channels') < out.indexOf('dist-reports') && out.indexOf('dist-reports') < out.indexOf(FIRST) && out.indexOf(FIRST) < out.indexOf(PRIVACY));
+  assert.ok(out.includes('צפייה') && out.includes('הורדת PDF'));
+  assert.ok(out.includes('תקופה: 09.10–15.10.2026'), 'same period line as the reports tab');
+  assert.ok(out.includes('דוח חדש &lt;script&gt;') && !out.includes('<script>'), 'file name escaped');
+  assert.ok(out.indexOf('דוח חדש') < out.indexOf('דוח ישן'), 'newest period first');
+  assert.ok(!out.includes(doc.id) && !out.includes('תקציר'), 'documents stay out of this list');
+  const btn = out.match(/<button type="button" class="dist-channel-btn" data-file="([^"]+)" data-mode="view"/);
+  assert.ok(btn, 'media row is a view button');
+  assert.equal(btn[1], newer.id, 'row opens the newest period, not the latest upload');
+  assert.equal((out.match(/class="dist-channel-btn"/g) || []).length, 1);
+  assert.ok(out.includes('הופץ ללקוחות VIP') && out.includes('class="dist-channel off"'));
+  assert.equal((out.match(/data-mode="download"/g) || []).length, 2, 'each report keeps הורדת PDF');
+  const quoted = render(mediaOn, [{ id: 'aa"bb', kind: 'advertising', name: 'q', mime: 'application/pdf', date: '2026-10-01T00:00:00Z' }]);
+  assert.ok(quoted.includes('data-file="aa&quot;bb"') && !quoted.includes('data-file="aa"bb"'));
+  const off = render({ channels: { vip: true, agents: false, media: false } }, [newer]);
+  assert.ok(!off.includes('dist-reports') && !off.includes('dist-channel-btn') && !off.includes(newer.id), 'media off keeps reports off this section');
+  assert.ok(off.includes('class="dist-channel on"') && off.includes(FIRST));
+  const empty = render(mediaOn, []);
+  assert.ok(!empty.includes('dist-reports') && !empty.includes('data-file') && !empty.includes('dist-channel-btn'));
+  assert.ok(empty.includes('הופץ במערכות המדיה של BSD') && empty.includes('>בוצע<'));
+  for (const media of ['true', 1, null]) {
+    const loose = render({ channels: { vip: false, agents: false, media } }, [newer]);
+    assert.ok(!loose.includes('dist-reports') && !loose.includes(newer.id), 'only strict true reveals the file');
+  }
+  assert.ok(js.includes('openFile(file.dataset.file,file.dataset.mode)'), 'row click uses the existing authenticated file action');
 });
