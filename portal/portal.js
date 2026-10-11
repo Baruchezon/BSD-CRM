@@ -57,9 +57,17 @@ const DIST_NOT_STARTED='ההפצה עדיין לא התחילה. ברגע שתת
 // Same section on every portal: always 3 channels, then ONE line, then the privacy paragraph.
 // ✓ only for a strict true from the API; anything else (missing, null, error) is «טרם בוצע».
 // The single line: first-exposure text if any channel is ✓, otherwise the not-started text.
-function distributionHtml(d){const ch=(d&&typeof d==='object'&&d.channels&&typeof d.channels==='object')?d.channels:{};
+// 11.10.2026: when media is strictly on AND the dashboard already returned advertising
+// reports, list those files here (same צפייה / הורדת PDF as the reports tab) and let the
+// media row open the newest one. Channel booleans are not derived from the files.
+function distributionHtml(d,reports){const ch=(d&&typeof d==='object'&&d.channels&&typeof d.channels==='object')?d.channels:{};
  const on=k=>ch[k]===true,started=DIST_CHANNELS.some(([k])=>on(k));
- return `<ul class="dist-channels">${DIST_CHANNELS.map(([k,label])=>`<li class="dist-channel ${on(k)?'on':'off'}"><span class="dist-mark" aria-hidden="true">${on(k)?'✓':''}</span><span class="dist-label">${esc(label)}</span><span class="dist-state">${on(k)?'בוצע':'טרם בוצע'}</span></li>`).join('')}</ul>`
+ const ads=(Array.isArray(reports)?reports:[]).filter(f=>f&&f.kind==='advertising'&&typeof f.id==='string'&&f.id).sort((a,b)=>String(b.period_to||'').localeCompare(String(a.period_to||''))||String(b.period_from||'').localeCompare(String(a.period_from||''))||(Date.parse(b.date)||0)-(Date.parse(a.date)||0)||String(b.id).localeCompare(String(a.id)));
+ const newest=on('media')&&ads.length?ads[0]:null;
+ const row=(k,label)=>{const inner=`<span class="dist-mark" aria-hidden="true">${on(k)?'✓':''}</span><span class="dist-label">${esc(label)}</span><span class="dist-state">${on(k)?'בוצע':'טרם בוצע'}</span>`;
+  return newest&&k==='media'?`<li class="dist-channel on has-report"><button type="button" class="dist-channel-btn" data-file="${esc(newest.id)}" data-mode="${viewable(newest)?'view':'download'}" aria-label="${esc(label)} — צפייה בדוח">${inner}</button></li>`:`<li class="dist-channel ${on(k)?'on':'off'}">${inner}</li>`;};
+ return `<ul class="dist-channels">${DIST_CHANNELS.map(([k,label])=>row(k,label)).join('')}</ul>`
+  +(newest?`<div class="dist-reports">${filesHtml(ads,'advertising')}</div>`:'')
   +(started?`<p class="dist-first">${esc(DIST_FIRST)}</p>`:`<p class="muted dist-note">${esc(DIST_NOT_STARTED)}</p>`)
   +`<p class="dist-privacy">${esc(DIST_PRIVACY)}</p>`;}
 async function load(){try{data=await api('dashboard');const b=data.business,by=k=>data.files.filter(f=>f.kind===k),docs=by('document'),reports=by('advertising'),extras=by('extra');
@@ -67,7 +75,7 @@ async function load(){try{data=await api('dashboard');const b=data.business,by=k
  document.body.classList.remove('is-login');$('loginPage').hidden=true;$('dashboard').hidden=false;$('logout').hidden=false;$('businessName').textContent=b.internal_name;$('hello').textContent=b.owner_name?`שלום, ${b.owner_name}`:'ברוכים הבאים';$('businessMeta').textContent=[b.owner_name,b.owner_phone,b.city].filter(Boolean).join(' · ');
  $('docCount').textContent=docs.length||'טרם עודכנו';$('extraCount').textContent=extras.length||'אין עדיין';$('reportCount').textContent=reports.length||'טרם עודכנו';
  const matches=data.matches||[],ms=data.match_summary||{total:matches.length,active:0,signed:0,full:0};$('matchCount').textContent=ms.total||'אין עדיין';$('matchSummary').innerHTML=matches.length?summaryHtml(ms):'';$('matchList').innerHTML=data.matches_unavailable?'<p class="empty">טבלת הקונים אינה זמינה כרגע. אפשר לרענן בעוד כמה דקות או לפנות לצוות BSD.</p>':matchesHtml(matches);
- const dist=distributionHtml(data.distribution);$('homeDistribution').innerHTML=dist;$('reportsDistribution').innerHTML=dist;
+ const dist=distributionHtml(data.distribution,reports);$('homeDistribution').innerHTML=dist;$('reportsDistribution').innerHTML=dist;
  $('documentList').innerHTML=filesHtml(docs,'document');$('extraList').innerHTML=filesHtml(extras,'extra');$('reportList').innerHTML=filesHtml(reports,'advertising');$('homeFiles').innerHTML=filesHtml(docs.slice(0,4),'document');$('homeExtras').innerHTML=filesHtml(extras.slice(0,3),'extra');
  $('businessDetails').innerHTML=[['שם העסק',b.internal_name],['איש קשר',b.owner_name],['טלפון',b.owner_phone],['מיקום',b.city]].filter(x=>x[1]).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
  $('updateMessage').textContent=data.update?.message||'ניתן לפנות לצוות BSD לקבלת מידע על תהליך מכירת העסק.';$('updateTitle').textContent=data.update?'עדכון מצוות BSD':'עדכונים אישיים יופיעו כאן';$('updateDate').textContent=date(data.update?.date);
