@@ -871,6 +871,21 @@ function sfOnBrokerChange(){
   }
 }
 
+// 11.10.2026 (Baruch): the real/internal name may appear in the email subject,
+// the email body, and the WhatsApp text (both channels send this preview)
+// ONLY for the business owner, or for a buyer whose agreement_status is
+// exactly «יש הסכם חתום» (the same marker sfOnBuyerChange already uses).
+// A broker, a buyer without that status, or a buyer whose status cannot be
+// read, gets anonymous_name. Empty anonymous name → «העסק». Never guess.
+function sfMessageBizName(biz, recipientType, agreementStatus){
+  const anon = (biz && String(biz.anonymous_name || '').trim()) || 'העסק';
+  const internal = biz && String(biz.internal_name || '').trim();
+  const owner = recipientType === 'owner';
+  const buyerSigned = recipientType === 'buyer' && agreementStatus === 'יש הסכם חתום';
+  if ((owner || buyerSigned) && internal) return internal;
+  return anon;
+}
+
 // שלב תצוגה מקדימה (סעיף 5 בהנחיה) - נושא ותוכן ניתנים לעריכה, לפני שנשלח
 // בפועל. השליחה בפועל (sfConfirmSend) קוראת רק ל-Edge Function הקשיחה;
 // שום קישור/קובץ לא נבחר או נבנה כאן - רק טקסט חופשי לעריכה.
@@ -922,8 +937,12 @@ function sfShowSendPreview(bizId, bizName){
 
     const recipientName = recipient.full_name || [recipient.first_name, recipient.last_name].filter(Boolean).join(' ') || (recipientType === 'broker' ? 'מתווך' : (recipientType === 'owner' ? 'בעל העסק' : 'קונה'));
     const fileIds = selected.map(c => c.value);
-    const defaultSubject = `חומרי מכירה${signed ? ' - ' + bizName : ' (אנונימי)'}`;
-    const defaultBody = `שלום ${recipientName},\n\nמצורפים קישורים להורדת החומרים בנוגע ל${bizName} (בתוקף לשבוע):`;
+    // bizName above is the staff label (internal name on the card). The text
+    // that is actually emailed / opened in WhatsApp uses messageBizName.
+    const bizForName = (typeof ALL_BIZ !== 'undefined' ? ALL_BIZ : []).find(b => b && b.id === bizId);
+    const messageBizName = sfMessageBizName(bizForName, recipientType, recipient ? recipient.agreement_status : undefined);
+    const defaultSubject = `חומרי מכירה${signed ? ' - ' + messageBizName : ' (אנונימי)'}`;
+    const defaultBody = `שלום ${recipientName},\n\nמצורפים קישורים להורדת החומרים בנוגע ל${messageBizName} (בתוקף לשבוע):`;
 
     const body = document.getElementById('sfSendModalBody');
     body.innerHTML = `
