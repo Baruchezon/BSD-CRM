@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<script>
+// בדיקת גרסה אוטומטית - עוקפת בעיות קאשינג של דפדפני מובייל (ראו הסבר ב-match-detail.html)
+(function(){
+  try{
+    // PAGE_BUILD אפוי בתוך הדף עצמו (מתעדכן בכל push) - נבדק תמיד, גם
+    // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
+    // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
+    // לא תפסה בעיה כזו בטעינה ראשונה).
+    var PAGE_BUILD = '202610110700';
+    window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
+    // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
+    // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
+    // device, not on every new tab. Shared with checkStalePage() in js/auth.js.
+    var guardKey = 'bsd_ver_reload_guard:' + (location.pathname.split('/').pop() || 'index');
+    function readGuard(){ try { return localStorage.getItem(guardKey); } catch(e){ try { return sessionStorage.getItem(guardKey); } catch(e2){ return 'storage-blocked'; } } }
+    function writeGuard(v){ try { localStorage.setItem(guardKey, v); return true; } catch(e){ try { sessionStorage.setItem(guardKey, v); return true; } catch(e2){ return false; } } }
+    var loopGuard = readGuard();
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          if (!writeGuard(serverBuild)) return; // never reload if we can't remember that we did
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - WhatsApp 077</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=202610061550">
+<script src="js/bsdBlackBox.js?v=20261010"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
+<style>
+  .wrap{padding:18px 22px 40px;max-width:1200px;margin:0 auto;}
+  .btn{border:none;border-radius:8px;padding:7px 12px;font-family:inherit;font-size:.8rem;cursor:pointer;font-weight:700;}
+  .btn-primary{background:var(--navy);color:#fff;} .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);} .btn-success{background:var(--success);color:#fff;}
+  .btn[disabled]{opacity:.5;cursor:default}
+  .wa-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+  .wa-top h2{margin:0;color:var(--navy);font-size:1.25rem} #waMode{color:#8a6d1f;font-weight:700;font-size:.85rem}
+  .wa-grid{display:grid;grid-template-columns:340px 1fr;gap:14px;min-height:70vh}
+  @media (max-width:820px){.wa-grid{grid-template-columns:1fr}.wa-side{max-height:40vh}}
+  .wa-side{background:#fff;border-radius:12px;border:1px solid #f0ede4;display:flex;flex-direction:column;overflow:hidden}
+  .wa-filters{padding:10px;border-bottom:1px solid #f0ede4;display:flex;gap:6px;flex-wrap:wrap}
+  .wa-filters input{flex:1 1 100%;padding:8px 10px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit}
+  .wa-filters .btn.on{background:var(--navy);color:#fff}
+  #waList{overflow:auto;flex:1}
+  .wa-conv{padding:10px 12px;border-bottom:1px solid #f5f2ea;cursor:pointer} .wa-conv:hover{background:#faf8f2}
+  .wa-conv.active{background:#eef3fb} .wa-conv.unread b{color:#0e1b34} .wa-conv.unread{background:#fffdf6}
+  .wa-conv-top{display:flex;justify-content:space-between;gap:8px} .wa-time{font-size:.72rem;color:#999}
+  .wa-conv-sub{font-size:.74rem;color:#7a7a7a;margin-top:2px} .wa-conv-prev{font-size:.8rem;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+  .unread-badge{display:inline-block;background:#1f8f4e;color:#fff;font-size:.68rem;font-weight:700;border-radius:10px;padding:1px 7px;margin-inline-start:6px}
+  .wa-main{background:#fff;border-radius:12px;border:1px solid #f0ede4;display:flex;flex-direction:column;min-height:70vh}
+  #waThread{display:flex;flex-direction:column;flex:1;min-height:0}
+  .wa-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid #f0ede4;flex-wrap:wrap}
+  .wa-link{padding:10px 14px;background:#fff8e6;border-bottom:1px solid #f0e2b8;font-size:.84rem}
+  .wa-link .btn{margin:4px 2px} .wa-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+  .wa-row input{flex:1;min-width:160px;padding:7px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit}
+  .wa-msgs{flex:1;overflow:auto;padding:12px 14px;background:#f7f5ef;min-height:280px;max-height:62vh}
+  .bubble-row{display:flex;margin-bottom:8px} .bubble-row.mine{justify-content:flex-start} .bubble-row.theirs{justify-content:flex-end}
+  .bubble{max-width:520px;padding:8px 12px;border-radius:12px;font-size:.86rem;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+  .bubble.mine{background:#dcf3e1;color:#1c2333} .bubble.theirs{background:#fff;color:#1c2333;border:1px solid #ebe7dc}
+  .bubble-time{font-size:.68rem;color:#999;margin-top:2px}
+  .wa-doc{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center} .wa-doc a{color:#1f5fbf;cursor:pointer}
+  .wa-tpl{font-size:.7rem;color:#5b6b5e;margin-bottom:3px} .wa-err{color:#b3402c;font-size:.75rem;margin-top:3px}
+  .wa-chip{display:inline-block;border-radius:10px;padding:1px 8px;font-size:.7rem;font-weight:700;background:#e7efe8;color:#14532d}
+  .wa-win{font-size:.78rem;padding:6px 14px;color:#8a6d1f;background:#fffaf0;border-top:1px solid #f0ede4} .wa-win.open{color:#14532d;background:#f2faf3}
+  .wa-reply{padding:10px 14px;border-top:1px solid #f0ede4}
+  .wa-reply textarea{width:100%;box-sizing:border-box;padding:8px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;resize:vertical}
+  .empty-msg{text-align:center;color:#999;padding:40px 20px}
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span id="bsdVerLabel" style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.3px;">גרסה</span><script>(function(){var e=document.getElementById('bsdVerLabel');var b=window.PAGE_BUILD;if(e&&b&&b.length>=12){e.textContent='גרסה '+b.slice(6,8)+'.'+b.slice(4,6)+'.'+b.slice(0,4)+' '+b.slice(8,10)+':'+b.slice(10,12);}})();</script></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.15rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;text-shadow:0 0 8px rgba(255,221,51,.6);"></div>
+  <div class="nav-rows" style="display:flex;flex-direction:column;gap:6px;">
+  <div class="nav">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="leads-hub.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לידים</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+    <div style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">⚙️ הגדרות ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="backup.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">💾 גיבוי נתונים</a>
+      <a href="javascript:void(0)" id="pushBellBtn" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔕 הפעל התראות</a>
+      <a href="help.html" target="_blank" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">❓ עזרה</a>
+      <a href="javascript:void(0)" onclick="openMyProfile()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👤 פרטים אישיים</a>
+      <a href="javascript:void(0)" onclick="openChangePassword()" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🔑 שנה סיסמה</a>
+    </div>
+  </div>
+  </div>
+  <div class="nav">
+    <a href="tasks.html" class="nav-tasks">✅ משימות</a>
+    <a href="messages.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;position:relative;">💬 הודעות<span id="navMsgBadge" style="display:none;position:absolute;top:2px;left:2px;background:#b3402c;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;font-weight:700;"></span></a>
+    <a href="matches-workspace.html" style="color:#ffdd33;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">📁 מרכז ההתאמות</a>
+    <a href="commission-simulator.html" style="color:#c9a24b;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;border:1px solid rgba(201,162,75,.4);">🧮 סימולטור עמלות</a>
+    <div id="navToolsWrap" style="position:relative;display:inline-block;">
+    <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">🛠️ כלים ▾</button>
+    <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
+      <a href="recordings.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🎙️ הקלטות</a>
+      <a href="training-admin.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">🎓 הכשרות ומתעניינים</a>
+      <a href="messages.html?admin_view=1" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ כל ההודעות במערכת</a>
+      <a href="stats.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 סטטיסטיקה</a>
+      <a href="users.html" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">👥 משתמשים</a>
+      <a href="ad-reports.html" target="_blank" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📣 דוחות פרסום פייסבוק</a>
+    </div>
+  </div>
+    <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+  </div>
+</div>
+  
+</div>
+
+
+<div class="wrap" id="waMain">
+  <div class="wa-top"><h2>💬 WhatsApp העסקי · 077-444-6707 <span class="unread-badge" id="waUnreadTotal"></span></h2><span id="waMode"></span></div>
+  <div class="wa-grid">
+    <aside class="wa-side">
+      <div class="wa-filters">
+        <input type="search" id="waSearch" placeholder="חיפוש לפי שם, טלפון או הודעה...">
+        <button type="button" class="btn btn-ghost on" data-filter="all">הכל</button>
+        <button type="button" class="btn btn-ghost" data-filter="unread">לא נקראו</button>
+        <button type="button" class="btn btn-ghost" data-filter="unlinked">לא משויכות</button>
+      </div>
+      <div id="waList"><div class="empty-msg">טוען...</div></div>
+    </aside>
+    <section class="wa-main"><div id="waThread"><div class="empty-msg">בחרו שיחה מהרשימה</div></div></section>
+  </div>
+</div>
+
+<div id="toastBox"></div>
+
+<script src="js/config.js?v=202610111200wa"></script>
+<script src="js/supabaseClient.js?v=202608111530"></script>
+<script src="js/auth.js?v=202609241200"></script>
+<script src="js/whatsapp-api.js?v=202610111200"></script>
+<script src="js/whatsapp-inbox.js?v=202610111200"></script>
+<script>
+let CURRENT_PROFILE = null;
+function toast(msg){
+  const box = document.getElementById('toastBox');
+  const isError = /שגיאה|error|נכשל|אין/i.test(msg);
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed;bottom:24px;left:24px;background:${isError ? '#b00020' : 'var(--navy,#0e1b34)'};color:#fff;padding:14px 18px;border-radius:10px;font-size:.9rem;box-shadow:0 6px 20px rgba(0,0,0,.35);z-index:9500;max-width:320px;`;
+  el.textContent = msg; box.appendChild(el);
+  setTimeout(() => { if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
+}
+(async function(){
+  const profile = await requireAuth();
+  if (!profile) return;
+  CURRENT_PROFILE = profile;
+  document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email);
+  if (profile.role === 'viewer') { document.getElementById('waMain').innerHTML = '<div class="empty-msg">אין לך הרשאה לתיבת ה-WhatsApp</div>'; return; }
+  await window.BSDWhatsAppInbox.init();
+})();
+</script>
+</body>
+</html>

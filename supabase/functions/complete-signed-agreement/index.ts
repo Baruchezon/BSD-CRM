@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { sendSignedCopy } from "../_shared/whatsapp-signed-copy.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -295,9 +296,22 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // 11.10.2026 (WhatsApp Cloud API, pilot): signed copy to the client on WhatsApp. Inert unless WHATSAPP_MODE is
+  // set and the record is switched to whatsapp_channel = 'api'. Never affects the signing result.
+  let whatsappCopy: unknown = null;
+  try {
+    whatsappCopy = await Promise.race([
+      sendSignedCopy({ db: supabase, table: tableName as "leads" | "businesses" | "brokers", recordId, agreementNumber, storagePath }),
+      new Promise((resolve) => setTimeout(() => resolve({ attempted: true, ok: false, error: "timeout" }), 8000)),
+    ]);
+  } catch (error) {
+    whatsappCopy = { attempted: true, ok: false, error: error instanceof Error ? error.message.slice(0, 200) : "error" };
+  }
+
   return json(req, {
     ok: true,
     saved: true,
+    whatsapp_copy: whatsappCopy,
     email_sent: emailSent,
     warning: emailWarning,
     record_id: recordId,

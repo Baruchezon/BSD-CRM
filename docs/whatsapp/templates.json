@@ -1,0 +1,483 @@
+{
+  "generated_from": "supabase/functions/_shared/whatsapp-templates.ts",
+  "short_link_base": "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/go/",
+  "templates": [
+    {
+      "name": "bsd_agreement_to_sign",
+      "language": "he",
+      "category": "UTILITY",
+      "parameter_format": "POSITIONAL",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "שלום {{1}}, הסכם ההתקשרות שלך עם BSD בנושא {{2}} מוכן לחתימה. אפשר לעיין בהסכם ולחתום עליו דיגיטלית בלחיצה על «לצפייה וחתימה». לשאלות אפשר להשיב להודעה זו.",
+          "example": {
+            "body_text": [
+              [
+                "דני",
+                "מכירת עסק"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "BSD Business Brokers Israel"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "URL",
+              "text": "לצפייה וחתימה",
+              "url": "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/go/{{1}}",
+              "example": [
+                "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/go/Ab3kD9xQ"
+              ]
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "הסר אותי"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bsd_signing_reminder",
+      "language": "he",
+      "category": "UTILITY",
+      "parameter_format": "POSITIONAL",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "שלום {{1}}, תזכורת: הסכם ההתקשרות עם BSD שנשלח אליך בתאריך {{2}} עדיין ממתין לחתימה. אפשר לחתום בלחיצה על «לצפייה וחתימה». אם כבר חתמת, אין צורך לעשות דבר.",
+          "example": {
+            "body_text": [
+              [
+                "דני",
+                "11.10.2026"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "BSD Business Brokers Israel"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "URL",
+              "text": "לצפייה וחתימה",
+              "url": "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/go/{{1}}",
+              "example": [
+                "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/go/Ab3kD9xQ"
+              ]
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "הסר אותי"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bsd_agreement_signed_copy",
+      "language": "he",
+      "category": "UTILITY",
+      "parameter_format": "POSITIONAL",
+      "components": [
+        {
+          "type": "HEADER",
+          "format": "DOCUMENT",
+          "example": {
+            "header_handle": [
+              "<HEADER_HANDLE_FROM_RESUMABLE_UPLOAD>"
+            ]
+          }
+        },
+        {
+          "type": "BODY",
+          "text": "שלום {{1}}, תודה! ההסכם עם BSD נחתם בהצלחה. מצורף העתק ההסכם החתום (מספר הסכם {{2}}) לשמירה אצלך.",
+          "example": {
+            "body_text": [
+              [
+                "דני",
+                "BSD-2026-1042"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "BSD Business Brokers Israel"
+        }
+      ]
+    },
+    {
+      "name": "bsd_files_ready",
+      "language": "he",
+      "category": "UTILITY",
+      "parameter_format": "POSITIONAL",
+      "components": [
+        {
+          "type": "HEADER",
+          "format": "DOCUMENT",
+          "example": {
+            "header_handle": [
+              "<HEADER_HANDLE_FROM_RESUMABLE_UPLOAD>"
+            ]
+          }
+        },
+        {
+          "type": "BODY",
+          "text": "שלום {{1}}, בהמשך לבקשתך מצורף המסמך {{2}}. לשאלות אפשר להשיב להודעה זו.",
+          "example": {
+            "body_text": [
+              [
+                "דני",
+                "תיק מכירה"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "BSD Business Brokers Israel"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "QUICK_REPLY",
+              "text": "הסר אותי"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bsd_meeting_summary",
+      "language": "he",
+      "category": "UTILITY",
+      "parameter_format": "POSITIONAL",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "שלום {{1}}, תודה על הפגישה בתאריך {{2}}. עיקרי הדברים: {{3}}. נשמח להמשיך בטיפול, ולשאלות אפשר להשיב להודעה זו.",
+          "example": {
+            "body_text": [
+              [
+                "דני",
+                "11.10.2026",
+                "עברנו על הדוחות הכספיים וסיכמנו על ביקור בעסק"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "BSD Business Brokers Israel"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "QUICK_REPLY",
+              "text": "הסר אותי"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bsd_buyer_update",
+      "language": "he",
+      "category": "UTILITY",
+      "parameter_format": "POSITIONAL",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "שלום {{1}}, עדכון לגבי הפנייה שלך ל-BSD (מספר לקוח {{2}}): {{3}}. לפרטים נוספים אפשר להשיב להודעה זו.",
+          "example": {
+            "body_text": [
+              [
+                "דני",
+                "1042",
+                "קיבלנו את המסמכים ששלחת"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "BSD Business Brokers Israel"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "QUICK_REPLY",
+              "text": "הסר אותי"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bsd_portal_access",
+      "language": "he",
+      "category": "UTILITY",
+      "parameter_format": "POSITIONAL",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "שלום {{1}}, פתחנו עבורך אזור אישי מאובטח ב-BSD, שבו אפשר לצפות במסמכים ובעדכונים של העסק שלך. להפעלת החשבון ולכניסה לוחצים על «כניסה לאזור האישי». הקישור אישי, נא לא להעביר אותו לאחרים.",
+          "example": {
+            "body_text": [
+              [
+                "דני"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "BSD Business Brokers Israel"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "URL",
+              "text": "כניסה לאזור האישי",
+              "url": "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/go/{{1}}",
+              "example": [
+                "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/go/Ab3kD9xQ"
+              ]
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "הסר אותי"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bsd_vip_access",
+      "language": "he",
+      "category": "UTILITY",
+      "parameter_format": "POSITIONAL",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "שלום {{1}}, נפתחה עבורך גישה לאזור לקוחות VIP של BSD, שבו מוצגים העסקים שהתאמנו עבורך. לכניסה לוחצים על «כניסה לאזור VIP». הקישור אישי, נא לא להעביר אותו לאחרים.",
+          "example": {
+            "body_text": [
+              [
+                "דני"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "BSD Business Brokers Israel"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "URL",
+              "text": "כניסה לאזור VIP",
+              "url": "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/go/{{1}}",
+              "example": [
+                "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/go/Ab3kD9xQ"
+              ]
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "הסר אותי"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bsd_lead_followup",
+      "language": "he",
+      "category": "UTILITY",
+      "parameter_format": "POSITIONAL",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "שלום {{1}}, קיבלנו את פנייתך ל-BSD בנושא {{2}}. נשמח לתאם איתך שיחה קצרה. מתי נוח לך?",
+          "example": {
+            "body_text": [
+              [
+                "דני",
+                "מכירת עסק"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "BSD Business Brokers Israel"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "QUICK_REPLY",
+              "text": "היום"
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "מחר"
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "אחזור אליכם"
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "הסר אותי"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bsd_training_form",
+      "language": "he",
+      "category": "UTILITY",
+      "parameter_format": "POSITIONAL",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "שלום {{1}}, בהמשך להתעניינותך בהכשרת מתווכי העסקים של BSD, זה הקישור האישי לטופס הרישום. אפשר להשיב להודעה זו עם כל שאלה.",
+          "example": {
+            "body_text": [
+              [
+                "דני"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "BSD Business Brokers Israel"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "URL",
+              "text": "לטופס הרישום",
+              "url": "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/go/{{1}}",
+              "example": [
+                "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/go/Ab3kD9xQ"
+              ]
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "הסר אותי"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bsd_anon_offer",
+      "language": "he",
+      "category": "MARKETING",
+      "parameter_format": "POSITIONAL",
+      "components": [
+        {
+          "type": "HEADER",
+          "format": "DOCUMENT",
+          "example": {
+            "header_handle": [
+              "<HEADER_HANDLE_FROM_RESUMABLE_UPLOAD>"
+            ]
+          }
+        },
+        {
+          "type": "BODY",
+          "text": "פרסומת: שלום {{1}}, יש ב-BSD עסק חדש שעשוי להתאים לך: {{2}}. מצורף תקציר אנונימי. מעוניין בפרטים נוספים? אפשר ללחוץ «כן, מעוניין». להסרה מרשימת התפוצה לוחצים «הסר אותי».",
+          "example": {
+            "body_text": [
+              [
+                "דני",
+                "בית קפה במרכז הארץ"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "BSD Business Brokers Israel"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "QUICK_REPLY",
+              "text": "כן, מעוניין"
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "הסר אותי"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bsd_training_brochure",
+      "language": "he",
+      "category": "MARKETING",
+      "parameter_format": "POSITIONAL",
+      "components": [
+        {
+          "type": "HEADER",
+          "format": "DOCUMENT",
+          "example": {
+            "header_handle": [
+              "<HEADER_HANDLE_FROM_RESUMABLE_UPLOAD>"
+            ]
+          }
+        },
+        {
+          "type": "BODY",
+          "text": "פרסומת: שלום {{1}}, מצורף הברושור של הכשרת מתווכי העסקים של BSD, עם כל הפרטים על התוכנית. להרשמה או לשאלות אפשר להשיב להודעה זו. להסרה מרשימת התפוצה לוחצים «הסר אותי».",
+          "example": {
+            "body_text": [
+              [
+                "דני"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "BSD Business Brokers Israel"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "QUICK_REPLY",
+              "text": "הסר אותי"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
