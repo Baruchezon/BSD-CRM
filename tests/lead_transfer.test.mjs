@@ -286,9 +286,10 @@ test('«שמור והעבר» buyer: same card becomes the buyer with a client n
  assert.deepEqual(h.pending(),[]);assert.match(h.ctx.location.href,/leads\.html\?open=/);
 });
 
-test('manual «ליד חדש» form lets you set the type (קונה default, or מוכר)',()=>{
- assert.match(html,/<select id="manualType"><option value="buyer">קונה<\/option><option value="seller">מוכר<\/option><\/select>/);
- assert.match(html,/type:\(document\.getElementById\('manualType'\) \|\| \{\}\)\.value === 'seller' \? 'seller' : 'buyer'/);
+test('manual «ליד חדש» form: מוכר עסק / קונה עסק must be chosen (no silent default) and is saved as type + lead_side',()=>{
+ assert.match(html,/<select id="manualType" required><option value="" selected disabled>בחר: מוכר עסק או קונה עסק<\/option><option value="seller">מוכר עסק<\/option><option value="buyer">קונה עסק<\/option><\/select>/);
+ assert.match(html,/if \(side !== 'seller' && side !== 'buyer'\) throw new Error\('יש לבחור אם זה מוכר עסק או קונה עסק'\);/);
+ assert.match(html,/type:side, lead_side:side, lead_side_source:'manual_form'/);
 });
 test('«מצב טיפול»: a changed value is written with «שמור והעבר» (buyer and seller) and with «שמור»; unchanged is not sent',async()=>{
  for(const category of ['buyer','seller']){
@@ -301,4 +302,14 @@ test('«מצב טיפול»: a changed value is written with «שמור והעב
  await s.ctx.saveLeadOnly(s.lead.id);assert.equal(s.lead.handling_status,'טופל');assert.equal(s.lead.website_intake_stage,'contacted');
  const u=harness({category:'buyer'});u.fields.wlHandlingStatus={value:'לא טופל',dataset:{orig:'לא טופל'},disabled:false};u.lead.handling_status='טופל';
  await u.run();assert.equal(u.lead.handling_status,'טופל','unchanged select never overwrites a value saved elsewhere');
+});
+test('«מוכר/קונה» (lead_side) follows the card: «שמור» stores the chosen side, «שמור והעבר» the destination side',async()=>{
+ const s=harness({category:'seller',leadType:'buyer'});await s.ctx.saveLeadOnly(s.lead.id);
+ assert.equal(s.lead.lead_side,'seller');assert.equal(s.lead.lead_side_source,'lead_card');assert.equal(s.fields.wlSaveError.style.display||'none','none');
+ const b=harness({category:'buyer',leadType:'seller',clientNumber:null,migrated:true});await b.run();
+ assert.equal(b.lead.lead_side,'buyer');assert.equal(b.lead.type,'buyer');
+ const t=harness({category:'seller'});await t.run();assert.equal(t.lead.lead_side,'seller');
+ // already the same side: not re-sent
+ const k=harness({category:'buyer',leadType:'buyer'});k.lead.lead_side='buyer';k.lead.lead_side_source='website_form';await k.ctx.saveLeadOnly(k.lead.id);
+ assert.equal(k.lead.lead_side_source,'website_form');
 });
