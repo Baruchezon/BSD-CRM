@@ -154,14 +154,25 @@ test('phone normalisation for wa.me', () => {
   assert.equal(api.normalizePhone('12345').valid, false);
 });
 
-test('WhatsApp: device share sheet with the PDF file; desktop fallback = download + open the buyer chat', () => {
+test('WhatsApp: phone uses the share sheet; desktop downloads the PDF and opens the buyer chat', () => {
   assert.match(src, /navigator\.canShare\(\{ files \}\)/);
   assert.match(src, /await navigator\.share\(\{ files, title: /);
   assert.doesNotMatch(src, /navigator\.share\(\{[^}]*text:/, 'no text next to files (iOS WhatsApp drops files when text is added)');
   assert.match(src, /e\.name === 'AbortError'\)\{ setStatus\('השליחה בוטלה\. לא סומן כלום בהתאמות\.'/);
   assert.match(src, /a\.download = p\.file\.name/);
   assert.match(src, /https:\/\/wa\.me\/\$\{phone\.e164\}\?text=/);
-  assert.doesNotMatch(src, /functions\.invoke|createSignedUrl|api\.resend|graph\.facebook/, 'free: no paid API, no edge function, no links');
+  assert.doesNotMatch(src, /graph\.facebook|createSignedUrl|api\.resend/, 'the PDF goes out as bytes, never as a public link and never straight to Graph');
+  assert.equal(api.whatsappRoute({ channel: 'personal', cloudReady: false, mobile: false, canShare: true }), 'download_and_chat');
+  assert.equal(api.whatsappRoute({ channel: 'personal', cloudReady: false, mobile: true, canShare: true }), 'share_sheet');
+  assert.equal(api.whatsappRoute({ channel: 'personal', cloudReady: false, mobile: true, canShare: false }), 'download_and_chat');
+  assert.equal(api.whatsappRoute({ channel: 'api', cloudReady: true, mobile: false, canShare: true }), 'cloud_document');
+  const handoff = api.resultMessage('download', { full_name: 'יובל כהן' }, { created: 1 });
+  assert.match(handoff, /ירד למחשב/);
+  assert.doesNotMatch(handoff, /קיבל תקציר/);
+  const dl = src.slice(src.indexOf('async function downloadAndOpenChat'), src.indexOf('async function sendEmail'));
+  assert.match(dl, /if \(!win\)/);
+  assert.doesNotMatch(dl.slice(0, dl.indexOf('if (!win)')), /recordAll/, 'a blocked chat is not recorded as sent');
+  assert.doesNotMatch(dl, /קיבל תקציר/);
 });
 
 test('match plan: never duplicates, new = «תקציר נשלח», early stages move forward, later stages kept', () => {
@@ -224,6 +235,7 @@ test('after send: new match + activity log + anon distribution (generated PDF =>
   assert.equal(dist.payload.distribution_type, 'primary');
   assert.equal(dist.payload.summary_snapshot, 'טקסט אנונימי');
   assert.equal(dist.payload.channel, 'whatsapp');
+  assert.equal(dist.payload.delivery_status, 'sent');
   assert.equal(dist.payload.match_id, 'new1');
   assert.equal(logged[0][0], 'anon_summary_sent_whatsapp');
 });
@@ -239,6 +251,7 @@ test('after send: existing match is updated, not duplicated (saved PDF => extend
   const dist = ops.find(o => o.table === 'anon_distributions');
   assert.equal(dist.payload.distribution_type, 'extended');
   assert.equal(dist.payload.anon_file_id, 'f7'); assert.equal(dist.payload.anon_file_source, 'sale_file');
+  assert.equal(dist.payload.delivery_status, 'pending', 'a manual download is not delivery');
   assert.equal(ops.find(o => o.table === 'match_activity_log').payload.attached_file_id, 'f7');
 });
 
@@ -253,4 +266,85 @@ test('after send: a concurrent insert (unique buyer+business) falls back to upda
 
 test('buyer without agreement is blocked (same rule as before)', () => {
   assert.match(src, /if \(!b\.agreement_status \|\| b\.agreement_status === 'אין הסכם'\) return/);
+});
+
+test('a buyer with only an email can be prepared; a buyer with neither phone nor email cannot', () => {
+  const emailOnly = { agreement_status: 'יש הסכם', full_name: 'יובל כהן', email: 'yuval@example.com' };
+  assert.equal(api.buyerBlockReason(emailOnly), '');
+  assert.ok(api.buyerPhoneBlock(emailOnly));
+  assert.equal(api.buyerEmailBlock(emailOnly), '');
+  const phoneOnly = { agreement_status: 'יש הסכם', full_name: 'יובל כהן', phone: '052-566-8003' };
+  assert.equal(api.buyerBlockReason(phoneOnly), '');
+  assert.ok(api.buyerEmailBlock(phoneOnly));
+  const neither = { agreement_status: 'יש הסכם', full_name: 'יובל כהן' };
+  assert.match(api.buyerBlockReason(neither), /טלפון|אימייל/);
+  assert.match(api.buyerBlockReason({ agreement_status: 'אין הסכם', phone: '0525668003', email: 'a@b.co' }), /הסכם/);
+});
+
+test('email: Hebrew RTL introduction, BSD signature, PDF attachment, no identifying details', () => {
+  const buyer = { first_name: 'יובל', full_name: 'יובל כהן', email: 'yuval@example.com' };
+  const html = api.emailHtml(buyer, 1);
+  assert.match(html, /dir="rtl"/);
+  assert.match(html, /צוות BSD/);
+  assert.match(html, /BSD Business Brokers Israel · מחברים עסקים להזדמנויות/);
+  assert.match(html, /info@bsd-bbi\.co\.il \| www\.bsd-bbi\.co\.il/);
+  assert.doesNotMatch(html, /<img/i);
+  assert.doesNotMatch(html, /סטאר|כפר|יוסי|הרצל|280/);
+  assert.match(api.emailPlain(buyer, 2), /2 תקצירים אנונימיים/);
+  const payload = api.buildEmailPayload(buyer, [{ base64: 'QQ==', filename: 'תקציר אנונימי BSD-B-2607-1002.pdf' }]);
+  assert.equal(payload.to, 'yuval@example.com');
+  assert.equal(payload.attachments[0].base64, 'QQ==');
+  assert.equal(payload.attachments[0].filename, 'תקציר אנונימי BSD-B-2607-1002.pdf');
+  assert.equal(payload.attachments[0].contentType, 'application/pdf');
+  assert.equal(api.MAIL_FROM_ADDRESS, 'info@bsd-bbi.co.il');
+  assert.doesNotMatch(payload.subject + '\n' + payload.body_text + '\n' + payload.html_body, /סטאר|כפר קאסם|יוסי|הרצל|280|internal_name/);
+  assert.match(src, /functions\.invoke\('send-match-summary'/);
+  assert.match(help, /info@bsd-bbi\.co\.il/);
+  assert.match(help, /שלח PDF במייל/);
+});
+
+test('077 hook: cloud document when the buyer is on the api channel; refusals fall back, hard failures do not', () => {
+  assert.equal(api.cloudHook({ whatsapp_channel: 'api' }).ready, false);
+  assert.equal(api.cloudHook({ whatsapp_channel: 'api' }).reason, 'hook_not_loaded');
+  const { api: hooked } = load({ window: { BSDWhatsApp: { uploadForSend(){}, call(){} } } });
+  assert.equal(hooked.cloudHook({ whatsapp_channel: 'personal' }).reason, 'not_077');
+  assert.equal(hooked.cloudHook({ whatsapp_channel: 'api' }).ready, true);
+  assert.equal(api.interpretCloud({ ok: false, error: 'disabled' }).fallback, true);
+  assert.equal(api.interpretCloud({ ok: false, error: 'window_closed_use_template' }).fallback, true);
+  assert.equal(api.interpretCloud({ ok: false, error: 'send_failed' }).fallback, false);
+  assert.equal(api.interpretCloud({ ok: false, error: 'network' }).fallback, false);
+  const sim = api.interpretCloud({ ok: true, simulated: true, message_status: 'simulated' });
+  assert.equal(sim.ok, true);
+  assert.equal(sim.simulated, true);
+  const uncertain = api.interpretCloud({ ok: true, message_status: 'uncertain' });
+  assert.equal(uncertain.ok, false);
+  assert.equal(uncertain.fallback, false);
+  assert.match(src, /send_document/);
+  assert.match(src, /uploadForSend/);
+  assert.match(src, /לעסק הזה אין תקציר אנונימי שמור/);
+});
+
+test('a failed send is logged and does not mark the match as delivered', async () => {
+  const { ops, client } = fakeDb([]);
+  const { api: a } = load({ window: { supabaseClient: client } });
+  const action = await a._recordOne(prepared(null), { id: 'l1', email: 'yuval@example.com' }, { id: 'u1' }, 'email', { deliveryStatus: 'failed', deliveryError: 'boom', markMatch: false });
+  assert.equal(action, 'failed');
+  assert.ok(!ops.some(o => o.table === 'matches'));
+  const dist = ops.find(o => o.table === 'anon_distributions');
+  assert.equal(dist.payload.channel, 'email');
+  assert.equal(dist.payload.delivery_status, 'failed');
+  assert.equal(dist.payload.delivery_error, 'boom');
+  assert.equal(a.resultMessage('email', { full_name: 'יובל כהן', email: 'yuval@example.com' }, { created: 1 }).includes('yuval@example.com'), true);
+  assert.match(a.resultMessage('email', { full_name: 'יובל כהן', email: 'yuval@example.com' }, {}), /info@bsd-bbi\.co\.il/);
+});
+
+test('documents tab: שלח לקונים opens the anonymous summary for that business only', () => {
+  const sale = fs.readFileSync(new URL('../js/saleFileModule2.js', import.meta.url), 'utf8');
+  assert.match(sale, /📤 שלח לקונים/);
+  assert.match(sale, /openAnonSummarySendForBusiness/);
+  assert.match(sale, /התקציר המלא הפנימי/);
+  assert.match(sale, /function sfSendAnonSummary\(bizId\)/);
+  assert.match(src, /window\.openAnonSummarySendForBusiness = function\(bizId\)\{ return open\(\{ businessId: bizId \}\); \}/);
+  assert.match(html, /js\/anonSummarySend\.js\?v=202610111030/);
+  assert.match(html, /js\/saleFileModule2\.js\?v=202610111030/);
 });

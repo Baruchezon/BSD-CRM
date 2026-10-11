@@ -10,19 +10,27 @@
 //    spot from the current anonymous text (nothing is saved or published);
 //    never the internal description, notes, internal summary or profit;
 //  * the buyer is picked from a search box that is always visible;
-//  * sending is free: the PDF FILE goes to WhatsApp through the device share
-//    sheet (tablet/phone; also Windows/Mac when supported). Where a browser
-//    cannot share files, the PDF is downloaded and the buyer's WhatsApp chat is
-//    opened, so the file can be attached there;
-//  * after sending, «מרכז ההתאמות» is updated automatically for buyer+business
+//  * WhatsApp: on a phone/tablet the PDF FILE goes out through the share sheet.
+//    On a desktop the share sheet cannot hand a file to WhatsApp, so the PDF is
+//    downloaded and the buyer's chat is opened with a short message to attach.
+//    If the buyer card is on the 077 channel (whatsapp_channel = 'api') and
+//    js/whatsapp-api.js is loaded, the PDF is sent with whatsapp-send
+//    action send_document. If that call is refused (mode off, 24h window, hook
+//    not loaded), the desktop/phone path above is used and the screen says why.
+//  * Email: the same anonymous PDF is attached and sent through the existing
+//    send-match-summary function (Resend), from info@bsd-bbi.co.il, with a
+//    Hebrew RTL introduction and the BSD signature. No logo, no identifying
+//    business details.
+//  * after a real send, «מרכז ההתאמות» is updated automatically for buyer+business
 //    (existing match is updated, never duplicated; new match = «תקציר נשלח»),
 //    with an activity-log row and an anon_distributions row.
 // Privacy scan (Baruch, 06.10.2026 16:20): the scan NEVER blocks. A text that
 // shows a city, an address, profit, a phone, an email, a link or the real name
 // gets a small «⚠️ יש בטקסט: ...» note in the list and in the confirmation step;
 // the sender approves it himself at send time. Still blocked (non-content):
-// buyer with «אין הסכם», buyer without a valid phone, no permission, more than
-// 10 businesses per send, and a business with no anonymous text at all.
+// buyer with «אין הסכם», buyer with neither a valid phone nor an email,
+// no permission, more than 10 businesses per send, and a business with no
+// anonymous text at all. A phone alone can go by WhatsApp; an email alone by mail.
 // Relies on businesses.html globals: ALL_BIZ, CURRENT_PROFILE, esc, toast,
 // canSendPresentations, bsdRefreshBizRow, window.BSDAnonPdf, bsdRenderBrandedPdf.
 // ============================================================================
@@ -168,11 +176,110 @@
     return `שלום${first ? ' ' + first : ''},\nמצרף תקציר אנונימי של עסק שעשוי להתאים לך (קובץ PDF).\nאשמח לשמוע מה דעתך.\n\nBSD Business Brokers Israel`;
   }
 
-  function isTouchDevice(){
-    try { return (navigator.maxTouchPoints || 0) > 0 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || ''); } catch (_e){ return false; }
+  // Phones and tablets can hand a PDF to WhatsApp. A desktop (including a
+  // touch laptop) often reports navigator.canShare({files}) as true, then the
+  // share sheet has no WhatsApp file target — the click looks like it did
+  // nothing and the PDF never leaves the computer.
+  function isMobileShareDevice(){
+    try {
+      const ua = navigator.userAgent || '';
+      if (/Android|iPhone|iPad|iPod/i.test(ua)) return true;
+      if (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1) return true;
+      return false;
+    } catch (_e){ return false; }
   }
   function canShareFiles(files){
-    try { return !!(navigator.canShare && navigator.share && navigator.canShare({ files })); } catch (_e){ return false; }
+    try { return !!(navigator.canShare && navigator.share && files && files.length && navigator.canShare({ files })); } catch (_e){ return false; }
+  }
+
+  // cloud_document | share_sheet | download_and_chat
+  function whatsappRoute(opts){
+    opts = opts || {};
+    if (opts.channel === 'api' && opts.cloudReady) return 'cloud_document';
+    if (opts.mobile && opts.canShare) return 'share_sheet';
+    return 'download_and_chat';
+  }
+
+  const MAIL_FROM_ADDRESS = 'info@bsd-bbi.co.il';
+  const MAIL_SIGNATURE_LINES = [
+    'בברכה,',
+    'צוות BSD',
+    'BSD Business Brokers Israel · מחברים עסקים להזדמנויות',
+    'info@bsd-bbi.co.il | www.bsd-bbi.co.il',
+  ];
+
+  function emailSubject(count){
+    return count > 1 ? 'תקצירים אנונימיים של עסקים למכירה — BSD' : 'תקציר אנונימי של עסק למכירה — BSD';
+  }
+  function emailPlain(buyer, count){
+    const first = buyerFirstName(buyer);
+    const hello = `שלום${first ? ' ' + first : ''},`;
+    const body = count > 1
+      ? `פונים אליך מ-BSD Business Brokers Israel.\n\nמצורפים ${count} תקצירים אנונימיים של עסקים שעשויים להתאים לך. השמטנו בכוונה כל פרט מזהה, כדי לשמור על הדיסקרטיות של בעלי העסקים.\n\nנשמח לשמוע מה דעתך. אם אחד התקצירים מעניין, נשמח להמשיך בשיחה ולפרט את הצעד הבא.`
+      : `פונים אליך מ-BSD Business Brokers Israel.\n\nמצורף תקציר אנונימי של עסק שעשוי להתאים לך. השמטנו בכוונה כל פרט מזהה, כדי לשמור על הדיסקרטיות של בעל העסק.\n\nנשמח לשמוע מה דעתך. אם התקציר מעניין, נשמח להמשיך בשיחה ולפרט את הצעד הבא.`;
+    return [hello, '', body, '', MAIL_SIGNATURE_LINES.join('\n')].join('\n');
+  }
+  function emailHtml(buyer, count){
+    const text = emailPlain(buyer, count);
+    const body = escHtml(text).replace(/\n/g, '<br>');
+    return `<div dir="rtl" style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#1f2d3d;text-align:right;">${body}</div>`;
+  }
+  function buildEmailPayload(buyer, files){
+    const list = files || [];
+    return {
+      to: normText(buyer && buyer.email).trim(),
+      subject: emailSubject(list.length),
+      body_text: emailPlain(buyer, list.length),
+      html_body: emailHtml(buyer, list.length),
+      attachments: list.map(f => ({
+        base64: f.base64,
+        filename: f.filename,
+        contentType: 'application/pdf',
+      })),
+    };
+  }
+  function validEmail(email){
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normText(email).trim());
+  }
+
+  // Codes that mean "077 did not take the file" and the manual path is safe.
+  const CLOUD_FALLBACK = ['disabled', 'not_configured', 'window_closed_use_template', 'record_not_on_api_channel', 'hook_not_loaded', 'not_077', 'bad_phone'];
+  const CLOUD_ERROR_TEXT = {
+    disabled: 'שליחה מ-077 עדיין לא הופעלה',
+    not_configured: 'חיבור ה-WhatsApp העסקי עדיין לא הוגדר',
+    window_closed_use_template: 'עברו 24 שעות מההודעה האחרונה של הקונה, ולכן אי אפשר לצרף קובץ מ-077',
+    record_not_on_api_channel: 'הכרטיס עדיין על הוואטסאפ האישי (054)',
+    hook_not_loaded: 'חיבור השליחה מ-077 לא נטען בדף',
+    not_077: 'הקונה לא משויך לערוץ 077',
+    send_failed: 'השליחה מ-077 נכשלה',
+    network: 'אין קשר לשרת השליחה',
+    forbidden_document: 'אין הרשאה לשלוח את הקובץ',
+    document_too_large: 'הקובץ גדול מדי לשליחה ב-WhatsApp',
+    bad_phone: 'מספר הטלפון בכרטיס לא תקין',
+  };
+  function cloudErrorText(code){
+    return CLOUD_ERROR_TEXT[code] || ('שגיאה: ' + (code || 'לא ידועה'));
+  }
+  // Hook for whatsapp-send (PR #68, merged). Loaded by js/whatsapp-api.js as
+  // window.BSDWhatsApp. If the script is missing, or the buyer is not on the
+  // 077 channel, callers use the share sheet or the desktop download path.
+  function cloudHook(buyer){
+    const api = (typeof window !== 'undefined') ? window.BSDWhatsApp : null;
+    if (!api || typeof api.uploadForSend !== 'function' || typeof api.call !== 'function') {
+      return { ready: false, reason: 'hook_not_loaded' };
+    }
+    if (!buyer || buyer.whatsapp_channel !== 'api') return { ready: false, reason: 'not_077' };
+    return { ready: true, api };
+  }
+  function interpretCloud(res){
+    if (!res) return { ok: false, fallback: false, error: 'network' };
+    if (res.ok && res.message_status !== 'failed') {
+      // uncertain: the provider may already have the file. Do not claim success and do not send it again.
+      if (res.message_status === 'uncertain') return { ok: false, fallback: false, error: 'network', simulated: false };
+      return { ok: true, simulated: !!res.simulated || res.message_status === 'simulated', id: res.provider_message_id || res.id || null };
+    }
+    const code = res.error || 'send_failed';
+    return { ok: false, fallback: CLOUD_FALLBACK.indexOf(code) !== -1, error: code, simulated: false };
   }
 
   // ---------------------------------------------------------------- state + UI
@@ -200,12 +307,16 @@
     el.innerHTML = html || '';
   }
 
-  async function open(){
+  async function open(opts){
     const canSend = g('canSendPresentations');
     if (typeof canSend === 'function' && !canSend()){ say('אין לך הרשאה לשלוח תקצירים אנונימיים. פנה למנהל המערכת.'); return; }
     close();
     const all = allBiz();
-    S = { buyers: [], buyer: null, rows: eligibleBusinesses(all), info: {}, selected: new Set(), prepared: [], recorded: new Set(), query: '' };
+    const onlyId = opts && opts.businessId ? String(opts.businessId) : '';
+    let rows = eligibleBusinesses(all);
+    if (onlyId) rows = rows.filter(b => b.id === onlyId);
+    S = { buyers: [], buyer: null, rows, info: {}, selected: new Set(), prepared: [], recorded: new Set(), query: '', onlyId, log: [], busy: false };
+    if (rows.length === 1) S.selected.add(rows[0].id);
 
     const overlay = document.createElement('div');
     overlay.id = 'anonSendOverlay';
@@ -228,6 +339,7 @@
         <div id="anonSendBizList" style="max-height:42vh;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid #e3ded0;border-radius:8px;padding:2px 8px;"></div>
 
         <div id="anonSendStatus" style="min-height:20px;margin:10px 0 6px;font-size:.86rem;font-weight:600;line-height:1.6;"></div>
+        <div id="anonSendLog" style="font-size:.8rem;line-height:1.55;margin:0 0 8px;"></div>
         <div id="anonSendActions" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;"></div>
       </div>`;
     document.body.appendChild(overlay);
@@ -239,6 +351,23 @@
     renderActions();
     loadBuyers();
     loadFileInfo();
+  }
+
+  // The 077 column ships with PR #68 but the migration is not applied until
+  // go-live. A missing column must not hide the buyer list.
+  async function attachWhatsappChannel(buyers){
+    const ids = (buyers || []).map(b => b.id).filter(Boolean);
+    if (!ids.length || !sb()) return;
+    try {
+      for (let i = 0; i < ids.length; i += 200){
+        const slice = ids.slice(i, i + 200);
+        const { data, error } = await sb().from('leads').select('id,whatsapp_channel').in('id', slice);
+        if (error) return;
+        const byId = {};
+        (data || []).forEach(r => { byId[r.id] = r.whatsapp_channel || 'personal'; });
+        buyers.forEach(b => { if (byId[b.id]) b.whatsapp_channel = byId[b.id]; });
+      }
+    } catch (_e) { /* column not migrated yet — everyone stays on the personal channel */ }
   }
 
   async function loadBuyers(){
@@ -259,6 +388,8 @@
         if ((data || []).length < 1000) break;
       }
       if (S !== session || !box) return;
+      await attachWhatsappChannel(all);
+      if (S !== session || !box) return;
       S.buyers = all;
       if (!all.length){ box.innerHTML = '<span style="color:#8a5a00;">אין קונים ברשימה שלך.</span>'; return; }
       box.innerHTML = window.searchSelectHTML({ boxId: 'anonSendBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
@@ -274,11 +405,21 @@
     }
   }
 
+  function buyerPhoneBlock(b){
+    const ph = normalizePhone(b && b.phone);
+    if (!ph.valid) return ph.reason === 'missing' ? 'לקונה אין טלפון שמור. יש להוסיף טלפון בכרטיס הקונה.' : 'הטלפון של הקונה לא תקין לוואטסאפ. יש לתקן בכרטיס הקונה.';
+    return '';
+  }
+  function buyerEmailBlock(b){
+    if (!validEmail(b && b.email)) return 'לקונה אין כתובת אימייל שמורה. יש להוסיף אימייל בכרטיס הקונה.';
+    return '';
+  }
+  // Blocks preparing a file at all. A buyer with only an email can still be
+  // emailed; a buyer with only a phone can still get WhatsApp. Neither = blocked.
   function buyerBlockReason(b){
     if (!b) return 'בחר קונה';
     if (!b.agreement_status || b.agreement_status === 'אין הסכם') return `לא ניתן לשלוח ל${buyerLabel(b)}: עוד לא נשלח לו הסכם התקשרות.`;
-    const ph = normalizePhone(b.phone);
-    if (!ph.valid) return ph.reason === 'missing' ? 'לקונה אין טלפון שמור. יש להוסיף טלפון בכרטיס הקונה.' : 'הטלפון של הקונה לא תקין לוואטסאפ. יש לתקן בכרטיס הקונה.';
+    if (buyerPhoneBlock(b) && buyerEmailBlock(b)) return 'לקונה אין טלפון תקין לוואטסאפ ואין אימייל. יש להשלים לפחות אחד מהם בכרטיס הקונה.';
     return '';
   }
 
@@ -288,8 +429,11 @@
     const b = S.buyer;
     if (!b){ el.innerHTML = ''; return; }
     const block = buyerBlockReason(b);
+    const on077 = b.whatsapp_channel === 'api';
     el.innerHTML = `<div style="background:#f7f5ef;border-radius:8px;padding:8px 12px;font-size:.85rem;line-height:1.7;">
-        <b>${escHtml(buyerLabel(b))}</b> · <span dir="ltr">${escHtml(b.phone || 'אין טלפון')}</span> · הסכם: ${escHtml(b.agreement_status || 'אין הסכם')}
+        <b>${escHtml(buyerLabel(b))}</b><br>
+        <span dir="ltr">${escHtml(b.phone || 'אין טלפון')}</span> · <span dir="ltr">${escHtml(b.email || 'אין אימייל')}</span><br>
+        הסכם: ${escHtml(b.agreement_status || 'אין הסכם')}${on077 ? ' · <b>WhatsApp 077</b>' : ''}
       </div>${block ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:8px 12px;font-size:.85rem;margin-top:6px;">❌ ${escHtml(block)}</div>` : ''}`;
   }
 
@@ -345,7 +489,12 @@
     const shown = S.rows.filter(b => bizMatchesQuery(b, S.query));
     const cnt = document.getElementById('anonSendCount');
     if (cnt) cnt.textContent = `(${S.rows.length} עסקים עם תקציר אנונימי${S.query ? ', מוצגים ' + shown.length : ''}${S.selected.size ? ', נבחרו ' + S.selected.size : ''})`;
-    if (!S.rows.length){ box.innerHTML = '<div style="padding:12px;color:#8a5a00;font-size:.85rem;">אין עסק פעיל עם תקציר אנונימי.</div>'; return; }
+    if (!S.rows.length){
+      box.innerHTML = S.onlyId
+        ? '<div style="padding:12px;color:#8a5a00;font-size:.85rem;">לעסק הזה אין תקציר אנונימי שמור, ולכן אין מה לשלוח. התקציר המלא הפנימי לא נשלח לקונים.</div>'
+        : '<div style="padding:12px;color:#8a5a00;font-size:.85rem;">אין עסק פעיל עם תקציר אנונימי.</div>';
+      return;
+    }
     if (!shown.length){ box.innerHTML = '<div style="padding:12px;color:#999;font-size:.85rem;">לא נמצאו עסקים לחיפוש הזה.</div>'; return; }
     box.innerHTML = shown.map(b => {
       const info = S.info[b.id];
@@ -364,6 +513,18 @@
     }).join('');
   }
 
+  function currentWhatsappRoute(){
+    if (!S) return 'download_and_chat';
+    const files = S.prepared.map(p => p.file);
+    const hook = cloudHook(S.buyer);
+    return whatsappRoute({
+      channel: S.buyer && S.buyer.whatsapp_channel,
+      cloudReady: hook.ready,
+      mobile: isMobileShareDevice(),
+      canShare: canShareFiles(files),
+    });
+  }
+
   function renderActions(){
     const box = document.getElementById('anonSendActions');
     if (!box || !S) return;
@@ -375,25 +536,33 @@
       box.innerHTML = btn('close', 'ביטול', false) + btn('prepare', '📄 הכן קובץ PDF', true, !ready);
       return;
     }
-    const files = S.prepared.map(p => p.file);
-    const share = canShareFiles(files);
-    const touch = isTouchDevice();
-    const previews = S.prepared.map((p, i) => `<a href="${p.url}" target="_blank" rel="noopener" style="display:inline-block;margin:2px 0 2px 10px;color:#0e5a8a;">👁 ${escHtml(p.file.name)}</a>`).join('');
+    const previews = S.prepared.map((p) => `<a href="${p.url}" target="_blank" rel="noopener" style="display:inline-block;margin:2px 0 2px 10px;color:#0e5a8a;">👁 ${escHtml(p.file.name)}</a>`).join('');
     // Confirmation step: content warnings are shown here; sending them is the sender's decision.
     const warned = S.prepared.filter(p => p.warn);
     const warnBox = warned.length ? `<div style="width:100%;background:#fff6e0;color:#8a5a00;border-radius:8px;padding:8px 12px;font-size:.82rem;line-height:1.7;margin-bottom:4px;">
         ${warned.map(p => `<div><b>${escHtml(p.biz.business_number || p.biz.anon_display_name || 'עסק')}</b>: ${escHtml(p.warn)}</div>`).join('')}
         <div>אפשר לפתוח את הקובץ ולבדוק. בלחיצה על שליחה אתה מאשר לשלוח כמו שהוא.</div></div>` : '';
-    const phone = normalizePhone(S.buyer && S.buyer.phone);
-    const chatUrl = phone.valid ? `https://wa.me/${phone.e164}?text=${encodeURIComponent(waGreeting(S.buyer))}` : '';
+    const phoneBlock = buyerPhoneBlock(S.buyer);
+    const emailBlock = buyerEmailBlock(S.buyer);
+    const route = currentWhatsappRoute();
+    const who = escHtml(buyerLabel(S.buyer));
+    const routeNote = route === 'cloud_document'
+      ? `הקונה משויך ל-WhatsApp 077. «שלח בוואטסאפ» שולח את קובץ ה-PDF ישירות לצ'אט. אם 077 לא זמין כרגע, הקובץ ירד ונפתח הצ'אט כדי לצרף אותו ידנית.`
+      : route === 'share_sheet'
+      ? `בלחיצה על «שלח בוואטסאפ» נפתח חלון השיתוף עם קובץ ה-PDF: בוחרים WhatsApp ואז את ${who}.`
+      : `במחשב אין שיתוף קבצים ל-WhatsApp. «הורד PDF ופתח וואטסאפ» מוריד את הקובץ ופותח את הצ'אט של ${who} עם הודעה קצרה. אחר כך מצרפים את הקובץ (📎 מסמך) ולוחצים שלח.`;
+    const waLabel = route === 'cloud_document' ? '📲 שלח בוואטסאפ (077)' : (route === 'share_sheet' ? '📲 שלח בוואטסאפ' : '📲 הורד PDF ופתח וואטסאפ');
+    const waAct = route === 'share_sheet' ? 'share' : (route === 'cloud_document' ? 'cloud' : 'download');
     box.innerHTML = `
       <div style="width:100%;font-size:.82rem;line-height:1.7;margin-bottom:4px;">קבצים מוכנים: ${previews}</div>
       ${warnBox}
-      ${share ? `<div style="width:100%;font-size:.8rem;color:#555;line-height:1.6;">בלחיצה על «שלח בוואטסאפ» נפתח חלון השיתוף: בוחרים WhatsApp ואז את ${escHtml(buyerLabel(S.buyer))}. אם הקונה לא שמור באנשי הקשר, לחצו קודם על «פתח צ'אט עם הקונה».</div>` : `<div style="width:100%;font-size:.8rem;color:#555;line-height:1.6;">בלחיצה הקובץ יורד למחשב ונפתח צ'אט וואטסאפ עם ${escHtml(buyerLabel(S.buyer))}. גוררים את הקובץ לצ'אט (או 📎 מסמך) ולוחצים שלח.</div>`}
+      <div style="width:100%;font-size:.8rem;color:#555;line-height:1.6;">${routeNote} המייל יוצא מ-${MAIL_FROM_ADDRESS} עם ה-PDF מצורף.</div>
+      ${phoneBlock ? `<div style="width:100%;font-size:.8rem;color:#8a5a00;">וואטסאפ: ${escHtml(phoneBlock)}</div>` : ''}
+      ${emailBlock ? `<div style="width:100%;font-size:.8rem;color:#8a5a00;">מייל: ${escHtml(emailBlock)}</div>` : ''}
       ${btn('back', '↩ חזרה', false)}
-      ${chatUrl && share ? `<a href="${chatUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;min-height:46px;padding:0 14px;border-radius:9px;border:1px solid #b7e0c0;color:#128C4A;text-decoration:none;font-weight:700;font-size:.9rem;">💬 פתח צ'אט עם הקונה</a>` : ''}
-      ${share ? btn('share', '📲 שלח בוואטסאפ', true, false, '#25D366') : ''}
-      ${(!share || !touch) ? btn('download', share ? '⬇️ הורד ופתח WhatsApp Web' : '📲 הורד PDF ופתח וואטסאפ', !share, false, '#25D366') : ''}`;
+      ${btn(waAct, waLabel, true, !!phoneBlock, '#25D366')}
+      ${route !== 'download_and_chat' ? btn('download', '⬇️ הורד PDF ופתח צ\'אט', false, !!phoneBlock) : ''}
+      ${btn('email', '📧 שלח PDF במייל', true, !!emailBlock, '#0e1b34')}`;
   }
 
   function onChange(e){
@@ -425,6 +594,8 @@
     else if (act === 'back'){ resetPrepared(); renderActions(); }
     else if (act === 'share') shareFiles(el);
     else if (act === 'download') downloadAndOpenChat(el);
+    else if (act === 'cloud') sendCloudOrFallback(el);
+    else if (act === 'email') sendEmail(el);
   }
 
   async function buildPdfFromText(biz){
@@ -492,6 +663,97 @@
     }
   }
 
+  function pushLog(entry){
+    if (!S) return;
+    const row = Object.assign({ at: new Date().toISOString() }, entry);
+    S.log.push(row);
+    const box = document.getElementById('anonSendLog');
+    if (!box) return;
+    box.innerHTML = S.log.map(r => {
+      const mark = r.ok ? '✅' : '⚠️';
+      const ch = r.channel === 'email' ? 'מייל' : 'וואטסאפ';
+      return `<div>${mark} ${escHtml(ch)} · ${escHtml(r.who || '')} · ${escHtml(r.detail || '')}</div>`;
+    }).join('');
+  }
+
+  function withTimeout(promise, ms, code){
+    let timer;
+    const timeout = new Promise((_, rej) => {
+      timer = setTimeout(() => {
+        const err = new Error(code || 'timeout');
+        err.code = code || 'timeout';
+        rej(err);
+      }, ms);
+    });
+    return Promise.race([Promise.resolve(promise), timeout]).then(v => { clearTimeout(timer); return v; }, e => { clearTimeout(timer); throw e; });
+  }
+
+  function fileToBase64(file){
+    const read = file && typeof file.arrayBuffer === 'function' ? file.arrayBuffer() : Promise.reject(new Error('לא ניתן לקרוא את הקובץ'));
+    return read.then(buf => {
+      const bytes = new Uint8Array(buf);
+      let binary = '';
+      const size = 0x8000;
+      for (let i = 0; i < bytes.length; i += size){
+        const end = i + size < bytes.length ? i + size : bytes.length;
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, end));
+      }
+      return btoa(binary);
+    });
+  }
+
+  async function readInvokeError(error){
+    let detail = (error && error.message) || 'שגיאת שרת';
+    if (error && error.context && typeof error.context.json === 'function'){
+      try {
+        const b = await error.context.json();
+        if (b && b.error) detail = typeof b.error === 'string' ? b.error : JSON.stringify(b.error);
+      } catch (_e){}
+    }
+    return detail;
+  }
+
+  function cloudCodeFromThrown(err){
+    const msg = String((err && (err.message || err)) || '');
+    if (err && err.code && CLOUD_ERROR_TEXT[err.code]) return err.code;
+    const keys = Object.keys(CLOUD_ERROR_TEXT);
+    for (let i = 0; i < keys.length; i++){
+      const label = CLOUD_ERROR_TEXT[keys[i]];
+      if (label && msg.indexOf(label) !== -1) return keys[i];
+    }
+    if (/24 שעות/.test(msg)) return 'window_closed_use_template';
+    if (/054/.test(msg)) return 'record_not_on_api_channel';
+    if (/לא הופעלה/.test(msg)) return 'disabled';
+    if (/לא הוגדר/.test(msg)) return 'not_configured';
+    if (/timeout|network|Failed to fetch/i.test(msg)) return 'network';
+    return 'send_failed';
+  }
+
+  function triggerPdfDownload(p){
+    const a = document.createElement('a');
+    a.href = p.url;
+    a.download = p.file.name;
+    document.body.appendChild(a);
+    a.click();
+    // Removing the anchor in the same turn cancels the download on desktop Chrome.
+    setTimeout(() => { try { a.remove(); } catch (_e){} }, 1500);
+  }
+
+  // Staff-facing sentence after a completed attempt. A manual download never
+  // claims the buyer already received the file.
+  function resultMessage(via, buyer, counts){
+    counts = counts || {};
+    const who = buyerLabel(buyer);
+    const parts = [];
+    if (counts.created) parts.push(counts.created + ' התאמות חדשות');
+    if (counts.updated) parts.push(counts.updated + ' התאמות עודכנו');
+    const tail = parts.length ? ' (' + parts.join(', ') + ')' : '';
+    if (via === 'email') return 'נשלח מייל אל ' + normText(buyer && buyer.email).trim() + ' (' + who + ') מ-' + MAIL_FROM_ADDRESS + ', עם קובץ ה-PDF מצורף. במרכז ההתאמות סומן ש' + who + ' קיבל תקציר אנונימי' + tail + '.';
+    if (via === 'cloud') return 'קובץ ה-PDF נשלח ב-WhatsApp 077 אל ' + who + '. במרכז ההתאמות סומן ש' + who + ' קיבל תקציר אנונימי' + tail + '.';
+    if (via === 'share') return 'הקובץ נמסר לחלון השיתוף. במרכז ההתאמות סומן ש' + who + ' קיבל תקציר אנונימי' + tail + '.';
+    return 'ה-PDF ירד למחשב (אפשר גם לפתוח אותו מהקישור למעלה) ונפתח הצ\'אט של ' + who + '. צרף את הקובץ (📎 מסמך) ושלח. נרשם ביומן כממתין לצירוף ידני' + tail + '.';
+  }
+
   async function shareFiles(btnEl){
     if (!S || !S.prepared.length) return;
     const files = S.prepared.map(p => p.file);
@@ -502,79 +764,227 @@
       shared = true;
     } catch (e){
       if (e && e.name === 'AbortError'){ setStatus('השליחה בוטלה. לא סומן כלום בהתאמות.', true); return; }
-      setStatus('❌ השיתוף לא הצליח במכשיר הזה: ' + escHtml((e && e.message) || e) + '. אפשר להוריד את הקובץ ולצרף אותו ידנית.', true);
-      if (btnEl && btnEl.parentNode && !btnEl.parentNode.querySelector('[data-act="download"]')){
-        btnEl.insertAdjacentHTML('afterend', '<button type="button" data-act="download" style="min-height:46px;padding:10px 16px;border-radius:9px;background:#25D366;color:#fff;border:none;font-weight:700;font-family:inherit;">⬇️ הורד PDF ופתח וואטסאפ</button>');
-      }
+      await downloadAndOpenChat(btnEl, 'השיתוף לא הצליח במכשיר הזה');
       return;
     }
     if (shared) await recordAll('share');
   }
 
-  async function downloadAndOpenChat(){
+  // Desktop path. window.open stays synchronous in the click (no await before it).
+  // The PDF is a local download; wa.me cannot attach a file, so the status says so.
+  async function downloadAndOpenChat(btnEl, reason){
     if (!S || !S.prepared.length) return;
     const phone = normalizePhone(S.buyer && S.buyer.phone);
     if (!phone.valid){ setStatus('❌ הטלפון של הקונה לא תקין', true); return; }
-    const win = window.open(`https://wa.me/${phone.e164}?text=${encodeURIComponent(waGreeting(S.buyer))}`, '_blank');
-    S.prepared.forEach(p => {
-      const a = document.createElement('a');
-      a.href = p.url; a.download = p.file.name; a.rel = 'noopener';
-      document.body.appendChild(a); a.click(); a.remove();
+    const chatUrl = `https://wa.me/${phone.e164}?text=${encodeURIComponent(waGreeting(S.buyer))}`;
+    const win = window.open(chatUrl, '_blank');
+    S.prepared.forEach((p, i) => {
+      if (i === 0) triggerPdfDownload(p);
+      else setTimeout(() => triggerPdfDownload(p), i * 400);
     });
-    if (!win) setStatus('⚠️ הדפדפן חסם את פתיחת וואטסאפ. אפשר לפתוח את הצ\'אט ידנית.', true);
+    if (!win){
+      const why = reason ? escHtml(reason) + '. ' : '';
+      setStatus(`⚠️ ${why}הדפדפן חסם את פתיחת וואטסאפ. ה-PDF יורד למחשב. <a href="${escHtml(chatUrl)}" target="_blank" rel="noopener">פתח את הצ'אט של ${escHtml(buyerLabel(S.buyer))}</a> וצרף את הקובץ (📎 מסמך). השליחה לא סומנה כהושלמה.`, true);
+      pushLog({ channel: 'whatsapp', ok: false, who: buyerLabel(S.buyer), detail: (reason ? reason + '. ' : '') + 'חלון הוואטסאפ נחסם. הקובץ ירד, הצ\'אט לא נפתח.' });
+      return;
+    }
+    if (reason) pushLog({ channel: 'whatsapp', ok: true, who: buyerLabel(S.buyer), detail: reason + '. עברנו להורדת PDF ופתיחת הצ\'אט.' });
     await recordAll('download');
   }
 
-  // After sending: matches + match_activity_log + anon_distributions + activity log.
-  async function recordOne(p, buyer, me, via){
-    const nowIso = new Date().toISOString();
-    const actionText = `נשלח לקונה תקציר אנונימי (PDF) בוואטסאפ: ${p.file.name}`;
-    let matchId = null, action = 'failed';
-    const ctx = { nowIso, actionText, bizId: p.biz.id, buyerId: buyer.id, userId: me && me.id };
-    let { data: existing, error: findErr } = await sb().from('matches').select('id,status').eq('business_id', p.biz.id).eq('buyer_id', buyer.id).maybeSingle();
-    if (findErr) throw findErr;
-    let plan = planMatchWrite(existing, ctx);
-    if (plan.op === 'insert'){
-      const { data, error } = await sb().from('matches').insert(plan.payload).select('id').single();
-      if (error && String(error.code) === '23505'){
-        ({ data: existing } = await sb().from('matches').select('id,status').eq('business_id', p.biz.id).eq('buyer_id', buyer.id).maybeSingle());
-        plan = planMatchWrite(existing, ctx);
-      } else if (error) throw error;
-      else { matchId = data.id; action = 'created'; }
-    }
-    if (plan.op === 'update'){
-      const { error } = await sb().from('matches').update(plan.payload).eq('id', plan.id);
-      if (error) throw error;
-      matchId = plan.id; action = 'updated';
-    }
+  async function sendEmail(btnEl){
+    if (!S || !S.prepared.length || S.busy) return;
+    const block = buyerEmailBlock(S.buyer);
+    if (block){ setStatus('❌ ' + escHtml(block), true); return; }
+    S.busy = true;
+    if (btnEl) btnEl.disabled = true;
+    setStatus('שולח את ה-PDF במייל...');
+    const buyer = S.buyer;
     try {
-      await sb().from('match_activity_log').insert({
-        match_id: matchId, action_type: 'תקציר אנונימי נשלח', description: actionText,
-        note: p.source === 'saved' ? `PDF שמור${p.savedFile && p.savedFile.version_number ? ' גרסה ' + p.savedFile.version_number : ''}` : 'PDF הופק מהתקציר האנונימי העדכני',
-        attached_file_id: p.savedFile ? p.savedFile.id : null, performed_by: me && me.id,
-      });
-    } catch (e){ console.warn('[anonSend] match_activity_log', e); }
+      const files = [];
+      let total = 0;
+      for (const p of S.prepared){
+        const base64 = await fileToBase64(p.file);
+        total += base64.length;
+        if (total > 7000000) throw new Error('הקבצים גדולים מדי למייל אחד. אפשר לשלוח פחות עסקים בכל פעם.');
+        files.push({ base64, filename: p.file.name });
+      }
+      const payload = buildEmailPayload(buyer, files);
+      const client = sb();
+      if (!client || !client.functions || typeof client.functions.invoke !== 'function') throw new Error('שליחת המייל לא זמינה בדף הזה');
+      const { data, error } = await withTimeout(client.functions.invoke('send-match-summary', { body: payload }), 25000, 'network');
+      if (error) throw new Error(await readInvokeError(error));
+      if (data && data.error) throw new Error(typeof data.error === 'string' ? data.error : 'השליחה נכשלה');
+      await recordAll('email');
+    } catch (e){
+      const msg = (e && e.code === 'network') ? 'אין קשר לשרת השליחה' : ((e && e.message) || String(e));
+      setStatus('❌ המייל לא נשלח: ' + escHtml(msg), true);
+      pushLog({ channel: 'email', ok: false, who: buyer && buyer.email, detail: msg });
+      try { await recordFailures('email', msg); } catch (_e){}
+    } finally {
+      if (S){ S.busy = false; renderActions(); }
+    }
+  }
+
+  // 077 document send (whatsapp-send, PR #68). A refusal that means "the file
+  // never left" falls through to the desktop download. A hard failure does not
+  // open a second send and does not mark the buyer as having received it.
+  async function sendCloudOrFallback(btnEl){
+    if (!S || !S.prepared.length || S.busy) return;
+    const phoneBlock = buyerPhoneBlock(S.buyer);
+    if (phoneBlock){ setStatus('❌ ' + escHtml(phoneBlock), true); return; }
+    const hook = cloudHook(S.buyer);
+    if (!hook.ready){
+      const why = cloudErrorText(hook.reason);
+      pushLog({ channel: 'whatsapp', ok: false, who: buyerLabel(S.buyer), detail: why });
+      return downloadAndOpenChat(btnEl, why);
+    }
+    S.busy = true;
+    if (btnEl) btnEl.disabled = true;
+    const buyer = S.buyer;
+    const record = { table: 'leads', id: buyer.id };
+    let sentLive = 0, simulated = 0;
+    try {
+      for (const p of S.prepared){
+        if (!S || S.recorded.has(p.biz.id)) continue;
+        setStatus('שולח את ' + escHtml(p.file.name) + ' ב-WhatsApp 077...');
+        let uploaded = null;
+        try {
+          uploaded = await withTimeout(hook.api.uploadForSend({ record }, p.file), 25000, 'network');
+        } catch (e){
+          const code = (e && e.code === 'network') ? 'network' : cloudCodeFromThrown(e);
+          if (CLOUD_FALLBACK.indexOf(code) !== -1 && sentLive === 0 && simulated === 0){
+            pushLog({ channel: 'whatsapp', ok: false, who: buyerLabel(buyer), detail: cloudErrorText(code) });
+            S.busy = false;
+            return downloadAndOpenChat(btnEl, cloudErrorText(code));
+          }
+          await recordOne(p, buyer, profile(), 'cloud', { deliveryStatus: 'failed', deliveryError: code, markMatch: false });
+          pushLog({ channel: 'whatsapp', ok: false, who: buyerLabel(buyer), detail: p.file.name + ' — ' + cloudErrorText(code) });
+          setStatus('❌ ' + escHtml(cloudErrorText(code)) + '. הקובץ לא נשלח. אפשר להוריד אותו ולצרף ידנית בצ\'אט.', true);
+          return;
+        }
+        let res;
+        try {
+          res = await withTimeout(hook.api.call('send_document', {
+            record,
+            document: { storage_path: uploaded.storage_path, filename: uploaded.filename || p.file.name },
+            caption: waGreeting(buyer),
+          }), 25000, 'network');
+        } catch (_e){
+          res = { ok: false, error: 'network' };
+        }
+        const interpreted = interpretCloud(res);
+        if (!interpreted.ok && interpreted.fallback && sentLive === 0 && simulated === 0){
+          pushLog({ channel: 'whatsapp', ok: false, who: buyerLabel(buyer), detail: cloudErrorText(interpreted.error) });
+          S.busy = false;
+          return downloadAndOpenChat(btnEl, cloudErrorText(interpreted.error));
+        }
+        if (!interpreted.ok){
+          await recordOne(p, buyer, profile(), 'cloud', { deliveryStatus: 'failed', deliveryError: interpreted.error || 'send_failed', markMatch: false });
+          pushLog({ channel: 'whatsapp', ok: false, who: buyerLabel(buyer), detail: p.file.name + ' — ' + cloudErrorText(interpreted.error) });
+          setStatus('❌ ' + escHtml(cloudErrorText(interpreted.error)) + '. הקובץ לא סומן כנמסר לקונה.', true);
+          return;
+        }
+        if (interpreted.simulated){
+          simulated++;
+          await recordOne(p, buyer, profile(), 'cloud', { deliveryStatus: 'pending', markMatch: false, deliveryError: 'simulated' });
+          S.recorded.add(p.biz.id);
+          pushLog({ channel: 'whatsapp', ok: false, who: buyerLabel(buyer), detail: p.file.name + ' — סימולציה, הקובץ לא יצא לקונה' });
+          continue;
+        }
+        sentLive++;
+        await recordOne(p, buyer, profile(), 'cloud');
+        S.recorded.add(p.biz.id);
+        pushLog({ channel: 'whatsapp', ok: true, who: buyerLabel(buyer), detail: p.file.name + ' נשלח ב-077' });
+      }
+      if (!S) return;
+      if (simulated && !sentLive){
+        setStatus('⚠️ השליחה רצה במצב סימולציה. קובץ ה-PDF לא יצא אל הקונה, ולא סומן במרכז ההתאמות שהתקציר נמסר.', true);
+        return;
+      }
+      if (sentLive) setStatus('✅ ' + escHtml(resultMessage('cloud', buyer, {})), false);
+    } catch (e){
+      const msg = (e && e.message) || String(e);
+      setStatus('❌ השליחה מ-077 נעצרה: ' + escHtml(msg), true);
+      pushLog({ channel: 'whatsapp', ok: false, who: buyerLabel(buyer), detail: msg });
+    } finally {
+      if (S){ S.busy = false; renderActions(); }
+    }
+  }
+
+  // After a real delivery: matches + match_activity_log + anon_distributions + activity log.
+  // opts.markMatch === false (failure or simulation) writes the distribution row only.
+  async function recordOne(p, buyer, me, via, opts){
+    opts = opts || {};
+    const nowIso = new Date().toISOString();
+    const channel = via === 'email' ? 'email' : 'whatsapp';
+    const deliveryStatus = opts.deliveryStatus || (via === 'download' ? 'pending' : 'sent');
+    const markMatch = opts.markMatch !== false && deliveryStatus !== 'failed';
+    const viaLabel = via === 'share' ? 'שיתוף קובץ' : via === 'download' ? 'הורדה וצירוף ידני' : via === 'email' ? 'מייל עם קובץ מצורף' : 'WhatsApp 077';
+    const actionText = deliveryStatus === 'sent'
+      ? (channel === 'email' ? `נשלח לקונה במייל תקציר אנונימי (PDF מצורף): ${p.file.name}` : `נשלח לקונה תקציר אנונימי (PDF) בוואטסאפ: ${p.file.name}`)
+      : (deliveryStatus === 'failed' ? `השליחה נכשלה (${viaLabel}): ${p.file.name}` : `הוכן PDF לצירוף ידני בוואטסאפ: ${p.file.name}`);
+    let matchId = null, action = deliveryStatus === 'failed' ? 'failed' : 'logged';
+    if (markMatch){
+      const ctx = { nowIso, actionText, bizId: p.biz.id, buyerId: buyer.id, userId: me && me.id };
+      let { data: existing, error: findErr } = await sb().from('matches').select('id,status').eq('business_id', p.biz.id).eq('buyer_id', buyer.id).maybeSingle();
+      if (findErr) throw findErr;
+      let plan = planMatchWrite(existing, ctx);
+      if (plan.op === 'insert'){
+        const { data, error } = await sb().from('matches').insert(plan.payload).select('id').single();
+        if (error && String(error.code) === '23505'){
+          ({ data: existing } = await sb().from('matches').select('id,status').eq('business_id', p.biz.id).eq('buyer_id', buyer.id).maybeSingle());
+          plan = planMatchWrite(existing, ctx);
+        } else if (error) throw error;
+        else { matchId = data.id; action = 'created'; }
+      }
+      if (plan.op === 'update'){
+        const { error } = await sb().from('matches').update(plan.payload).eq('id', plan.id);
+        if (error) throw error;
+        matchId = plan.id; action = 'updated';
+      }
+      try {
+        await sb().from('match_activity_log').insert({
+          match_id: matchId, action_type: 'תקציר אנונימי נשלח', description: actionText,
+          note: p.source === 'saved' ? `PDF שמור${p.savedFile && p.savedFile.version_number ? ' גרסה ' + p.savedFile.version_number : ''}` : 'PDF הופק מהתקציר האנונימי העדכני',
+          attached_file_id: p.savedFile ? p.savedFile.id : null, performed_by: me && me.id,
+        });
+      } catch (e){ console.warn('[anonSend] match_activity_log', e); }
+    }
     try {
       const { error } = await sb().from('anon_distributions').insert({
         business_id: p.biz.id, buyer_id: buyer.id, sender_user_id: me && me.id, match_id: matchId,
         distribution_type: p.savedFile ? 'extended' : 'primary',
         anon_file_id: p.savedFile ? p.savedFile.id : null, anon_file_source: p.savedFile ? 'sale_file' : null,
         summary_snapshot: p.savedFile ? null : p.text,
-        channel: 'whatsapp', delivery_status: 'sent', subject: 'תקציר אנונימי', message: `${p.file.name} (${via === 'share' ? 'שיתוף קובץ' : 'הורדה וצירוף'})`,
+        channel, delivery_status: deliveryStatus, delivery_error: opts.deliveryError || null,
+        subject: 'תקציר אנונימי', message: `${p.file.name} (${viaLabel})`,
       });
       if (error) console.warn('[anonSend] anon_distributions', error.message);
     } catch (e){ console.warn('[anonSend] anon_distributions', e); }
     const log = g('bsdLogActivity');
-    if (typeof log === 'function') { try { log('anon_summary_sent_whatsapp', 'businesses', p.biz.id, { buyer_id: buyer.id, match_id: matchId, source: p.source, file_id: p.savedFile ? p.savedFile.id : null, via }); } catch (_e){} }
+    const event = channel === 'email' ? 'anon_summary_sent_email' : 'anon_summary_sent_whatsapp';
+    if (typeof log === 'function') { try { log(event, 'businesses', p.biz.id, { buyer_id: buyer.id, match_id: matchId, source: p.source, file_id: p.savedFile ? p.savedFile.id : null, via, delivery_status: deliveryStatus }); } catch (_e){} }
     return action;
+  }
+
+  async function recordFailures(via, errorText){
+    if (!S) return;
+    const buyer = S.buyer, me = profile();
+    for (const p of S.prepared){
+      const key = 'fail:' + p.biz.id + ':' + via;
+      if (S.recorded.has(key)) continue;
+      await recordOne(p, buyer, me, via, { deliveryStatus: 'failed', deliveryError: errorText, markMatch: false });
+      S.recorded.add(key);
+    }
   }
 
   async function recordAll(via){
     if (!S) return;
     const buyer = S.buyer, me = profile();
     const todo = S.prepared.filter(p => !S.recorded.has(p.biz.id));
-    if (!todo.length){ setStatus('✅ נשלח. ההתאמות כבר סומנו.'); return; }
-    setStatus('מסמן במרכז ההתאמות...');
+    if (!todo.length){ setStatus('✅ נרשם. אין קבצים חדשים לסימון.'); return; }
+    setStatus('רושם ביומן...');
     let created = 0, updated = 0; const failed = [];
     for (const p of todo){
       try {
@@ -583,17 +993,19 @@
         if (a === 'created') created++; else if (a === 'updated') updated++;
       } catch (e){ failed.push((p.biz.business_number || 'עסק') + ': ' + ((e && e.message) || e)); }
     }
-    const parts = [];
-    if (created) parts.push(`${created} התאמות חדשות`);
-    if (updated) parts.push(`${updated} התאמות עודכנו`);
-    let msg = `✅ ${via === 'share' ? 'נשלח' : 'הקובץ ירד ונפתח צ\'אט עם הקונה'}. במרכז ההתאמות סומן ש${escHtml(buyerLabel(buyer))} קיבל תקציר אנונימי${parts.length ? ' (' + parts.join(', ') + ')' : ''}.`;
-    if (failed.length) msg += `<br><span style="color:#b3402c;">⚠️ לא סומן: ${escHtml(failed.join(' | '))}</span>`;
+    let msg = '✅ ' + escHtml(resultMessage(via, buyer, { created, updated }));
+    if (failed.length) msg += `<br><span style="color:#b3402c;">⚠️ לא נרשם: ${escHtml(failed.join(' | '))}</span>`;
     setStatus(msg, false);
+    const detail = via === 'download' ? 'הורדה ופתיחת צ\'אט, ממתין לצירוף ידני' : via === 'email' ? 'PDF מצורף נשלח מ-' + MAIL_FROM_ADDRESS : via === 'cloud' ? 'PDF נשלח ב-077' : 'שיתוף קובץ';
+    pushLog({ channel: via === 'email' ? 'email' : 'whatsapp', ok: !failed.length, who: via === 'email' ? (buyer && buyer.email) : buyerLabel(buyer), detail });
     // matches caches are cleared automatically by BSDDataCache.observeWrites (js/config.js).
   }
 
   window.openAnonSummarySendModal = open;
+  window.openAnonSummarySendForBusiness = function(bizId){ return open({ businessId: bizId }); };
   window.BSDAnonSend = { scanAnonText, warnCategories, warnNote, hasAnonText, eligibleBusinesses, bizMatchesQuery, chooseSource, pdfFileName, normalizePhone,
     planMatchWrite, waGreeting, buyerLabel, hasHebrewWord, PROFIT_WORD_RE, EARLY_STATUSES, SENT_STATUS, MATERIAL_TYPE, close,
+    whatsappRoute, emailHtml, emailPlain, emailSubject, buildEmailPayload, validEmail, cloudHook, interpretCloud, cloudErrorText,
+    isMobileShareDevice, buyerPhoneBlock, buyerEmailBlock, buyerBlockReason, resultMessage, MAIL_FROM_ADDRESS,
     _recordOne: recordOne };
 })();

@@ -228,6 +228,17 @@ function toggleSfVersionHistory(groupId){
   if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
+function sfAnonSummarySendButton(bizId){
+  const id = String(bizId || '').replace(/[^0-9a-zA-Z-]/g, '');
+  if (!id) return '';
+  return `<button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" title="נשלח רק התקציר האנונימי כ-PDF, לא התקציר המלא הפנימי" onclick="sfSendAnonSummary('${id}')">📤 שלח לקונים</button>`;
+}
+
+function sfSendAnonSummary(bizId){
+  if (typeof window.openAnonSummarySendForBusiness === 'function') window.openAnonSummarySendForBusiness(bizId);
+  else if (typeof toast === 'function') toast('שליחת התקציר האנונימי לא נטענה. רענן את הדף.');
+}
+
 function openSaleFileCategory(bizId, categoryKey){
   const cat = sfCategoryMeta(categoryKey);
   const files = SF_FILES_BY_CATEGORY[categoryKey] || [];
@@ -244,7 +255,10 @@ function openSaleFileCategory(bizId, categoryKey){
     <div style="background:#f7f5ef;border-radius:12px;padding:14px 16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
         <div style="font-weight:700;color:#0e1b34;">${cat.icon} ${esc(cat.label)}</div>
-        <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="document.getElementById('saleFileCategoryPanel').innerHTML=''">סגור</button>
+        <span style="display:flex;gap:6px;align-items:center;">
+          ${(categoryKey === 'full_summary' || categoryKey === 'anonymous_summary') ? sfAnonSummarySendButton(bizId) : ''}
+          <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="document.getElementById('saleFileCategoryPanel').innerHTML=''">סגור</button>
+        </span>
       </div>
       <div id="sfFilesList">
         ${rows.length === 0
@@ -308,6 +322,7 @@ function sfFileRow(f, canManage, bizId, categoryKey){
       </span>
       <span style="display:flex;gap:4px;flex-wrap:wrap;">
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="viewSaleFile('${f.id}','${esc(f.storage_path)}')">👁️ צפייה</button>
+        ${(categoryKey === 'full_summary' || categoryKey === 'anonymous_summary') ? sfAnonSummarySendButton(bizId) : ''}
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="downloadSaleFile('${esc(f.storage_path)}','${esc(f.file_name.replace(/'/g,''))}')">📂 הורדה</button>
         ${canManage && !isAuto ? `
         <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:.72rem;" onclick="replaceSaleFile('${f.id}','${bizId}','${categoryKey}')">🔄 גרסה חדשה</button>
