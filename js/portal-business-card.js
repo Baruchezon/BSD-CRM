@@ -191,6 +191,23 @@ function markup(biz){return `<section id="sellerPortalCard" class="field full" s
 // Opens a blank tab synchronously (inside the click) so the browser allows it,
 // then points it at wa.me once the server answered.
 function reserveTab(){const w=window.open('about:blank','_blank');if(w){try{w.opener=null;w.document.body.innerHTML='<p dir="rtl" style="font-family:Arial;padding:30px">מכין את הודעת ה-WhatsApp...</p>';}catch(_){}}return w;}
+// 11.10.2026 (בקשת ברוך): who may use «צפייה כבעל העסק». Same gate as the business
+// card (admin/manager only; the API rejects every other role). The list tag
+// calls this before it becomes a link.
+function canPreviewAsOwner(profile){return !!(profile&&['admin','manager'].includes(profile.role));}
+// One view-as-owner action. The card button and the businesses-list
+// «מחובר לפורטל» tag (only when it says כן) both call this. admin_preview:
+// no password, and the preview session is not an owner login and does not
+// count views or downloads. The blank tab is opened inside the click, before
+// any await, so the browser allows it on phone, tablet and desktop.
+async function openAsOwner(businessId){
+ const tab=reserveTab();
+ try{
+  const d=await api('admin_preview',{business_id:businessId});
+  const url=String(d.portal_url||'').replace(/#.*$/,'')+'#preview='+d.token;
+  if(tab)tab.location.replace(url);else location.assign(url);
+ }catch(e){try{tab&&tab.close();}catch(_){}throw e;}
+}
 function sendTo(tab,d){const wa=invite().waUrl(d);if(tab&&wa){tab.location.replace(wa);return true;}if(tab)tab.close();return false;}
 async function mount(biz){
  const root=document.getElementById('sellerPortalCard');if(!root)return;
@@ -250,7 +267,7 @@ async function mount(biz){
   const view=e.target.closest('[data-mail-view]');if(view){const r=emailRows.find(x=>x.id===view.getAttribute('data-mail-view'));if(r)showMailView(r);return;}
   const copy=e.target.closest('[data-portal-copy]');if(copy){const t=root.querySelector('[data-portal-invite]');try{await navigator.clipboard.writeText(t.value);copy.textContent='ההודעה הועתקה';}catch(_){t.select();}return;}
   const button=e.target.closest('[data-portal-controls] button');if(!button||busy)return;
-  if(button.hasAttribute('data-portal-preview')){const tab=reserveTab();run(async()=>{const d=await api('admin_preview',{business_id:biz.id});const url=String(d.portal_url||'').replace(/#.*$/,'')+'#preview='+d.token;if(tab)tab.location.replace(url);else location.assign(url);},tab);}
+  if(button.hasAttribute('data-portal-preview')){run(()=>openAsOwner(biz.id));}
   else if(button.hasAttribute('data-portal-open')){if(!account.pending&&!confirm('ליצור סיסמה חדשה? הסיסמה הקודמת תפסיק לעבוד מיד.'))return;const tab=reserveTab();run(()=>open(tab),tab);}
   else if(button.hasAttribute('data-portal-email')){const m=emailState(biz,account);if(!m.enabled)return;
    if(!await previewAndConfirm(biz.id,biz))return;
@@ -275,5 +292,5 @@ async function afterSave(id,requested){
  dialog.addEventListener('click',async e=>{if(e.target.closest('[data-close]'))dialog.close();if(e.target.closest('[data-portal-copy]')){try{await navigator.clipboard.writeText(dialog.querySelector('textarea').value);e.target.textContent='ההודעה הועתקה';}catch(_){}}});
  dialog.onclose=()=>dialog.remove();document.body.append(dialog);dialog.showModal();
 }
-window.BSDSellerPortal={markup,mount,afterSave,api,emailState,emailPreviewHtml,mailResultHtml,sentRows,sentListHtml,sendStatusText,mailViewHtml,deliveryText,reasonText,validEmail,channelChoiceHtml,mailNoticeData};
+window.BSDSellerPortal={markup,mount,afterSave,api,emailState,emailPreviewHtml,mailResultHtml,sentRows,sentListHtml,sendStatusText,mailViewHtml,deliveryText,reasonText,validEmail,channelChoiceHtml,mailNoticeData,canPreviewAsOwner,openAsOwner};
 })();
