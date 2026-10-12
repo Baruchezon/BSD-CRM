@@ -396,8 +396,8 @@ Deno.test('email access: sender defaults to info@bsd-bbi.co.il (BCC baruch@bsd-b
   assert(portalMailFrom(v)==='info@bsd-bbi.co.il','ignored override '+String(v));
  assert(portalMailFrom('office@bsd-bbi.co.il')==='office@bsd-bbi.co.il','bsd override');
  assert(portalMailFrom('BSD <Office@BSD-BBI.co.il>')==='office@bsd-bbi.co.il','named bsd override');
- const idx=await Deno.readTextFile(new URL('../../supabase/functions/seller-portal-api/index.ts',import.meta.url));
- const hsrc=await Deno.readTextFile(new URL('../../supabase/functions/seller-portal-api/handler.ts',import.meta.url));
+ const idx=await import('../../supabase/functions/seller-portal-api/index.ts',{with:{type:'text'}}).then(m=>m.default);
+ const hsrc=await import('../../supabase/functions/seller-portal-api/handler.ts',{with:{type:'text'}}).then(m=>m.default);
  assert(!/env\.get\(\s*['"]RESEND_FROM_EMAIL/.test(idx)&&!/RESEND_FROM_EMAIL/.test(hsrc),'shared RESEND_FROM_EMAIL never read');
  assert(/mail:\{from:portalMailFrom\(Deno\.env\.get\('SELLER_PORTAL_MAIL_FROM'\)\),apiKey:\(Deno\.env\.get\('RESEND_API_KEY'\)\|\|''\)\.trim\(\)\}/.test(idx),'index wiring');
 });
