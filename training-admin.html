@@ -231,7 +231,7 @@
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
 <script src="js/permissions.js?v=202608251215"></script>
-<script src="js/waSendModule.js?v=202608300456"></script>
+<script src="js/waSendModule.js?v=20261012-1"></script>
 <script>
 let CURRENT_PROFILE = null;
 let ALL_LEADS = [];
@@ -703,7 +703,7 @@ async function submitSendBrochure(e){
   await logEvent(data.id, 'נפתח כרטיס');
   await logEvent(data.id, 'נשלח ברושור ההכשרה ב-WhatsApp');
 
-  const message = `שלום ${first_name},\n\nבהמשך להתעניינותך, מצורף הברושור של הכשרת מתווכי העסקים של BSD Business Brokers Israel - ההכשרה המעשית היחידה בארץ שמלווה אותך מהכשרה מקצועית ועד עסקה אמיתית בשטח.\n\n${brochureLink()}\n\nלאחר עיון בברושור אשמח לעמוד לרשותך לכל שאלה, ולהמשיך בתהליך ההרשמה.\n\nברוך איזון\nBSD Business Brokers Israel\n054-2424999`;
+  const message = `שלום ${first_name},\n\nבהמשך להתעניינותך, מצורף הברושור של הכשרת מתווכי העסקים של BSD Business Brokers Israel - ההכשרה המעשית היחידה בארץ שמלווה אותך מהכשרה מקצועית ועד עסקה אמיתית בשטח.\n\n${brochureLink()}\n\nלאחר עיון בברושור אשמח לעמוד לרשותך לכל שאלה, ולהמשיך בתהליך ההרשמה.\n\nברוך איזון\nBSD Business Brokers Israel\n077-444-6707`;
 
   let waPhone = phone.replace(/\D/g,'');
   if (waPhone.startsWith('0')) waPhone = '972' + waPhone.slice(1);
@@ -1016,7 +1016,7 @@ async function restoreTrainingLead(id){
 async function resendBrochure(id){
   const lead = ALL_LEADS.find(l => l.id === id);
   if (!lead) return;
-  const message = `שלום ${lead.first_name},\n\nבהמשך להתעניינותך, מצורף הברושור של הכשרת מתווכי העסקים של BSD Business Brokers Israel - ההכשרה המעשית היחידה בארץ שמלווה אותך מהכשרה מקצועית ועד עסקה אמיתית בשטח.\n\n${brochureLink()}\n\nלאחר עיון בברושור אשמח לעמוד לרשותך לכל שאלה, ולהמשיך בתהליך ההרשמה.\n\nברוך איזון\nBSD Business Brokers Israel\n054-2424999`;
+  const message = `שלום ${lead.first_name},\n\nבהמשך להתעניינותך, מצורף הברושור של הכשרת מתווכי העסקים של BSD Business Brokers Israel - ההכשרה המעשית היחידה בארץ שמלווה אותך מהכשרה מקצועית ועד עסקה אמיתית בשטח.\n\n${brochureLink()}\n\nלאחר עיון בברושור אשמח לעמוד לרשותך לכל שאלה, ולהמשיך בתהליך ההרשמה.\n\nברוך איזון\nBSD Business Brokers Israel\n077-444-6707`;
   let waPhone = (lead.phone||'').replace(/\D/g,'');
   if (waPhone.startsWith('0')) waPhone = '972' + waPhone.slice(1);
   window.open('https://wa.me/' + waPhone + '?text=' + encodeURIComponent(message), '_blank');

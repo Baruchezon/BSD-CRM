@@ -120,7 +120,7 @@ function bsdBuildFooterEl(tagline){
   el.innerHTML = `
     <div style="text-align:center;font-size:10.5pt;color:${BSD_BRAND.cream};font-weight:600;letter-spacing:.3px;margin-bottom:3mm;">${bsdEsc(tagline || BSD_BRAND.footerTagline)}</div>
     <div style="display:flex;justify-content:center;align-items:center;gap:4px;font-size:8.5pt;color:#c7cee2;flex-wrap:wrap;">
-      <span dir="ltr">www.bsd-bbi.co.il</span>&nbsp;&nbsp;&nbsp;<span style="width:3px;height:3px;border-radius:50%;background:${BSD_BRAND.gold};display:inline-block;"></span>&nbsp;&nbsp;&nbsp;<span dir="ltr">info@bsd-bbi.co.il</span>&nbsp;&nbsp;&nbsp;<span style="width:3px;height:3px;border-radius:50%;background:${BSD_BRAND.gold};display:inline-block;"></span>&nbsp;&nbsp;&nbsp;<span dir="ltr">054-2424999</span>
+      <span dir="ltr">www.bsd-bbi.co.il</span>&nbsp;&nbsp;&nbsp;<span style="width:3px;height:3px;border-radius:50%;background:${BSD_BRAND.gold};display:inline-block;"></span>&nbsp;&nbsp;&nbsp;<span dir="ltr">info@bsd-bbi.co.il</span>&nbsp;&nbsp;&nbsp;<span style="width:3px;height:3px;border-radius:50%;background:${BSD_BRAND.gold};display:inline-block;"></span>&nbsp;&nbsp;&nbsp;<span dir="ltr">077-444-6707</span>
     </div>`;
   return el;
 }

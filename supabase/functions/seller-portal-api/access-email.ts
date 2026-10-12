@@ -31,8 +31,15 @@ export function accessEmailText(d: Data): string {
     'info@bsd-bbi.co.il | www.bsd-bbi.co.il',
   ].join('\n');
 }
+// Hebrew copy shows 077-444-6707. The call link uses the international form.
+function contactTelHref(display: string, escaped: string): string {
+  const digits = display.replace(/\D/g, '');
+  if (digits === '0774446707' || digits === '972774446707') return 'tel:+972774446707';
+  return 'tel:' + escaped;
+}
 export function accessEmailHtml(d: Data): string {
-  const name = String(d.name || '').trim(), phone = esc(d.phone || '');
+  const name = String(d.name || '').trim(), rawPhone = String(d.phone || ''), phone = esc(rawPhone);
+  const tel = contactTelHref(rawPhone, phone);
   const step = (n: number, html: string) => `<tr><td style="width:30px;vertical-align:top;padding:6px 0"><span style="display:inline-block;width:24px;height:24px;line-height:24px;border-radius:50%;background:#0f2a44;color:#fff;text-align:center;font-weight:700;font-size:13px">${n}</span></td><td style="padding:6px 8px 6px 0;font-size:15px;line-height:1.6;color:#1f2d3d">${html}</td></tr>`;
   const cred = (k: string, v: string) => `<tr><td style="padding:6px 0;font-size:15px;color:#4a5a6a;white-space:nowrap">${k}</td><td style="padding:6px 12px 6px 0"><b dir="ltr" style="font-family:Consolas,Menlo,monospace;font-size:18px;letter-spacing:1px;color:#0f2a44">${esc(v)}</b></td></tr>`;
   return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(ACCESS_EMAIL_SUBJECT)}</title></head>
@@ -48,7 +55,7 @@ export function accessEmailHtml(d: Data): string {
 </div></td></tr>
 <tr><td align="center" style="padding:18px 26px 6px"><a href="${SITE_URL}" style="display:inline-block;background:#0f2a44;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:12px 28px;border-radius:10px">לאתר BSD</a></td></tr>
 <tr><td style="padding:10px 26px 0"><p style="margin:0;font-size:14px;line-height:1.7;color:#4a5a6a">הפרטים אישיים, נא לא להעביר אותם לאחרים. אפשר להחליף את הסיסמה בכל עת בתוך האזור האישי («החלפת סיסמה»).</p>
-<p style="margin:10px 0 0;font-size:14px;line-height:1.7;color:#4a5a6a">אם הכניסה לא מצליחה, נשמח לעזור${phone ? ` בטלפון <a href="tel:${phone}" dir="ltr" style="color:#0f5ea8;white-space:nowrap">${phone}</a>` : ''}.</p></td></tr>
+<p style="margin:10px 0 0;font-size:14px;line-height:1.7;color:#4a5a6a">אם הכניסה לא מצליחה, נשמח לעזור${phone ? ` בטלפון <a href="${tel}" dir="ltr" style="color:#0f5ea8;white-space:nowrap">${phone}</a>` : ''}.</p></td></tr>
 <tr><td style="padding:18px 26px 22px"><p style="margin:0;font-size:15px;line-height:1.6;color:#1f2d3d">בברכה,<br><b>צוות BSD</b><br><span style="color:#8a6d1f">BSD Business Brokers Israel · מחברים עסקים להזדמנויות</span><br><span dir="ltr"><a href="mailto:info@bsd-bbi.co.il" style="color:#0f5ea8;text-decoration:none">info@bsd-bbi.co.il</a> | <a href="${SITE_URL}" style="color:#0f5ea8;text-decoration:none">${SITE}</a></span></p></td></tr>
 </table></td></tr></table></body></html>`;
 }
