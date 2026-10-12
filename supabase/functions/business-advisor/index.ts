@@ -53,6 +53,7 @@ Deno.serve(async req=>{
     let listings=[];
     try {if(/מחפש|עסקים למכירה|מפעל|חנות|לרכוש עסק/.test(input.at(-1).content)){const r=await fetch(DB+'/rest/v1/public_business_listings?select=business_number,anon_display_name,field,category,region,asking_price,short_description&limit=60',{headers:{apikey:PUBLIC_KEY}});if(r.ok)listings=await r.json();}}catch{}
     const instructions=PROMPT+'\nתאריך: '+new Date().toISOString().slice(0,10)+'\nידע מאושר:\n'+JSON.stringify(knowledge).slice(0,14000)+'\nעסקים ציבוריים בלבד:\n'+JSON.stringify(listings).slice(0,18000);
+    const regulated=/מע.?מ|מיסוי|מס הכנסה|מס רכישה|מס רווח|חוק|משפטי|רגול|הסכם/.test(input.map(m=>m.content).join(' '));
     const enc=new TextEncoder();
     const stream=new ReadableStream({async start(controller){
       const send=v=>controller.enqueue(enc.encode(JSON.stringify(v)+'\n'));
@@ -61,12 +62,12 @@ Deno.serve(async req=>{
       for(const provider of providers){
         if(!provider.key)continue;
         const isClaude=provider.name==='claude';
-        let reader,output='',completed=false,usage={input_tokens:0,output_tokens:0},stopReason='',searches=0;
+        let reader,output='',completed=false,usage={input_tokens:0,output_tokens:0},stopReason='',searches=0,officialSource=false;
         try {
           const r=await fetch(isClaude?'https://api.anthropic.com/v1/messages':'https://api.openai.com/v1/responses',{
             method:'POST',signal:AbortSignal.timeout(45000),
             headers:isClaude?{'x-api-key':provider.key,'anthropic-version':'2023-06-01','Content-Type':'application/json'}:{Authorization:'Bearer '+provider.key,'Content-Type':'application/json'},
-            body:JSON.stringify(isClaude?{model:'claude-sonnet-5',max_tokens:2200,thinking:{type:'disabled'},stream:true,system:instructions,messages:input,tools:[{type:'web_search_20250305',name:'web_search',max_uses:2}]}:{model:settings.model||'gpt-5.4',store:false,stream:true,max_output_tokens:2200,reasoning:{effort:'low'},tools:[{type:'web_search'}],max_tool_calls:2,instructions,input})
+            body:JSON.stringify(isClaude?{model:'claude-sonnet-5',max_tokens:2200,thinking:{type:'disabled'},stream:true,system:instructions,messages:input,tools:[{type:'web_search_20250305',name:'web_search',max_uses:2,...(regulated?{allowed_domains:['gov.il','boi.org.il']}:{})}]}:{model:settings.model||'gpt-5.4',store:false,stream:true,max_output_tokens:2200,reasoning:{effort:'low'},tools:[{type:'web_search',...(regulated?{filters:{allowed_domains:['gov.il','boi.org.il']}}:{})}],max_tool_calls:2,instructions,input})
           });
           if(!r.ok||!r.body)throw new Error('provider_'+r.status);
           reader=r.body.getReader();let buffer='';const dec=new TextDecoder();
@@ -77,6 +78,8 @@ Deno.serve(async req=>{
               const data=part.split('\n').filter(l=>l.startsWith('data:')).map(l=>l.slice(5).trim()).join('\n');if(!data||data==='[DONE]')continue;const e=JSON.parse(data);
               const delta=isClaude?(e.type==='content_block_delta'&&e.delta?.type==='text_delta'?e.delta.text:null):(e.type==='response.output_text.delta'?e.delta:null);
               if(delta){output+=delta;send({delta});}
+              const citation=isClaude?e.delta?.citation:e.annotation;
+              if(citation?.url){try{const h=new URL(citation.url).hostname;officialSource=officialSource||h==='gov.il'||h.endsWith('.gov.il')||h==='boi.org.il'||h.endsWith('.boi.org.il');}catch{}}
               if(isClaude&&e.type==='content_block_delta'&&e.delta?.type==='citations_delta')send({citation:e.delta.citation});
               if(!isClaude&&e.type==='response.output_text.annotation.added'&&e.annotation?.type==='url_citation')send({citation:e.annotation});
               if(isClaude&&e.type==='message_start')usage=e.message?.usage||usage;
@@ -87,7 +90,7 @@ Deno.serve(async req=>{
               if(['error','response.failed','response.incomplete'].includes(e.type))throw new Error('incomplete');
             }
           }
-          if(!completed||!output.trim())throw new Error('incomplete');
+          if(!completed||!output.trim()||(regulated&&!officialSource))throw new Error('incomplete');
           const rows=await db('advisor_events','POST',{session_hash:sessionHash,kind:'answer',provider:provider.name,web_searches:isClaude?(usage.server_tool_use?.web_search_requests||0):searches,topic:topic(input.at(-1).content),input_tokens:usage.input_tokens||0,output_tokens:usage.output_tokens||0}).catch(()=>[]);
           send({done:true,event:rows?.[0]?.id});answered=true;break;
         }catch{
