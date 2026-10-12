@@ -1451,6 +1451,8 @@ function renderWebsiteLeadConversationForm(r){
     </div>
 
     ${leadHandlingStatusFieldHtml(r)}
+    <div data-advisor-lead="${r.id}"></div>
+    <a href="advisor-admin.html" style="font-size:13px;display:inline-block;margin-bottom:12px;">ניהול היועץ העסקי AI</a>
 
     <div class="wl-block" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;">
       <div>
@@ -2171,9 +2173,17 @@ async function rejectWebsiteLead(id){
     const row = ALL_SELLERS.find(x => x.id === openId);
     history.replaceState(null, '', location.pathname);
     if (row) openWebsiteLead(openId);
-    else toast('הליד לא נמצא (ייתכן שכבר טופל)');
+    else {
+      // An advisor inquiry may belong to an existing buyer already outside the intake list.
+      const inquiry = await window.supabaseClient.from('advisor_inquiries').select('id').eq('lead_id', openId).limit(1);
+      const existing = inquiry.data?.length ? await window.supabaseClient.from('leads').select('*').eq('id', openId).maybeSingle() : { data:null };
+      if (existing.data && canEditRecord(existing.data.created_by)) renderWebsiteLeadConversationForm(existing.data);
+      else toast('הליד לא נמצא (ייתכן שכבר טופל)');
+    }
   }
 })();
 </script>
+<script src="js/advisor-leads.js?v=20261012a"></script>
 </body>
 </html>
+
