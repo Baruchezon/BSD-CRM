@@ -61,7 +61,7 @@ test('shared page for every portal: home + reports containers, no inline styles 
   assert.ok(html.includes('id="homeDistribution"') && html.includes('id="reportsDistribution"'));
   assert.ok(!/style="/.test(html.slice(html.indexOf('id="dashboard"'))), 'no inline style attributes in the dashboard');
   assert.ok(!/style="/.test(js.slice(js.indexOf('const DIST_CHANNELS='), js.indexOf('async function load(){'))));
-  assert.ok(html.includes('portal.js?v=20261011-2') && html.includes('portal.css?v=20261011-2'));
+  assert.ok(html.includes('portal.js?v=20261012-1') && html.includes('portal.css?v=20261011-2'));
   assert.ok(/@media\(max-width:1050px\)\{\.dist-channels\{grid-template-columns:1fr/.test(css), 'tablet/phone: one channel per row');
 });
 
