@@ -39,4 +39,9 @@ const lead={action:'lead',session:'00000000-0000-4000-8000-000000000001',request
 r=await run('ok',lead);assert(r.events[0].ok);
 r=await run('lead-fail',lead);assert(!r.events[0].ok);
 r=await run('ok',{...lead,consent:false});assert.equal(r.res.status,400);assert(!r.calls.some(c=>c.includes('advisor_capture')));
-console.log('8 checks passed: primary, fallback, partial reset, both fail, quota, lead save, save failure, consent');
+for(const content of ['תכין לי הערכת שווי לעסק שלי','תיצור לי קובץ PDF עם תוכנית עסקית','Prepare a market research report']){
+  r=await run('ok',{action:'chat',session:'00000000-0000-4000-8000-000000000001',messages:[{role:'user',content}]});
+  assert(r.events[0].handoff);assert(r.events[0].message.includes('BSD'));
+  assert(!r.calls.some(c=>c.includes('anthropic')||c.includes('openai')));
+}
+console.log('11 checks passed, including service referrals without generating deliverables');
