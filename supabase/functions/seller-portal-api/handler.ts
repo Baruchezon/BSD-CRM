@@ -51,7 +51,7 @@ export function createHandler(db:any,opts:Options){
   const files=fileIds.length?await query(db.from('business_sale_files').select('id,business_id,category,document_type,file_name').eq('business_id',id).in('id',fileIds)):[];
   return buildOwnerMatches({businessId:id,matches,buyers,permissions,anonSends,fullSends,files,history,notes});
  };
- const publicFile=(f:any,kind:'document'|'advertising'|'extra')=>({id:f.id,file_source:kind==='extra'?'extra':'sale',name:f.file_name,kind,bucket:kind==='document'?f.bucket:kind,type:kind==='document'?DOC_LABELS[f.bucket]:kind==='advertising'?REPORTS_LABEL:'קובץ נוסף',date:f.created_at,period_from:f.portal_period_from??null,period_to:f.portal_period_to??null,mime:kind==='extra'?f.mime_type:'application/pdf',size:kind==='extra'?f.size_bytes:f.file_size??null});
+ const publicFile=(f:any,kind:'document'|'advertising'|'extra')=>({id:f.id,file_source:kind==='extra'?'extra':'sale',name:kind==='document'?(f.display_name||f.file_name):f.file_name,version:kind==='document'?(f.doc_version||1):null,replaced_on:kind==='document'?(f.replaced_on||null):null,kind,bucket:kind==='document'?f.bucket:kind,type:kind==='document'?DOC_LABELS[f.bucket]:kind==='advertising'?REPORTS_LABEL:'קובץ נוסף',date:f.created_at,period_from:f.portal_period_from??null,period_to:f.portal_period_to??null,mime:kind==='extra'?f.mime_type:'application/pdf',size:kind==='extra'?f.size_bytes:f.file_size??null});
  // «איפה העסק מופץ» (08.10.2026): three channels from fields staff ALREADY tick per deal in the CRM.
  // VIP = «פרסום ללקוחות VIP» (vip_business_publications.enabled); agents = «הפצה לכל הסוכנים המורשים»
  // (distribution_status='all_authorized'); media = live on the BSD website (same rule as public_business_listings).

@@ -54,7 +54,7 @@ test('buyer and business archives are one-line strips, and restore toasts name t
     assert.match(html, /archive-strip-meta/);
     assert.match(html, /↩️ שחזר/);
     assert.match(html, /archiveModule\.js\?v=202610112100/);
-    assert.match(html, /var PAGE_BUILD = '202610112100';/);
+    assert.match(html, file === 'businesses.html' ? /var PAGE_BUILD = '202610130800';/ : /var PAGE_BUILD = '202610112100';/);
   }
   const leads = read('leads.html');
   assert.match(leads, /שוחזר לרשימת הקונים/);
@@ -65,7 +65,7 @@ test('buyer and business archives are one-line strips, and restore toasts name t
   assert.match(biz, /שוחזר לרשימת העסקים/);
   assert.match(biz, /id="bizArchiveStrips"/);
   assert.match(read('js/archiveModule.js'), /listing_status:'active'/);
-  assert.equal(JSON.parse(read('version.json')).version, '202610112100');
+  assert.equal(JSON.parse(read('version.json')).version, '202610130800');
 });
 
 test('business restore payload keeps the row on the active list', async () => {

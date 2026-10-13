@@ -49,3 +49,17 @@ Deno.test('G2: request shape (business number format, weekly only, .pdf name, sh
     assert(!publishShape({...base, ...bad}).ok, 'rejects ' + JSON.stringify(bad));
   const s: any = publishShape({...base, file_name: '../../evil/r.pdf'}); assert(s.ok && !s.v.file_name.includes('/'), 'file name sanitized');
 });
+
+// 13.10.2026: document versions + dated names (Dekor case).
+import {versionCount, datedName} from '../../supabase/functions/seller-portal-api/latest-files.ts';
+Deno.test('document version: newest shown, version counts all saved PDFs, name dated', () => {
+  const B = 'b1';
+  const mk = (id: string, created: string, status = 'active', extra: any = {}) => ({id, business_id: B, category: 'exec_summary', document_type: 'internal_full_summary', file_name: `full ${id}.pdf`, file_type: 'application/pdf', storage_path: `${B}/${id}.pdf`, status, deleted_at: status === 'active' ? null : created, created_at: created, portal_kind: 'document', ...extra});
+  const rows = [mk('old', '2026-10-11T12:07:56Z'), mk('new', '2026-10-12T07:32:11Z'), mk('short', '2026-10-06T09:48:55Z', 'deleted', {document_type: 'short_summary'})];
+  const d = portalDocuments(rows, B).documents;
+  if (d.length !== 1 || d[0].id !== 'new') throw Error('newest only');
+  if (d[0].doc_version !== 2 || versionCount(rows, B, 'full_summary') !== 2) throw Error('version 2');
+  if (d[0].replaced_on !== '12.10.2026') throw Error('replaced date ' + d[0].replaced_on);
+  if (d[0].display_name !== 'full new – 12.10.2026.pdf') throw Error('dated name ' + d[0].display_name);
+  if (datedName('x – 12.10.2026.pdf', '2026-10-12T07:00:00Z') !== 'x – 12.10.2026.pdf') throw Error('no double date');
+});
