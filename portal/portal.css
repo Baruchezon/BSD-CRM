@@ -81,3 +81,6 @@
 .dist-reports{margin:0 0 16px}
 .dist-reports .file-row:first-child{border-top:0;padding-top:4px}
 @media(max-width:1050px){.dist-channels{grid-template-columns:1fr;gap:9px}.dist-channel{padding:12px 14px}.dist-channel-btn{padding:12px 14px}}
+
+/* 13.10.2026: new version notice next to a document */
+.file-new{display:block;color:#1a7f37;font-weight:700}

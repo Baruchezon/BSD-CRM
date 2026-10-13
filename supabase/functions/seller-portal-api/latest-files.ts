@@ -29,12 +29,35 @@ const reportOrder = (a: any, b: any) => String(b.portal_period_to || '').localeC
 // rows: business_sale_files rows of ONE business. Since 10.10.2026 ALL published advertising
 // reports (portal_visible + portal_kind='advertising') are listed, newest period first, one entry
 // per version_group_id (latest version wins; older versions stay in DB/storage, never deleted).
+// Versions (Baruch, 13.10.2026): the version number of a document type is how many
+// PDFs of that type were ever saved for the business (active or retired; the old
+// «תקציר קצר» type is not counted). The client still sees only the newest one.
+export function versionCount(rows: any[], businessId: string, bucket: string): number {
+  return (rows || []).filter(f => f && f.business_id === businessId && f.portal_kind !== 'advertising'
+    && f.document_type !== 'short_summary' && isPdf(f) && documentBucket(f) === bucket).length;
+}
+// DD.MM.YYYY in Israel time.
+export function ilDate(v: any): string {
+  const d = new Date(v); if (isNaN(d.getTime())) return '';
+  const p = new Intl.DateTimeFormat('en-GB', {timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric'}).formatToParts(d);
+  const g = (t: string) => p.find(x => x.type === t)?.value || '';
+  return `${g('day')}.${g('month')}.${g('year')}`;
+}
+// File name shown/downloaded in the portal always carries the date of the version.
+export function datedName(name: string, created: any): string {
+  const d = ilDate(created); const n = String(name || 'קובץ.pdf');
+  if (!d || n.includes(d)) return n;
+  const m = /\.pdf$/i.exec(n); return m ? `${n.slice(0, m.index)} – ${d}.pdf` : `${n} – ${d}`;
+}
 export function portalDocuments(rows: any[], businessId: string) {
   const sorted = (rows || []).filter(f => live(f, businessId)).sort(newest);
   const documents: any[] = [];
   for (const bucket of DOC_ORDER) {
     const f = sorted.find(x => x.portal_kind !== 'advertising' && documentBucket(x) === bucket);
-    if (f) documents.push({...f, bucket});
+    if (f) {
+      const v = Math.max(1, versionCount(rows, businessId, bucket));
+      documents.push({...f, bucket, doc_version: v, replaced_on: v > 1 ? ilDate(f.created_at) : null, display_name: datedName(f.file_name, f.created_at)});
+    }
   }
   const seen = new Set<string>(); const reports: any[] = [];
   for (const r of sorted.filter(x => x.portal_kind === 'advertising' && x.portal_visible === true).sort(reportOrder)) {

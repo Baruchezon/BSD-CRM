@@ -29,6 +29,8 @@ const SALE_FILE_CATEGORIES = [
   { key: 'other',             label: 'קבצים נוספים',   icon: '📁', confidentiality: 2, dbCategory: 'other',            dbDocumentType: null },
 ];
 const SALE_FILE_MAX_MB = 20;
+const SF_VERSIONED_KEYS = ['anonymous_summary', 'full_summary', 'market_research', 'economic_analysis'];
+let SF_VERSION_BY_CATEGORY = {};
 const SALE_FILE_MAX_PHOTOS = 3;
 const SALE_FILE_BUCKET = 'business-files';
 
@@ -132,6 +134,20 @@ async function loadSaleFileModule(bizId){
     box.innerHTML = `<span style="color:#b3402c;">שגיאה בטעינת תיק המכירה: ${esc(error.message)}</span>`;
     return;
   }
+  // Versions per type (13.10.2026): how many PDFs of the type were ever saved
+  // (active or retired, the old «תקציר קצר» type not counted). Same rule as the portal.
+  SF_VERSION_BY_CATEGORY = {};
+  try {
+    const { data: allRows } = await window.supabaseClient
+      .from('business_sale_files').select('id,category,document_type,file_name,file_type')
+      .eq('business_id', bizId);
+    (allRows || []).forEach(f => {
+      if (f.document_type === 'short_summary') return;
+      if (!(f.file_type === 'application/pdf' || /\.pdf$/i.test(f.file_name || ''))) return;
+      const k = sfBucketKeyForFile(f);
+      SF_VERSION_BY_CATEGORY[k] = (SF_VERSION_BY_CATEGORY[k] || 0) + 1;
+    });
+  } catch (_e) { SF_VERSION_BY_CATEGORY = {}; }
   SF_FILES_BY_CATEGORY = {};
   (data || []).forEach(f => {
     const bucket = sfBucketKeyForFile(f);
@@ -159,10 +175,11 @@ function renderSaleFileCards(bizId){
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;">
       ${SALE_FILE_CATEGORIES.map(cat => {
         const count = (SF_FILES_BY_CATEGORY[cat.key] || []).length;
+        const ver = SF_VERSIONED_KEYS.includes(cat.key) && count ? Math.max(1, SF_VERSION_BY_CATEGORY[cat.key] || 1) : 0;
         return `
         <div class="sf-card" onclick="openSaleFileCategory('${bizId}','${cat.key}')" style="cursor:pointer;background:#fff;border:1px solid #e5e1d5;border-radius:10px;padding:10px 6px 12px;text-align:center;box-shadow:0 1px 4px rgba(14,27,52,.07);transition:transform .16s cubic-bezier(.34,1.56,.64,1),box-shadow .16s ease;min-height:70px;">
           <div style="font-size:1.15rem;margin-bottom:3px;">${cat.icon}</div>
-          <div style="font-weight:700;font-size:.72rem;color:#0e1b34;line-height:1.3;">${esc(cat.label)}</div>
+          <div style="font-weight:700;font-size:.72rem;color:#0e1b34;line-height:1.3;">${esc(cat.label)}${ver ? ` <span class="sf-ver" style="color:#1a4d8f;">· גרסה ${ver}</span>` : ''}</div>
           <div style="font-size:.68rem;color:#8a93ab;margin-top:3px;">${count} ${count === 1 ? 'קובץ' : 'קבצים'}</div>
         </div>`;
       }).join('')}
