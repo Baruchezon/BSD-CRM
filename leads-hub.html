@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610111900';
+    var PAGE_BUILD = '202610141200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -278,6 +278,7 @@
 <script src="js/leadLifecycle.js?v=20260930"></script>
 <script src="js/bsd-search.js?v=202610081400"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
+<script src="js/phoneCalls.js?v=202610141200"></script>
 <script src="js/push.js?v=202610051500"></script>
 <script>
 let ALL_BUSINESSES = [];
@@ -1502,6 +1503,8 @@ function renderWebsiteLeadConversationForm(r){
     <label class="wl-label" style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;"><span>הערות כלליות בליד</span><button type="button" class="wl-expand-btn" data-target="wlGeneralNotes" title="פתח את השדה במסך מלא לקריאה ועריכה">⛶ מסך מלא</button></label>
     <textarea id="wlGeneralNotes" class="wl-note" rows="3" style="width:100%;border:1px solid #d8d3c4;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.88rem;margin-bottom:14px;resize:vertical;">${esc(r.notes || '')}</textarea>
 
+    <!-- 14.10.2026 BSD Smart Telephony: «📞 שיחות טלפון» – filled by js/phoneCalls.js (admins only, hidden when the lead has no calls) -->
+    <div id="wlPhoneCalls" data-lead-id="${esc(r.id)}" style="display:none;margin-bottom:14px"></div>
     <!-- 06.10.2026 (בקשת ברוך): «🔎 חקר מקדים» - עמודה leads.pre_research. פנימי בלבד: לא נשלח, לא מתפרסם,
          לא נכנס לתקציר האנונימי. עובר עם «שמור והעבר» (קונה: אותה שורה; מוכר: businesses.pre_research). -->
     <label class="wl-label" style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;"><span>🔎 חקר מקדים</span><button type="button" class="wl-expand-btn" data-target="wlPreResearch" title="פתח את השדה במסך מלא לקריאה ועריכה">⛶ מסך מלא</button></label>
