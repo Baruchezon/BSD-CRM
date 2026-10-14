@@ -10,6 +10,12 @@ test('open existing card points at the buyers list, not the leads inbox', () => 
   assert.match(src, /const EXISTING_CARD = id => `leads\.html\?open=\$\{encodeURIComponent\(id\)\}`/);
   assert.match(src, /href="\$\{EXISTING_CARD\(id\)\}"/);
   assert.match(src, /leads-hub\.html\?open=/);
+  assert.match(src, /queued:'ממתין לסיכום הקלטת שיחה'/);
+  assert.match(src, /done:'סיכום מוכן'/);
+  assert.match(src, /data-mode="view">צפייה/);
+  assert.match(src, /data-mode="download">הורדה/);
+  assert.match(src, /createSignedUrl/);
+  assert.doesNotMatch(src, /מחקר/);
 });
 
 test('a buyer missing from the leads inbox opens on leads.html', async () => {

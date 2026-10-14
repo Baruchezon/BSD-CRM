@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610112100';
+    var PAGE_BUILD = '202610142200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -296,6 +296,7 @@
 <script src="js/dedupeCheckModule.js?v=20260930dup1"></script>
 <script src="js/waSendModule.js?v=20261012-1"></script>
 <script src="js/archiveModule.js?v=202610112100"></script>
+<script src="js/phoneCalls.js?v=202610142200"></script>
 <script>
 let ALL_LEADS = [];
 let ARCHIVED_LEADS = [];
@@ -1205,6 +1206,8 @@ function openLeadForm(id, forcedType, prefillData){
           ${fieldRow('sale_reason','סיבת מכירה', lead?.sale_reason)}
           ${fieldRow('agreement_signed_date','תאריך חתימת הסכם (אם רלוונטי)', lead?.agreement_signed_date, 'date')}
         `}
+        ${lead ? `<div class="section-h">מסמכים</div>
+        <div class="field full" data-lead-docs data-buyer-id="${esc(lead.id)}"></div>` : ''}
         <div class="section-h" style="display:flex;align-items:center;justify-content:space-between;">
           <span>הערות</span>
           <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:.72rem;text-transform:none;letter-spacing:normal;" onclick="openNotesRecording({recordId:'${lead ? lead.id : 'new-' + Date.now()}', label:'${esc((lead?.full_name || 'רשומה חדשה').replace(/'/g,''))}', textareaId:'notes', currentProfile:CURRENT_PROFILE})">🎙️ הקלט הערות</button>

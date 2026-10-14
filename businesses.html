@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610130800';
+    var PAGE_BUILD = '202610142200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -547,6 +547,7 @@
 <script src="js/waSendModule.js?v=20261012-1"></script>
 <script src="js/dedupeCheckModule.js?v=20260930dup1"></script>
 <script src="js/archiveModule.js?v=202610112100"></script>
+<script src="js/phoneCalls.js?v=202610142200"></script>
 <script src="js/portal-invite.js?v=20261004-2"></script>
 <script src="js/portal-business-card.js?v=202610110550"></script>
 <script src="js/anonAgreementMark.js?v=202610061550"></script>
@@ -1939,6 +1940,7 @@ function openBizForm(id){
         <div id="bizUploadQueue" style="margin-top:8px;"></div>
         `}
         <div id="bizFilesList" style="margin-top:10px;font-size:.82rem;">טוען קבצים...</div>
+        <div id="bizLeadDocs" data-lead-docs data-business-id="${esc(biz.id)}" style="margin-top:14px;"></div>
       </div>
       ` : `
       <div class="section-h" style="margin-top:14px;">קבצים מצורפים</div>

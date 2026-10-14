@@ -16,7 +16,7 @@ function harness({category='seller', leadType='buyer', clientNumber='BSD-C-2610-
   failInsert=false, failUpdate=false, lostInsert=false, rejectRead=false, failAgreementMark=false, popupBlocked=false,
   businesses=[], otherLeads=[], rpcFails=false, canSend=true, role='admin', recordNotes=[], failNotesCopy=false}={}) {
   const lead = {id:LEAD_ID,type:leadType,client_number:clientNumber,full_name:'Test Owner',phone:'050-0000000',email:'test@example.test',business_name:'Test Shop',business_city:'Test City',business_field:'Retail',asking_price:0,notes:'Original inquiry',created_by:'user-1',website_intake_stage:'contacted',status:'בטיפול',agreement_status:agreementStatus,agreement_sent:agreementStatus!=='אין הסכם',is_archived:false,source:'הזנה ידנית'};
-  const tables={leads:[lead,...otherLeads.map(x=>({...x}))],businesses:businesses.map(x=>({...x})),record_notes:recordNotes.map(x=>({...x}))};
+  const tables={leads:[lead,...otherLeads.map(x=>({...x}))],businesses:businesses.map(x=>({...x})),record_notes:recordNotes.map(x=>({...x})),lead_documents:[]};
   const events=[]; const removed=[]; const windows=[];
   let leadWrites=0, seq=2000;
   const digits9=p=>String(p||'').replace(/\D/g,'').slice(-9);

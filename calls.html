@@ -7,7 +7,7 @@
 <script src="js/config.js?v=20260930archive1"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
-<script src="js/phoneCalls.js?v=202610141200"></script>
+<script src="js/phoneCalls.js?v=202610142200"></script>
 <style>
  body{font-family:Arial,Helvetica,sans-serif;background:#f7f4ec;margin:0;color:#1f2d3d}
  header{background:#1f2d3d;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
@@ -25,7 +25,7 @@
   <div class="stat on" data-f="all"><b id="sAll">–</b>כל השיחות (30 יום)</div>
   <div class="stat" data-f="missed"><b id="sMissed">–</b>לא נענו – ממתינות לחזרה</div>
   <div class="stat" data-f="today"><b id="sToday">–</b>היום</div>
-  <div class="stat" data-f="research"><b id="sResearch">–</b>ממתינות למחקר</div>
+  <div class="stat" data-f="research"><b id="sResearch">–</b>ממתינות לסיכום הקלטת שיחה</div>
  </div>
  <div id="list">טוען…</div>
 </main>
@@ -44,11 +44,11 @@
     document.getElementById('sAll').textContent = rows.length;
     document.getElementById('sMissed').textContent = rows.filter(c => c.missed && !c.handled_at).length;
     document.getElementById('sToday').textContent = rows.filter(isToday).length;
-    document.getElementById('sResearch').textContent = rows.filter(c => c.research_status === 'queued' || c.research_status === 'in_progress').length;
+    document.getElementById('sResearch').textContent = rows.filter(c => c.summary_status === 'queued' || c.summary_status === 'processing').length;
     render();
   }
   function render(){
-    const f = { all: () => true, missed: c => c.missed && !c.handled_at, today: isToday, research: c => c.research_status === 'queued' || c.research_status === 'in_progress' }[filter];
+    const f = { all: () => true, missed: c => c.missed && !c.handled_at, today: isToday, research: c => c.summary_status === 'queued' || c.summary_status === 'processing' }[filter];
     const shown = rows.filter(f);
     list.innerHTML = shown.length ? shown.map(c => P.callRow(c, { leadLink: true })).join('') : '<p>אין שיחות להצגה.</p>';
   }
