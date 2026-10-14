@@ -1,0 +1,20 @@
+{
+  "taken_at": "2026-10-14T19:10:00Z",
+  "note": "Operational columns of the first real call before the call-summary migration. raw_last is not included.",
+  "phone_call": {
+    "id": "3eb04b26-7c11-4a87-8e87-c9c58fd777c5",
+    "external_call_id": "i988HiUSr6",
+    "caller_friendly": "052-5970100",
+    "caller_e164": "+972525970100",
+    "duration_sec": 905,
+    "answered": true,
+    "missed": false,
+    "recording_status": "available",
+    "research_status": "queued",
+    "ai_status": null,
+    "lead_id": "df8a0a7a-642e-4770-af08-371242c430f9",
+    "is_test": false,
+    "started_at": "2026-10-14 13:05:35+00",
+    "ended_at": "2026-10-14 13:21:01+00"
+  }
+}

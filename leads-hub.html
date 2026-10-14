@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610141200';
+    var PAGE_BUILD = '202610142200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -278,7 +278,7 @@
 <script src="js/leadLifecycle.js?v=20260930"></script>
 <script src="js/bsd-search.js?v=202610081400"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
-<script src="js/phoneCalls.js?v=202610141200"></script>
+<script src="js/phoneCalls.js?v=202610142200"></script>
 <script src="js/push.js?v=202610051500"></script>
 <script>
 let ALL_BUSINESSES = [];
@@ -299,6 +299,7 @@ let RATING_LEVELS = [];
 let RATING_BY_ID = {};
 let CURRENT_TAB = 'manual';
 let ALL_MANUAL = [];
+let LEAD_HAS_RECORDING = null;
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('he-IL'); }catch(e){ return iso; } }
@@ -412,6 +413,11 @@ async function loadAll(){
   if (leadErr){ toast('שגיאה בטעינת לידים: ' + leadErr.message); }
 
   ALL_BUSINESSES = bizData || [];
+  LEAD_HAS_RECORDING = null;
+  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin'){
+    const rec = await window.supabaseClient.from('phone_calls').select('lead_id').eq('recording_status', 'available');
+    if (!rec.error) LEAD_HAS_RECORDING = new Set((rec.data || []).map(r => r.lead_id).filter(Boolean));
+  }
 
   // Existing businesses and buyers are destinations, never pending leads.
   const pending = BSDLeadLifecycle.pending(leadData || [], ALL_BUSINESSES);
@@ -976,8 +982,10 @@ function rowPhoneCell(r){
   return phone ? `<a href="tel:${esc(phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(phone)}</a>${waBtn(phone)}` : '—';
 }
 function rowNotesCell(r){
-  if (CURRENT_TAB === 'seller' && r.website_intake_stage) return esc(r.website_purpose_guess || '—');
-  return esc(r.notes || '—');
+  const body = (CURRENT_TAB === 'seller' && r.website_intake_stage) ? (r.website_purpose_guess || '—') : (r.notes || '—');
+  if (!(LEAD_HAS_RECORDING instanceof Set)) return esc(body);
+  const mark = LEAD_HAS_RECORDING.has(r.id) ? 'יש הקלטה' : 'אין הקלטה';
+  return body && body !== '—' ? esc(mark + ' — ' + body) : esc(mark);
 }
 
 function renderTable(){
@@ -1532,6 +1540,7 @@ function renderWebsiteLeadConversationForm(r){
 
     <!-- 14.10.2026 BSD Smart Telephony: «📞 שיחות טלפון» – filled by js/phoneCalls.js (admins only, hidden when the lead has no calls) -->
     <div id="wlPhoneCalls" data-lead-id="${esc(r.id)}" style="display:none;margin-bottom:14px"></div>
+    <div id="wlLeadDocs" data-lead-docs data-lead-id="${esc(r.id)}" style="margin-bottom:14px"></div>
     <!-- 06.10.2026 (בקשת ברוך): «🔎 חקר מקדים» - עמודה leads.pre_research. פנימי בלבד: לא נשלח, לא מתפרסם,
          לא נכנס לתקציר האנונימי. עובר עם «שמור והעבר» (קונה: אותה שורה; מוכר: businesses.pre_research). -->
     <label class="wl-label" style="display:block;font-size:.8rem;color:#665;margin-bottom:4px;font-weight:700;"><span>🔎 חקר מקדים</span><button type="button" class="wl-expand-btn" data-target="wlPreResearch" title="פתח את השדה במסך מלא לקריאה ועריכה">⛶ מסך מלא</button></label>
@@ -1827,6 +1836,17 @@ async function ensureWebsiteLeadBusiness(lead, opts){
 // row. A buyer keeps them (same row); for a seller they are copied to the new
 // business card so they show there too. Already-copied notes are skipped, so a
 // retry never doubles them. Failure here never undoes the transfer.
+// Call-summary PDFs stay on the lead and are also pointed at the card they move to.
+// A failure here does not undo the transfer.
+async function carryLeadDocuments(leadId, patch){
+  try {
+    const saved = await window.supabaseClient.from('lead_documents').update(patch).eq('lead_id', leadId).is('deleted_at', null);
+    if (saved.error) return 'המסמכים לא הועברו לכרטיס: ' + saved.error.message;
+  } catch (e) {
+    return 'המסמכים לא הועברו לכרטיס: ' + (e && e.message ? e.message : e);
+  }
+  return '';
+}
 const LEAD_NOTE_COPY_PREFIX = '[מהליד] ';
 async function copyLeadNotesToBusiness(leadId, businessId){
   const db = window.supabaseClient;
@@ -2133,6 +2153,8 @@ async function saveWebsiteLeadTransfer(id, opts){
       const notesWarning = await copyLeadNotesToBusiness(id, destination.id);
       if (notesWarning) agreementNote += ' ' + notesWarning;
     }
+    const docWarning = await carryLeadDocuments(id, destination ? { business_id: destination.id } : { buyer_id: id });
+    if (docWarning) agreementNote += ' ' + docWarning;
     if (sendAgreement && destination && destination.agreement_status !== 'יש הסכם חתום'){
       // Same status change «📄 שלח הסכם» makes on the businesses screen.
       const marked = await window.supabaseClient.from('businesses').update({ agreement_status: 'נשלח הסכם לחתימה' }).eq('id', destination.id);
