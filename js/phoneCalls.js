@@ -9,6 +9,8 @@
   const REC = { available:'הקלטה זמינה', pending:'ההקלטה בעיבוד', none:'אין הקלטה', unavailable:'ההקלטה לא זמינה', excluded:'לא הוקלט (החרגה)' };
   const RES = { queued:'ממתין למחקר', in_progress:'מחקר בתהליך', done:'מחקר הושלם', failed:'המחקר נכשל', skipped:'אין מחקר (מספר חסוי)' };
   const CRM_LEAD = id => `leads-hub.html?open=${encodeURIComponent(id)}`;
+  // Old buyers are no longer in the leads inbox. Their card is the buyers list.
+  const EXISTING_CARD = id => `leads.html?open=${encodeURIComponent(id)}`;
 
   function badge(text, color){ return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem;background:${color}1a;color:${color};border:1px solid ${color}55;margin-inline-end:4px">${esc(text)}</span>`; }
 
@@ -27,7 +29,7 @@
         ${c.ai_gist || c.ai_body ? `<button type="button" class="pc-summary">📝 צפה בסיכום</button>` : ''}
         <button type="button" class="pc-research">🔎 פרטי המחקר</button>
         ${!c.is_hidden && local ? `<a class="pc-callback" href="tel:${esc(local)}" style="text-decoration:none"><button type="button">📞 חזור למתקשר</button></a>` : ''}
-        ${(c.existing_lead_ids || []).map((id, i) => `<a href="${CRM_LEAD(id)}" target="_blank" rel="noopener"><button type="button">📂 פתח כרטיס קיים${(c.existing_lead_ids.length > 1) ? ' ' + (i+1) : ''}</button></a>`).join('')}
+        ${(c.existing_lead_ids || []).map((id, i) => `<a href="${EXISTING_CARD(id)}" target="_blank" rel="noopener"><button type="button">📂 פתח כרטיס קיים${(c.existing_lead_ids.length > 1) ? ' ' + (i+1) : ''}</button></a>`).join('')}
         ${!c.handled_at ? `<button type="button" class="pc-handled">✔️ סמן כטופל</button>` : ''}
       </div>
       <div class="pc-panel" style="display:none;margin-top:8px;white-space:pre-wrap;background:#f6f8fc;border-radius:8px;padding:8px 10px;font-size:.88rem"></div>

@@ -31,6 +31,7 @@
 </main>
 <script>
 (async function(){
+  if (!(await requireAuth())) return;
   const P = window.bsdPhoneCalls, sb = window.supabaseClient, list = document.getElementById('list');
   let rows = [], filter = 'all';
   const todayIL = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });

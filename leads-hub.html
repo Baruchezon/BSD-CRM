@@ -1381,6 +1381,33 @@ async function verifyLeadWrite(id, expectedFields){
   return { ok: mismatches.length === 0, row: data, mismatches };
 }
 
+async function openDeepLink(openId){
+  const manual = ALL_MANUAL.find(x => x.id === openId);
+  const seller = ALL_SELLERS.find(x => x.id === openId);
+  if (manual || seller){
+    switchTab(manual ? 'manual' : 'seller');
+    history.replaceState(null, '', location.pathname);
+    openWebsiteLead(openId);
+    return;
+  }
+  // An advisor inquiry may belong to an existing buyer already outside the intake list.
+  const inquiry = await window.supabaseClient.from('advisor_inquiries').select('id').eq('lead_id', openId).limit(1);
+  const existing = inquiry.data?.length ? await window.supabaseClient.from('leads').select('*').eq('id', openId).maybeSingle() : { data:null };
+  if (existing.data && canEditRecord(existing.data.created_by)){
+    history.replaceState(null, '', location.pathname);
+    renderWebsiteLeadConversationForm(existing.data);
+    return;
+  }
+  // «פתח כרטיס קיים»: a buyer already moved to קונים ומשקיעים is not in this list.
+  const looked = existing.data || (await window.supabaseClient.from('leads').select('id,type').eq('id', openId).maybeSingle()).data;
+  if (looked && (looked.type === 'buyer' || looked.type === 'partner')){
+    location.href = 'leads.html?open=' + encodeURIComponent(openId);
+    return;
+  }
+  history.replaceState(null, '', location.pathname);
+  toast('הליד לא נמצא (ייתכן שכבר טופל)');
+}
+
 function openWebsiteLead(id){
   const r = [...ALL_MANUAL, ...ALL_SELLERS].find(x => x.id === id);
   if (!r){ toast('הליד לא נמצא'); return; }
@@ -2172,17 +2199,7 @@ async function rejectWebsiteLead(id){
   if (params.get('tab') === 'vip') {
     history.replaceState(null, '', location.pathname);
   } else if (openId){
-    switchTab('seller');
-    const row = ALL_SELLERS.find(x => x.id === openId);
-    history.replaceState(null, '', location.pathname);
-    if (row) openWebsiteLead(openId);
-    else {
-      // An advisor inquiry may belong to an existing buyer already outside the intake list.
-      const inquiry = await window.supabaseClient.from('advisor_inquiries').select('id').eq('lead_id', openId).limit(1);
-      const existing = inquiry.data?.length ? await window.supabaseClient.from('leads').select('*').eq('id', openId).maybeSingle() : { data:null };
-      if (existing.data && canEditRecord(existing.data.created_by)) renderWebsiteLeadConversationForm(existing.data);
-      else toast('הליד לא נמצא (ייתכן שכבר טופל)');
-    }
+    await openDeepLink(openId);
   }
 })();
 </script>
