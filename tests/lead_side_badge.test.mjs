@@ -144,6 +144,6 @@ test('migration: additive nullable columns + CHECK, logged backfill from reliabl
   assert.ok(fs.existsSync(new URL('../docs/edge-backups/website-lead-v16.ts', import.meta.url)));
 });
 
-test('leads hub page build stays 202610111900', () => {
-  assert.match(hub, /var PAGE_BUILD = '202610111900';/);
+test('leads hub page build stays 202610141200', () => {
+  assert.match(hub, /var PAGE_BUILD = '202610141200';/);
 });

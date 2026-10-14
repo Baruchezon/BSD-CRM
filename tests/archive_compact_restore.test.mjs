@@ -65,7 +65,7 @@ test('buyer and business archives are one-line strips, and restore toasts name t
   assert.match(biz, /שוחזר לרשימת העסקים/);
   assert.match(biz, /id="bizArchiveStrips"/);
   assert.match(read('js/archiveModule.js'), /listing_status:'active'/);
-  assert.equal(JSON.parse(read('version.json')).version, '202610130800');
+  assert.equal(JSON.parse(read('version.json')).version, '202610141200');
 });
 
 test('business restore payload keeps the row on the active list', async () => {

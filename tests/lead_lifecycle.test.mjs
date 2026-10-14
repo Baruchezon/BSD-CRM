@@ -20,6 +20,16 @@ test('only unresolved leads remain regardless of agreement; archived destination
  assert.equal(ctx.BSDLeadLifecycle.isWebsite(leads[5]),false);
  assert.equal(ctx.BSDLeadLifecycle.isWebsite(leads[6]),true);
 });
+test('incoming phone leads stay in the leads list until they are transferred',()=>{
+ const fresh={id:'call',type:'buyer',source:'שיחה טלפונית נכנסת',status:'התקבלה שיחה',website_intake_stage:null};
+ assert.deepEqual(pending([fresh],[]).map(l=>l.id),['call']);
+ const missed={...fresh,id:'missed',status:'ממתין לחזרה'};
+ assert.equal(pending([missed],[]).length,1);
+ const moved={...fresh,status:'הועבר לקונה'};
+ assert.equal(pending([moved],[]).length,0);
+ const archived={...fresh,is_archived:true};
+ assert.equal(pending([archived],[]).length,0);
+});
 test('conversion leaves same buyer card intact but removes it from inbox',()=>{
  const lead={id:'same',type:'buyer',website_intake_stage:'new',notes:'all notes',phone:'0500000000'};
  assert.equal(pending([lead],[]).length,1);
