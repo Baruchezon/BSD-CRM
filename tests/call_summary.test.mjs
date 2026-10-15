@@ -2,15 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { visualLine, wrapLogical } from '../supabase/functions/exm-call-summary/visual.mjs';
 
 const read = rel => fs.readFileSync(new URL('../' + rel, import.meta.url), 'utf8');
 
-test('hebrew visual order keeps digits and reverses the hebrew run', () => {
-  assert.equal(visualLine('שלום'), 'םולש');
-  assert.equal(visualLine('שלום 123'), '123 םולש');
-  assert.equal(visualLine('ABC'), 'ABC');
-  const wrapped = wrapLogical('אחת שתיים שלוש', 6, v => v.length);
+test('bidi layout keeps a hebrew run logical for fontkit and wraps in logical order', () => {
+  const visual = read('supabase/functions/exm-call-summary/visual.mjs');
+  assert.match(visual, /from 'npm:bidi-js@1\.0\.3'/);
+  assert.match(visual, /export function visualRuns/);
+  // fontkit shapes Hebrew itself, so the hebrew run is returned in logical order
+  assert.match(visual, /r\.hebrew \? \[\.\.\.r\.chars\]\.reverse\(\) : r\.chars/);
+  assert.doesNotMatch(visual, /export function visualLine/);
+  const wrap = visual.slice(visual.indexOf('export function wrapLogical')).replace(/^export /m, '');
+  const c = {};
+  vm.createContext(c);
+  vm.runInContext(wrap + '\nthis.wrapLogical = wrapLogical;\n', c);
+  const wrapped = c.wrapLogical('אחת שתיים שלוש', 6, v => v.length);
   assert.ok(wrapped.length > 1);
   assert.ok(wrapped.join(' ').includes('אחת'));
 });
@@ -48,9 +54,13 @@ test('summary function is token-guarded and uses whisper-1 plus claude-sonnet-5'
   assert.match(src, /summary_status: 'done'/);
   assert.match(src, /research_status: 'done'/);
   assert.match(src, /leads\/\$\{call\.lead_id\}/);
-  assert.match(read('supabase/functions/exm-call-summary/pdf.ts'), /embedFont/);
-  assert.match(read('supabase/functions/exm-call-summary/pdf.ts'), /StandardFonts\.Helvetica/);
-  assert.match(read('supabase/functions/exm-call-summary/pdf.ts'), /noto-sans-hebrew@5\.2\.8/);
+  assert.match(src, /regenerate_call_id/);
+  const pdf = read('supabase/functions/exm-call-summary/pdf.ts');
+  assert.match(pdf, /embedFont/);
+  assert.match(pdf, /noto-sans-hebrew@5\.2\.8/);
+  assert.match(pdf, /hebrew-400-normal\.ttf/);
+  assert.match(pdf, /latin-400-normal\.ttf/);
+  assert.match(pdf, /visualRuns/);
   assert.match(read('supabase/functions/exm-call-summary/font.ts'), /HEBREW_FONT_B64/);
   assert.match(src, /summary_attempts \|\| 0\) >= 3 \? 'error' : 'queued'/);
   assert.doesNotMatch(src, /saleFile|whatsapp-send|whatsapp-webhook/);

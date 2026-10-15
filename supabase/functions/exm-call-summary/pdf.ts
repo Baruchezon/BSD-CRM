@@ -1,78 +1,78 @@
-// RTL summary PDF. pdf-lib + an embedded Hebrew font. BSD colours.
-import { PDFDocument, rgb, StandardFonts } from 'npm:pdf-lib@1.17.1';
+// RTL summary PDF. pdf-lib + Noto Sans Hebrew (Hebrew + Latin/digits subsets), BSD colours.
+import { PDFDocument, rgb } from 'npm:pdf-lib@1.17.1';
 import fontkit from 'npm:@pdf-lib/fontkit@1.1.1';
-import { visualLine, wrapLogical } from './visual.mjs';
+import { visualRuns, wrapLogical } from './visual.mjs';
 
-// Noto Sans Hebrew (SIL OFL), vendored as font.ts. The PDF embeds this face.
-// Runtime loads the same pinned file (17220 bytes) so the bundle does not depend on a binary upload.
-const FONT_URL = 'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-hebrew@5.2.8/hebrew-400-normal.ttf';
-const FONT_BYTES = 17220;
-
-async function fontBytes(): Promise<Uint8Array> {
-  const res = await fetch(FONT_URL);
-  if (!res.ok) throw new Error('hebrew_font ' + res.status);
-  const fetched = new Uint8Array(await res.arrayBuffer());
-  if (fetched.byteLength !== FONT_BYTES) throw new Error('hebrew_font_size ' + fetched.byteLength);
-  return fetched;
+const BASE = 'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-hebrew@5.2.8/';
+const FONTS: Record<string, number> = {
+  'hebrew-400-normal.ttf': 17220, 'hebrew-700-normal.ttf': 17216,
+  'latin-400-normal.ttf': 21544, 'latin-700-normal.ttf': 21452,
+};
+async function fontBytes(name: string): Promise<Uint8Array> {
+  const res = await fetch(BASE + name);
+  if (!res.ok) throw new Error('font ' + name + ' ' + res.status);
+  const b = new Uint8Array(await res.arrayBuffer());
+  if (b.byteLength !== FONTS[name]) throw new Error('font_size ' + name + ' ' + b.byteLength);
+  return b;
 }
 
 const NAVY = rgb(0x0B / 255, 0x1B / 255, 0x3A / 255);
-const ORANGE = rgb(0xF2 / 255, 0x6B / 255, 0x1D / 255);
-const CREAM = rgb(0xFA / 255, 0xF5 / 255, 0xEC / 255);
-const INK = rgb(0x1A / 255, 0x1A / 255, 0x1A / 255);
+const AMBER = rgb(0xF2 / 255, 0x6B / 255, 0x1D / 255);
+const CREAM = rgb(0xFA / 255, 0xF7 / 255, 0xF2 / 255);
+const WHITE = rgb(1, 1, 1);
 
 export async function buildSummaryPdf(title: string, points: string[]): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
-  const font = await doc.embedFont(await fontBytes(), { subset: true });
-  const latin = await doc.embedFont(StandardFonts.Helvetica);
-  const pageWidth = 595.28;
-  const pageHeight = 841.89;
-  const margin = 48;
-  const maxWidth = pageWidth - margin * 2;
+  const [h4, h7, l4, l7] = await Promise.all(['hebrew-400', 'hebrew-700', 'latin-400', 'latin-700']
+    .map(async n => doc.embedFont(await fontBytes(n + '-normal.ttf'), { subset: true })));
+  doc.setTitle(title);
+  doc.setAuthor('BSD Business Brokers Israel');
+  doc.setLanguage('he-IL');
+  const W = 595.28, H = 841.89, M = 50;
+  const BULLET_GAP = 16;
+  const maxWidth = W - M * 2 - BULLET_GAP;
 
-  let page = doc.addPage([pageWidth, pageHeight]);
-  const paintPage = () => {
-    page.drawRectangle({ x: 0, y: 0, width: pageWidth, height: pageHeight, color: CREAM });
-    page.drawRectangle({ x: 0, y: pageHeight - 78, width: pageWidth, height: 78, color: NAVY });
-    page.drawRectangle({ x: 0, y: pageHeight - 84, width: pageWidth, height: 6, color: ORANGE });
-  };
-  paintPage();
-
-  // The Hebrew subset has no Latin, digits, or ASCII punctuation. Those runs use Helvetica.
-  const runsOf = (visual: string) => (visual.match(/[\u0590-\u05FF]+|[^\u0590-\u05FF]+/g) || []).map(text => ({
-    text,
-    font: /[\u0590-\u05FF]/.test(text) ? font : latin,
+  // deno-lint-ignore no-explicit-any
+  const runsWithFont = (s: string, bold: boolean) => visualRuns(s).map((r: any) => ({
+    text: r.text, font: r.hebrew ? (bold ? h7 : h4) : (bold ? l7 : l4),
   }));
-  const widthOf = (visual: string, size: number) => runsOf(visual)
-    .reduce((sum, run) => sum + run.font.widthOfTextAtSize(run.text, size), 0);
-  const draw = (logical: string, size: number, y: number, color: ReturnType<typeof rgb>) => {
-    const runs = runsOf(visualLine(logical));
-    let x = pageWidth - margin - widthOf(visualLine(logical), size);
-    for (const run of runs) {
-      page.drawText(run.text, { x, y, size, font: run.font, color });
-      x += run.font.widthOfTextAtSize(run.text, size);
+  // deno-lint-ignore no-explicit-any
+  const widthOf = (s: string, size: number, bold = false) => runsWithFont(s, bold).reduce((t: number, r: any) => t + r.font.widthOfTextAtSize(r.text, size), 0);
+
+  let page = doc.addPage([W, H]);
+  const paint = () => {
+    page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: CREAM });
+    page.drawRectangle({ x: 0, y: H - 86, width: W, height: 86, color: NAVY });
+    page.drawRectangle({ x: 0, y: H - 92, width: W, height: 6, color: AMBER });
+    page.drawRectangle({ x: 0, y: 0, width: W, height: 4, color: AMBER });
+  };
+  // draw text whose right edge is at xRight
+  const draw = (s: string, size: number, xRight: number, y: number, color: ReturnType<typeof rgb>, bold = false) => {
+    let x = xRight - widthOf(s, size, bold);
+    for (const r of runsWithFont(s, bold)) {
+      page.drawText(r.text, { x, y, size, font: r.font, color });
+      x += r.font.widthOfTextAtSize(r.text, size);
     }
   };
+  paint();
+  draw(title, 18, W - M, H - 44, WHITE, true);
+  draw('BSD Business Brokers Israel', 10, W - M, H - 68, AMBER, true);
 
-  draw(title, 16, pageHeight - 40, rgb(1, 1, 1));
-  draw('BSD Business Brokers Israel', 9, pageHeight - 62, ORANGE);
-
-  let y = pageHeight - 116;
+  let y = H - 132;
+  draw('עיקרי השיחה', 14, W - M, y, NAVY, true);
+  page.drawRectangle({ x: W - M - widthOf('עיקרי השיחה', 14, true), y: y - 7, width: widthOf('עיקרי השיחה', 14, true), height: 1.5, color: AMBER });
+  y -= 32;
   const body = points.length ? points : ['לא נמצאו עיקרי דברים בתמלול.'];
   for (const point of body) {
-    const lines = wrapLogical(point, maxWidth - 18, v => widthOf(v, 12));
+    const lines = wrapLogical(point, maxWidth, (s: string) => widthOf(s, 12));
     for (let i = 0; i < lines.length; i++) {
-      if (y < 56) {
-        page = doc.addPage([pageWidth, pageHeight]);
-        paintPage();
-        y = pageHeight - 116;
-      }
-      const logical = (i === 0 ? '– ' : '  ') + lines[i];
-      draw(logical, 12, y, INK);
-      y -= 20;
+      if (y < 60) { page = doc.addPage([W, H]); paint(); y = H - 132; }
+      if (i === 0) page.drawCircle({ x: W - M - 4, y: y + 4, size: 2.8, color: AMBER });
+      draw(lines[i], 12, W - M - BULLET_GAP, y, NAVY);
+      y -= 19;
     }
-    y -= 6;
+    y -= 9;
   }
   return doc.save();
 }
