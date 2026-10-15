@@ -89,7 +89,7 @@ async function summarise(transcript: string): Promise<{ points: string[]; usage:
       model: MODEL,
       max_tokens: 1200,
       system,
-      messages: [{ role: 'user', content: `תמלול השיחה:\n"""\n${transcript.slice(0, 80000)}\n"""` }],
+      messages: [{ role: 'user', content: `תמלול השיחה:\n\"\"\"\n${transcript.slice(0, 80000)}\n\"\"\"` }],
     }),
   });
   if (!res.ok) throw new Error(`claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
@@ -185,6 +185,27 @@ async function processCall(call: Record<string, any>, key: string) {
   }
 }
 
+// Re-render the PDF of an already summarised call from the stored points
+// (phone_call_audit). No Whisper/Claude calls. Overwrites the same storage object.
+async function regenerate(callId: string) {
+  const { data: call } = await supabase.from('phone_calls').select('id, started_at, summary_doc_id').eq('id', callId).single();
+  if (!call?.summary_doc_id) return { ok: false, error: 'no_summary_doc' };
+  const { data: audit } = await supabase.from('phone_call_audit').select('details').eq('phone_call_id', callId)
+    .eq('action', 'call_summary_done').order('created_at', { ascending: false }).limit(1).single();
+  const points = (audit?.details?.points || []) as string[];
+  if (!points.length) return { ok: false, error: 'no_points' };
+  const { data: docRow } = await supabase.from('lead_documents').select('id, storage_path').eq('id', call.summary_doc_id).single();
+  if (!docRow?.storage_path) return { ok: false, error: 'no_document' };
+  const title = `סיכום הקלטת שיחה – ${ilDate(call.started_at)}`;
+  const pdf = await buildSummaryPdf(title, points);
+  const up = await supabase.storage.from('business-files').upload(docRow.storage_path, pdf, { contentType: 'application/pdf', upsert: true });
+  if (up.error) return { ok: false, error: 'upload ' + up.error.message };
+  await supabase.from('lead_documents').update({ file_size: pdf.byteLength }).eq('id', docRow.id);
+  await supabase.from('phone_call_audit').insert({ phone_call_id: callId, action: 'call_summary_pdf_regenerated', details: { doc_id: docRow.id, bytes: pdf.byteLength } });
+  const signed = await supabase.storage.from('business-files').createSignedUrl(docRow.storage_path, 900);
+  return { ok: true, storage_path: docRow.storage_path, bytes: pdf.byteLength, signed_url: signed.data?.signedUrl || null };
+}
+
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok');
   const token = await secret('EXM_WEBHOOK_TOKEN');
@@ -193,7 +214,8 @@ Deno.serve(async req => {
   if (!OPENAI_API_KEY || !ANTHROPIC_API_KEY) return json({ ok: false, error: 'missing_model_keys' }, 500);
   const key = await secret('EXM_API_KEY');
   if (!key) return json({ ok: false, error: 'missing_api_key' }, 500);
-  const opts = await req.json().catch(() => ({})) as { limit?: number };
+  const opts = await req.json().catch(() => ({})) as { limit?: number; regenerate_call_id?: string };
+  if (opts.regenerate_call_id) return json(await regenerate(opts.regenerate_call_id));
   const limit = Math.max(1, Math.min(2, Number(opts.limit) || 1));
   const { data: claimed, error } = await supabase.rpc('bsd_claim_call_summary', { p_limit: limit });
   if (error) return json({ ok: false, error: error.message }, 500);
