@@ -84,3 +84,5 @@
 
 /* 13.10.2026: new version notice next to a document */
 .file-new{display:block;color:#1a7f37;font-weight:700}
+
+.channels{margin-top:18px;border-top:3px solid #F26B1D}.channels h3{color:#0B1B3A;margin:4px 0 14px}.channel-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.channel{display:flex;flex-direction:column;gap:6px;padding:16px 18px;border-radius:12px;background:#FAF5EC;border:1px solid #D4A34D;color:#0B1B3A;text-decoration:none;transition:box-shadow .2s,transform .2s}.channel:hover,.channel:focus-visible{box-shadow:0 6px 16px #0B1B3A1f;transform:translateY(-1px)}.channel b{font-size:17px}.channel span{color:#53677a;font-size:14px}.channel small{color:#F26B1D;font-weight:700}
