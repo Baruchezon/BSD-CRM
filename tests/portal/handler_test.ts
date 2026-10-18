@@ -462,3 +462,30 @@ Deno.test('email status: asks Resend for that email only, returns last_event onl
  const g=await mailFixture({status:()=>new Response('{"message":"not found"}',{status:404})});const s2=await (await g.admin('admin_email_access',{business_id:biz})).json();
  r=await g.admin('admin_email_status',{business_id:biz,log_id:s2.log_id});assert(r.status===502&&(await r.json()).error==='status_unavailable','provider error');
 });
+Deno.test('proactive outreach: own business, owner-visible notes only, never phone or email',async()=>{
+ const f=await fixture();
+ const shown='a2000000-0000-4000-8000-000000000001',hidden='a2000000-0000-4000-8000-000000000002',otherId='a2000000-0000-4000-8000-000000000003';
+ f.tables.seller_portal_outreach=[
+  {id:shown,business_id:biz,contact_name:'יוסי פנייה',channel:'וואטסאפ',reason:'התעניין בתחום',status:'פנינו',next_step:'לחזור ביום ראשון',next_step_at:'2026-10-20',updated_at:'2026-10-18T00:00:00Z',phone:'050-1111111',email:'secret-outreach@example.com',company_notes:'SECRET-COMPANY'},
+  {id:hidden,business_id:biz,contact_name:'מוסתר מהפורטל',channel:'טלפון',reason:'x',status:'פנינו',hidden_from_owner:true,phone:'050-2222222',email:'hidden@example.com'},
+  {id:otherId,business_id:other,contact_name:'OTHER OUTREACH',channel:'מייל',reason:'x',status:'פנינו',phone:'050-3333333',updated_at:'2026-10-18T00:00:00Z'}];
+ f.tables.seller_portal_outreach_events=[
+  {outreach_id:shown,business_id:biz,occurred_on:'2026-10-18',stage:'פנינו',note:'הערה לבעלים',visible_to_owner:true},
+  {outreach_id:shown,business_id:biz,occurred_on:'2026-10-17',stage:'פנינו',note:'SECRET-NOTE',visible_to_owner:false},
+  {outreach_id:hidden,business_id:biz,occurred_on:'2026-10-18',stage:'פנינו',note:'HIDDEN-NOTE',visible_to_owner:true}];
+ const d=await json(await f.request('dashboard'));
+ assert(d.outreach.length===1&&d.outreach[0].contact_name==='יוסי פנייה','only the visible outreach of this business');
+ assert(d.outreach[0].channel==='וואטסאפ'&&d.outreach[0].status==='פנינו'&&d.outreach[0].next_step==='לחזור ביום ראשון'&&d.outreach[0].reason==='התעניין בתחום','portal fields');
+ assert(d.outreach[0].notes.length===1&&d.outreach[0].notes[0].text==='הערה לבעלים','private timeline note stays off the portal');
+ assert(!('phone' in d.outreach[0])&&!('email' in d.outreach[0]),'response object has no contact keys');
+ const ser=JSON.stringify(d.outreach);
+ for(const bad of ['050-1111111','050-2222222','050-3333333','secret-outreach@example.com','hidden@example.com','SECRET-COMPANY','SECRET-NOTE','HIDDEN-NOTE','OTHER OUTREACH','מוסתר'])assert(!ser.includes(bad),'leak '+bad);
+ const otherDash=await json(await f.seller('token-b')('dashboard'));
+ assert(otherDash.outreach.length===1&&otherDash.outreach[0].contact_name==='OTHER OUTREACH'&&!JSON.stringify(otherDash.outreach).includes('יוסי'),'other seller sees only his business');
+});
+Deno.test('outreach read failure never blocks the dashboard',async()=>{
+ const f=await fixture();
+ Object.defineProperty(f.tables,'seller_portal_outreach',{get(){throw Error('boom');}});
+ const r=await f.request('dashboard');assert(r.status===200,'dashboard still 200');const d=await r.json();
+ assert(d.outreach_unavailable===true&&Array.isArray(d.files)&&d.files.length>0,'files stay, outreach flagged');
+});

@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610142200';
+    var PAGE_BUILD = '202610181700';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -550,6 +550,7 @@
 <script src="js/phoneCalls.js?v=202610142200"></script>
 <script src="js/portal-invite.js?v=20261004-2"></script>
 <script src="js/portal-business-card.js?v=202610110550"></script>
+<script src="js/outreachModule.js?v=202610181700"></script>
 <script src="js/anonAgreementMark.js?v=202610061550"></script>
 <script src="js/anonSummarySend.js?v=202610061625"></script>
 <script>
@@ -1799,6 +1800,8 @@ function openBizForm(id){
       ${biz ? `
       <div class="section-h" style="margin-top:14px;">🤝 קונים פוטנציאליים והתאמות</div>
       <div id="bizMatchesModuleBox" style="margin-bottom:6px;">טוען...</div>
+      <div class="section-h" id="bizOutreachHeading" style="margin-top:14px;">📣 פניות יזומות</div>
+      <div id="bizOutreachBox" style="margin-bottom:8px;">טוען...</div>
       ` : ``}
 
       ${biz ? `
@@ -1984,6 +1987,7 @@ function openBizForm(id){
   if (biz) loadBizMeetings(biz.id);
   if (biz) waRenderHistory('business', biz.id, 'bizWaHistoryBox');
   if (biz) loadBizMatchesModule(biz.id);
+  if (biz && window.BSDOutreach) BSDOutreach.mount(biz.id);
   if (biz) bsdLoadBizSummaryBuyers(biz.id);
   if (biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz)) loadBizAccessGrants(biz.id);
   if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadAnonDistSummary(biz.id);

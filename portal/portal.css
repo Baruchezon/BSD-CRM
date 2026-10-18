@@ -86,3 +86,10 @@
 .file-new{display:block;color:#1a7f37;font-weight:700}
 
 .channels{margin-top:18px;border-top:3px solid #F26B1D}.channels h3{color:#0B1B3A;margin:4px 0 14px}.channel-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.channel{display:flex;flex-direction:column;gap:6px;padding:16px 18px;border-radius:12px;background:#FAF5EC;border:1px solid #D4A34D;color:#0B1B3A;text-decoration:none;transition:box-shadow .2s,transform .2s}.channel:hover,.channel:focus-visible{box-shadow:0 6px 16px #0B1B3A1f;transform:translateY(-1px)}.channel b{font-size:17px}.channel span{color:#53677a;font-size:14px}.channel small{color:#F26B1D;font-weight:700}
+/* פניות יזומות (18.10.2026) — name, channel, reason, status, next step, owner-visible notes. No phone or email. */
+.outreach-list{display:flex;flex-direction:column;gap:12px}
+.outreach-card{border:1px solid var(--line);border-radius:12px;background:#fff;padding:14px 16px;border-right:4px solid var(--gold)}
+.outreach-card header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px}
+.outreach-card header strong{font-size:18px;color:var(--navy)}
+.outreach-card .stage-label{background:#eef4f8;border-radius:999px;padding:2px 10px;font-size:14px}
+.outreach-notes{margin-top:8px;border-top:1px dashed var(--line);padding-top:8px}
