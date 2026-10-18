@@ -38,8 +38,8 @@
 <script src="js/supabaseClient.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/sessionExpired.js?v=202610071530"></script>
-<script src="js/searchSelect.js?v=202608281900"></script>
-<script src="js/bsd-search.js?v=202610081400"></script>
+<script src="js/searchSelect.js?v=202610181400"></script>
+<script src="js/bsd-search.js?v=202610181400"></script>
 <style>
   :root{
     --navy:#0e1b34; --navy-light:#16264a; --gold:#c9a24b; --gold-light:#e8cf8a;
@@ -576,9 +576,9 @@ function restoreMatchesPageCache(){
 async function loadEverything(){
   const sb = window.supabaseClient;
   const results = await Promise.all([
-    sb.from('leads').select('id,full_name,phone,phone2,client_number,agreement_status,created_by,handled_by,type,is_archived').eq('type','buyer'),
+    sb.from('leads').select('id,full_name,phone,phone2,email,client_number,agreement_status,created_by,handled_by,type,is_archived,created_at,updated_at').eq('type','buyer'),
     sb.from('brokers').select('id,full_name,phone,email,city,looking_for,agreement_status,status,created_by,handled_by,is_archived'),
-    sb.from('businesses').select('id,internal_name,business_number,field,agreement_status,created_by,handled_by,is_archived'),
+    sb.from('businesses').select('id,internal_name,internal_code,anonymous_name,anon_display_name,business_number,field,category,subcategory,city,region,owner_name,agreement_status,created_by,handled_by,is_archived,created_at,updated_at'),
     sb.from('matches').select('*'),
     sb.from('profiles').select('id,full_name,role'),
     sb.from('tasks').select('id,match_id,business_id,buyer_id,title,status,due_date,assigned_to')
@@ -647,10 +647,23 @@ function matchSearchHay(m){
   const handler = userName(m.current_handler) || "";
   const acts = ALL_ACTIVITY.filter(a=>a.match_id===m.id).map(a=>(a.description||'')+' '+(a.note||'')).join(' ');
   const openTasks = ALL_TASKS.filter(t=>t.match_id===m.id).map(t=>t.title).join(' ');
-  return [b?.internal_name, b?.business_number, cp?.full_name, cp?.client_number, cp?.phone, cp?.phone2, handler, m.status, m.notes, acts, openTasks]
+  return [...bizSearchFields(b), cp?.full_name, cp?.client_number, cp?.phone, cp?.phone2, handler, m.status, m.notes, acts, openTasks]
     .filter(Boolean).join(" ").toLowerCase();
 }
 
+// 18.10.2026: שדות חיפוש של עסק - שם פנימי, מספר BSD, תחום, כותרת אנונימית, עיר/אזור.
+function bizSearchFields(b){
+  if (!b) return [];
+  return [b.internal_name, b.internal_code, b.business_number, b.anonymous_name, b.anon_display_name, b.field, b.category, b.subcategory, b.city, b.region, b.owner_name];
+}
+function buyerSearchFields(l){
+  if (!l) return [];
+  return [l.full_name, l.client_number, l.phone, l.phone2, l.email];
+}
+function searchHit(q, fields){
+  if (window.BSDSearch && BSDSearch.textMatch) return BSDSearch.textMatch(q, fields);
+  return fields.filter(Boolean).join(' ').toLowerCase().includes(String(q).trim().toLowerCase());
+}
 // 08.10.2026: טלפון נמצא גם בלי מקפים/רווחים/+972 (js/bsd-search.js).
 function matchPhoneHit(m, q){
   if (!window.BSDSearch) return false;
@@ -659,11 +672,11 @@ function matchPhoneHit(m, q){
 }
 
 function filteredMatches(){
-  const q = searchTerm.trim().toLowerCase();
+  const q = searchTerm.trim();
   return ALL_MATCHES.filter(m=>{
     if (statFilter && matchStatBucket(m) !== statFilter) return false;
     if (activeQuickView && !matchMatchesQuickView(m, activeQuickView)) return false;
-    if (q && !matchSearchHay(m).includes(q) && !matchPhoneHit(m, q)) return false;
+    if (q && !searchHit(q, [matchSearchHay(m)]) && !matchPhoneHit(m, q)) return false;
     return true;
   });
 }
@@ -714,12 +727,21 @@ function renderByBusiness(){
   const wrap = document.getElementById('mainContent');
   const rows = filteredMatches();
   const bizIds = [...new Set(rows.map(m=>m.business_id))];
-  if (!bizIds.length){ wrap.innerHTML = `<div class="empty-state">לא נמצאו התאמות תואמות לסינון.</div>`; return; }
+  // 18.10.2026 (בקשת ברוך): עד היום תצוגת "לפי עסקים" הציגה רק עסקים שיש להם
+  // התאמות, ולכן חיפוש עסק בלי התאמות (למשל "דקור") החזיר ריק. בחיפוש - מוסיפים
+  // גם כל עסק פעיל שתואם, עם כפתור "הוסף קונה" כדי לחבר אליו קונים.
+  const q = searchTerm.trim();
+  if (q && !statFilter && !activeQuickView){
+    Object.values(ALL_BUSINESSES).forEach(b=>{
+      if (!b.is_archived && !bizIds.includes(b.id) && searchHit(q, bizSearchFields(b))) bizIds.push(b.id);
+    });
+  }
+  if (!bizIds.length){ wrap.innerHTML = `<div class="empty-state">לא נמצאו עסקים או התאמות תואמות לסינון.</div>`; return; }
 
   const bizStats = bizIds.map(bid=>{
     const b = ALL_BUSINESSES[bid];
     const bizMatches = rows.filter(m=>m.business_id===bid);
-    const lastActivity = bizMatches.reduce((max,m)=> new Date(m.updated_at) > new Date(max) ? m.updated_at : max, bizMatches[0].updated_at);
+    const lastActivity = bizMatches.length ? bizMatches.reduce((max,m)=> new Date(m.updated_at) > new Date(max) ? m.updated_at : max, bizMatches[0].updated_at) : (b?.updated_at || b?.created_at || null);
     return {
       bid, b, matches: bizMatches,
       active: bizMatches.filter(m=>!CLOSED_STATUSES.includes(m.status) && m.status!=='עסקה הושלמה').length,
@@ -741,6 +763,7 @@ function renderByBusiness(){
           <div class="th-stats">
             <span>מטפל: ${esc(userName(s.b?.handled_by)||'—')}</span>
             <span>${s.matches.length} קונים</span>
+            ${!s.matches.length?`<span class="chip chip-gray">עדיין אין התאמות</span>`:''}
             <span class="chip chip-green">${s.active} פעילות</span>
             ${s.interested?`<span class="chip chip-blue">${s.interested} מעוניינים</span>`:''}
             ${s.meetings?`<span class="chip chip-purple">${s.meetings} פגישות</span>`:''}
@@ -755,6 +778,7 @@ function renderByBusiness(){
         </div>
       </div>
       <div class="tree-body">
+        ${s.matches.length ? '' : `<div class="empty-state" style="padding:14px;">אין עדיין קונים מחוברים לעסק הזה. <button class="mini-btn" data-addbuyer="${s.bid}">➕ הוסף קונה</button></div>`}
         ${s.matches.sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).map(m=>{
           return branchRowHtml(m, counterpartyLabelHtml(m));
         }).join('')}
@@ -781,13 +805,21 @@ function renderByBuyer(){
   // מתקבצות יחד תחת "—" אחד משותף וטועה. כל צד (קונה/מתווך) מקבל את
   // הענף שלו, עם התג הבולט המתאים.
   const groupKeys = [...new Set(rows.map(m=> (m.counterparty_type==='broker'?'broker:':'buyer:') + (m.counterparty_type==='broker'?m.broker_id:m.buyer_id)))];
+  // 18.10.2026: בחיפוש - גם קונים שעדיין אין להם התאמות, כדי לחבר אותם לעסק.
+  const qb = searchTerm.trim();
+  if (qb && !statFilter && !activeQuickView){
+    ALL_LEADS.forEach(l=>{
+      const k = 'buyer:' + l.id;
+      if (!l.is_archived && !groupKeys.includes(k) && (searchHit(qb, buyerSearchFields(l)) || (window.BSDSearch && BSDSearch.phoneMatch(qb, [l.phone, l.phone2])))) groupKeys.push(k);
+    });
+  }
   if (!groupKeys.length){ wrap.innerHTML = `<div class="empty-state">לא נמצאו התאמות תואמות לסינון.</div>`; return; }
 
   const groupStats = groupKeys.map(key=>{
     const [type, id] = [key.startsWith('broker:') ? 'broker' : 'buyer', key.slice(key.indexOf(':')+1)];
     const rec = type==='broker' ? brokerById(id) : leadById(id);
     const groupMatches = type==='broker' ? rows.filter(m=>m.counterparty_type==='broker' && m.broker_id===id) : rows.filter(m=>m.counterparty_type!=='broker' && m.buyer_id===id);
-    const lastActivity = groupMatches.reduce((max,m)=> new Date(m.updated_at) > new Date(max) ? m.updated_at : max, groupMatches[0].updated_at);
+    const lastActivity = groupMatches.length ? groupMatches.reduce((max,m)=> new Date(m.updated_at) > new Date(max) ? m.updated_at : max, groupMatches[0].updated_at) : (rec?.updated_at || rec?.created_at || null);
     return {
       key, id, rec, isBroker: type==='broker', matches: groupMatches,
       active: groupMatches.filter(m=>!CLOSED_STATUSES.includes(m.status) && m.status!=='עסקה הושלמה').length,
@@ -817,11 +849,13 @@ function renderByBuyer(){
         <div class="th-actions">
           <button class="mini-btn" data-quicksend="${s.key}" style="background:#dff0e4;border-color:#a9d6b8;">💬 עדכון מהיר</button>
           ${s.isBroker ? `<a class="mini-btn" href="brokers.html?open=${s.id}">🔵 כרטיס המתווך</a>` : `
-          <button class="mini-btn" data-addbiz="${s.id}">➕ הוסף עסק</button>
+          <button class="mini-btn" data-addbiz="${s.id}">➕ חבר לעסק</button>
+          <a class="mini-btn" href="leads.html?open=${s.id}" data-editbuyer="1">✏️ כרטיס הקונה</a>
           <button class="mini-btn" data-buyerreport="${s.id}">📊 דוח לקונה</button>`}
         </div>
       </div>
       <div class="tree-body">
+        ${s.matches.length || s.isBroker ? '' : `<div class="empty-state" style="padding:14px;">הקונה עדיין לא מחובר לאף עסק. <button class="mini-btn" data-addbiz="${s.id}">➕ חבר לעסק</button></div>`}
         ${s.matches.sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).map(m=>{
           const b = ALL_BUSINESSES[m.business_id];
           const bizLabel = (b?.business_number?`<span class="biz-number">#${esc(b.business_number.replace('BSD-B-',''))}</span> `:'') + esc(b?.internal_name||'—');
@@ -832,12 +866,12 @@ function renderByBuyer(){
   }).join('');
 
   wrap.querySelectorAll('[data-toggle]').forEach(el=>el.addEventListener('click', (e)=>{
-    if (e.target.closest('[data-addbiz],[data-buyerreport]')) return;
+    if (e.target.closest('[data-addbiz],[data-buyerreport],[data-editbuyer],[data-quicksend]')) return;
     const key = el.dataset.toggle;
     OPEN_NODES.has(key) ? OPEN_NODES.delete(key) : OPEN_NODES.add(key);
     render();
   }));
-  wrap.querySelectorAll('[data-addbiz]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='leads.html?open='+el.dataset.addbiz; }));
+  wrap.querySelectorAll('[data-addbiz]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openNewMatchModal({ buyerId: el.dataset.addbiz }); }));
   wrap.querySelectorAll('[data-buyerreport]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='leads.html?open='+el.dataset.buyerreport; }));
   wrap.querySelectorAll('[data-quicksend]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickCheckinModalForKey(el.dataset.quicksend); }));
   wireBranchActions(wrap);
@@ -893,10 +927,11 @@ function wsRenderAddSelect(){
       onChange: (id)=>{ window.WS_SELECTED_BROKER = ALL_BROKERS.find(b=>b.id===id) || null; }
     });
   } else {
-    box.innerHTML = window.searchSelectHTML({ boxId: 'addBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
+    box.innerHTML = window.searchSelectHTML({ boxId: 'addBuyerSelect', placeholder: 'הקלד שם קונה, מספר לקוח או טלפון...' });
     window.initSearchSelect('addBuyerSelect', ALL_LEADS.filter(l=>!l.is_archived), {
       getId: b => b.id,
       getLabel: b => (b.full_name||'קונה ללא שם') + (b.client_number?' ('+b.client_number+')':''),
+      getSearchText: b => [b.phone, b.phone2].filter(Boolean).join(' '),
       onChange: (id)=>{ window.WS_SELECTED_BUYER = ALL_LEADS.find(l=>l.id===id) || null; }
     });
   }
@@ -980,15 +1015,25 @@ function nmRenderCounterpartySelect(){
       onChange: (id)=>{ window.NM_SELECTED_BROKER = ALL_BROKERS.find(b=>b.id===id) || null; updateNewMatchUI(); }
     });
   } else {
-    box.innerHTML = window.searchSelectHTML({ boxId: 'nmBuyerSelect', placeholder: 'הקלד שם קונה לחיפוש...' });
+    box.innerHTML = window.searchSelectHTML({ boxId: 'nmBuyerSelect', placeholder: 'הקלד שם קונה, מספר לקוח או טלפון...' });
     window.initSearchSelect('nmBuyerSelect', ALL_LEADS.filter(l=>!l.is_archived), {
       getId: b => b.id,
       getLabel: b => (b.full_name||'קונה ללא שם') + (b.client_number?' ('+b.client_number+')':''),
+      getSearchText: b => [b.phone, b.phone2].filter(Boolean).join(' '),
       onChange: (id)=>{ window.NM_SELECTED_BUYER = ALL_LEADS.find(l=>l.id===id) || null; updateNewMatchUI(); }
     });
   }
+  // הקלדה אחרי בחירה (כולל קונה שמולא מ"חבר לעסק") מנקה את הבחירה.
+  // אחרת השם על המסך משתנה אבל השמירה עדיין משתמשת בקונה הקודם.
+  const nmInp = document.getElementById('nmBuyerSelect_input');
+  if (nmInp) nmInp.addEventListener('input', ()=>{
+    window.NM_SELECTED_BUYER = null;
+    window.NM_SELECTED_BROKER = null;
+    updateNewMatchUI();
+  });
 }
-function openNewMatchModal(){
+function openNewMatchModal(opts){
+  opts = (opts && typeof opts === 'object' && !(opts instanceof Event)) ? opts : {};
   window.NM_SELECTED_TYPE = 'buyer';
   window.NM_SELECTED_BUYER = null;
   window.NM_SELECTED_BROKER = null;
@@ -1015,8 +1060,24 @@ function openNewMatchModal(){
   window.initSearchSelect('nmBizSelect', bizList, {
     getId: b => b.id,
     getLabel: b => (b.internal_name||'עסק ללא שם') + (b.business_number?' ('+b.business_number+')':'') + (b.field?' - '+b.field:''),
+    getSearchText: b => bizSearchFields(b).join(' '),
     onChange: (id)=>{ window.NM_SELECTED_BIZ = ALL_BUSINESSES[id] || null; updateNewMatchUI(); }
   });
+  // 18.10.2026: "חבר לעסק" מתצוגת הקונים - הקונה כבר נבחר, נשאר לבחור עסק.
+  if (opts.buyerId){
+    const lead = ALL_LEADS.find(l=>String(l.id)===String(opts.buyerId));
+    if (lead){
+      window.NM_SELECTED_BUYER = lead;
+      const hid = document.getElementById('nmBuyerSelect'), inp = document.getElementById('nmBuyerSelect_input');
+      if (hid) hid.value = lead.id;
+      if (inp) inp.value = (lead.full_name||'קונה ללא שם') + (lead.client_number?' ('+lead.client_number+')':'');
+      const h = document.querySelector('#modalRoot .modal-head h3');
+      if (h) h.textContent = '➕ חיבור ' + (lead.full_name||'הקונה') + ' לעסק';
+      updateNewMatchUI();
+      const bizInp = document.getElementById('nmBizSelect_input');
+      if (bizInp) setTimeout(()=>bizInp.focus(), 50);
+    }
+  }
 }
 async function confirmNewMatch(){
   const isBroker = window.NM_SELECTED_TYPE === 'broker';
