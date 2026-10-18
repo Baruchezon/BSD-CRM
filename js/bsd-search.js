@@ -31,5 +31,28 @@
     if (!qd) return false;
     return (phones || []).some(p => { const k = phoneKey(p); return !!k && k.includes(qd); });
   }
-  root.BSDSearch = { phoneKey, phoneQuery, phoneMatch };
+  // 18.10.2026 (בקשת ברוך, מרכז ההתאמות): נרמול טקסט עברי לחיפוש - ניקוד,
+  // אותיות סופיות (ך/כ ם/מ ן/נ ף/פ ץ/צ), גרש/גרשיים/מרכאות, מקפים ורווחים כפולים,
+  // אותיות גדולות/קטנות. "דקור", "דקור " ו-"ד'קור" מוצאים את אותו עסק.
+  const FINALS = { 'ך':'כ', 'ם':'מ', 'ן':'נ', 'ף':'פ', 'ץ':'צ' };
+  function normText(v){
+    return String(v == null ? '' : v)
+      .replace(/[\u0591-\u05C7]/g, '')
+      .replace(/[ךםןףץ]/g, ch => FINALS[ch])
+      .replace(/["'`\u05F3\u05F4\u2018\u2019\u201C\u201D]/g, '')
+      .replace(/[\-_.,\/\\()|#:]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+  // כל מילה בחיפוש צריכה להופיע איפשהו בשדות (בכל סדר). מספר עסק נמצא גם
+  // בלי הקידומת BSD-B (למשל "1088" או "2610-1088").
+  function textMatch(query, fields){
+    const q = normText(query);
+    if (!q) return true;
+    const hay = normText((fields || []).filter(f => f != null && f !== '').join(' | '));
+    const hayDigits = hay.replace(/\s+/g, '');
+    return q.split(' ').every(tok => hay.includes(tok) || (/^\d+$/.test(tok) && hayDigits.includes(tok)));
+  }
+  root.BSDSearch = { phoneKey, phoneQuery, phoneMatch, normText, textMatch };
 })(typeof window === 'undefined' ? globalThis : window);

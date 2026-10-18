@@ -69,7 +69,11 @@
 
     function renderList(filterText){
       const q = (filterText || '').trim().toLowerCase();
-      let filtered = q ? items.filter(it => getLabel(it).toLowerCase().includes(q)) : items.slice();
+      // 18.10.2026: נרמול עברי (סופיות/ניקוד/גרשיים/רווחים) + שדות חיפוש נוספים (opts.getSearchText).
+      const getHay = it => getLabel(it) + (opts.getSearchText ? ' ' + (opts.getSearchText(it) || '') : '');
+      let filtered = q ? items.filter(it => window.BSDSearch && window.BSDSearch.textMatch
+        ? window.BSDSearch.textMatch(q, [getHay(it)]) || window.BSDSearch.phoneMatch(q, [getHay(it)])
+        : getHay(it).toLowerCase().includes(q)) : items.slice();
       const overflow = filtered.length > 60;
       filtered = filtered.slice(0, 60);
       hlIndex = -1;
