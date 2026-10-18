@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202610101234';
+    var PAGE_BUILD = '202610181800';
     window.PAGE_BUILD = PAGE_BUILD;
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -40,6 +40,7 @@
 <script src="js/sessionExpired.js?v=202610071530"></script>
 <script src="js/searchSelect.js?v=202610181400"></script>
 <script src="js/bsd-search.js?v=202610181400"></script>
+<script src="js/outreachModule.js?v=202610181800"></script>
 <style>
   :root{
     --navy:#0e1b34; --navy-light:#16264a; --gold:#c9a24b; --gold-light:#e8cf8a;
@@ -138,6 +139,7 @@
     .page{padding:0 12px;}
   }
   .mini-btn:hover{background:var(--gold-light);}
+  .outreach-mini{flex-basis:100%;color:var(--navy);background:#f7f5ef;border-right:3px solid var(--gold);border-radius:6px;padding:3px 8px;}
   .btn-ghost{background:#f1eee2;color:var(--text);border:none;padding:9px 16px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
   .btn-primary{background:var(--navy);color:#fff;border:none;padding:10px 18px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
   .btn-primary[disabled]{opacity:.5;cursor:not-allowed;}
@@ -323,7 +325,7 @@
 
 <script>
 let CURRENT_PROFILE = null;
-let ALL_LEADS = [], ALL_BROKERS = [], ALL_BUSINESSES = {}, ALL_MATCHES = [], ALL_PROFILES = {}, ALL_TASKS = [], ALL_ACTIVITY = [];
+let ALL_LEADS = [], ALL_BROKERS = [], ALL_BUSINESSES = {}, ALL_MATCHES = [], ALL_PROFILES = {}, ALL_TASKS = [], ALL_ACTIVITY = [], ALL_OUTREACH = [];
 let searchTerm = "", activeQuickView = "", currentView = "business";
 const OPEN_NODES = new Set();
 
@@ -599,12 +601,34 @@ async function loadEverything(){
     const { data: activity } = await sb.from('match_activity_log').select('match_id,description,note').in('match_id', matchIds).is('deleted_at', null);
     ALL_ACTIVITY = activity || [];
   }
+  await loadOutreach();
   buildQuickViews();
   buildStatStrip();
   render();
   saveMatchesPageCache();
 }
 
+async function loadOutreach(){
+  try {
+    const { data, error } = await window.supabaseClient.from('business_outreach')
+      .select('id,business_id,contact_name,channel,status,next_step,next_step_at,hidden_from_owner,updated_at')
+      .order('updated_at', { ascending: false });
+    if (error) throw error;
+    ALL_OUTREACH = data || [];
+  } catch (e) {
+    ALL_OUTREACH = [];
+  }
+}
+function outreachForBusiness(bid){
+  return ALL_OUTREACH.filter(r => r.business_id === bid);
+}
+function outreachSummaryHtml(bid){
+  const list = outreachForBusiness(bid);
+  if (!list.length) return `<span class="outreach-mini">📣 אין פניות יזומות</span>`;
+  const bits = list.slice(0, 3).map(r => `${esc(r.contact_name || '—')} · ${esc(r.status || '—')}${r.hidden_from_owner ? ' · מוסתר' : ''}`);
+  const extra = list.length > 3 ? ` · +${list.length - 3}` : '';
+  return `<span class="outreach-mini">📣 ${list.length} פניות יזומות: ${bits.join(' | ')}${extra}</span>`;
+}
 function matchOpenTaskCount(matchId){
   return ALL_TASKS.filter(t=>t.match_id===matchId && t.status!=='הושלמה').length;
 }
@@ -770,15 +794,17 @@ function renderByBusiness(){
             ${s.negotiation?`<span class="chip chip-orange">${s.negotiation} במו"מ</span>`:''}
             ${s.openTasks?`<span class="chip chip-gray">${s.openTasks} משימות פתוחות</span>`:''}
             <span>עודכן: ${fmtDate(s.lastActivity)}</span>
+            ${outreachSummaryHtml(s.bid)}
           </div>
         </div>
         <div class="th-actions">
           <button class="mini-btn" data-addbuyer="${s.bid}">➕ הוסף קונה</button>
+          <button class="mini-btn" data-outreach="${s.bid}">📣 פנייה יזומה</button>
           <button class="mini-btn" data-bizreport="${s.bid}">📊 הפק דוח ללקוח</button>
         </div>
       </div>
       <div class="tree-body">
-        ${s.matches.length ? '' : `<div class="empty-state" style="padding:14px;">אין עדיין קונים מחוברים לעסק הזה. <button class="mini-btn" data-addbuyer="${s.bid}">➕ הוסף קונה</button></div>`}
+        ${s.matches.length ? '' : `<div class="empty-state" style="padding:14px;">אין עדיין קונים מחוברים לעסק הזה. <button class="mini-btn" data-addbuyer="${s.bid}">➕ הוסף קונה</button> <button class="mini-btn" data-outreach="${s.bid}">📣 פנייה יזומה</button></div>`}
         ${s.matches.sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).map(m=>{
           return branchRowHtml(m, counterpartyLabelHtml(m));
         }).join('')}
@@ -787,12 +813,13 @@ function renderByBusiness(){
   }).join('');
 
   wrap.querySelectorAll('[data-toggle]').forEach(el=>el.addEventListener('click', (e)=>{
-    if (e.target.closest('[data-addbuyer],[data-bizreport]')) return;
+    if (e.target.closest('[data-addbuyer],[data-outreach],[data-bizreport]')) return;
     const key = el.dataset.toggle;
     OPEN_NODES.has(key) ? OPEN_NODES.delete(key) : OPEN_NODES.add(key);
     render();
   }));
   wrap.querySelectorAll('[data-addbuyer]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openAddBuyerModal(el.dataset.addbuyer); }));
+  wrap.querySelectorAll('[data-outreach]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openOutreachModal(el.dataset.outreach); }));
   wrap.querySelectorAll('[data-bizreport]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='business-report-builder.html?business_id='+el.dataset.bizreport; }));
   wireBranchActions(wrap);
 }
@@ -877,6 +904,23 @@ function renderByBuyer(){
   wireBranchActions(wrap);
 }
 
+function openOutreachModal(bizId){
+  const biz = ALL_BUSINESSES[bizId];
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="overlay"><div class="modal" style="max-width:820px;">
+      <div class="modal-head"><h3>📣 פנייה יזומה — ${esc(biz?.internal_name||'')}</h3><button class="modal-close" data-close>✕</button></div>
+      <div class="modal-body"><div id="bizOutreachBox">טוען...</div></div>
+    </div></div>`;
+  document.querySelectorAll('#modalRoot [data-close]').forEach(el=>el.addEventListener('click', ()=> document.getElementById('modalRoot').innerHTML=""));
+  if (!window.BSDOutreach) { document.getElementById('bizOutreachBox').textContent = 'מודול הפניות לא נטען'; return; }
+  BSDOutreach.mount(bizId, {
+    startNew: true,
+    afterLoad(rows){
+      ALL_OUTREACH = ALL_OUTREACH.filter(r => r.business_id !== bizId).concat(rows || []);
+      if (currentView === 'business') render();
+    }
+  });
+}
 async function openAddBuyerModal(bizId){
   const biz = ALL_BUSINESSES[bizId];
   window.WS_SELECTED_TYPE = 'buyer';
@@ -1213,6 +1257,10 @@ document.getElementById('sortModeSelect').addEventListener('change', e=>{ sortMo
   document.getElementById('whoAmI').textContent = `מחובר: ${profile.full_name || profile.email} (${profile.role})`;
   const restored = restoreMatchesPageCache();
   if (!restored) await loadEverything();
+  else {
+    await loadOutreach();
+    if (currentView === 'business') render();
+  }
 })();
 window.addEventListener('pagehide', saveMatchesPageCache);
 </script>

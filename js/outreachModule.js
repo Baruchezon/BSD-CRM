@@ -6,6 +6,8 @@
   const INTERESTED = 'מעוניין — העבר לקונה';
   let bizId = null;
   let rows = [];
+  let startNew = false;
+  let afterLoad = null;
 
   function esc(s) {
     if (s === undefined || s === null) return '';
@@ -109,6 +111,8 @@
   async function load() {
     const box = document.getElementById('bizOutreachBox');
     if (!box || !bizId) return;
+    const openNew = startNew;
+    startNew = false;
     const { data, error } = await sb().from('business_outreach').select('*').eq('business_id', bizId).order('updated_at', { ascending: false });
     if (error) { box.innerHTML = `<span style="color:#a02c1d;">שגיאה בטעינת פניות יזומות: ${esc(error.message)}</span>`; return; }
     const ids = (data || []).map(r => r.id);
@@ -119,7 +123,10 @@
       events = ev.data || [];
     }
     rows = (data || []).map(r => ({ ...r, events: events.filter(e => e.outreach_id === r.id) }));
-    paint('');
+    paint(openNew ? editorHtml(null) : '');
+    if (typeof afterLoad === 'function') {
+      try { afterLoad(rows); } catch (e) { /* the list on the page is optional */ }
+    }
   }
 
   function field(root, name) {
@@ -295,6 +302,11 @@
   document.addEventListener('change', onChange);
 
   window.BSDOutreach = {
-    mount(id) { bizId = id; load(); }
+    mount(id, opts) {
+      bizId = id;
+      afterLoad = opts && typeof opts.afterLoad === 'function' ? opts.afterLoad : null;
+      startNew = !!(opts && opts.startNew);
+      return load();
+    }
   };
 })();
