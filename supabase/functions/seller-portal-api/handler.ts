@@ -1,6 +1,7 @@
 import {portalDocuments,DOC_LABELS,REPORTS_LABEL} from './latest-files.ts';
 import {MR_CATEGORY,MR_DIR,MR_MAX_BYTES,MR_MAX_RAW,validPeriod,decodeBase64,sha256Hex,isPdfBytes,publishShape} from './marketing-reports.ts';
 import {buildOwnerMatches} from './matches.ts';
+import {buildOwnerOutreach} from './outreach.ts';
 import {ACCESS_EMAIL_SUBJECT,PORTAL_MAIL_NAME,PORTAL_MAIL_BCC,PREVIEW_PASSWORD,PREVIEW_USERNAME,MASKED_PASSWORD,accessEmailHtml,accessEmailText,bsdSender,validEmail,validResendId} from './access-email.ts';
 import {digest,randomText,activationToken,validActivationToken,PENDING_ACTIVATION,strongPassword,hashPassword,verifyPassword,usableHash,sessionAllowed,fileAllowed,pathAllowed,clientIp,generatePassword,extraFileType,safeFileName,EXTRA_MAX_BYTES} from './security.ts';
 type Options={origins:string[];portalUrl:string;phone:string;ipSalt:string;ipHeader?:string;activationHours?:number;pruneRate?:number;site?:string;mail?:{from?:string;apiKey?:string;fetch?:typeof fetch}};
@@ -50,6 +51,14 @@ export function createHandler(db:any,opts:Options){
   const fileIds=[...new Set(fullSends.flatMap((s:any)=>Array.isArray(s.details?.file_ids)?s.details.file_ids:[]).filter(uuid))];
   const files=fileIds.length?await query(db.from('business_sale_files').select('id,business_id,category,document_type,file_name').eq('business_id',id).in('id',fileIds)):[];
   return buildOwnerMatches({businessId:id,matches,buyers,permissions,anonSends,fullSends,files,history,notes});
+ };
+ // Proactive outreach for the seller's OWN business. The views have no phone,
+ // email or company-notes columns. A failure here must not block the dashboard.
+ const ownerOutreach=async(id:string)=>{
+  const rows=(await query(db.from('seller_portal_outreach').select('id,business_id,contact_name,channel,reason,status,next_step,next_step_at,updated_at,created_at').eq('business_id',id).limit(200))).filter((r:any)=>r.business_id===id);
+  const ids=rows.map((r:any)=>r.id).filter(uuid);
+  const events=ids.length?await query(db.from('seller_portal_outreach_events').select('id,outreach_id,business_id,occurred_on,stage,note,visible_to_owner').in('outreach_id',ids).eq('business_id',id).limit(1000)):[];
+  return buildOwnerOutreach({businessId:id,rows,events:(events||[]).filter((e:any)=>e.business_id===id)});
  };
  const publicFile=(f:any,kind:'document'|'advertising'|'extra')=>({id:f.id,file_source:kind==='extra'?'extra':'sale',name:kind==='document'?(f.display_name||f.file_name):f.file_name,version:kind==='document'?(f.doc_version||1):null,replaced_on:kind==='document'?(f.replaced_on||null):null,kind,bucket:kind==='document'?f.bucket:kind,type:kind==='document'?DOC_LABELS[f.bucket]:kind==='advertising'?REPORTS_LABEL:'קובץ נוסף',date:f.created_at,period_from:f.portal_period_from??null,period_to:f.portal_period_to??null,mime:kind==='extra'?f.mime_type:'application/pdf',size:kind==='extra'?f.size_bytes:f.file_size??null});
  // «איפה העסק מופץ» (08.10.2026): three channels from fields staff ALREADY tick per deal in the CRM.
@@ -516,9 +525,10 @@ export function createHandler(db:any,opts:Options){
     const {is_archived:_arch,agreement_status:_agr,...safeBusiness}=business;
     // The buyers table never blocks documents: on any error the dashboard still loads, without buyers.
     let owner:any={rows:[],summary:{total:0,active:0,signed:0,full:0}};try{owner=await ownerMatches(business.id);}catch{owner.unavailable=true;}
+    let outreach:any={rows:[],summary:{total:0}};try{outreach=await ownerOutreach(business.id);}catch{outreach.unavailable=true;}
     // Distribution never blocks the dashboard either: on any error all three channels are «טרם בוצע».
     let distribution:any;try{distribution=await ownerDistribution(business.id);}catch{distribution={channels:{vip:false,agents:false,media:false},started:false};}
-    return reply(200,{ok:true,preview,business:safeBusiness,files:publicFiles(await portalFiles(business.id)),matches:owner.rows,match_summary:owner.summary,...(owner.unavailable?{matches_unavailable:true}:{}),distribution,update:a.client_update?{message:a.client_update,date:a.client_updated_at}:null,contact:{phone:opts.phone}});
+    return reply(200,{ok:true,preview,business:safeBusiness,files:publicFiles(await portalFiles(business.id)),matches:owner.rows,match_summary:owner.summary,...(owner.unavailable?{matches_unavailable:true}:{}),outreach:outreach.rows,outreach_summary:outreach.summary,...(outreach.unavailable?{outreach_unavailable:true}:{}),distribution,update:a.client_update?{message:a.client_update,date:a.client_updated_at}:null,contact:{phone:opts.phone}});
    }
    if(action==='file'){
     if(!uuid(b.file_id)||!['view','download'].includes(b.mode))return reply(404,{error:'not_found'});
