@@ -576,7 +576,7 @@ function restoreMatchesPageCache(){
 async function loadEverything(){
   const sb = window.supabaseClient;
   const results = await Promise.all([
-    sb.from('leads').select('id,full_name,phone,phone2,client_number,agreement_status,created_by,handled_by,type,is_archived').eq('type','buyer'),
+    sb.from('leads').select('id,full_name,phone,phone2,email,client_number,agreement_status,created_by,handled_by,type,is_archived,created_at,updated_at').eq('type','buyer'),
     sb.from('brokers').select('id,full_name,phone,email,city,looking_for,agreement_status,status,created_by,handled_by,is_archived'),
     sb.from('businesses').select('id,internal_name,internal_code,anonymous_name,anon_display_name,business_number,field,category,subcategory,city,region,owner_name,agreement_status,created_by,handled_by,is_archived,created_at,updated_at'),
     sb.from('matches').select('*'),
@@ -1023,6 +1023,14 @@ function nmRenderCounterpartySelect(){
       onChange: (id)=>{ window.NM_SELECTED_BUYER = ALL_LEADS.find(l=>l.id===id) || null; updateNewMatchUI(); }
     });
   }
+  // הקלדה אחרי בחירה (כולל קונה שמולא מ"חבר לעסק") מנקה את הבחירה.
+  // אחרת השם על המסך משתנה אבל השמירה עדיין משתמשת בקונה הקודם.
+  const nmInp = document.getElementById('nmBuyerSelect_input');
+  if (nmInp) nmInp.addEventListener('input', ()=>{
+    window.NM_SELECTED_BUYER = null;
+    window.NM_SELECTED_BROKER = null;
+    updateNewMatchUI();
+  });
 }
 function openNewMatchModal(opts){
   opts = (opts && typeof opts === 'object' && !(opts instanceof Event)) ? opts : {};
@@ -1057,7 +1065,7 @@ function openNewMatchModal(opts){
   });
   // 18.10.2026: "חבר לעסק" מתצוגת הקונים - הקונה כבר נבחר, נשאר לבחור עסק.
   if (opts.buyerId){
-    const lead = ALL_LEADS.find(l=>l.id===opts.buyerId);
+    const lead = ALL_LEADS.find(l=>String(l.id)===String(opts.buyerId));
     if (lead){
       window.NM_SELECTED_BUYER = lead;
       const hid = document.getElementById('nmBuyerSelect'), inp = document.getElementById('nmBuyerSelect_input');

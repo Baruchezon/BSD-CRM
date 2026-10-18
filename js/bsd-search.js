@@ -48,11 +48,15 @@
   // כל מילה בחיפוש צריכה להופיע איפשהו בשדות (בכל סדר). מספר עסק נמצא גם
   // בלי הקידומת BSD-B (למשל "1088" או "2610-1088").
   function textMatch(query, fields){
+    const raw = String(query == null ? '' : query).trim();
+    if (!raw) return true;
     const q = normText(query);
-    if (!q) return true;
+    // "---" / גרשיים בלבד מתנרמלים למחרוזת ריקה. בלי הבדיקה הזו כל העסקים
+    // והקונים היו נחשבים לתוצאה, כי חיפוש ריק = "בלי סינון".
+    if (!q) return false;
     const hay = normText((fields || []).filter(f => f != null && f !== '').join(' | '));
     const hayDigits = hay.replace(/\s+/g, '');
-    return q.split(' ').every(tok => hay.includes(tok) || (/^\d+$/.test(tok) && hayDigits.includes(tok)));
+    return q.split(' ').every(tok => tok && (hay.includes(tok) || (/^\d+$/.test(tok) && hayDigits.includes(tok))));
   }
   root.BSDSearch = { phoneKey, phoneQuery, phoneMatch, normText, textMatch };
 })(typeof window === 'undefined' ? globalThis : window);
