@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610142200';
+    var PAGE_BUILD = '202610190842';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -87,6 +87,11 @@
   tbody tr.row-sent{background:#ffe9cc !important;border-right:10px solid #e0932e;}
   tbody tr.row-sent td{color:#7a4a00 !important;font-weight:600;}
   tbody tr.row-sent:hover{background:#ffdcae !important;}
+  /* שורה צהובה: רק כש-intake_conversation_summary («מהות השיחה») לא ריק אחרי trim.
+     לא לפי הערות, שיחות או סטטוס. בלי !important — ירוק (הסכם חתום) וכתום (נשלח)
+     נשארים מעליה, ושורות הארכיון אינן שורות טבלה. */
+  tbody tr.row-spoken{background:#fff6cc;}
+  tbody tr.row-spoken:hover{background:#ffefb0;}
   .primary-name{font-weight:700;color:var(--navy);}
   .sub-name{font-size:.75rem;color:#888;margin-top:2px;}
   .row-menu-btn{border:1.5px solid #d8d3c4;background:#f7f5ee;color:#333;cursor:pointer;font-size:1.1rem;font-weight:700;padding:2px 8px;border-radius:8px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.15);}
@@ -793,6 +798,10 @@ function switchLeadTypeTab(type){
 }
 
 function leadHasSignedAgreement(l){ return !!l && (l.agreement_status === 'יש הסכם חתום' || l.agreement_signed === true); }
+// Highlight only a documented «מהות השיחה». Whitespace-only does not count.
+function leadHasConversationSummary(l){
+  return String((l && l.intake_conversation_summary) || '').trim() !== '';
+}
 function leadVisibleOnBuyersList(l){
   if (!l || l.is_archived || l.type === 'seller') return false;
   if ((l.website_intake_stage === 'new' || l.website_intake_stage === 'contacted' || l.website_intake_stage === 'training') && !leadHasSignedAgreement(l)) return false;
@@ -856,8 +865,9 @@ function renderTable(){
     }
 
     const agrStatus = l.agreement_status || 'אין הסכם';
-    const rowCls = agrStatus === 'יש הסכם חתום' ? 'row-signed' : (agrStatus === 'נשלח הסכם לחתימה' ? 'row-sent' : 'row-none');
-    const statusEmoji = rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
+    const agrCls = agrStatus === 'יש הסכם חתום' ? 'row-signed' : (agrStatus === 'נשלח הסכם לחתימה' ? 'row-sent' : 'row-none');
+    const rowCls = [agrCls, leadHasConversationSummary(l) ? 'row-spoken' : ''].filter(Boolean).join(' ');
+    const statusEmoji = agrCls === 'row-signed' ? '✅ ' : (agrCls === 'row-sent' ? '🟠 ' : '');
     const nameCell = leadIdentityCell(l, personName, statusEmoji);
 
     return `<tr class="${rowCls}" style="cursor:pointer;" onclick="openLeadForm('${l.id}')">
