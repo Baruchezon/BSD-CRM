@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610142200';
+    var PAGE_BUILD = '202610190842';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -72,6 +72,11 @@
   thead th{background:var(--navy);color:#fff;padding:12px 14px;font-size:.8rem;text-align:right;white-space:nowrap;}
   tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
   tbody tr:hover{background:#faf8f2;}
+  /* שורה צהובה: רק כש-intake_conversation_summary («מהות השיחה») לא ריק אחרי trim.
+     לא לפי הערות, שיחות או סטטוס. בלי !important כדי לא לכסות סימון נבחר/ארכיון/הסכם. */
+  tbody tr.row-spoken{background:#fff6cc;}
+  tbody tr.row-spoken:hover{background:#ffefb0;}
+  tbody tr.row-spoken td{color:#1c2333;}
   .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
   /* 11.10.2026 (בקשת ברוך): «מוכר עסק» / «קונה עסק» / «לא ידוע» על כל ליד */
   .side-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.74rem;font-weight:800;white-space:nowrap;line-height:1.4;border:none;font-family:inherit;}
@@ -988,6 +993,10 @@ function rowNotesCell(r){
   return body && body !== '—' ? esc(mark + ' — ' + body) : esc(mark);
 }
 
+// Highlight only a documented «מהות השיחה». Whitespace-only does not count.
+function leadHasConversationSummary(l){
+  return String((l && l.intake_conversation_summary) || '').trim() !== '';
+}
 function renderTable(){
   const search = document.getElementById('fSearch').value.trim().toLowerCase();
   let rows = currentRows().filter(r=>{
@@ -1024,8 +1033,9 @@ function renderTable(){
               ${(editable && canSendAgreement() && !isWebsiteLead) ? `<a href="javascript:void(0)" onclick="sendAgreement('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
               ${editable ? `<a href="javascript:void(0)" onclick="deleteRecord('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 העבר לארכיון</a>` : ''}
     `;
+    const rowCls = leadHasConversationSummary(r) ? 'row-spoken' : '';
     return `
-    <tr style="cursor:pointer;" onclick="${rowClickAction}">
+    <tr class="${rowCls}" style="cursor:pointer;" onclick="${rowClickAction}">
       <td>
         <div style="display:flex;align-items:flex-start;gap:8px;">
           <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
