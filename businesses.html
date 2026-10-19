@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610190924';
+    var PAGE_BUILD = '202610181800';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -92,11 +92,6 @@
   tbody tr.row-sold{background:#2563c9 !important;border-right:10px solid #143a72;}
   tbody tr.row-sold td{color:#fff !important;font-weight:700;}
   tbody tr.row-sold:hover{background:#1d54ac !important;}
-  /* שורה צהובה: לליד המוכר המקושר יש intake_conversation_summary לא ריק אחרי trim.
-     הרקע גובר על צבע ההסכם; הפס הימני של הסכם/נמכר/הוסר נשאר. */
-  tbody tr.row-spoken{background:#fff6cc !important;}
-  tbody tr.row-spoken:hover{background:#ffefb0 !important;}
-  tbody tr.row-spoken td{color:#1c2333 !important;}
   .phone-cell-content{display:inline-flex;align-items:center;gap:0;white-space:nowrap;}
   .listing-state-stamp{display:inline-block;margin-left:18px;padding:2px 8px 3px;border-top:2px solid currentColor;border-bottom:2px solid currentColor;font-size:.78rem;font-weight:900;line-height:1;letter-spacing:.35px;white-space:nowrap;transform:rotate(-8deg);transform-origin:center;}
   .listing-state-stamp.is-sold{color:#ffe082 !important;text-shadow:0 1px 1px rgba(0,0,0,.35);}
@@ -730,25 +725,6 @@ function restoreBusinessPageCache(){
   return true;
 }
 
-let SELLER_SPOKEN_IDS = new Set();
-function sellerLeadSpoken(b){
-  return !!(b && b.seller_id && SELLER_SPOKEN_IDS.has(b.seller_id));
-}
-async function loadSellerConversationFlags(rows){
-  const ids = [...new Set((rows || []).map(b => b && b.seller_id).filter(Boolean))];
-  const next = new Set();
-  if (ids.length && window.supabaseClient){
-    for (let i = 0; i < ids.length; i += 150){
-      const slice = ids.slice(i, i + 150);
-      const { data, error } = await window.supabaseClient.from('leads').select('id,intake_conversation_summary').in('id', slice);
-      if (error) return;
-      (data || []).forEach(l => {
-        if (String((l && l.intake_conversation_summary) || '').trim()) next.add(l.id);
-      });
-    }
-  }
-  SELLER_SPOKEN_IDS = next;
-}
 function paintBusinessRows(data){
   // תיקון 25.08.2026 (כלל עסקי מחייב): קיום/הצגה של עסק לעולם לא מותנים
   // בסטטוס הסכם. עסק חדש חייב להישאר ולהופיע כאן מהרגע שנשמר, גם בלי
@@ -770,10 +746,7 @@ async function loadBusinesses(options={}){
   // replaces it; file badges are not part of this wait.
   if (refresh && !ALL_BIZ.length && !ARCHIVED_BIZ.length){
     const cached = window.BSDDataCache.get('rows:businesses', userId);
-    if (cached && cached.length){
-      await loadSellerConversationFlags(cached);
-      paintBusinessRows(cached);
-    }
+    if (cached && cached.length) paintBusinessRows(cached);
   }
   const { data, error } = await window.BSDDataCache.rows('businesses', userId, { forceRefresh:refresh });
   if (error){
@@ -783,7 +756,6 @@ async function loadBusinesses(options={}){
     }
     return false;
   }
-  await loadSellerConversationFlags(data);
   paintBusinessRows(data);
   saveBusinessPageCache();
   scheduleBusinessIndicators();
@@ -1339,11 +1311,10 @@ function renderTable(){
   }
   body.innerHTML = rows.map(b=>{
     const agrStatus = b.agreement_status || 'אין הסכם';
-    const baseCls = b.listing_status === 'sold' ? 'row-sold'
+    const rowCls = b.listing_status === 'sold' ? 'row-sold'
       : b.listing_status === 'removed' ? 'row-removed'
       : agrStatus === 'יש הסכם חתום' ? 'row-signed' : (agrStatus === 'נשלח הסכם לחתימה' ? 'row-sent' : 'row-none');
-    const rowCls = [baseCls, sellerLeadSpoken(b) ? 'row-spoken' : ''].filter(Boolean).join(' ');
-    const statusEmoji = baseCls === 'row-sold' ? '🔵 ' : baseCls === 'row-removed' ? '⛔ ' : baseCls === 'row-signed' ? '✅ ' : (baseCls === 'row-sent' ? '🟠 ' : '');
+    const statusEmoji = rowCls === 'row-sold' ? '🔵 ' : rowCls === 'row-removed' ? '⛔ ' : rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
     return `
     <tr class="${rowCls}" style="cursor:pointer;" onclick="openBizForm('${b.id}')">
       <td data-label="שם פנימי">

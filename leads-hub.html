@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610190924';
+    var PAGE_BUILD = '202610190944';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -72,8 +72,8 @@
   thead th{background:var(--navy);color:#fff;padding:12px 14px;font-size:.8rem;text-align:right;white-space:nowrap;}
   tbody td{padding:11px 14px;border-bottom:1px solid #f0ede4;font-size:.85rem;}
   tbody tr:hover{background:#faf8f2;}
-  /* שורה צהובה: רק כש-intake_conversation_summary («מהות השיחה») לא ריק אחרי trim.
-     לא לפי הערות, שיחות או סטטוס. בלי !important כדי לא לכסות סימון נבחר/ארכיון/הסכם. */
+  /* שורה צהובה רק בטאבים «לידים ידניים» ו«לידים מהאתר», כש-intake_conversation_summary
+     («מהות השיחה») לא ריק אחרי trim. לא בלידים 2026 ולא ברשימות אחרות. */
   tbody tr.row-spoken{background:#fff6cc;}
   tbody tr.row-spoken:hover{background:#ffefb0;}
   tbody tr.row-spoken td{color:#1c2333;}
@@ -575,32 +575,10 @@ function existsBadges(matches){
     return `<span class="badge" style="background:#eaf1fb;color:#2b5fa3;margin-inline-end:4px;">${esc(label)}</span>`;
   }).join('');
 }
-const REVIEW_LEAD_SPOKEN = new Set();
-const REVIEW_SUMMARY_LOADED = new Set();
-async function loadReviewLeadSummaries(rows){
-  const ids = [];
-  (rows || []).forEach(r => {
-    (Y2026_REVIEW_MATCHES_CACHE[r.id] || []).forEach(m => {
-      if (m && m.table === 'leads' && m.id && !REVIEW_SUMMARY_LOADED.has(m.id)) ids.push(m.id);
-    });
-  });
-  const unique = [...new Set(ids)];
-  for (let i = 0; i < unique.length; i += 150){
-    const slice = unique.slice(i, i + 150);
-    const { data, error } = await window.supabaseClient.from('leads').select('id,intake_conversation_summary').in('id', slice);
-    if (error) return;
-    slice.forEach(id => REVIEW_SUMMARY_LOADED.add(id));
-    (data || []).forEach(l => { if (leadHasConversationSummary(l)) REVIEW_LEAD_SPOKEN.add(l.id); });
-  }
-}
-function reviewRowSpoken(r){
-  return (Y2026_REVIEW_MATCHES_CACHE[r.id] || []).some(m => m && m.table === 'leads' && REVIEW_LEAD_SPOKEN.has(m.id));
-}
 async function renderY2026ReviewTable(){
   const body = document.getElementById('y2026ReviewBody');
   if (!body) return;
   await loadY2026ReviewMatches(Y2026_REVIEW_ROWS);
-  await loadReviewLeadSummaries(Y2026_REVIEW_ROWS);
 
   const search = (document.getElementById('y2026ReviewSearch')?.value || '').trim().toLowerCase();
   const fClass = document.getElementById('y2026FilterClassification')?.value || '';
@@ -651,9 +629,8 @@ async function renderY2026ReviewTable(){
   }
   body.innerHTML = rows.map(r => {
     const matches = Y2026_REVIEW_MATCHES_CACHE[r.id] || [];
-    const rowCls = reviewRowSpoken(r) ? 'row-spoken' : '';
     return `
-    <tr class="${rowCls}" style="cursor:pointer;" onclick="openY2026ReviewDetail('${r.id}')">
+    <tr style="cursor:pointer;" onclick="openY2026ReviewDetail('${r.id}')">
       <td>
         <div class="primary-name">${esc(r.full_name || 'שם לא זוהה')}</div>
         <div class="sub-name">${esc(r.phone || '—')}${r.email ? ' · ' + esc(r.email) : ''}</div>
@@ -1056,7 +1033,7 @@ function renderTable(){
               ${(editable && canSendAgreement() && !isWebsiteLead) ? `<a href="javascript:void(0)" onclick="sendAgreement('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
               ${editable ? `<a href="javascript:void(0)" onclick="deleteRecord('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 העבר לארכיון</a>` : ''}
     `;
-    const rowCls = leadHasConversationSummary(r) ? 'row-spoken' : '';
+    const rowCls = (CURRENT_TAB === 'manual' || CURRENT_TAB === 'seller') && leadHasConversationSummary(r) ? 'row-spoken' : '';
     return `
     <tr class="${rowCls}" style="cursor:pointer;" onclick="${rowClickAction}">
       <td>
