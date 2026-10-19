@@ -119,6 +119,12 @@ let SF_SEND_BROKERS_CACHE = null;   // 03.09.2026 (מודול מתווכים) - 
 // אבל תמיד אובייקט יחיד (לא מפתח לפי id) - יש בעל עסק אחד בלבד לכל עסק, אין בחירה מרשימה.
 let SF_SEND_OWNER_CACHE = null;
 let SF_SEND_RECIPIENT_TYPE = 'buyer';   // 'buyer' | 'broker' | 'owner' - איזה select/אזור גלוי כרגע במודאל השליחה
+// 19.10.2026: חיפוש ידני במודאל «שליחת חומרים». הרשימה הריקה נשארת כל הקונים
+// (כמו קודם); ברגע שמקלידים, הסינון רץ על כל הקונים הפעילים שנטענו — לא על
+// חלון קצר של ה-select. SF_SEND_BUYER_ROWS הוא המערך המלא, לפי סדר השליפה.
+let SF_SEND_BUYER_ROWS = [];
+let SF_SEND_MATCH_BY_BUYER = {};
+let SF_SEND_BUYER_HL = -1;
 
 async function loadSaleFileModule(bizId){
   SF_CURRENT_BIZ = bizId;
@@ -639,6 +645,168 @@ function sfAllActiveFiles(){
 //    לקונה עם הסכם חתום מתבצעת שם, בשרת, מול ה-DB בזמן אמת - לא ניתנת
 //    לעקיפה מקריאת API ישירה. הנטרול כאן בממשק (sfOnBuyerChange) נשאר
 //    כפי שהיה כרשת ביטחון/חוויית משתמש בלבד, לא כהגנה יחידה.
+function sfBuyerDisplayName(b){
+  return (b && (b.full_name || [b.first_name, b.last_name].filter(Boolean).join(' '))) || '(ללא שם)';
+}
+
+function sfBuyerOptionLabel(b){
+  const name = sfBuyerDisplayName(b);
+  const match = SF_SEND_MATCH_BY_BUYER[b.id];
+  const extra = [match ? `התאמה: ${match}` : null, b.email ? null : 'אין אימייל'].filter(Boolean).join(' · ');
+  return name + (extra ? ' — ⚠️ ' + extra : '');
+}
+
+// שם / טלפון / מספר לקוח / קוד פנימי. עברית, רישיות ורווחים דרך BSDSearch;
+// טלפון בלי תלות במקפים, ב-0 מוביל או בקידומת 972.
+function sfBuyerMatchesQuery(b, q){
+  const fields = [b.full_name, b.first_name, b.last_name, b.phone, b.phone2, b.client_number, b.internal_code];
+  const S = window.BSDSearch;
+  if (!S){
+    const flat = String(q || '').trim().toLowerCase().replace(/\s+/g, '');
+    if (!flat) return true;
+    const hay = fields.filter(v => v != null && v !== '').join(' ').toLowerCase().replace(/[\s\-]/g, '');
+    const qDigits = String(q).replace(/\D/g, '');
+    return hay.includes(flat) || (qDigits.length >= 3 && hay.replace(/\D/g, '').includes(qDigits));
+  }
+  if (S.textMatch(q, fields) || S.phoneMatch(q, [b.phone, b.phone2])) return true;
+  const flatQ = S.normText(q).replace(/ /g, '');
+  if (!flatQ) return false;
+  const flatHay = S.normText(fields.filter(v => v != null && v !== '').join(' ')).replace(/ /g, '');
+  return flatHay.includes(flatQ);
+}
+
+function sfFilterBuyers(query){
+  const rows = SF_SEND_BUYER_ROWS || [];
+  if (!String(query || '').trim()) return rows.slice();
+  return rows.filter(b => sfBuyerMatchesQuery(b, query));
+}
+
+// כל הקונים שאינם בארכיון, מעבר לתקרת 1000 של PostgREST. אותו סינון type/archive כמו קודם.
+async function sfFetchActiveBuyers(){
+  const all = [];
+  for (let start = 0; ; start += 1000){
+    const { data, error } = await window.supabaseClient.from('leads')
+      .select('id, full_name, first_name, last_name, email, phone, phone2, client_number, internal_code, agreement_status')
+      .eq('type', 'buyer').eq('is_archived', false)
+      .order('full_name', { ascending: true }).order('id', { ascending: true })
+      .range(start, start + 999);
+    if (error) return { data: null, error };
+    const rows = data || [];
+    if (rows.length && all.some(r => r.id === rows[0].id)) break;
+    all.push(...rows);
+    if (rows.length < 1000) break;
+  }
+  return { data: all, error: null };
+}
+
+function sfRebuildBuyerSelect(query){
+  const sel = document.getElementById('sfSendBuyer');
+  if (!sel) return;
+  const prev = sel.value;
+  const rows = sfFilterBuyers(query);
+  sel.innerHTML = '<option value="">— בחר קונה —</option>' + rows.map(b =>
+    `<option value="${esc(b.id)}">${esc(sfBuyerOptionLabel(b))}</option>`).join('');
+  if (prev && rows.some(b => String(b.id) === String(prev))) sel.value = prev;
+  else sel.value = '';
+  if (sel.value !== prev && SF_SEND_RECIPIENT_TYPE === 'buyer') sfOnBuyerChange();
+  return rows;
+}
+
+function sfPaintBuyerSearchHighlight(){
+  const suggest = document.getElementById('sfSendBuyerSuggest');
+  if (!suggest) return;
+  const buttons = [...suggest.querySelectorAll('[data-buyer-id]')];
+  buttons.forEach((btn, i) => {
+    btn.style.background = i === SF_SEND_BUYER_HL ? '#f2efe4' : '#fff';
+  });
+  const cur = buttons[SF_SEND_BUYER_HL];
+  if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
+}
+
+function sfRenderBuyerSuggest(query, rows){
+  const suggest = document.getElementById('sfSendBuyerSuggest');
+  const meta = document.getElementById('sfSendBuyerSearchMeta');
+  if (!suggest) return;
+  const trimmed = String(query || '').trim();
+  if (!trimmed){
+    suggest.style.display = 'none';
+    suggest.innerHTML = '';
+    SF_SEND_BUYER_HL = -1;
+    if (meta) meta.textContent = '';
+    return;
+  }
+  const total = (SF_SEND_BUYER_ROWS || []).length;
+  if (meta) meta.textContent = rows.length ? `${rows.length} מתוך ${total} קונים` : `אין התאמה מתוך ${total} קונים`;
+  if (!rows.length){
+    SF_SEND_BUYER_HL = -1;
+    suggest.style.display = 'block';
+    suggest.innerHTML = '<div style="padding:8px 10px;color:#8a93ab;font-size:.8rem;">לא נמצאו קונים</div>';
+    return;
+  }
+  if (SF_SEND_BUYER_HL < 0 || SF_SEND_BUYER_HL >= rows.length) SF_SEND_BUYER_HL = 0;
+  suggest.style.display = 'block';
+  suggest.innerHTML = rows.map(b => {
+    const metaLine = [b.client_number, b.internal_code, b.phone].filter(Boolean).join(' · ');
+    return `<button type="button" data-buyer-id="${esc(b.id)}" style="display:block;width:100%;text-align:right;background:#fff;border:0;border-bottom:1px solid #f0ede4;padding:8px 10px;cursor:pointer;font-family:inherit;">` +
+      `<div style="font-weight:700;font-size:.84rem;color:#0e1b34;">${esc(sfBuyerDisplayName(b))}</div>` +
+      (metaLine ? `<div style="font-size:.75rem;color:#5a6172;">${esc(metaLine)}</div>` : '') +
+      `</button>`;
+  }).join('');
+  sfPaintBuyerSearchHighlight();
+}
+
+function sfApplyBuyerSearch(query){
+  SF_SEND_BUYER_HL = String(query || '').trim() ? 0 : -1;
+  const rows = sfRebuildBuyerSelect(query);
+  sfRenderBuyerSuggest(query, rows || []);
+}
+
+function sfClearBuyerSearchUi(){
+  const input = document.getElementById('sfSendBuyerSearch');
+  if (input) input.value = '';
+  SF_SEND_BUYER_HL = -1;
+  sfApplyBuyerSearch('');
+}
+
+function sfSelectSendBuyer(id){
+  const sel = document.getElementById('sfSendBuyer');
+  if (!sel) return;
+  const buyer = (SF_SEND_BUYER_ROWS || []).find(b => String(b.id) === String(id));
+  if (!buyer) return;
+  const input = document.getElementById('sfSendBuyerSearch');
+  if (input) input.value = '';
+  SF_SEND_BUYER_HL = -1;
+  sfRebuildBuyerSelect('');
+  sel.value = buyer.id;
+  sfRenderBuyerSuggest('', SF_SEND_BUYER_ROWS);
+  sfOnBuyerChange();
+}
+
+function sfBuyerSearchKeydown(e){
+  const suggest = document.getElementById('sfSendBuyerSuggest');
+  if (e.key === 'Escape'){
+    e.preventDefault();
+    sfClearBuyerSearchUi();
+    return;
+  }
+  const buttons = suggest ? [...suggest.querySelectorAll('[data-buyer-id]')] : [];
+  if (!buttons.length || suggest.style.display === 'none') return;
+  if (e.key === 'ArrowDown'){
+    e.preventDefault();
+    SF_SEND_BUYER_HL = Math.min(buttons.length - 1, SF_SEND_BUYER_HL + 1);
+    sfPaintBuyerSearchHighlight();
+  } else if (e.key === 'ArrowUp'){
+    e.preventDefault();
+    SF_SEND_BUYER_HL = Math.max(0, SF_SEND_BUYER_HL - 1);
+    sfPaintBuyerSearchHighlight();
+  } else if (e.key === 'Enter'){
+    e.preventDefault();
+    const idx = SF_SEND_BUYER_HL >= 0 ? SF_SEND_BUYER_HL : 0;
+    const btn = buttons[idx];
+    if (btn) sfSelectSendBuyer(btn.getAttribute('data-buyer-id'));
+  }
+}
+
 async function openSendToBuyerModal(bizId, bizName){
   // מגן הכרחי: אם ניסיון קודם השאיר overlay ישן בדף (למשל אחרי שגיאה שלא
   // נסגרה), פתיחה חוזרת הייתה יוצרת שני אלמנטים עם אותם id - ואז
@@ -659,9 +827,7 @@ async function openSendToBuyerModal(bizId, bizName){
   // מתווכים, לפי אותה שיטה בדיוק. שליפה ישירה מהטבלה (לא מ-ALL_BIZ שנטען כבר
   // בדף) כדי להבטיח נתונים עדכניים גם אם ה-cache הכללי מיושן.
   const [{ data: buyers, error }, { data: bizMatches }, { data: brokers, error: brokersErr }, { data: bizOwnerRow, error: ownerErr }] = await Promise.all([
-    window.supabaseClient.from('leads')
-      .select('id, full_name, first_name, last_name, email, phone, agreement_status')
-      .eq('type', 'buyer').eq('is_archived', false).order('full_name'),
+    sfFetchActiveBuyers(),
     window.supabaseClient.from('matches').select('buyer_id, broker_id, counterparty_type, status').eq('business_id', bizId),
     window.supabaseClient.from('brokers')
       .select('id, full_name, first_name, last_name, email, phone, agreement_status, status')
@@ -681,7 +847,9 @@ async function openSendToBuyerModal(bizId, bizName){
     else if (m.buyer_id) matchStatusByBuyer[m.buyer_id] = m.status;
   });
   SF_SEND_BUYERS_CACHE = {};
-  (buyers || []).forEach(b => { SF_SEND_BUYERS_CACHE[b.id] = b; });
+  SF_SEND_BUYER_ROWS = buyers || [];
+  SF_SEND_BUYER_HL = -1;
+  SF_SEND_BUYER_ROWS.forEach(b => { SF_SEND_BUYERS_CACHE[b.id] = b; });
   SF_SEND_BROKERS_CACHE = {};
   (brokers || []).forEach(b => { SF_SEND_BROKERS_CACHE[b.id] = b; });
   SF_SEND_RECIPIENT_TYPE = 'buyer';
@@ -689,12 +857,8 @@ async function openSendToBuyerModal(bizId, bizName){
   const overlay = document.createElement('div');
   overlay.id = 'sfSendOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:150;padding:40px 20px;';
-  const buyerOptions = (buyers || []).map(b => {
-    const name = b.full_name || [b.first_name, b.last_name].filter(Boolean).join(' ') || '(ללא שם)';
-    const match = matchStatusByBuyer[b.id];
-    const extra = [match ? `התאמה: ${match}` : null, b.email ? null : 'אין אימייל'].filter(Boolean).join(' · ');
-    return `<option value="${b.id}">${esc(name)}${extra ? ' — ⚠️ ' + esc(extra) : ''}</option>`;
-  }).join('');
+  SF_SEND_MATCH_BY_BUYER = matchStatusByBuyer;
+  const buyerOptions = SF_SEND_BUYER_ROWS.map(b => `<option value="${esc(b.id)}">${esc(sfBuyerOptionLabel(b))}</option>`).join('');
   const brokerOptions = (brokers || []).map(b => {
     const name = b.full_name || [b.first_name, b.last_name].filter(Boolean).join(' ') || '(ללא שם)';
     const match = matchStatusByBroker[b.id];
@@ -710,6 +874,9 @@ async function openSendToBuyerModal(bizId, bizName){
         <button type="button" id="sfTypeOwnerBtn" onclick="sfSwitchRecipientType('owner')" style="flex:1;padding:9px;border-radius:8px;border:1px solid #1f7a45;background:#fff;color:#1f7a45;cursor:pointer;font-family:inherit;font-weight:700;">🏠 בעל העסק</button>
       </div>
       <div class="field" id="sfSendBuyerField"><label>קונה</label>
+        <input type="text" id="sfSendBuyerSearch" autocomplete="off" placeholder="חיפוש: שם, טלפון, מספר לקוח או קוד פנימי" style="width:100%;box-sizing:border-box;margin-bottom:4px;padding:8px 10px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.9rem;">
+        <div id="sfSendBuyerSearchMeta" style="font-size:.72rem;color:#8a93ab;min-height:0;margin-bottom:4px;"></div>
+        <div id="sfSendBuyerSuggest" style="display:none;max-height:220px;overflow-y:auto;border:1px solid #e5e1d5;border-radius:8px;margin-bottom:6px;background:#fff;"></div>
         <select id="sfSendBuyer" onchange="sfOnBuyerChange()"><option value="">— בחר קונה —</option>${buyerOptions}</select>
       </div>
       <div class="field" id="sfSendBrokerField" style="display:none;"><label>מתווך / סוכן</label>
@@ -740,6 +907,20 @@ async function openSendToBuyerModal(bizId, bizName){
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  const buyerSearch = document.getElementById('sfSendBuyerSearch');
+  if (buyerSearch){
+    buyerSearch.addEventListener('input', () => sfApplyBuyerSearch(buyerSearch.value));
+    buyerSearch.addEventListener('keydown', sfBuyerSearchKeydown);
+  }
+  const buyerSuggest = document.getElementById('sfSendBuyerSuggest');
+  if (buyerSuggest){
+    buyerSuggest.addEventListener('mousedown', (e) => {
+      const btn = e.target.closest('[data-buyer-id]');
+      if (!btn) return;
+      e.preventDefault();
+      sfSelectSendBuyer(btn.getAttribute('data-buyer-id'));
+    });
+  }
   sfOnBuyerChange();
 }
 
@@ -766,11 +947,13 @@ function sfSwitchRecipientType(type){
   if (type === 'broker'){
     brokerBtn.style.background = '#7a3fd1'; brokerBtn.style.color = '#fff';
     brokerField.style.display = '';
+    sfClearBuyerSearchUi();
     document.getElementById('sfSendBuyer').value = '';
     sfOnBrokerChange();
   } else if (type === 'owner'){
     ownerBtn.style.background = '#1f7a45'; ownerBtn.style.color = '#fff';
     ownerField.style.display = '';
+    sfClearBuyerSearchUi();
     document.getElementById('sfSendBuyer').value = '';
     document.getElementById('sfSendBroker').value = '';
     sfOnOwnerSelect();
