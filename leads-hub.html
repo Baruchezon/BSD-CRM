@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610190944';
+    var PAGE_BUILD = '202610200830';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -77,6 +77,11 @@
   tbody tr.row-spoken{background:#fff6cc;}
   tbody tr.row-spoken:hover{background:#ffefb0;}
   tbody tr.row-spoken td{color:#1c2333;}
+  /* 20.10.2026: סטטוס שיחה (leads.lead_call_status) - צהוב = ממתין לתשובה, ירוק בהיר = תואמה פגישה */
+  tbody tr.row-meeting{background:#dcf5e3;}
+  tbody tr.row-meeting:hover{background:#c8eed4;}
+  tbody tr.row-meeting td{color:#1c2333;}
+  select.call-status-select{border:1px solid #d8d3c4;border-radius:8px;padding:5px 6px;font-family:inherit;font-size:.8rem;background:#fff;max-width:170px;}
   .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
   /* 11.10.2026 (בקשת ברוך): «מוכר עסק» / «קונה עסק» / «לא ידוע» על כל ליד */
   .side-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.74rem;font-weight:800;white-space:nowrap;line-height:1.4;border:none;font-family:inherit;}
@@ -253,6 +258,12 @@
   <div id="legacyY2026AndOtherTabsSection">
   <div class="filters">
     <input type="text" id="fSearch" oninput="renderTable()" placeholder="חיפוש לפי שם, טלפון, עיר, תחום, הערות...">
+    <select id="fCallStatus" onchange="renderTable()" style="display:none;">
+      <option value="">כל הסטטוסים (שיחה)</option>
+      <option value="not_contacted">התקשר – טרם חזרנו</option>
+      <option value="awaiting_answer">ממתין לתשובה</option>
+      <option value="meeting_set">תואמה פגישה</option>
+    </select>
   </div>
 
   <div class="table-scroll-wrap" style="position:relative;">
@@ -997,9 +1008,49 @@ function rowNotesCell(r){
 function leadHasConversationSummary(l){
   return String((l && l.intake_conversation_summary) || '').trim() !== '';
 }
+// 20.10.2026 (בקשת ברוך): סטטוס שיחה - leads.lead_call_status. רק בטאבים «לידים ידניים» ו«לידים מהאתר».
+// לבן = התקשר – טרם חזרנו (ברירת מחדל), צהוב = ממתין לתשובה, ירוק בהיר = תואמה פגישה.
+const LEAD_CALL_STATUSES = [['not_contacted','התקשר – טרם חזרנו'],['awaiting_answer','ממתין לתשובה'],['meeting_set','תואמה פגישה']];
+const LEAD_CALL_DEFAULT = 'not_contacted';
+function leadCallStatusValue(r){
+  const v = r && r.lead_call_status;
+  return LEAD_CALL_STATUSES.some(x => x[0] === v) ? v : LEAD_CALL_DEFAULT;
+}
+function leadCallStatusOptions(cur){
+  return LEAD_CALL_STATUSES.map(([v,l]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`).join('');
+}
+function isCallStatusTab(){ return CURRENT_TAB === 'manual' || CURRENT_TAB === 'seller'; }
+function renderLeadsTableHead(){
+  const head = document.getElementById('tableHead');
+  const f = document.getElementById('fCallStatus');
+  const on = isCallStatusTab();
+  if (f) f.style.display = on ? '' : 'none';
+  if (head) head.innerHTML = '<th>שם / עסק</th><th>טלפון</th><th>עיר</th>' + (on ? '<th>סטטוס</th>' : '') + '<th>הוזן ע"י</th><th>נוצר</th><th>הערות</th>';
+}
+async function setLeadCallStatus(id, value, sel){
+  if (!LEAD_CALL_STATUSES.some(x => x[0] === value)) return;
+  const row = currentRows().find(x => x.id === id);
+  const prev = row ? leadCallStatusValue(row) : LEAD_CALL_DEFAULT;
+  if (sel) sel.disabled = true;
+  const { data, error } = await window.supabaseClient.from('leads').update({ lead_call_status: value }).eq('id', id).select('id,lead_call_status');
+  if (sel) sel.disabled = false;
+  if (error || !data || !data.length || data[0].lead_call_status !== value){
+    if (sel) sel.value = prev;
+    toast('הסטטוס לא נשמר' + (error ? ': ' + error.message : ' (אין הרשאה לליד הזה)'));
+    return;
+  }
+  if (row) row.lead_call_status = value;
+  renderTable();
+  toast('הסטטוס עודכן');
+}
 function renderTable(){
+  renderLeadsTableHead();
+  const callOn = isCallStatusTab();
+  const colCount = callOn ? 7 : 6;
+  const callFilter = callOn ? ((document.getElementById('fCallStatus') || {}).value || '') : '';
   const search = document.getElementById('fSearch').value.trim().toLowerCase();
   let rows = currentRows().filter(r=>{
+    if (callFilter && leadCallStatusValue(r) !== callFilter) return false;
     if (!search) return true;
     const hay = [r.full_name, r.first_name, r.last_name, r.phone, r.city, r.internal_name, r.owner_name,
       r.owner_phone, r.requested_field, r.requested_area, r.business_name, r.business_field, r.business_city, r.notes].join(' ').toLowerCase();
@@ -1008,7 +1059,7 @@ function renderTable(){
 
   const body = document.getElementById('leadsBody');
   if (rows.length === 0){
-    body.innerHTML = '<tr class="empty-row"><td colspan="6">אין רשומות בקטגוריה זו</td></tr>';
+    body.innerHTML = `<tr class="empty-row"><td colspan="${colCount}">אין רשומות בקטגוריה זו</td></tr>`;
     return;
   }
   const tn = tableName();
@@ -1033,7 +1084,8 @@ function renderTable(){
               ${(editable && canSendAgreement() && !isWebsiteLead) ? `<a href="javascript:void(0)" onclick="sendAgreement('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
               ${editable ? `<a href="javascript:void(0)" onclick="deleteRecord('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 העבר לארכיון</a>` : ''}
     `;
-    const rowCls = (CURRENT_TAB === 'manual' || CURRENT_TAB === 'seller') && leadHasConversationSummary(r) ? 'row-spoken' : '';
+    const callStatus = callOn ? leadCallStatusValue(r) : '';
+    const rowCls = callStatus === 'awaiting_answer' ? 'row-spoken' : (callStatus === 'meeting_set' ? 'row-meeting' : '');
     return `
     <tr class="${rowCls}" style="cursor:pointer;" onclick="${rowClickAction}">
       <td>
@@ -1049,6 +1101,9 @@ function renderTable(){
       </td>
       <td class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;" onclick="event.stopPropagation()">${rowPhoneCell(r)}</td>
       <td>${rowCityCell(r)}</td>
+      ${callOn ? `<td onclick="event.stopPropagation()">${editable
+        ? `<select class="call-status-select" aria-label="סטטוס" onchange="setLeadCallStatus('${r.id}', this.value, this)">${leadCallStatusOptions(callStatus)}</select>`
+        : esc((LEAD_CALL_STATUSES.find(x => x[0] === callStatus) || [,''])[1])}</td>` : ''}
       <td>${r.created_by ? `<b style="color:${creatorColor(r.created_by) || '#333'};">${esc(userName(r.created_by))}</b>` : 'לא ידוע'}</td>
       <td>${fmtDate(r.created_at)}</td>
       <td class="notes-cell">${rowNotesCell(r)}</td>
@@ -1124,6 +1179,7 @@ function openAddChoice(){
     <form onsubmit="event.preventDefault();saveManualLead()">
       <div class="field"><label>שם מלא</label><input id="manualName" required maxlength="200"></div>
       <div class="field"><label>טלפון</label><input id="manualPhone" type="tel" dir="ltr" required></div>
+      <div class="field"><label>סטטוס</label><select id="manualCallStatus">${leadCallStatusOptions(LEAD_CALL_DEFAULT)}</select></div>
       <div class="field"><label>מוכר או קונה?</label><select id="manualType" required><option value="" selected disabled>בחר: מוכר עסק או קונה עסק</option><option value="seller">מוכר עסק</option><option value="buyer">קונה עסק</option></select></div>
       <div class="field"><label>אימייל</label><input id="manualEmail" type="email" dir="ltr"></div>
       <div class="field"><label>תוכן הפנייה</label><textarea id="manualNotes" rows="4"></textarea></div>
@@ -1148,6 +1204,7 @@ async function saveManualLead(){
       email:document.getElementById('manualEmail').value.trim() || null,
       notes:document.getElementById('manualNotes').value.trim() || null,
       source:'הזנה ידנית', website_intake_stage:'new', status:'חדש',
+      lead_call_status:(LEAD_CALL_STATUSES.some(x => x[0] === (document.getElementById('manualCallStatus') || {}).value) ? document.getElementById('manualCallStatus').value : LEAD_CALL_DEFAULT),
       created_by:CURRENT_PROFILE.id
     }).select('id,website_intake_stage').single();
     if (error) throw new Error(error.message);
@@ -1497,6 +1554,7 @@ function renderWebsiteLeadConversationForm(r){
     </div>
 
     ${leadHandlingStatusFieldHtml(r)}
+    ${leadCallStatusFieldHtml(r)}
     <div data-advisor-lead="${r.id}"></div>
     <a href="advisor-admin.html" style="font-size:13px;display:inline-block;margin-bottom:12px;">ניהול היועץ העסקי AI</a>
 
@@ -1919,6 +1977,21 @@ function leadHandlingStatusFieldHtml(r){
       </select>
     </div>`;
 }
+function leadCallStatusFieldHtml(r){
+  return `<div class="wl-block" style="background:#f4f7fb;border:1px solid #d3dcec;border-radius:10px;padding:10px 12px;margin-bottom:12px;box-sizing:border-box;max-width:100%;">
+      <label for="wlCallStatus" style="display:block;font-size:.8rem;color:#665;margin-bottom:6px;font-weight:700;">סטטוס שיחה</label>
+      <select id="wlCallStatus" data-orig="${esc(leadCallStatusValue(r))}" style="width:100%;max-width:100%;box-sizing:border-box;border:1px solid #d8d3c4;border-radius:8px;padding:9px 10px;min-height:44px;font-family:inherit;font-size:16px;background:#fff;">
+        ${leadCallStatusOptions(leadCallStatusValue(r))}
+      </select>
+    </div>`;
+}
+function leadCallStatusEdit(){
+  const el = document.getElementById('wlCallStatus');
+  if (!el) return undefined;
+  const v = el.value;
+  if (!LEAD_CALL_STATUSES.some(x => x[0] === v)) throw new Error('יש לבחור «סטטוס שיחה» מהרשימה');
+  return v === ((el.dataset && el.dataset.orig) || LEAD_CALL_DEFAULT) ? undefined : v;
+}
 // undefined = not changed on this card (nothing is sent).
 function leadHandlingStatusEdit(){
   const el = document.getElementById('wlHandlingStatus');
@@ -1981,6 +2054,8 @@ function readLeadCardPayload(sourceRow){
   if (preResearch !== undefined) payload.pre_research = preResearch;
   const handlingStatus = leadHandlingStatusEdit();
   if (handlingStatus !== undefined) payload.handling_status = handlingStatus;
+  const callStatus = leadCallStatusEdit();
+  if (callStatus !== undefined) payload.lead_call_status = callStatus;
   return payload;
 }
 
@@ -1992,6 +2067,8 @@ function setLeadCardBusy(busy, primaryText){
   const handling = document.getElementById('wlHandlingStatus');
   if (saveOnly) saveOnly.disabled = busy;
   if (handling) handling.disabled = busy;
+  const callSel = document.getElementById('wlCallStatus');
+  if (callSel) callSel.disabled = busy;
   if (transfer){ transfer.disabled = busy; if (primaryText) transfer.textContent = primaryText; }
   if (agreement) agreement.disabled = busy;
   if (target) target.disabled = busy;
