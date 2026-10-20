@@ -38,7 +38,7 @@ export function createHandler(db:any,opts:Options){
  // business id; buyer rows are read with agreement columns only (never name, phone,
  // email, ID number or internal notes). Only notes marked visible_to_client are read.
  const ownerMatches=async(id:string)=>{
-  const matches=(await query(db.from('matches').select('id,business_id,buyer_id,counterparty_type,status,legacy_status,status_changed_at,last_action_at,created_at').eq('business_id',id).limit(300))).filter((m:any)=>m.business_id===id&&m.buyer_id&&(m.counterparty_type??'buyer')==='buyer');
+  const matches=(await query(db.from('matches').select('id,business_id,buyer_id,buyer_source,counterparty_type,status,legacy_status,status_changed_at,last_action_at,created_at').eq('business_id',id).limit(300))).filter((m:any)=>m.business_id===id&&m.buyer_id&&(m.counterparty_type??'buyer')==='buyer');
   if(!matches.length)return buildOwnerMatches({businessId:id,matches:[],buyers:[]});
   const mids=matches.map((m:any)=>m.id),bids=[...new Set(matches.map((m:any)=>m.buyer_id))];
   const [buyers,permissions,anonSends,fullSends,history,notes]=await Promise.all([

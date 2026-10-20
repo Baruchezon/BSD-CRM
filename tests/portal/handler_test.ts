@@ -186,8 +186,8 @@ Deno.test('buyers table: own business only, anonymous «קונה פוטנציא�
  const sa='a1000000-0000-4000-8000-000000000001',sv='a1000000-0000-4000-8000-000000000002';
  f.tables.business_sale_files.push(doc(sa,biz,'exec_summary','internal_full_summary','2026-09-01T00:00:00Z'),doc(sv,biz,'economic_analysis',null,'2026-09-01T00:00:00Z'));
  f.tables.matches=[
-  {id:'m-signed',business_id:biz,buyer_id:'b-signed',counterparty_type:'buyer',status:'במשא ומתן',notes:'INTERNAL-MATCH-NOTE commission 3%',created_at:'2026-09-01T00:00:00Z',status_changed_at:'2026-10-01T00:00:00Z'},
-  {id:'m-sent',business_id:biz,buyer_id:'b-sent',counterparty_type:'buyer',status:'מידע ראשוני נשלח',created_at:'2026-09-02T00:00:00Z'},
+  {id:'m-signed',business_id:biz,buyer_id:'b-signed',buyer_source:'website',counterparty_type:'buyer',status:'במשא ומתן',notes:'INTERNAL-MATCH-NOTE commission 3%',created_at:'2026-09-01T00:00:00Z',status_changed_at:'2026-10-01T00:00:00Z'},
+  {id:'m-sent',business_id:biz,buyer_id:'b-sent',buyer_source:'bogus',counterparty_type:'buyer',status:'מידע ראשוני נשלח',created_at:'2026-09-02T00:00:00Z'},
   {id:'m-none',business_id:biz,buyer_id:'b-none',counterparty_type:'buyer',status:'התאמה חדשה',created_at:'2026-09-03T00:00:00Z'},
   {id:'m-unsigned-full',business_id:biz,buyer_id:'b-unsigned-full',counterparty_type:'buyer',status:'חומרים מלאים נשלחו',created_at:'2026-09-03T00:00:00Z'},
   {id:'m-other',business_id:other,buyer_id:'b-other',counterparty_type:'buyer',status:'במשא ומתן',created_at:'2026-09-03T00:00:00Z'},
@@ -213,6 +213,7 @@ Deno.test('buyers table: own business only, anonymous «קונה פוטנציא�
  assert(s.updated_at==='2026-10-02T00:00:00.000Z'&&s.materials.date==='2026-09-21T00:00:00.000Z'&&rows.every((r:any)=>r.updated_at),'dates '+JSON.stringify([s.updated_at,s.materials.date]));
  assert(d.match_activity.length===1&&d.match_activity[0].buyer==='קונה פוטנציאלי #1'&&d.match_activity[0].action==='הוצגו לקונה דוחות 2025'&&d.match_activity[0].response==='הקונה ביקש לחשוב'&&d.match_activity[0].date==='2026-10-02T00:00:00.000Z','activity '+JSON.stringify(d.match_activity));
  assert(rows.map((r:any)=>r.ref).sort().join()==='1,2,3,4','stable refs');
+ assert(d.match_activity[0].source==='אתר'&&by('קונה פוטנציאלי #1').source==='אתר'&&by('קונה פוטנציאלי #2').source===null&&by('קונה פוטנציאלי #3').source===null,'source labels; unknown value never shown');
  assert(d.match_summary.total===4&&d.match_summary.signed===1&&d.match_summary.full===1,'summary '+JSON.stringify(d.match_summary));
  const ser=JSON.stringify(d);
  for(const bad of ['דנה כהן','יוסי לוי','רון אבן','מיכל רז','052-9999','@buyer.test','0123456','INTERNAL','DELETED-NOTE','OTHER BUYER','HIDDEN BUYER','b-signed','m-signed','commission','storage_path'])assert(!ser.includes(bad),'leak: '+bad);
