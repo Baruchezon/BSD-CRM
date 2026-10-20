@@ -60,6 +60,15 @@ export function splitDescription(d: unknown): {topic: string; shared: string} {
 }
 export const CALL_TYPE = 'שיחה';
 const dateOnly = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? '')) ? String(v) : null);
+// 20.10.2026 hotfix: a company is shown only if it looks like a name. Anything with 5+ digits
+// (ID / company number / phone typed into the field) or equal to the lead's id_number/phone is dropped.
+export function safeCompany(l: any): string {
+  const co = clean(l?.company, 80);
+  if (!co || /\d[\d\s-]{3,}\d/.test(co) || !/[A-Za-z\u0590-\u05FF]/.test(co)) return '';
+  const digits = (v: unknown) => String(v ?? '').replace(/\D/g, '');
+  if ([l?.id_number, l?.phone, l?.phone2].some(v => digits(v).length >= 5 && digits(co).includes(digits(v)))) return '';
+  return co;
+}
 export function agreementBadge(l: any) {
   const s = l?.agreement_status;
   if (s === SIGNED_STATUS) return {key: 'signed', label: 'חתום', date: iso(l?.agreement_signed_date)};
@@ -88,7 +97,7 @@ export function buildOwnerMatches(i: Input) {
   // Baruch 20.10.2026: the buyer's full name is shown by default, ONLY in this business's own portal
   // (inputs are already scoped to the owner's business). Hidden matches are excluded above.
   // Company only if the CRM has one for the buyer (leads.company); never invented.
-  const nameOf = new Map(shown.map(m => {const l = buyers.get(m.buyer_id), co = clean(l?.company, 80); return [m.id, co ? `${buyerName(l)} · ${co}` : buyerName(l)];}));
+  const nameOf = new Map(shown.map(m => {const l = buyers.get(m.buyer_id), co = safeCompany(l); return [m.id, co ? `${buyerName(l)} · ${co}` : buyerName(l)];}));
   const visibleNotes = (i.notes || []).filter(n => n && num.has(n.match_id) && n.visible_to_client === true && !n.deleted_at);
   const srcOf = new Map(shown.map(m => [m.id, sourceLabel(m.buyer_source)]));
   const activity = visibleNotes
