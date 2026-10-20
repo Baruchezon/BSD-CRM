@@ -89,7 +89,8 @@ test('lead card «סוג הליד»: preselects the known side; an unknown websi
 test('wiring: badge on every lead row (manual, site, 2026), in the card header and the read-only view', () => {
   const name = hub.slice(hub.indexOf('function rowNameCell('), hub.indexOf('function rowCityCell('));
   assert.match(name, /leadSideBadge\(r, \{ editable: canEditRecord\(r\.created_by\) \}\)/);
-  for (const branch of ["CURRENT_TAB === 'y2026'", "CURRENT_TAB === 'seller' && r.website_intake_stage", "CURRENT_TAB === 'seller' && r.business_name"]){
+  // 20.10.2026: seller business_name sub-line replaced by «שם (עסק)» brackets
+  for (const branch of ["CURRENT_TAB === 'y2026'", "CURRENT_TAB === 'seller' && r.website_intake_stage"]){
     const at = name.indexOf(branch); assert.ok(at > 0, branch);
     const ret = name.indexOf('return', at);
     assert.ok(name.slice(ret, name.indexOf('\n', ret)).includes('${side}'), branch);

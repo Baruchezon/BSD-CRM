@@ -1,0 +1,12 @@
+-- 20.10.2026: label shown in brackets after contact name in leads-hub (manual/website tabs).
+-- Applied to production via MCP migration leads_business_label_20261020. Additive only.
+alter table public.leads add column if not exists lead_business_label text;
+-- RPC public.bsd_lead_set_business_label(p_lead text, p_label text) -> jsonb (service_role only);
+-- lookup by uuid / internal_code / client_number / phone, like bsd_lead_set_call_status. Empty label clears.
+-- Rollback:
+--   begin; alter table public.leads disable trigger user;
+--   update public.leads l set lead_business_label = null;  -- or drop column after dropping function
+--   alter table public.leads enable trigger user; commit;
+--   drop function if exists public.bsd_lead_set_business_label(text,text);
+--   alter table public.leads drop column if exists lead_business_label;
+-- Backup: public.leads_backup_namelabel_20261020 (177 rows, taken before change).
