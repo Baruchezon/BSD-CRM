@@ -3804,6 +3804,8 @@ function bsdCollectAnonAiForm(){
     description: bsdAiFormVal('short_description'),
     internal_summary: bsdAiFormVal('internal_business_summary'),
     anon_text: bsdAiFormVal('anon_summary'),
+    // 20.10.2026 (ברוך): התקציר קורא את כל הכרטיס - גם הערות וחקר מקדים (השרת מנקה מזהים).
+    notes: bsdAiFormVal('notes'), pre_research: bsdAiFormVal('pre_research'),
     field: bsdAiFormVal('field'), category: bsdAiFormVal('category'), region: bsdAiFormVal('region'),
     annual_revenue: bsdAiFormVal('annual_revenue'), years_active: bsdAiFormVal('years_active'), employees_count: bsdAiFormVal('employees_count'),
   };

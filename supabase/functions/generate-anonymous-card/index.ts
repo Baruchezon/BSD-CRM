@@ -31,7 +31,7 @@
 //   supabase.functions.invoke('generate-anonymous-card', { body: { business_id, action: 'confirm', anon_display_name, anon_summary } })
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { buildAnonInput, buildAnonPrompts, localSafetyScan } from './lib.ts';
+import { buildAnonInput, buildAnonPrompts, localSafetyScan, type AnonExtras, BASE_FILE_INSTRUCTION } from './lib.ts';
 
 function cleanEnv(v: string | undefined): string {
   return (v || '').trim();
@@ -66,7 +66,7 @@ const ANON_CARD_TOOL = {
     type: 'object',
     properties: {
       anon_display_name: { type: ['string', 'null'], description: 'ביטוי גנרי קצר לפי תחום הפעילות (למשל "משחקיית ילדים אינדור"), או null אם אין מספיק מידע' },
-      anon_summary: { type: ['string', 'null'], description: 'התקציר האנונימי המלא כטקסט רגיל בעברית: פתיחה קצרה, תיאור העסק ואיך הוא נראה, נתונים מרכזיים (שורות שמתחילות ב-"•"), וסיכום. בלי רווח/רווחיות, בלי עיר/כתובת, בלי שמות/טלפונים/קישורים. null אם אין מספיק מידע.' },
+      anon_summary: { type: ['string', 'null'], description: 'התקציר השיווקי האנונימי המלא כטקסט רגיל בעברית לפי המבנה בהנחיות: כותרת, על העסק, יתרונות וחוזקות, שוק וצמיחה, תפעול ונכסים, מה מוצע לעסקה, הקונה האידיאלי, לפרטים נוספים. בלי רווח, בלי עיר/כתובת, בלי שמות/טלפונים/קישורים. null אם אין מספיק מידע.' },
       ai_flagged_concerns: { type: 'array', items: { type: 'string' }, description: 'חששות אנונימיות שנשארו בטקסט שהגשת (אם יש), אחרת מערך ריק' },
     },
     required: ['anon_display_name', 'anon_summary', 'ai_flagged_concerns'],
@@ -107,16 +107,72 @@ function buildFallbackDisplayName(biz: Record<string, unknown>): string | null {
   return label ? `עסק בתחום ${label}` : null;
 }
 
-async function generateSummary(biz: Record<string, unknown>, form: unknown): Promise<{ anon_display_name: string | null; anon_summary: string | null; ai_flagged_concerns: string[] }> {
-  const input = buildAnonInput(biz, form);
+// 20.10.2026 (ברוך 21:18): התקציר קורא את כל הכרטיס - כולל סיכומי שיחות טלפון
+// של המוכר, סיכומי פגישות של העסק ושדות סיכום מכרטיס הליד של המוכר.
+async function loadAnonExtras(biz: Record<string, unknown>): Promise<AnonExtras> {
+  const extras: AnonExtras = { calls: [], meetings: [], leadTexts: [] };
+  try {
+    const sellerId = typeof biz.seller_id === 'string' ? biz.seller_id : null;
+    if (sellerId) {
+      const { data: calls } = await supabase.from('phone_calls')
+        .select('started_at, ai_gist, ai_body, ai_next_steps, research_summary, transcript')
+        .or(`lead_id.eq.${sellerId},existing_lead_ids.cs.{${sellerId}}`)
+        .eq('is_test', false).order('started_at', { ascending: false }).limit(5);
+      (calls || []).forEach((c: Record<string, unknown>) => {
+        const t = [c.ai_gist, c.ai_body, c.research_summary].filter(Boolean).join('\n');
+        const tr = typeof c.transcript === 'string' && c.transcript.trim() ? '\nתמלול:\n' + c.transcript.slice(0, 12000) : '';
+        if (t || tr) extras.calls!.push(t + tr);
+      });
+      const { data: lead } = await supabase.from('leads')
+        .select('meeting_summary, intake_conversation_summary, intake_important_details, current_business_info')
+        .eq('id', sellerId).maybeSingle();
+      if (lead) Object.values(lead).forEach(v => { if (typeof v === 'string' && v.trim()) extras.leadTexts!.push(v); });
+    }
+    const { data: meetings } = await supabase.from('match_meetings')
+      .select('summary_text').eq('business_id', biz.id as string).is('deleted_at', null).limit(5);
+    (meetings || []).forEach((m: Record<string, unknown>) => { if (typeof m.summary_text === 'string' && m.summary_text.trim()) extras.meetings!.push(m.summary_text); });
+  } catch (_e) { /* מקורות משלימים - כשל בהם לא מפיל את התקציר */ }
+  return extras;
+}
 
-  if (!input.sourceText) {
+// 20.10.2026 21:24 (ברוך): קודם מחפשים בקבצי הכרטיס קובץ ששמו מכיל «אנונימי».
+// PDF נשלח ל-Claude כמסמך (קורא עברית ישירות); קובץ טקסט - כטקסט.
+type BaseFile = { name: string; block: Record<string, unknown> } | null;
+async function loadAnonBaseFile(bizId: string): Promise<BaseFile> {
+  try {
+    const { data: files } = await supabase.from('business_file_meta')
+      .select('display_name, original_filename, storage_path, file_type, file_size, created_at')
+      .eq('business_id', bizId).order('created_at', { ascending: false });
+    const f = (files || []).find((x: Record<string, unknown>) => /אנונימ/.test(`${x.display_name || ''} ${x.original_filename || ''}`)
+      && /pdf|text|markdown/i.test(`${x.file_type || ''} ${x.original_filename || ''}`) && Number(x.file_size || 0) < 20_000_000);
+    if (!f) return null;
+    const { data: blob, error } = await supabase.storage.from('business-files').download(f.storage_path as string);
+    if (error || !blob) return null;
+    const name = String(f.display_name || f.original_filename);
+    const isPdf = /pdf/i.test(`${f.file_type || ''} ${f.original_filename || ''}`);
+    if (isPdf) {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      return { name, block: { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: btoa(bin) } } };
+    }
+    return { name, block: { type: 'text', text: `תוכן הקובץ:\n${(await blob.text()).slice(0, 30000)}` } };
+  } catch (_e) { return null; }
+}
+
+async function generateSummary(biz: Record<string, unknown>, form: unknown): Promise<{ anon_display_name: string | null; anon_summary: string | null; ai_flagged_concerns: string[] }> {
+  const input = buildAnonInput(biz, form, await loadAnonExtras(biz));
+
+  const baseFile = await loadAnonBaseFile(String(biz.id));
+  if (!input.sourceText && !baseFile) {
     // אין טקסט מקור (תקציר אנונימי / תקציר פנימי / תיאור) - לא קוראים ל-AI על ריק,
     // אבל עדיין נותנים שם תצוגה גנרי לפי תחום/קטגוריה אם קיימים.
     return { anon_display_name: buildFallbackDisplayName({ field: input.field, category: input.category }), anon_summary: null, ai_flagged_concerns: [] };
   }
 
   const { systemPrompt, userPrompt } = buildAnonPrompts(input);
+  const userContent: unknown = baseFile
+    ? [{ type: 'text', text: `${BASE_FILE_INSTRUCTION}\nשם הקובץ: «${baseFile.name}»` }, baseFile.block, { type: 'text', text: userPrompt }]
+    : userPrompt;
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -127,10 +183,10 @@ async function generateSummary(biz: Record<string, unknown>, form: unknown): Pro
     },
     body: JSON.stringify({
       model: 'claude-sonnet-5',
-      // 06.10.2026: תקציר שיווקי מלא בעברית - 3000, עם בדיקת stop_reason למטה.
-      max_tokens: 3000,
+      // 20.10.2026: תקציר מובנה מלא (8 פרקים) - 8000, עם בדיקת stop_reason למטה.
+      max_tokens: 8000,
       system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
+      messages: [{ role: 'user', content: userContent }],
       tools: [ANON_CARD_TOOL],
       tool_choice: { type: 'tool', name: 'submit_anonymous_card' },
     }),
@@ -150,9 +206,19 @@ async function generateSummary(biz: Record<string, unknown>, form: unknown): Pro
     throw new Error('התשובה מ-Claude לא הגיעה במבנה הצפוי (tool_use חסר) - נסה שוב');
   }
   const out = toolBlock.input as { anon_display_name?: string | null; anon_summary?: string | null; ai_flagged_concerns?: string[] };
-  const summary = typeof out.anon_summary === 'string'
-    ? out.anon_summary.replace(/\*\*/g, '').replace(/^#+\s*/gm, '').trim()
-    : '';
+  // 20.10.2026: לפעמים המודל "מדליף" תגיות XML של הכלי לתוך המחרוזת
+  // (</anon_summary><parameter name="ai_flagged_concerns">...) - חותכים שם.
+  let rawSummary = typeof out.anon_summary === 'string' ? out.anon_summary : '';
+  const leak = rawSummary.search(/<\/?(anon_summary|parameter|anon_display_name|ai_flagged_concerns)\b/);
+  if (leak >= 0) {
+    const tail = rawSummary.slice(leak);
+    rawSummary = rawSummary.slice(0, leak);
+    const m = tail.match(/ai_flagged_concerns">\s*(\[[\s\S]*?\])/);
+    if (m && !(Array.isArray(out.ai_flagged_concerns) && out.ai_flagged_concerns.length)) {
+      try { out.ai_flagged_concerns = JSON.parse(m[1]); } catch (_e) { /* ignore */ }
+    }
+  }
+  const summary = rawSummary.replace(/\*\*/g, '').replace(/^#+\s*/gm, '').trim();
 
   return {
     // אם Claude החזיר null - נופלים לשם גנרי לפי תחום/קטגוריה, כדי שתקציר
