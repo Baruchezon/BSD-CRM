@@ -104,3 +104,42 @@
 .matches-panel{margin-top:0}
 @media(max-width:720px){.bsd-welcome{padding:20px}.bsd-welcome h2{font-size:21px}}
 .oa-source{background:#fbf3df;color:#6b5320;border-radius:6px;padding:2px 10px;font-size:13px;font-weight:700}.mt-buyer .oa-source{display:inline-block;margin-top:4px}
+
+/* 20.10.2026 portal upgrade: buyer cards, KPI cards and timeline. BSD navy/gold/white. */
+.greeting h2{margin:.2em 0;color:var(--navy);font-size:1.6rem}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin-top:16px}
+.kpi{display:flex;flex-direction:column;align-items:flex-start;text-align:right;gap:4px;padding:16px 18px;border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:14px;background:#fff;box-shadow:0 2px 0 #e3e9ef,0 8px 20px #082a430d;min-height:128px}
+.kpi:hover{border-color:var(--gold);transform:translateY(-1px)}
+.kpi-k{font-size:.95rem;color:var(--muted);font-weight:700}
+.kpi b{font-size:2.1rem;color:var(--navy);line-height:1.1}
+.kpi small{color:var(--muted);font-weight:400;font-size:.82rem;line-height:1.4}
+.timeline h2{color:var(--navy)}
+.timeline-list{list-style:none;margin:10px 0 0;padding:0;position:relative}
+.timeline-list:before{content:"";position:absolute;right:17px;top:6px;bottom:6px;width:2px;background:linear-gradient(var(--gold),#e8dcc0)}
+.tl-item{display:flex;gap:14px;align-items:flex-start;padding:8px 0;position:relative}
+.tl-dot{flex:0 0 36px;height:36px;border-radius:50%;background:#fff;border:2px solid var(--gold);color:var(--navy);display:grid;place-items:center;font-size:16px;z-index:1}
+.tl-body{flex:1;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.tl-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:.85rem;color:var(--muted)}
+.tl-type{background:#f6efdc;color:#6b5114;border-radius:999px;padding:1px 10px;font-weight:700}
+.tl-title{margin:4px 0 0;font-weight:700;color:var(--navy)}
+.tl-text{margin:2px 0 0;color:var(--ink)}
+.buyer-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;margin-top:14px}
+.buyer-card{background:#fff;border:1px solid var(--line);border-top:3px solid var(--blue);border-radius:14px;padding:16px 18px;box-shadow:0 8px 22px #082a430f}
+.buyer-card.closed{border-top-color:#9aa8b4;opacity:.88}
+.bc-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.bc-head h3{margin:0;color:var(--navy);font-size:1.2rem}
+.bc-stage{margin:10px 0;padding:8px 10px;background:var(--paper);border-radius:10px}
+.bc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:0}
+.bc-f dt{font-size:.82rem;color:var(--muted);font-weight:700}
+.bc-f dd{margin:0;color:var(--ink)}
+.na{color:#8a96a3;font-style:italic}
+.bc-more{margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
+.bc-more summary{cursor:pointer;font-weight:700;color:var(--blue);min-height:44px;display:flex;align-items:center}
+.bc-calls{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:8px}
+.bc-call{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:#fbfcfd}
+.bc-call-h{display:flex;gap:10px;font-size:.85rem;color:var(--muted)}
+.bc-type{color:#6b5114;font-weight:700}
+.bc-call dl{margin:4px 0 0;display:grid;gap:4px}
+.bc-mat{margin:6px 0}
+@media(max-width:1100px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:720px){.kpis{grid-template-columns:1fr 1fr;gap:10px}.kpi{min-height:0;padding:12px}.kpi b{font-size:1.7rem}.buyer-cards{grid-template-columns:1fr}.bc-grid{grid-template-columns:1fr}.greeting h2{font-size:1.3rem}}

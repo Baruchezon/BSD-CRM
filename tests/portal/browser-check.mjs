@@ -53,9 +53,9 @@ for(const [name,width,height] of [['desktop',1440,1000],['mobile-375',375,812]])
  await page.locator('#loginPassword').fill('QA-current-1');await page.locator('#loginForm button[type=submit]').click();await page.waitForSelector('#dashboard:not([hidden])');
  assert.ok(await noOverflow(page),'dashboard overflow '+name);
  const dash=await page.locator('#dashboard').innerText();assert.ok(!/עמל/.test(dash),'dashboard mentions commissions');
- assert.equal(await page.locator('#matchCount').innerText(),'2');
+ assert.equal(await page.locator('#matchCount').innerText(),'2');assert.equal(await page.locator('#kpis .kpi').count(),5,'five KPI cards');assert.ok((await page.locator('#kpis').innerText()).includes('קונים שהיה איתם קשר'),'contacted KPI');assert.ok(await page.locator('#timeline').isVisible(),'timeline visible');
  await page.locator('.sidebar [data-tab=matches]').click();assert.ok(await page.locator('#matches').isVisible(),'buyers tab visible');
- assert.equal(await page.locator('#matchList .mt-row').count(),2,'two buyer rows');assert.equal(await page.locator('#matchList .agr-signed').count(),1,'green signed badge');
+ assert.equal(await page.locator('#matchList .buyer-card').count(),2,'two buyer cards');assert.equal(await page.locator('#matchList .agr-signed').count(),1,'green signed badge');
  assert.ok(await page.locator('#matchList').getByText('מידע אנונימי בלבד').isVisible(),'unsigned buyer shows anonymous only');
  assert.ok(await noOverflow(page),'buyers table overflow '+name);await page.screenshot({path:`${shots}/portal-matches-${name}.png`,fullPage:true});
  await page.locator('.sidebar [data-tab=home]').click();
