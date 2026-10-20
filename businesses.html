@@ -1719,6 +1719,7 @@ function openBizForm(id){
         <div class="field full" id="bizFullInfoField">
           <!-- 06.10.2026 (אושר ע"י ברוך): שתי תיבות טקסט בלבד בכרטיס. זו התיבה המלאה (עמודה short_description). -->
           <label for="short_description" style="font-weight:700;color:#0e1b34;">📋 כל המידע על העסק (פנימי) <span style="font-weight:400;color:#8a8578;font-size:.75rem;">(כותבים כאן הכל, כולל שמות ומספרים - לא מתפרסם)</span></label>
+          <span id="bizCallSummaryBtns" style="display:inline-flex;gap:6px;margin-inline-start:8px;flex-wrap:wrap;"></span>
           ${biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz) ? `
           <div class="anon-one-place-note" style="background:#eef3fb;border:1px solid #c9d6ee;border-radius:8px;padding:8px 10px;margin:4px 0 8px;font-size:.78rem;color:#1c2b4a;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span>🪪 מה שמתפרסם באתר ולסוכנים המורשים הוא רק <b>«⭐ התקציר האנונימי»</b>, שה-AI כותב מתוך התיבה הזו (לשונית «תקצירים אנונימיים והפצה»).</span>
@@ -4319,7 +4320,30 @@ async function processBizFiles(bizId, files){
 // קאש קל של הקבצים הטעונים לכל עסק - משמש לבדיקת כפילות שם מול קבצים קיימים
 let BIZ_FILES_CACHE = {};
 
+// 20.10.2026 (אושר ע"י ברוך): כפתור «סיכום שיחה טלפונית» ליד «כל המידע על העסק».
+// מוצג רק אם קיים בכרטיס קובץ ששמו מתחיל ב«סיכום שיחה» (business_file_meta).
+async function renderCallSummaryBtns(bizId){
+  const box = document.getElementById('bizCallSummaryBtns'); if (!box) return;
+  try {
+    const { data } = await window.supabaseClient.from('business_file_meta')
+      .select('storage_path, display_name, original_filename').eq('business_id', bizId);
+    const rows = (data || []).filter(r => /^סיכום שיחה/.test(String(r.display_name || r.original_filename || '').trim()))
+      .sort((a,b) => String(b.storage_path).localeCompare(String(a.storage_path)));
+    const f = rows[0];
+    if (!f){ box.innerHTML = ''; return; }
+    box.innerHTML = '';
+    const v = document.createElement('button'); v.type='button'; v.className='btn btn-ghost'; v.textContent='📞 סיכום שיחה טלפונית – צפייה';
+    v.onclick = () => window.bsdOpenPrivateFile({ bucket: BIZ_FILES_BUCKET, path: f.storage_path, label: 'סיכום שיחה' });
+    const d = document.createElement('button'); d.type='button'; d.className='btn btn-ghost'; d.textContent='⬇️ הורדת PDF';
+    d.onclick = async () => {
+      const r = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).createSignedUrl(f.storage_path, 300, { download: f.display_name || true });
+      if (r && r.data) location.href = r.data.signedUrl; else toast('שגיאה בהורדת הקובץ');
+    };
+    box.appendChild(v); box.appendChild(d);
+  } catch(e){ console.warn('renderCallSummaryBtns', e); }
+}
 async function loadBizFiles(bizId){
+  renderCallSummaryBtns(bizId);
   const box = document.getElementById('bizFilesList');
   const { data: rawData, error } = await window.supabaseClient.storage.from(BIZ_FILES_BUCKET).list(bizId, { sortBy: { column: 'created_at', order: 'desc' } });
   if (error){ box.innerHTML = '<span style="color:#b3402c;">שגיאה בטעינת קבצים: ' + esc(error.message) + '</span>'; return; }
