@@ -966,12 +966,25 @@ function websiteStatusBadge(r){
   const [bg,fg] = map[s] || ['#eee6d4','#665'];
   return `<span class="badge" style="background:${bg};color:${fg};">${esc(s || 'ליד מהאתר')}</span>`;
 }
+// 20.10.2026 (בקשת ברוך): בלידים ידניים / מהאתר — אחרי שם האיש, בסוגריים, שם העסק או התחום בקצרה.
+// סדר: שם העסק ← תווית עסק (lead_business_label) ← תחום העסק ← התחום המבוקש. אם אין — בלי סוגריים. לא ממציאים כלום.
+function leadBusinessLabel(r){
+  const pick = v => (v == null ? '' : String(v).replace(/\s+/g, ' ').trim());
+  let label = pick(r && r.business_name) || pick(r && r.lead_business_label) || pick(r && r.business_field) || pick(r && r.requested_field);
+  if (label.length > 30) label = label.slice(0, 29).trim() + '…';
+  return label;
+}
+function leadNameWithBusinessLabel(personName, r){
+  const label = leadBusinessLabel(r);
+  return label && personName !== '—' ? `${personName} (${label})` : personName;
+}
 function rowNameCell(r){
   if (CURRENT_TAB === 'business'){
     const bizName = r.internal_name && r.internal_name.trim() ? r.internal_name : '(ללא שם עסק)';
     return `<div class="primary-name">${esc(bizName)}</div><div class="sub-name">${esc(r.owner_name||'—')}</div>`;
   }
-  const personName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || '—';
+  const basePersonName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || '—';
+  const personName = (CURRENT_TAB === 'manual' || CURRENT_TAB === 'seller') ? leadNameWithBusinessLabel(basePersonName, r) : basePersonName;
   const side = `<div style="margin-top:4px;" onclick="event.stopPropagation()">${leadSideBadge(r, { editable: canEditRecord(r.created_by) })}</div>`;
   if (CURRENT_TAB === 'y2026'){
     const badges = [];
@@ -980,9 +993,6 @@ function rowNameCell(r){
   }
   if (CURRENT_TAB === 'seller' && r.website_intake_stage){
     return `<div class="primary-name">${esc(personName)}</div>${side}<div style="margin-top:4px;">${websiteStatusBadge(r)}</div>`;
-  }
-  if (CURRENT_TAB === 'seller' && r.business_name){
-    return `<div class="primary-name">${esc(personName)}</div>${side}<div class="sub-name">${esc(r.business_name)}</div>`;
   }
   const badge = ratingBadge(r);
   return `<div class="primary-name">${esc(personName)}</div>${side}${badge ? `<div style="margin-top:4px;" onclick="event.stopPropagation()">${badge}</div>` : ''}`;
@@ -1053,7 +1063,7 @@ function renderTable(){
     if (callFilter && leadCallStatusValue(r) !== callFilter) return false;
     if (!search) return true;
     const hay = [r.full_name, r.first_name, r.last_name, r.phone, r.city, r.internal_name, r.owner_name,
-      r.owner_phone, r.requested_field, r.requested_area, r.business_name, r.business_field, r.business_city, r.notes].join(' ').toLowerCase();
+      r.owner_phone, r.requested_field, r.requested_area, r.business_name, r.business_field, r.lead_business_label, r.business_city, r.notes].join(' ').toLowerCase();
     return hay.includes(search) || (window.BSDSearch && BSDSearch.phoneMatch(search, [r.phone, r.phone2, r.owner_phone]));
   });
 
