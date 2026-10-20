@@ -4,7 +4,10 @@ import {documentBucket, DOC_LABELS} from './latest-files.ts';
 // HIS business. Inputs are already filtered by the owner's business id in the
 // handler; this function filters again and returns only presentation fields:
 // anonymous buyer label, agreement badge, stage, materials, date, owner-visible notes.
-// 20.10.2026 (Baruch): buyers are NEVER named to the owner. Each buyer is «קונה פוטנציאלי #N»,
+// 20.10.2026 (staging, Baruch, final): the buyer's FULL NAME is shown by default in the owner's own portal.
+// Matches with seller_portal_match_permissions.visible=false stay hidden. No phone/email/id is ever returned.
+// Owner-facing text comes ONLY from match_activity_log.description / buyer_response (never `note`).
+// (previous rule:) buyers are NEVER named to the owner. Each buyer is «קונה פוטנציאלי #N»,
 // N stable by match creation order. `activity` lists every visible_to_client=true,
 // non-deleted match_activity_log row: date, action description, buyer response.
 // Never returned: buyer id, phone, email, ID number, internal CRM notes,
@@ -47,6 +50,16 @@ export const anonBuyer = (n: number) => `קונה פוטנציאלי #${n}`;
 export function buyerName(l: any): string {
   return clean(l?.full_name, 80) || clean([l?.first_name, l?.last_name].filter(Boolean).join(' '), 80) || 'קונה';
 }
+// «מה מסרנו» is stored by bsd_match_log_call as a second line «מה מסרנו: …» inside description.
+export const SHARED_PREFIX = 'מה מסרנו:';
+export function splitDescription(d: unknown): {topic: string; shared: string} {
+  const raw = String(d ?? '');
+  const k = raw.indexOf('\n' + SHARED_PREFIX);
+  if (k < 0) return {topic: clean(raw, 1200), shared: ''};
+  return {topic: clean(raw.slice(0, k), 1200), shared: clean(raw.slice(k + 1 + SHARED_PREFIX.length), 1200)};
+}
+export const CALL_TYPE = 'שיחה';
+const dateOnly = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? '')) ? String(v) : null);
 export function agreementBadge(l: any) {
   const s = l?.agreement_status;
   if (s === SIGNED_STATUS) return {key: 'signed', label: 'חתום', date: iso(l?.agreement_signed_date)};
@@ -72,10 +85,14 @@ export function buildOwnerMatches(i: Input) {
     .filter(m => m && m.business_id === biz && m.buyer_id && (m.counterparty_type ?? 'buyer') === 'buyer' && !hidden.has(m.id) && buyers.has(m.buyer_id))
     .sort((a, b) => t(a.created_at) - t(b.created_at) || String(a.id).localeCompare(String(b.id)));
   const num = new Map(shown.map((m, k) => [m.id, k + 1]));
+  // Baruch 20.10.2026: the buyer's full name is shown by default, ONLY in this business's own portal
+  // (inputs are already scoped to the owner's business). Hidden matches are excluded above.
+  // Company only if the CRM has one for the buyer (leads.company); never invented.
+  const nameOf = new Map(shown.map(m => {const l = buyers.get(m.buyer_id), co = clean(l?.company, 80); return [m.id, co ? `${buyerName(l)} · ${co}` : buyerName(l)];}));
   const visibleNotes = (i.notes || []).filter(n => n && num.has(n.match_id) && n.visible_to_client === true && !n.deleted_at);
   const srcOf = new Map(shown.map(m => [m.id, sourceLabel(m.buyer_source)]));
   const activity = visibleNotes
-    .map(n => ({source: srcOf.get(n.match_id) ?? null, date: iso(n.occurred_at || n.created_at), buyer: anonBuyer(num.get(n.match_id)!), action: clean(n.description || n.note, 1200), response: clean(n.buyer_response, 600)}))
+    .map(n => ({source: srcOf.get(n.match_id) ?? null, date: iso(n.occurred_at || n.created_at), buyer: nameOf.get(n.match_id)!, action: clean(n.description, 1200), response: clean(n.buyer_response, 600)}))
     .filter(a => a.action || a.response)
     .sort((a, b) => t(b.date) - t(a.date));
   const rows = shown
@@ -114,17 +131,34 @@ export function buildOwnerMatches(i: Input) {
       // A buyer without a signed agreement can never be shown past the anonymous stage.
       const step = closed ? 0 : signed ? Math.max(statusStep, 3) : Math.min(statusStep, 2);
       const stageLabel = !signed && statusStep > 2 ? 'קיבל מידע ראשוני על העסק' : label;
-      const notes = visibleNotes.filter(n => n.match_id === m.id)
-        .map(n => ({text: clean(n.description || n.note, 300), date: iso(n.occurred_at || n.created_at)})).filter(n => n.text)
-        .sort((a, b) => t(b.date) - t(a.date)).slice(0, 3);
+      const mine = visibleNotes.filter(n => n.match_id === m.id).sort((a, b) => t(b.occurred_at || b.created_at) - t(a.occurred_at || a.created_at));
+      const notes = mine.map(n => ({text: clean(n.description, 300), date: iso(n.occurred_at || n.created_at)})).filter(n => n.text).slice(0, 3);
+      // Buyer card: every owner-visible entry for THIS match, newest first. Nothing is inferred.
+      const contacts = mine.map(n => {const d = splitDescription(n.description);
+        return {date: iso(n.occurred_at || n.created_at), type: clean(n.action_type, 40) || 'עדכון', topic: d.topic, shared: d.shared, response: clean(n.buyer_response, 600), follow_up: dateOnly(n.follow_up_date)};})
+        .filter(c => c.topic || c.shared || c.response);
+      const last = contacts[0] || null;
+      const followUp = contacts.find(c => c.follow_up)?.follow_up ?? null;
       const updated = latest(m.created_at, m.status_changed_at, m.last_action_at, materials.date, ...notes.map(n => n.date));
-      return {ref: num.get(m.id)!, buyer: anonBuyer(num.get(m.id)!), source: srcOf.get(m.id) ?? null, agreement, stage: {label: stageLabel, step, closed: !!closed}, materials, updated_at: updated, notes};
+      return {ref: num.get(m.id)!, buyer_key: m.buyer_id, buyer: nameOf.get(m.id)!, named: true, status: m.status, last_contact: last, contacts, follow_up: followUp, source: srcOf.get(m.id) ?? null, agreement, stage: {label: stageLabel, step, closed: !!closed}, materials, updated_at: updated, notes};
     })
     .sort((a, b) => Number(a.stage.closed) - Number(b.stage.closed) || b.stage.step - a.stage.step || t(b.updated_at) - t(a.updated_at));
-  const active = rows.filter(r => !r.stage.closed);
+  // Metrics count DISTINCT buyers (Baruch 20.10.2026: every visible match = a buyer we spoke with).
+  const distinct = (f: (r: any) => boolean) => new Set(rows.filter(f).map(r => r.buyer_key)).size;
+  const summary = {
+    total: distinct(() => true),
+    contacted: distinct(() => true),
+    active: distinct(r => !r.stage.closed),
+    signed: distinct(r => r.agreement.key === 'signed'),
+    full: distinct(r => r.materials.level === 'full'),
+    info: distinct(r => r.materials.level !== 'none'),
+    negotiation: distinct(r => r.status === 'במשא ומתן'),
+    closed: distinct(r => r.stage.closed),
+  };
+  // buyer_key (internal id) is used only for counting; it is removed before leaving the server.
   return {
-    rows,
+    rows: rows.map(({buyer_key: _k, status: _s, ...r}) => ({...r, negotiation: _s === 'במשא ומתן'})),
     activity,
-    summary: {total: rows.length, active: active.length, signed: rows.filter(r => r.agreement.key === 'signed').length, full: rows.filter(r => r.materials.level === 'full').length},
+    summary,
   };
 }
