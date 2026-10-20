@@ -35,19 +35,19 @@ export function createHandler(db:any,opts:Options){
   return {documents,reports,extras};
  };
  // Buyers matched to the seller's OWN business (05.10.2026). Every query is scoped by
- // business id; buyer rows are read with name/agreement columns only (never phone,
+ // business id; buyer rows are read with agreement columns only (never name, phone,
  // email, ID number or internal notes). Only notes marked visible_to_client are read.
  const ownerMatches=async(id:string)=>{
   const matches=(await query(db.from('matches').select('id,business_id,buyer_id,counterparty_type,status,legacy_status,status_changed_at,last_action_at,created_at').eq('business_id',id).limit(300))).filter((m:any)=>m.business_id===id&&m.buyer_id&&(m.counterparty_type??'buyer')==='buyer');
   if(!matches.length)return buildOwnerMatches({businessId:id,matches:[],buyers:[]});
   const mids=matches.map((m:any)=>m.id),bids=[...new Set(matches.map((m:any)=>m.buyer_id))];
   const [buyers,permissions,anonSends,fullSends,history,notes]=await Promise.all([
-   query(db.from('leads').select('id,type,full_name,first_name,last_name,agreement_status,agreement_sent,agreement_signed_date').in('id',bids).eq('type','buyer')),
+   query(db.from('leads').select('id,type,agreement_status,agreement_sent,agreement_signed_date').in('id',bids).eq('type','buyer')),
    query(db.from('seller_portal_match_permissions').select('match_id,visible').in('match_id',mids)),
    query(db.from('anon_distributions').select('business_id,buyer_id,distribution_type,delivery_status,sent_at,created_at').eq('business_id',id).in('buyer_id',bids)),
    query(db.from('audit_log').select('record_id,details,occurred_at').eq('action','send_sale_files_to_buyer').eq('record_id',id).limit(500)),
    query(db.from('match_status_history').select('match_id,status,changed_at').in('match_id',mids)),
-   query(db.from('match_activity_log').select('match_id,note,description,occurred_at,created_at,visible_to_client,deleted_at').in('match_id',mids).eq('visible_to_client',true).is('deleted_at',null))]);
+   query(db.from('match_activity_log').select('match_id,note,description,buyer_response,occurred_at,created_at,visible_to_client,deleted_at').in('match_id',mids).eq('visible_to_client',true).is('deleted_at',null))]);
   const fileIds=[...new Set(fullSends.flatMap((s:any)=>Array.isArray(s.details?.file_ids)?s.details.file_ids:[]).filter(uuid))];
   const files=fileIds.length?await query(db.from('business_sale_files').select('id,business_id,category,document_type,file_name').eq('business_id',id).in('id',fileIds)):[];
   return buildOwnerMatches({businessId:id,matches,buyers,permissions,anonSends,fullSends,files,history,notes});
@@ -524,11 +524,11 @@ export function createHandler(db:any,opts:Options){
     // owner-visible notes for THIS business's matches. No contact details, other sellers, prices or commissions.
     const {is_archived:_arch,agreement_status:_agr,...safeBusiness}=business;
     // The buyers table never blocks documents: on any error the dashboard still loads, without buyers.
-    let owner:any={rows:[],summary:{total:0,active:0,signed:0,full:0}};try{owner=await ownerMatches(business.id);}catch{owner.unavailable=true;}
+    let owner:any={rows:[],activity:[],summary:{total:0,active:0,signed:0,full:0}};try{owner=await ownerMatches(business.id);}catch{owner.unavailable=true;}
     let outreach:any={rows:[],summary:{total:0}};try{outreach=await ownerOutreach(business.id);}catch{outreach.unavailable=true;}
     // Distribution never blocks the dashboard either: on any error all three channels are «טרם בוצע».
     let distribution:any;try{distribution=await ownerDistribution(business.id);}catch{distribution={channels:{vip:false,agents:false,media:false},started:false};}
-    return reply(200,{ok:true,preview,business:safeBusiness,files:publicFiles(await portalFiles(business.id)),matches:owner.rows,match_summary:owner.summary,...(owner.unavailable?{matches_unavailable:true}:{}),outreach:outreach.rows,outreach_summary:outreach.summary,...(outreach.unavailable?{outreach_unavailable:true}:{}),distribution,update:a.client_update?{message:a.client_update,date:a.client_updated_at}:null,contact:{phone:opts.phone}});
+    return reply(200,{ok:true,preview,business:safeBusiness,files:publicFiles(await portalFiles(business.id)),matches:owner.rows,match_activity:owner.activity||[],match_summary:owner.summary,...(owner.unavailable?{matches_unavailable:true}:{}),outreach:outreach.rows,outreach_summary:outreach.summary,...(outreach.unavailable?{outreach_unavailable:true}:{}),distribution,update:a.client_update?{message:a.client_update,date:a.client_updated_at}:null,contact:{phone:opts.phone}});
    }
    if(action==='file'){
     if(!uuid(b.file_id)||!['view','download'].includes(b.mode))return reply(404,{error:'not_found'});

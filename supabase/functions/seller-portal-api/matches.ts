@@ -3,7 +3,10 @@ import {documentBucket, DOC_LABELS} from './latest-files.ts';
 // Pure function: builds what the BUSINESS OWNER sees about the buyers matched to
 // HIS business. Inputs are already filtered by the owner's business id in the
 // handler; this function filters again and returns only presentation fields:
-// buyer display name, agreement badge, stage, materials, date, owner-visible notes.
+// anonymous buyer label, agreement badge, stage, materials, date, owner-visible notes.
+// 20.10.2026 (Baruch): buyers are NEVER named to the owner. Each buyer is «קונה פוטנציאלי #N»,
+// N stable by match creation order. `activity` lists every visible_to_client=true,
+// non-deleted match_activity_log row: date, action description, buyer response.
 // Never returned: buyer id, phone, email, ID number, internal CRM notes,
 // handler names, prices, commissions or anything about other businesses.
 export const SIGNED_STATUS = 'יש הסכם חתום';
@@ -37,6 +40,7 @@ const t = (v: unknown) => Date.parse(String(v ?? '')) || 0;
 const iso = (v: unknown) => (t(v) ? new Date(t(v)).toISOString() : null);
 const latest = (...v: unknown[]) => { const n = Math.max(0, ...v.map(t)); return n ? new Date(n).toISOString() : null; };
 const clean = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
+export const anonBuyer = (n: number) => `קונה פוטנציאלי #${n}`;
 export function buyerName(l: any): string {
   return clean(l?.full_name, 80) || clean([l?.first_name, l?.last_name].filter(Boolean).join(' '), 80) || 'קונה';
 }
@@ -61,8 +65,16 @@ export function buildOwnerMatches(i: Input) {
   const buyers = new Map((i.buyers || []).filter(l => l && l.type === 'buyer').map(l => [l.id, l]));
   const hidden = new Set((i.permissions || []).filter(p => p && p.visible === false).map(p => p.match_id));
   const files = new Map((i.files || []).filter(f => f && f.business_id === biz).map(f => [f.id, f]));
-  const rows = (i.matches || [])
+  const shown = (i.matches || [])
     .filter(m => m && m.business_id === biz && m.buyer_id && (m.counterparty_type ?? 'buyer') === 'buyer' && !hidden.has(m.id) && buyers.has(m.buyer_id))
+    .sort((a, b) => t(a.created_at) - t(b.created_at) || String(a.id).localeCompare(String(b.id)));
+  const num = new Map(shown.map((m, k) => [m.id, k + 1]));
+  const visibleNotes = (i.notes || []).filter(n => n && num.has(n.match_id) && n.visible_to_client === true && !n.deleted_at);
+  const activity = visibleNotes
+    .map(n => ({date: iso(n.occurred_at || n.created_at), buyer: anonBuyer(num.get(n.match_id)!), action: clean(n.description || n.note, 1200), response: clean(n.buyer_response, 600)}))
+    .filter(a => a.action || a.response)
+    .sort((a, b) => t(b.date) - t(a.date));
+  const rows = shown
     .map(m => {
       const l = buyers.get(m.buyer_id), agreement = agreementBadge(l), signed = agreement.key === 'signed';
       const [label, statusStep, closed] = STAGES[m.status] || ['בטיפול צוות BSD', 1];
@@ -98,16 +110,17 @@ export function buildOwnerMatches(i: Input) {
       // A buyer without a signed agreement can never be shown past the anonymous stage.
       const step = closed ? 0 : signed ? Math.max(statusStep, 3) : Math.min(statusStep, 2);
       const stageLabel = !signed && statusStep > 2 ? 'קיבל מידע ראשוני על העסק' : label;
-      const notes = (i.notes || []).filter(n => n.match_id === m.id && n.visible_to_client === true && !n.deleted_at)
-        .map(n => ({text: clean(n.note || n.description, 300), date: iso(n.occurred_at || n.created_at)})).filter(n => n.text)
+      const notes = visibleNotes.filter(n => n.match_id === m.id)
+        .map(n => ({text: clean(n.description || n.note, 300), date: iso(n.occurred_at || n.created_at)})).filter(n => n.text)
         .sort((a, b) => t(b.date) - t(a.date)).slice(0, 3);
       const updated = latest(m.created_at, m.status_changed_at, m.last_action_at, materials.date, ...notes.map(n => n.date));
-      return {buyer: buyerName(l), agreement, stage: {label: stageLabel, step, closed: !!closed}, materials, updated_at: updated, notes};
+      return {ref: num.get(m.id)!, buyer: anonBuyer(num.get(m.id)!), agreement, stage: {label: stageLabel, step, closed: !!closed}, materials, updated_at: updated, notes};
     })
     .sort((a, b) => Number(a.stage.closed) - Number(b.stage.closed) || b.stage.step - a.stage.step || t(b.updated_at) - t(a.updated_at));
   const active = rows.filter(r => !r.stage.closed);
   return {
-    rows: rows.map((r, k) => ({ref: k + 1, ...r})),
+    rows,
+    activity,
     summary: {total: rows.length, active: active.length, signed: rows.filter(r => r.agreement.key === 'signed').length, full: rows.filter(r => r.materials.level === 'full').length},
   };
 }
