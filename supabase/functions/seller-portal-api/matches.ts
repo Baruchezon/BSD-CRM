@@ -40,6 +40,9 @@ const t = (v: unknown) => Date.parse(String(v ?? '')) || 0;
 const iso = (v: unknown) => (t(v) ? new Date(t(v)).toISOString() : null);
 const latest = (...v: unknown[]) => { const n = Math.max(0, ...v.map(t)); return n ? new Date(n).toISOString() : null; };
 const clean = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
+// 20.10.2026: lead source of the buyer (matches.buyer_source) shown to the owner as «מקור הפנייה».
+export const SOURCE_LABELS: Record<string, string> = {website: 'אתר', phone: 'טלפון', facebook: 'פייסבוק', existing_clients: 'לקוחות קיימים', other: 'אחר'};
+const sourceLabel = (v: unknown) => SOURCE_LABELS[String(v ?? '')] || null;
 export const anonBuyer = (n: number) => `קונה פוטנציאלי #${n}`;
 export function buyerName(l: any): string {
   return clean(l?.full_name, 80) || clean([l?.first_name, l?.last_name].filter(Boolean).join(' '), 80) || 'קונה';
@@ -70,8 +73,9 @@ export function buildOwnerMatches(i: Input) {
     .sort((a, b) => t(a.created_at) - t(b.created_at) || String(a.id).localeCompare(String(b.id)));
   const num = new Map(shown.map((m, k) => [m.id, k + 1]));
   const visibleNotes = (i.notes || []).filter(n => n && num.has(n.match_id) && n.visible_to_client === true && !n.deleted_at);
+  const srcOf = new Map(shown.map(m => [m.id, sourceLabel(m.buyer_source)]));
   const activity = visibleNotes
-    .map(n => ({date: iso(n.occurred_at || n.created_at), buyer: anonBuyer(num.get(n.match_id)!), action: clean(n.description || n.note, 1200), response: clean(n.buyer_response, 600)}))
+    .map(n => ({source: srcOf.get(n.match_id) ?? null, date: iso(n.occurred_at || n.created_at), buyer: anonBuyer(num.get(n.match_id)!), action: clean(n.description || n.note, 1200), response: clean(n.buyer_response, 600)}))
     .filter(a => a.action || a.response)
     .sort((a, b) => t(b.date) - t(a.date));
   const rows = shown
@@ -114,7 +118,7 @@ export function buildOwnerMatches(i: Input) {
         .map(n => ({text: clean(n.description || n.note, 300), date: iso(n.occurred_at || n.created_at)})).filter(n => n.text)
         .sort((a, b) => t(b.date) - t(a.date)).slice(0, 3);
       const updated = latest(m.created_at, m.status_changed_at, m.last_action_at, materials.date, ...notes.map(n => n.date));
-      return {ref: num.get(m.id)!, buyer: anonBuyer(num.get(m.id)!), agreement, stage: {label: stageLabel, step, closed: !!closed}, materials, updated_at: updated, notes};
+      return {ref: num.get(m.id)!, buyer: anonBuyer(num.get(m.id)!), source: srcOf.get(m.id) ?? null, agreement, stage: {label: stageLabel, step, closed: !!closed}, materials, updated_at: updated, notes};
     })
     .sort((a, b) => Number(a.stage.closed) - Number(b.stage.closed) || b.stage.step - a.stage.step || t(b.updated_at) - t(a.updated_at));
   const active = rows.filter(r => !r.stage.closed);
