@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610200830';
+    var PAGE_BUILD = '202610201100';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -81,7 +81,18 @@
   tbody tr.row-meeting{background:#dcf5e3;}
   tbody tr.row-meeting:hover{background:#c8eed4;}
   tbody tr.row-meeting td{color:#1c2333;}
-  select.call-status-select{border:1px solid #d8d3c4;border-radius:8px;padding:5px 6px;font-family:inherit;font-size:.8rem;background:#fff;max-width:170px;}
+  /* 20.10.2026: תכלת בהיר = נוצר קשר – ממתין לתשובה (שיחה הבאה בעוד 2-3 ימים) */
+  tbody tr.row-followup{background:#e0f2fe;}
+  tbody tr.row-followup:hover{background:#cbe9fb;}
+  tbody tr.row-followup td{color:#1c2333;}
+  select.call-status-select{border:1px solid #d8d3c4;border-radius:8px;padding:4px 4px;font-family:inherit;font-size:.74rem;background:#fff;max-width:120px;width:100%;}
+  /* צמצום עמודות בטאבים ידניים/אתר כדי לפנות מקום ל«שיחה אחרונה» */
+  table.call-cols td.c-narrow, table.call-cols th.c-narrow{padding-left:6px;padding-right:6px;}
+  table.call-cols td.c-city{max-width:90px;white-space:normal;word-break:break-word;font-size:.8rem;}
+  table.call-cols td.phone-cell{min-width:0;font-size:.8rem;}
+  table.call-cols td.c-status{max-width:128px;}
+  .next-due{display:block;font-size:.68rem;color:#2b5fa3;margin-top:2px;white-space:nowrap;}
+  .next-due.overdue{color:#a02c1d;font-weight:700;}
   .badge{padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700;}
   /* 11.10.2026 (בקשת ברוך): «מוכר עסק» / «קונה עסק» / «לא ידוע» על כל ליד */
   .side-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.74rem;font-weight:800;white-space:nowrap;line-height:1.4;border:none;font-family:inherit;}
@@ -262,6 +273,7 @@
       <option value="">כל הסטטוסים (שיחה)</option>
       <option value="not_contacted">התקשר – טרם חזרנו</option>
       <option value="awaiting_answer">ממתין לתשובה</option>
+      <option value="contacted_followup">נוצר קשר – ממתין לתשובה</option>
       <option value="meeting_set">תואמה פגישה</option>
     </select>
   </div>
@@ -1019,8 +1031,27 @@ function leadHasConversationSummary(l){
   return String((l && l.intake_conversation_summary) || '').trim() !== '';
 }
 // 20.10.2026 (בקשת ברוך): סטטוס שיחה - leads.lead_call_status. רק בטאבים «לידים ידניים» ו«לידים מהאתר».
-// לבן = התקשר – טרם חזרנו (ברירת מחדל), צהוב = ממתין לתשובה, ירוק בהיר = תואמה פגישה.
-const LEAD_CALL_STATUSES = [['not_contacted','התקשר – טרם חזרנו'],['awaiting_answer','ממתין לתשובה'],['meeting_set','תואמה פגישה']];
+// לבן = התקשר – טרם חזרנו (ברירת מחדל), צהוב = ממתין לתשובה, תכלת בהיר = נוצר קשר – ממתין לתשובה, ירוק בהיר = תואמה פגישה.
+const LEAD_CALL_STATUSES = [['not_contacted','התקשר – טרם חזרנו'],['awaiting_answer','ממתין לתשובה'],['contacted_followup','נוצר קשר – ממתין לתשובה'],['meeting_set','תואמה פגישה']];
+const LEAD_CALL_ROW_CLASS = { awaiting_answer:'row-spoken', contacted_followup:'row-followup', meeting_set:'row-meeting' };
+// last_call_at (timestamptz) -> dd.mm ; next_call_due (date 'YYYY-MM-DD') -> dd.mm
+function fmtDayMonth(v){
+  if (!v) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v));
+  if (m) return m[3] + '.' + m[2];
+  const d = new Date(v); if (isNaN(d)) return '';
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone:'Asia/Jerusalem', day:'2-digit', month:'2-digit' }).formatToParts(d);
+  const g = t => (p.find(x => x.type === t) || {}).value || '';
+  return g('day') + '.' + g('month');
+}
+function todayIsoJerusalem(){
+  return new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Jerusalem' }).format(new Date());
+}
+function nextDueHtml(r){
+  if (!r || !r.next_call_due) return '';
+  const overdue = String(r.next_call_due) < todayIsoJerusalem();
+  return `<span class="next-due${overdue ? ' overdue' : ''}">שיחה הבאה: ${esc(fmtDayMonth(r.next_call_due))}</span>`;
+}
 const LEAD_CALL_DEFAULT = 'not_contacted';
 function leadCallStatusValue(r){
   const v = r && r.lead_call_status;
@@ -1035,7 +1066,12 @@ function renderLeadsTableHead(){
   const f = document.getElementById('fCallStatus');
   const on = isCallStatusTab();
   if (f) f.style.display = on ? '' : 'none';
-  if (head) head.innerHTML = '<th>שם / עסק</th><th>טלפון</th><th>עיר</th>' + (on ? '<th>סטטוס</th>' : '') + '<th>הוזן ע"י</th><th>נוצר</th><th>הערות</th>';
+  if (head){
+    head.innerHTML = on
+      ? '<th>שם / עסק</th><th class="c-narrow">טלפון</th><th class="c-narrow">עיר</th><th class="c-narrow">סטטוס</th><th class="c-narrow">שיחה אחרונה</th><th>הוזן ע"י</th><th>נוצר</th><th>הערות</th>'
+      : '<th>שם / עסק</th><th>טלפון</th><th>עיר</th><th>הוזן ע"י</th><th>נוצר</th><th>הערות</th>';
+    const t = head.closest('table'); if (t) t.classList.toggle('call-cols', on);
+  }
 }
 async function setLeadCallStatus(id, value, sel){
   if (!LEAD_CALL_STATUSES.some(x => x[0] === value)) return;
@@ -1056,7 +1092,7 @@ async function setLeadCallStatus(id, value, sel){
 function renderTable(){
   renderLeadsTableHead();
   const callOn = isCallStatusTab();
-  const colCount = callOn ? 7 : 6;
+  const colCount = callOn ? 8 : 6;
   const callFilter = callOn ? ((document.getElementById('fCallStatus') || {}).value || '') : '';
   const search = document.getElementById('fSearch').value.trim().toLowerCase();
   let rows = currentRows().filter(r=>{
@@ -1095,7 +1131,7 @@ function renderTable(){
               ${editable ? `<a href="javascript:void(0)" onclick="deleteRecord('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 העבר לארכיון</a>` : ''}
     `;
     const callStatus = callOn ? leadCallStatusValue(r) : '';
-    const rowCls = callStatus === 'awaiting_answer' ? 'row-spoken' : (callStatus === 'meeting_set' ? 'row-meeting' : '');
+    const rowCls = LEAD_CALL_ROW_CLASS[callStatus] || '';
     return `
     <tr class="${rowCls}" style="cursor:pointer;" onclick="${rowClickAction}">
       <td>
@@ -1109,11 +1145,12 @@ function renderTable(){
           <div>${rowNameCell(r)}</div>
         </div>
       </td>
-      <td class="phone-cell" dir="ltr" style="text-align:right;unicode-bidi:isolate;" onclick="event.stopPropagation()">${rowPhoneCell(r)}</td>
-      <td>${rowCityCell(r)}</td>
-      ${callOn ? `<td onclick="event.stopPropagation()">${editable
+      <td class="phone-cell${callOn ? ' c-narrow' : ''}" dir="ltr" style="text-align:right;unicode-bidi:isolate;" onclick="event.stopPropagation()">${rowPhoneCell(r)}</td>
+      <td${callOn ? ' class="c-narrow c-city"' : ''}>${rowCityCell(r)}</td>
+      ${callOn ? `<td class="c-narrow c-status" onclick="event.stopPropagation()">${editable
         ? `<select class="call-status-select" aria-label="סטטוס" onchange="setLeadCallStatus('${r.id}', this.value, this)">${leadCallStatusOptions(callStatus)}</select>`
-        : esc((LEAD_CALL_STATUSES.find(x => x[0] === callStatus) || [,''])[1])}</td>` : ''}
+        : esc((LEAD_CALL_STATUSES.find(x => x[0] === callStatus) || [,''])[1])}${nextDueHtml(r)}</td>
+      <td class="c-narrow" style="white-space:nowrap;">${r.last_call_at ? esc(fmtDayMonth(r.last_call_at)) : '—'}</td>` : ''}
       <td>${r.created_by ? `<b style="color:${creatorColor(r.created_by) || '#333'};">${esc(userName(r.created_by))}</b>` : 'לא ידוע'}</td>
       <td>${fmtDate(r.created_at)}</td>
       <td class="notes-cell">${rowNotesCell(r)}</td>
@@ -1993,7 +2030,21 @@ function leadCallStatusFieldHtml(r){
       <select id="wlCallStatus" data-orig="${esc(leadCallStatusValue(r))}" style="width:100%;max-width:100%;box-sizing:border-box;border:1px solid #d8d3c4;border-radius:8px;padding:9px 10px;min-height:44px;font-family:inherit;font-size:16px;background:#fff;">
         ${leadCallStatusOptions(leadCallStatusValue(r))}
       </select>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;align-items:center;font-size:.8rem;color:#665;">
+        <span>שיחה אחרונה: <b>${r.last_call_at ? esc(fmtDayMonth(r.last_call_at)) : '—'}</b></span>
+        <label for="wlNextCallDue" style="font-weight:700;">שיחה הבאה:</label>
+        <input type="date" id="wlNextCallDue" data-orig="${esc(r.next_call_due || '')}" value="${esc(r.next_call_due || '')}" style="border:1px solid #d8d3c4;border-radius:8px;padding:6px 8px;font-family:inherit;font-size:16px;background:#fff;">
+      </div>
     </div>`;
+}
+// undefined = not changed on this card (nothing is sent). '' -> null (cleared).
+function leadNextCallDueEdit(){
+  const el = document.getElementById('wlNextCallDue');
+  if (!el) return undefined;
+  const v = (el.value || '').trim();
+  if (v === ((el.dataset && el.dataset.orig) || '')) return undefined;
+  if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error('תאריך «שיחה הבאה» לא תקין');
+  return v || null;
 }
 function leadCallStatusEdit(){
   const el = document.getElementById('wlCallStatus');
@@ -2066,6 +2117,8 @@ function readLeadCardPayload(sourceRow){
   if (handlingStatus !== undefined) payload.handling_status = handlingStatus;
   const callStatus = leadCallStatusEdit();
   if (callStatus !== undefined) payload.lead_call_status = callStatus;
+  const nextDue = leadNextCallDueEdit();
+  if (nextDue !== undefined) payload.next_call_due = nextDue;
   return payload;
 }
 
@@ -2079,6 +2132,8 @@ function setLeadCardBusy(busy, primaryText){
   if (handling) handling.disabled = busy;
   const callSel = document.getElementById('wlCallStatus');
   if (callSel) callSel.disabled = busy;
+  const dueInp = document.getElementById('wlNextCallDue');
+  if (dueInp) dueInp.disabled = busy;
   if (transfer){ transfer.disabled = busy; if (primaryText) transfer.textContent = primaryText; }
   if (agreement) agreement.disabled = busy;
   if (target) target.disabled = busy;
