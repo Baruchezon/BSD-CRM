@@ -203,9 +203,11 @@ test('business card save: pre_research is a guarded text field (sent only if cha
 });
 
 // ---------------------------------------------------------------- privacy
-test('privacy: pre_research appears only in the three internal cards, the migration and this test', () => {
+test('privacy: pre_research appears only in the three internal cards, the anonymous-summary AI, the migration and these tests', () => {
   const allowed = new Set(['leads-hub.html', 'leads.html', 'businesses.html', 'migrations/2026-10-06_pre_research.sql',
-    'migrations/2026-10-06_pre_research_rollback.sql', 'tests/pre_research.test.mjs', 'tests/research_in_card.test.mjs']);
+    'migrations/2026-10-06_pre_research_rollback.sql', 'tests/pre_research.test.mjs', 'tests/research_in_card.test.mjs',
+    'tests/ai_buttons_screen_text.test.mjs', 'tests/two_box_edge_test.ts',
+    'supabase/functions/generate-anonymous-card/lib.ts']);
   const hits = [];
   const walk = dir => { for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes:true })){
     const rel = dir ? dir + '/' + e.name : e.name;
@@ -217,14 +219,16 @@ test('privacy: pre_research appears only in the three internal cards, the migrat
   assert.deepEqual(hits.filter(f => !allowed.has(f)), []);
 });
 
-test('privacy: not in website, agent, seller portal, anonymous AI input, PDFs or the anonymous send flow', () => {
+test('privacy: not on the website, agent tools, seller portal, internal-summary AI, PDFs or the anonymous send flow; the anonymous-summary AI does receive it', () => {
   for (const f of ['listings.html', 'portal/portal.js', 'js/anonSummarySend.js', 'js/pdfPipeline.js', 'js/anonAgreementMark.js', 'js/waSendModule.js',
     'js/saleFileModule2.js', 'js/portal-business-card.js', 'anon-distributions.html', 'smart-matches.html', 'match-detail.html', 'business-report-builder.html',
-    'supabase/functions/generate-anonymous-card/lib.ts', 'supabase/functions/generate-anonymous-card/index.ts', 'supabase/functions/generate-business-summary/index.ts',
+    'supabase/functions/generate-business-summary/index.ts',
     'supabase/functions/match-suggestions-report/index.ts', 'supabase/functions/match-suggestions-report/engine.js', 'supabase/functions/seller-portal-api/handler.ts',
     'supabase/functions/vip-api/index.ts', 'supabase/functions/send-sale-files-to-buyer/index.ts', 'supabase/functions/send-match-summary/index.ts'])
     assert.ok(!/pre_research/.test(read(f)), f);
-  for (const name of ['bsdCollectAnonAiForm', 'bsdCollectInternalAiForm', 'bsdCollectOldTextsForMerge', 'computeAnonSourceFingerprint',
+  assert.match(read('supabase/functions/generate-anonymous-card/lib.ts'), /pre_research/);
+  assert.match(fnSrc(biz, 'bsdCollectAnonAiForm'), /pre_research:\s*bsdAiFormVal\('pre_research'\)/);
+  for (const name of ['bsdCollectInternalAiForm', 'bsdCollectOldTextsForMerge', 'computeAnonSourceFingerprint',
     'generateAndSaveSummaryPdf', 'maybeAutoRefreshAnonSummary', 'bsdSaveAnonSummaryOnly'])
     assert.ok(!/pre_research/.test(fnSrc(biz, name)), name);
   assert.ok(!/pre_research/.test(biz.match(/const ANON_SIGNIFICANT_FIELDS = [^\n]*/)[0]));

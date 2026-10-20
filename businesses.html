@@ -3793,10 +3793,10 @@ async function bsdSaveAnonSummaryOnly(bizId){
 // והשרת לוקח במקומו את הערך השמור.
 function bsdAiFormVal(id){ const el = document.getElementById(id); return el ? el.value : null; }
 function bsdAiFormChecked(id){ const el = document.getElementById(id); return el ? !!el.checked : null; }
-// קלט לתקציר האנונימי: בכוונה בלי עיר, כתובת, רווחים, שמות, טלפונים והערות.
+// קלט לתקציר האנונימי: בכוונה בלי עיר, כתובת, רווחים, שמות וטלפונים.
+// 20.10.2026: כן נשלחים הערות וחקר מקדים, יחד עם שאר מקורות הכרטיס (השרת מנקה מזהים).
 // מחיר מבוקש רק אם "הצג מחיר" מסומן, סיבת מכירה רק אם סומנה.
-// 06.10.2026: השרת כותב מתוך «כל המידע על העסק» (description) קודם; אם אין אזור -
-// השרת גוזר אזור רחב מהעיר השמורה בלי לשלוח את העיר ל-AI.
+// אם אין אזור - השרת גוזר אזור רחב מהעיר השמורה בלי לשלוח את העיר ל-AI.
 function bsdCollectAnonAiForm(){
   const showPrice = bsdAiFormChecked('anon_card_show_price');
   const showReason = bsdAiFormChecked('anon_card_show_reason');
@@ -5013,13 +5013,15 @@ function bsdOldTextsFoldHtml(biz){
 
 // 06.10.2026 (בקשת ברוך): «🔎 חקר מקדים» (businesses.pre_research) - חלק פנימי משני
 // מתחת לתיבה המלאה, לא תיבה שלישית: קיפול סגור כשהוא ריק, פתוח כשיש בו חקר.
-// פנימי בלבד: לא נכנס ל-AI של התקציר האנונימי / התקציר הפנימי, לא לאתר, לא
-// לסוכנים, לא ל-PDF ולא לשליחה. נשמר דרך «שמירה» הרגיל, רק אם שונה (BIZ_GUARDED_TEXT_FIELDS).
+// 20.10.2026: כן נשלח ל-AI של התקציר האנונימי (generate-anonymous-card), יחד עם
+// שאר מקורות הכרטיס. השרת מנקה מזהים, ופריט שמסומן "לא מאומת" אסור לפרסם.
+// עדיין לא נכנס לתקציר הפנימי, לא לאתר, לא לסוכנים, לא ל-PDF ולא לשליחה.
+// נשמר דרך «שמירה» הרגיל, רק אם שונה (BIZ_GUARDED_TEXT_FIELDS).
 function bsdPreResearchFoldHtml(biz){
   const val = biz && biz.pre_research != null ? String(biz.pre_research) : '';
   return `
           <details id="bizPreResearchFold" class="bsd-pre-research"${val.trim() ? ' open' : ''} style="margin-top:10px;background:#f6f8fc;border:1px solid #d3dcec;border-radius:8px;padding:4px 10px 8px;">
-            <summary style="cursor:pointer;font-size:.86rem;font-weight:700;color:#1c2b4a;padding:6px 0;">🔎 חקר מקדים <span style="font-weight:400;color:#8a8578;font-size:.75rem;">(פנימי בלבד - לא מתפרסם, לא נשלח ולא נכנס לתקציר האנונימי)</span></summary>
+            <summary style="cursor:pointer;font-size:.86rem;font-weight:700;color:#1c2b4a;padding:6px 0;">🔎 חקר מקדים <span style="font-weight:400;color:#8a8578;font-size:.75rem;">(פנימי - לא מתפרסם ולא נשלח לקונים; כן נכנס לתקציר האנונימי)</span></summary>
             <textarea id="pre_research" rows="6" style="width:100%;box-sizing:border-box;min-height:140px;margin-top:4px;resize:vertical;white-space:pre-wrap;font-size:16px;line-height:1.45;">${esc(val)}</textarea>
           </details>`;
 }

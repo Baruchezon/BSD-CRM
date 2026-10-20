@@ -1,5 +1,6 @@
 // 06.10.2026 - כפתורי ה-AI בכרטיס העסק עובדים על מה שכתוב כרגע על המסך.
-// התקציר האנונימי: בלי עיר, כתובת, רווחים, שמות, טלפונים והערות; מחיר רק אם "הצג מחיר".
+// 20.10.2026: התקציר האנונימי מקבל את כל מקורות הכרטיס, כולל הערות וחקר מקדים
+// (השרת מנקה מזהים). עדיין בלי עיר, כתובת, רווחים ושמות כשדות נפרדים; מחיר רק אם "הצג מחיר".
 // תיאור/הערות/תקציר פנימי: מסדרים ומתקנים בלי לקצר ובלי להשמיט פרטים.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -26,14 +27,17 @@ const screen = {
   asking_price: '900000', sale_reason: 'מעבר לחו"ל', anon_card_show_price: false, anon_card_show_reason: false,
 };
 
-test('anonymous AI input = screen values, never city/address/profit/names/notes', () => {
-  const { bsdCollectAnonAiForm } = makeEnv(screen);
+test('anonymous AI input = every card source on screen, including notes and research, never city/address/profit/names', () => {
+  const { bsdCollectAnonAiForm } = makeEnv({ ...screen, pre_research: 'חקר: מתחם 400 מ"ר' });
   const f = bsdCollectAnonAiForm();
+  assert.equal(f.description, 'תיאור עם עיר');
   assert.equal(f.anon_text, 'טקסט שכתבתי בתיבה');
   assert.equal(f.internal_summary, 'תקציר פנימי');
+  assert.equal(f.notes, 'ליד: דנה 050-1111111');
+  assert.equal(f.pre_research, 'חקר: מתחם 400 מ"ר');
   assert.equal(f.region, 'אזור המרכז');
   const json = JSON.stringify(f);
-  for (const bad of ['כפר קאסם', 'הרצל', '350000', '280000', 'סטאר לנד', 'יוסי', '0521234567', 'ליד: דנה', '900000', 'מעבר לחו"ל']) {
+  for (const bad of ['כפר קאסם', 'הרצל', '350000', '280000', 'סטאר לנד', 'יוסי', '0521234567', '900000', 'מעבר לחו"ל']) {
     assert.ok(!json.includes(bad), 'must not send: ' + bad);
   }
   assert.equal(f.show_price, false);
@@ -75,11 +79,20 @@ test('edge functions: no shortening, room for long text, truncation is an error'
   assert.match(summary, /mode === 'short' \? 400 : 4000/);
   assert.match(summary, /stop_reason === 'max_tokens'/);
   assert.match(summary, /body\.form/);
-  const anon = read('generate-anonymous-card') + fs.readFileSync(new URL('../supabase/functions/generate-anonymous-card/lib.ts', import.meta.url), 'utf8');
-  assert.match(anon, /max_tokens: 3000/);
+  const anonIndex = read('generate-anonymous-card');
+  const anon = anonIndex + fs.readFileSync(new URL('../supabase/functions/generate-anonymous-card/lib.ts', import.meta.url), 'utf8');
+  assert.match(anon, /max_tokens: 8000/);
+  assert.doesNotMatch(anon, /max_tokens:\s*3000/);
   assert.match(anon, /stop_reason === 'max_tokens'/);
   assert.match(anon, /רווחיות - אסור לחלוטין/);
+  assert.match(anon, /הערות פנימיות/);
+  assert.match(anon, /pre_research/);
+  assert.match(anon, /סיכום שיחה טלפונית/);
   assert.match(anon, /generateSummary\(biz, body\.form\)/);
+  const fileAt = anonIndex.indexOf('${BASE_FILE_INSTRUCTION}');
+  const blockAt = anonIndex.indexOf('baseFile.block');
+  const restAt = anonIndex.indexOf("{ type: 'text', text: userPrompt }");
+  assert.ok(fileAt > 0 && fileAt < blockAt && blockAt < restAt, 'anonymous file is the first block, before the rest of the card');
   assert.ok(!/factsAvailable\.push\(`רווח/.test(anon), 'profit must never be sent to the anonymous AI');
   assert.ok(!/עיר=\$\{biz\.city/.test(anon), 'city must never be sent to the anonymous AI');
 });

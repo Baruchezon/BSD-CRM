@@ -1,6 +1,6 @@
 // 06.10.2026 - generate-anonymous-card pure helpers. Run: deno test tests/two_box_edge_test.ts
 import { assert, assertEquals } from 'jsr:@std/assert@1';
-import { buildAnonInput, buildAnonPrompts, localSafetyScan, deriveRegionFromCity } from '../supabase/functions/generate-anonymous-card/lib.ts';
+import { buildAnonInput, buildAnonPrompts, localSafetyScan, deriveRegionFromCity, BASE_FILE_INSTRUCTION } from '../supabase/functions/generate-anonymous-card/lib.ts';
 
 const biz = {
   internal_name: 'סטאר לנד', owner_name: 'יוסי', city: 'ראשון לציון', region: null, address: 'הרצל 12',
@@ -9,13 +9,45 @@ const biz = {
   asking_price: 900000, anon_card_show_price: false,
 };
 
-Deno.test('full box is the first source, even when the anonymous box already has text', () => {
-  const i = buildAnonInput(biz, { description: 'כל המידע מהמסך', internal_summary: 'פנימי', anon_text: 'טקסט אנונימי ישן' });
-  assertEquals(i.sourceText, 'כל המידע מהמסך');
-  assert(i.sourceLabel!.includes('כל המידע על העסק'));
-  assertEquals(buildAnonInput(biz, { description: '', internal_summary: 'פנימי', anon_text: 'x' }).sourceText, 'פנימי');
-  assertEquals(buildAnonInput(biz, { description: '', internal_summary: '', anon_text: 'x' }).sourceText, 'x');
-  assertEquals(buildAnonInput(biz, null).sourceText, 'DB full'); // old callers without form
+Deno.test('all card sources are sent; notes and research are included and identifiers are redacted', () => {
+  const i = buildAnonInput(biz, {
+    description: 'כל המידע מהמסך', internal_summary: 'פנימי', anon_text: 'טקסט אנונימי ישן',
+    notes: 'הערה: סטאר לנד, יוסי, 050-1111111', pre_research: 'חקר בראשון לציון, מתחם 400', sale_reason: 'סיבה פנימית',
+  }, { calls: ['סיכום שיחה'], meetings: ['סיכום פגישה'], leadTexts: ['כרטיס מוכר'] });
+  assert(i.sourceLabel!.includes('כל הכרטיס'));
+  for (const part of [
+    '=== כל המידע על העסק ===\nכל המידע מהמסך',
+    '=== תקציר עסקי פנימי ===\nפנימי',
+    '=== הערות פנימיות ===',
+    '=== חקר מקדים (דנה)',
+    '=== סיבת מכירה (רקע פנימי בלבד) ===\nסיבה פנימית',
+    '=== סיכום שיחה טלפונית 1 ===\nסיכום שיחה',
+    '=== סיכום פגישה 1 ===\nסיכום פגישה',
+    '=== מידע מכרטיס המוכר 1 ===\nכרטיס מוכר',
+    '=== טקסט קיים בתיבת התקציר האנונימי ===\nטקסט אנונימי ישן',
+  ]) assert(i.sourceText.includes(part), part);
+  assert(!i.sourceText.includes('סטאר לנד') && !i.sourceText.includes('יוסי'));
+  assert(!i.sourceText.includes('050-1111111') && !i.sourceText.includes('ראשון לציון'));
+  assert(i.sourceText.includes('[מזהה הוסר]') && i.sourceText.includes('[טלפון הוסר]') && i.sourceText.includes('[יישוב הוסר]'));
+  assert(i.sourceText.includes('מתחם 400'));
+  // an empty box on screen is not replaced by the saved value; a missing box falls back to the database
+  const emptyDesc = buildAnonInput(biz, { description: '', internal_summary: 'פנימי', anon_text: 'x', notes: '', pre_research: '' });
+  assert(!emptyDesc.sourceText.includes('DB full'));
+  assert(emptyDesc.sourceText.includes('פנימי') && emptyDesc.sourceText.includes('x'));
+  const db = buildAnonInput(biz, null);
+  assert(db.sourceText.includes('DB full') && db.sourceText.includes('DB internal') && db.sourceText.includes('DB anon'));
+});
+
+Deno.test('anonymous file is the base and is placed before the rest of the card', () => {
+  assert(BASE_FILE_INSTRUCTION.includes('מצורף קובץ תקציר אנונימי'));
+  assert(BASE_FILE_INSTRUCTION.includes('הוא הבסיס של התקציר'));
+  const index = Deno.readTextFileSync(new URL('../supabase/functions/generate-anonymous-card/index.ts', import.meta.url));
+  const fileAt = index.indexOf('${BASE_FILE_INSTRUCTION}');
+  const blockAt = index.indexOf('baseFile.block');
+  const restAt = index.indexOf("{ type: 'text', text: userPrompt }");
+  assert(fileAt > 0 && fileAt < blockAt && blockAt < restAt);
+  assert(index.includes('max_tokens: 8000'));
+  assert(!index.includes('max_tokens: 3000'));
 });
 
 Deno.test('region derived from the city when empty; city/profit/price never reach the AI', () => {
