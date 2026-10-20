@@ -15,3 +15,11 @@ Deno.test('full name by default, note never shown, hidden excluded, distinct met
   assertEquals(r.summary.contacted,2);assert(!s.includes('קונה פוטנציאלי #'));
   assertEquals(buildTimeline({cards:r.rows,outreach:[],reports:[]}).filter(t=>t.type==='שיחה').length,1);
 });
+
+import {safeCompany} from '../../supabase/functions/seller-portal-api/matches.ts';
+Deno.test('company: ID/phone/number-only values are never shown',()=>{
+  assertEquals(safeCompany({company:'123456789',id_number:'123456789'}),'');
+  assertEquals(safeCompany({company:'ח.פ. 512345678'}),'');
+  assertEquals(safeCompany({company:'050-1234567'}),'');
+  assertEquals(safeCompany({company:'חברת דוגמה'}),'חברת דוגמה');
+});
