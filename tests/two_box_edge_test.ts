@@ -50,6 +50,19 @@ Deno.test('anonymous file is the base and is placed before the rest of the card'
   assert(!index.includes('max_tokens: 3000'));
 });
 
+Deno.test('v15 prompt is the three site headings, 120-170 words, without an area or closing section', () => {
+  const { systemPrompt } = buildAnonPrompts(buildAnonInput(biz, { description: 'טקסט' }));
+  for (const h of ['תחום פעילות:', 'הזדמנות עסקית:', 'נתונים מרכזיים:']) assert(systemPrompt.includes(h), h);
+  assert(systemPrompt.includes('120-170 מילים'));
+  assert(systemPrompt.includes('שלושת הפרקים האלה בלבד'));
+  assert(systemPrompt.includes('לא "אזור"') && systemPrompt.includes('לא "לפרטים נוספים"'));
+  assert(systemPrompt.includes('תמציתי'));
+  assert(!systemPrompt.includes('אל תקצר'));
+  assert(!systemPrompt.includes('יתרונות וחוזקות') && !systemPrompt.includes('הקונה האידיאלי'));
+  assert(BASE_FILE_INSTRUCTION.includes('הנתונים והמסרים המרכזיים'));
+  assert(!BASE_FILE_INSTRUCTION.includes('אל תקצר'));
+});
+
 Deno.test('region derived from the city when empty; city/profit/price never reach the AI', () => {
   const i = buildAnonInput(biz, { description: 'טקסט', region: '' });
   assertEquals(i.region, 'אזור המרכז');

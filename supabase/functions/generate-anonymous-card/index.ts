@@ -66,7 +66,7 @@ const ANON_CARD_TOOL = {
     type: 'object',
     properties: {
       anon_display_name: { type: ['string', 'null'], description: 'ביטוי גנרי קצר לפי תחום הפעילות (למשל "משחקיית ילדים אינדור"), או null אם אין מספיק מידע' },
-      anon_summary: { type: ['string', 'null'], description: 'התקציר השיווקי האנונימי המלא כטקסט רגיל בעברית לפי המבנה בהנחיות: כותרת, על העסק, יתרונות וחוזקות, שוק וצמיחה, תפעול ונכסים, מה מוצע לעסקה, הקונה האידיאלי, לפרטים נוספים. בלי רווח, בלי עיר/כתובת, בלי שמות/טלפונים/קישורים. null אם אין מספיק מידע.' },
+      anon_summary: { type: ['string', 'null'], description: 'התקציר האנונימי כטקסט רגיל בעברית בפורמט האתר: "תחום פעילות:", "הזדמנות עסקית:", "נתונים מרכזיים:" (נקודות •), 120-170 מילים. בלי פרק אזור ובלי לפרטים נוספים/קריאה לפעולה. בלי רווח, בלי עיר/כתובת, בלי שמות/טלפונים/קישורים. null אם אין מספיק מידע.' },
       ai_flagged_concerns: { type: 'array', items: { type: 'string' }, description: 'חששות אנונימיות שנשארו בטקסט שהגשת (אם יש), אחרת מערך ריק' },
     },
     required: ['anon_display_name', 'anon_summary', 'ai_flagged_concerns'],
@@ -183,7 +183,7 @@ async function generateSummary(biz: Record<string, unknown>, form: unknown): Pro
     },
     body: JSON.stringify({
       model: 'claude-sonnet-5',
-      // 20.10.2026: תקציר מובנה מלא (8 פרקים) - 8000, עם בדיקת stop_reason למטה.
+      // 20.10.2026: תקציר אתר קצר (3 כותרות, 120-170 מילים) - 8000, עם בדיקת stop_reason למטה.
       max_tokens: 8000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userContent }],
