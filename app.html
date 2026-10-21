@@ -141,7 +141,6 @@
     <a href="matches-workspace.html" style="color:#ffdd33;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;border:1px solid rgba(255,221,51,.4);">📁 מרכז ההתאמות</a>
     <a href="commission-simulator.html" style="color:#c9a24b;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;border:1px solid rgba(201,162,75,.4);">🧮 סימולטור עמלות</a>
     <a href="https://bsd-sale-file-builder.onrender.com" target="_blank" rel="noopener" style="color:#9fd6c9;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;border:1px solid rgba(159,214,201,.4);">📄 מערכת יצירת מסמכים</a>
-    <a id="navMatchesArchiveLink" href="matches.html" style="display:none;color:#9aa3b5;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.8rem;">🗄️ ארכיון התאמות ישן</a>
     <div id="navToolsWrap" style="position:relative;display:inline-block;">
     <button type="button" onclick="toggleFormsMenu(event)" style="background:none;border:none;color:#cfd6e6;cursor:pointer;padding:8px 14px;border-radius:8px;font-size:.85rem;font-family:inherit;">🛠️ כלים ▾</button>
     <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:210px;z-index:70;overflow:hidden;">
@@ -1104,10 +1103,6 @@ window.bsdOnLeadPush = function(){ if (CURRENT_PROFILE) checkNewLeadPopup(CURREN
   const surveyBtn = document.getElementById('surveyBtn');
   if (!fullAccess && !profile.can_use_ai_match) aiBtn.style.display = 'none';
   if (!fullAccess && !profile.can_use_survey) surveyBtn.style.display = 'none';
-
-  // ארכיון התאמות ישן - זמין לאדמין בלבד (סעיף ט', 28.08.2026)
-  const matchesArchiveLink = document.getElementById('navMatchesArchiveLink');
-  if (matchesArchiveLink && profile.role === 'admin') matchesArchiveLink.style.display = '';
 
   const restoredDashboard = restoreDashboardCache();
   if (!restoredDashboard){
