@@ -125,6 +125,15 @@ document.addEventListener('DOMContentLoaded', bsdInitPushBell);
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', event => {
+    // 21.10.2026: handled on another device (or from a notification button) -> drop the card here too
+    if (event.data && event.data.type === 'BSD_PUSH_CLOSE') {
+      const N = window.BSDNotify;
+      if (N && event.data.tag) N.closeCard('push:' + event.data.tag);
+      if (N && event.data.taskId) N.dismiss('task', event.data.taskId);
+      if (typeof window.bsdOnTaskClosed === 'function') { try { window.bsdOnTaskClosed(event.data.taskId); } catch (e) {} }
+      return;
+    }
+    if (event.data && event.data.type === 'BSD_OPEN_URL' && event.data.url) { location.href = event.data.url; return; }
     if (event.data && event.data.type === 'BSD_PUSH_SOUND') {
       // 05.10.2026: respects the user's popup settings (js/bsdNotify.js):
       //  - muted / sound off -> no sound;
@@ -159,6 +168,26 @@ if ('serviceWorker' in navigator) {
       if (!isLead && !N.allowed('tasks')) return;
       if (isLead && leadId && N.isHidden('lead', leadId)) return;
       if (isLead && typeof window.bsdOnLeadPush === 'function' && window.bsdOnLeadPush(leadId)) return;
+      // 21.10.2026: task reminder card = one per task (key by tag), with real actions that are
+      // saved on the server and close the reminder on every device (bsdTaskReminderAction).
+      const taskId = !isLead ? (event.data.taskId || null) : null;
+      if (taskId && typeof bsdTaskReminderAction === 'function') {
+        if (N.isHidden('task', taskId)) return;
+        const sb = window.supabaseClient;
+        N.showCard({
+          key: 'push:' + (event.data.tag || ('bsd-task-' + taskId)),
+          kind: 'tasks', icon: '⏰',
+          title: event.data.title || 'תזכורת למשימה',
+          bodyHtml: event.data.body ? String(event.data.body).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]) : '',
+          actions: [
+            { label: 'פתח', href: targetUrl, primary: true, onClick: () => { location.href = targetUrl; } },
+            { label: '✅ בוצע', onClick: () => bsdTaskReminderAction(sb, taskId, 'done') },
+            { label: '📅 דחייה / עוד אפשרויות', href: targetUrl, onClick: () => { location.href = targetUrl; } }
+          ],
+          onDismiss: () => bsdTaskReminderAction(sb, taskId, 'close')
+        });
+        return;
+      }
       N.showCard({
         key: 'push:' + targetUrl,
         kind: isLead ? 'leads' : 'tasks',

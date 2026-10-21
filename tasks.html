@@ -239,8 +239,8 @@
 <script src="js/sessionExpired.js?v=202610071530"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
-<script src="js/push.js?v=202610051500"></script>
-<script src="js/taskActions.js?v=202608230500"></script>
+<script src="js/push.js?v=202610211000"></script>
+<script src="js/taskActions.js?v=202610211000"></script>
 <script>
 let ALL_TASKS = [], ALL_USERS = [], CURRENT_PROFILE = null;
 let CURRENT_TASK_TAB = 'today'; // default landing tab, per spec
@@ -545,7 +545,7 @@ function openTaskForm(id){
   if (task && !task.read_at){
     window.supabaseClient.from('tasks').update({ read_at: new Date().toISOString() }).eq('id', id)
       .then(({error}) => {
-        if (!error){ task.read_at = new Date().toISOString(); renderTable(); }
+        if (!error){ task.read_at = new Date().toISOString(); renderTable(); bsdTaskReminderAction(window.supabaseClient, id, 'sync'); }
       });
   }
   const modal = document.getElementById('modalBox');
@@ -728,6 +728,7 @@ async function saveTask(e){
 async function postponeTask(id){
   const { error, newDueDate } = await postponeTaskToTomorrow(window.supabaseClient, id);
   if (error){ toast('שגיאה בדחיית המשימה: ' + error.message); return; }
+  bsdTaskReminderAction(window.supabaseClient, id, 'sync'); // close the old reminder on every device
   toast('המשימה נדחתה למחר (' + fmtDate(newDueDate) + ')');
   await loadTasks(); // re-fetches + re-renders -> task now lands in the correct tab automatically
 }
@@ -743,6 +744,7 @@ async function completeTask(id){
   }
 
   if (error){ toast('שגיאה: ' + error.message); return; }
+  bsdTaskReminderAction(window.supabaseClient, id, 'sync'); // close its reminder on every device
   toast('המשימה סומנה כהושלמה');
   await loadTasks();
 }
@@ -771,7 +773,8 @@ async function toggleTaskRead(id, markRead){
 
 async function deleteTask(id){
   if (!confirm('למחוק משימה זו?')) return;
-  const { error } = await window.supabaseClient.from('tasks').delete().eq('id', id);
+  // 21.10.2026: through the reminder action so the notification disappears from every device
+  const { error } = await bsdTaskReminderAction(window.supabaseClient, id, 'delete');
   if (error){ toast('אין הרשאה למחוק, או שגיאה: ' + error.message); return; }
   toast('נמחקה בהצלחה');
   await loadTasks();
