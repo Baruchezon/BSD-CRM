@@ -252,7 +252,8 @@
 <script src="js/auth.js?v=202609241200"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
-<script src="js/push.js?v=202610051500"></script>
+<script src="js/taskActions.js?v=202610211000"></script>
+<script src="js/push.js?v=202610211000"></script>
 <script>
 let currentPeriod = 'week';
 let customFrom = null, customTo = null;
@@ -843,15 +844,23 @@ async function checkTasksPopup(){
 
   const { data, error } = await window.supabaseClient
     .from('tasks')
-    .select('id, title, priority, status, due_time')
+    .select('id, title, priority, status, due_time, read_at')
     .eq('assigned_to', profile.id)
     .eq('due_date', today)
     .neq('status', 'הושלמה')
     .order('priority', { ascending:false });
   if (error || !data) return;
 
+  // 21.10.2026: the server is the source of truth. A timed task that was already handled
+  // (read/closed/muted/done/postponed/deleted) on ANY device never pops here, and an open
+  // card is closed as soon as everything in it was handled somewhere else.
+  const openCard = window.BSDNotify ? BSDNotify.findCard('tasks') : null;
+  if (openCard && openCard.dataset.ids){
+    const stillOpen = new Set(data.filter(t => !t.due_time || !t.read_at).map(t => t.id));
+    if (!openCard.dataset.ids.split(',').some(id => stillOpen.has(id))) openCard.remove();
+  }
   const noTimeTasks = data.filter(t => !t.due_time);
-  const timedTasks = data.filter(t => !!t.due_time);
+  const timedTasks = data.filter(t => !!t.due_time && !t.read_at && !(window.BSDNotify && BSDNotify.isHidden('task', t.id)));
 
   const now = new Date();
   const nowMinutes = now.getHours()*60 + now.getMinutes();
@@ -883,15 +892,18 @@ function showTasksPopup(tasks){
     <div style="max-height:200px;overflow-y:auto;">
       ${tasks.map(t=>`
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #f0ede4;">
-          <span style="font-size:.86rem;color:#1c2333;">${esc(t.title)}${t.due_time ? ' <span style="color:#8a93a8;font-size:.74rem;">· ' + esc(t.due_time.slice(0,5)) + '</span>' : ''}</span>
+          <a href="task-alert.html?id=${encodeURIComponent(t.id)}&kind=${t.due_time ? 'nudnik' : 'morning'}" style="font-size:.86rem;color:#1c2333;text-decoration:none;">${esc(t.title)}${t.due_time ? ' <span style="color:#8a93a8;font-size:.74rem;">· ' + esc(t.due_time.slice(0,5)) + '</span>' : ''}</a>
           <span style="font-size:.68rem;padding:2px 8px;border-radius:10px;white-space:nowrap;${t.priority==='גבוהה' ? 'background:#fbe4e0;color:#832d1f;' : 'background:#eef1f6;color:#0e1b34;'}">${esc(t.priority)}</span>
         </div>`).join('')}
     </div>`;
   if (!window.BSDNotify) return;
-  BSDNotify.showCard({
+  const card = BSDNotify.showCard({
     key: 'tasks', kind: 'tasks', icon: '📋', title: 'המשימות שלך להיום', bodyHtml: body,
-    actions: [{ label: 'למסך המשימות', href: 'tasks.html', primary: true }]
+    actions: [{ label: 'למסך המשימות', href: 'tasks.html', primary: true }],
+    // closing the card = "close" for the timed reminders in it, on every device
+    onDismiss: () => { if (typeof bsdTaskReminderAction === 'function') tasks.filter(t => t.due_time).forEach(t => bsdTaskReminderAction(window.supabaseClient, t.id, 'close')); }
   });
+  card.dataset.ids = tasks.map(t => t.id).join(',');
 }
 
 // ============================================================
@@ -925,6 +937,7 @@ function checkVersionNotice(){
   });
 }
 
+window.bsdOnTaskClosed = function(){ checkTasksPopup(); };
 function initTasksPopupWatcher(profile){
   TASKS_POPUP_PROFILE = profile;
   checkTasksPopup();
