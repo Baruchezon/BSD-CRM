@@ -530,9 +530,23 @@ export function createHandler(db:any,opts:Options){
     // Distribution never blocks the dashboard either: on any error all three channels are «טרם בוצע».
     let distribution:any;try{distribution=await ownerDistribution(business.id);}catch{distribution={channels:{vip:false,agents:false,media:false},started:false};}
     const pfiles=publicFiles(await portalFiles(business.id));
+    // «בשבוע האחרון» + «פרסומי מדיה». Precomputed by refresh_seller_portal_weekly_stats
+    // (every 3 days). Real counts only. A missing row or a query error leaves both
+    // blocks null and does not block the dashboard. Facebook rows come from
+    // business_facebook_posts, which must be synced from Adam's posting log.
+    // impressions stays null until he records a real number; the portal hides it.
+    let weekly:any=null,media:any=null;
+    try{
+     const w=await db.from('seller_portal_weekly_stats').select('site_visitors,for_sale_views,business_views,facebook_group_posts,facebook_group_members,facebook_impressions,facebook_scope,facebook_posts').eq('business_id',business.id).maybeSingle();
+     if(w.data){
+      weekly={site_visitors:w.data.site_visitors,for_sale_views:w.data.for_sale_views,business_views:w.data.business_views};
+      const posts=Number(w.data.facebook_group_posts)||0;
+      if(posts>0)media={scope:w.data.facebook_scope,group_posts:posts,group_members:w.data.facebook_group_members,impressions:w.data.facebook_impressions??null,posts:Array.isArray(w.data.facebook_posts)?w.data.facebook_posts:[]};
+     }
+    }catch{weekly=null;media=null;}
     // 20.10.2026: «מה עשינו לאחרונה» — built only from rows already scoped to THIS business above.
     const timeline=buildTimeline({cards:owner.rows||[],outreach:outreach.rows||[],reports:pfiles.filter((f:any)=>f.kind==='advertising')});
-    return reply(200,{ok:true,preview,business:safeBusiness,files:pfiles,timeline,matches:owner.rows,match_activity:owner.activity||[],match_summary:owner.summary,...(owner.unavailable?{matches_unavailable:true}:{}),outreach:outreach.rows,outreach_summary:outreach.summary,...(outreach.unavailable?{outreach_unavailable:true}:{}),distribution,update:a.client_update?{message:a.client_update,date:a.client_updated_at}:null,contact:{phone:opts.phone}});
+    return reply(200,{ok:true,preview,business:safeBusiness,files:pfiles,timeline,matches:owner.rows,match_activity:owner.activity||[],match_summary:owner.summary,...(owner.unavailable?{matches_unavailable:true}:{}),outreach:outreach.rows,outreach_summary:outreach.summary,...(outreach.unavailable?{outreach_unavailable:true}:{}),distribution,weekly,media,update:a.client_update?{message:a.client_update,date:a.client_updated_at}:null,contact:{phone:opts.phone}});
    }
    if(action==='file'){
     if(!uuid(b.file_id)||!['view','download'].includes(b.mode))return reply(404,{error:'not_found'});
