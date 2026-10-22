@@ -547,6 +547,7 @@
 <script src="js/waSendModule.js?v=20261012-1"></script>
 <script src="js/dedupeCheckModule.js?v=20260930dup1"></script>
 <script src="js/archiveModule.js?v=202610112100"></script>
+<script src="js/crmStage.js?v=202610221200"></script>
 <script src="js/phoneCalls.js?v=202610142200"></script>
 <script src="js/portal-invite.js?v=20261004-2"></script>
 <script src="js/portal-business-card.js?v=202610110550"></script>
@@ -1282,6 +1283,8 @@ function renderTable(){
   const sort = document.getElementById('fSort').value;
 
   let rows = ALL_BIZ.filter(b=>{
+    // 22.10.2026: כרטיסים ב«לקוחות בטיפול» / שהוחזרו ללידים מוצגים במסך הלידים, לא כאן
+    if (b.crm_stage) return false;
     if (status !== 'all' && b.status !== status) return false;
     if (field !== 'all' && b.field !== field) return false;
     if (agreement !== 'all' && (b.agreement_status || 'אין הסכם') !== agreement) return false;
@@ -1327,6 +1330,7 @@ function renderTable(){
               <a href="javascript:void(0)" onclick="openAddBuyerToMatchModal('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">➕ הוסף קונה להתאמה</a>
               <a href="javascript:void(0)" onclick="openActivityReportModal('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📊 הפק דוח פעילות לעסק</a>
               ${(canSendAgreement() && b.agreement_status !== 'יש הסכם חתום') ? `<a href="javascript:void(0)" onclick="sendAgreementForBiz('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
+              ${canManageBiz(b) ? `<a href="javascript:void(0)" onclick="moveBizStage('${b.id}','in_progress')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">⏳ העבר ללקוחות בטיפול</a><a href="javascript:void(0)" onclick="moveBizStage('${b.id}','lead')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">↩️ החזר ללידים</a>` : ''}
               ${canManageBiz(b) ? `<a href="javascript:void(0)" onclick="archiveBiz('${b.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 העבר לארכיון</a>` : ''}
             </div>
           </div>
@@ -1676,6 +1680,7 @@ function openBizForm(id){
           ${biz ? ` · הוזן ע"י: <b>${esc(userName(biz.created_by))}</b> בתאריך ${fmtDate(biz.created_at)}` : ''}
           ${(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin' && biz?.internal_code) ? `<div style="margin-top:4px;font-size:.68rem;color:#aaa;">מזהה טכני (מנהל בלבד): ${esc(biz.internal_code)}</div>` : ''}
         </div>
+        ${(biz && biz.crm_stage && !biz.is_archived) ? `<div class="field full" style="background:#fff7e0;border:1px solid #e6c200;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#5c4a00;">⏳ כרטיס זה נמצא ב«${esc(BSDCrmStage.label(biz.crm_stage,'businesses'))}» — לא מוצג ברשימת העסקים, באתר, בפיד ובהתאמות.${canManageBiz(biz) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="moveBizStage('${biz.id}',null)">✅ העבר לרשימת העסקים</button>${biz.crm_stage !== 'in_progress' ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="moveBizStage('${biz.id}','in_progress')">⏳ העבר ללקוחות בטיפול</button>` : ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="moveBizStage('${biz.id}','lead')">↩️ החזר ללידים</button>`}` : ''}</div>` : ''}
         ${biz?.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 עסק זה נמצא בארכיון${biz.archive_reason ? ' — סיבה: '+esc(biz.archive_reason) : ''}${canRestoreBiz(biz) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${biz.id}')">↩️ שחזר מהארכיון</button>` : ''}${canManageBiz(biz) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#a33;" onclick="deleteBiz('${biz.id}')">🗑️ מחיקה סופית</button>` : ''}</div>` : (biz && canManageBiz(biz) ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveBiz('${biz.id}')">📁 העבר לארכיון</button></div>` : '')}
         ${biz ? bsdPreResearchViewHtml(biz) : ''}
         ${fieldRow('internal_name','שם העסק (פנימי)', biz?.internal_name)}
@@ -5786,6 +5791,24 @@ async function loadAnonDistSummary(bizId){
   `;
 }
 
+async function moveBizStage(id, stage){
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
+  const b = ALL_BIZ.find(x=>x.id===id) || (await window.supabaseClient.from('businesses').select('*').eq('id', id).maybeSingle()).data;
+  if (!b || !canManageBiz(b)){ toast('אין לך הרשאה להעביר עסק זה'); return; }
+  if (stage && b.public_listing_active && b.listing_status === 'active'){
+    if (!confirm('העסק מפורסם כרגע באתר. במעבר הוא יוסתר מהאתר ומהפיד עד שיוחזר לרשימת העסקים. להמשיך?')) return;
+  }
+  try {
+    const row = await BSDCrmStage.move('businesses', id, stage, CURRENT_PROFILE.id, b.internal_name);
+    if (!row) return;
+    b.crm_stage = row.crm_stage;
+    if (!ALL_BIZ.some(x => x.id === id)) ALL_BIZ.unshift(b);
+    closeModal();
+    saveBusinessPageCache();
+    renderTable();
+    toast(stage ? 'הועבר אל «' + BSDCrmStage.label(stage,'businesses') + '» (במסך הלידים)' : 'הועבר לרשימת העסקים');
+  } catch(e){ toast('שגיאה: ' + e.message); }
+}
 async function archiveBiz(id){
   document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
   const b = ALL_BIZ.find(x=>x.id===id) || (await window.supabaseClient.from('businesses').select('*').eq('id', id).maybeSingle()).data;

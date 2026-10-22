@@ -201,8 +201,9 @@
   </div>
 
   <div class="lead-tabs">
-    <button type="button" class="lead-tab active" data-tab="manual" onclick="switchTab('manual')">לידים ידניים <span class="count" id="countBusiness">0</span></button>
-    <button type="button" class="lead-tab" data-tab="seller" onclick="switchTab('seller')">לידים מהאתר <span class="count" id="countSeller">0</span></button>
+    <button type="button" class="lead-tab active" data-tab="manual" onclick="switchTab('manual')">לידים <span class="count" id="countBusiness">0</span></button>
+    <button type="button" class="lead-tab" style="display:none" data-tab="seller" onclick="switchTab('seller')">לידים מהאתר <span class="count" id="countSeller">0</span></button>
+    <button type="button" class="lead-tab" data-tab="in_progress" onclick="switchTab('in_progress')">לקוחות בטיפול <span class="count" id="countInProgress">0</span></button>
     <button type="button" class="lead-tab" style="display:none" data-tab="buyer" onclick="switchTab('buyer')">קונים <span class="count" id="countBuyer">0</span></button>
     <button type="button" class="lead-tab" style="display:none" data-tab="partner" onclick="switchTab('partner')">שותפות/השקעה <span class="count" id="countPartner">0</span></button>
     <button type="button" class="lead-tab" data-tab="y2026" onclick="switchTab('y2026')">לידים 2026 <span class="count" id="countY2026">0</span></button>
@@ -303,7 +304,8 @@
 <script src="js/auth.js?v=202609241200"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/archiveModule.js?v=20260930delete1"></script>
-<script src="js/leadLifecycle.js?v=20260930"></script>
+<script src="js/leadLifecycle.js?v=202610221200"></script>
+<script src="js/crmStage.js?v=202610221200"></script>
 <script src="js/bsd-search.js?v=202610081400"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/phoneCalls.js?v=202610142200"></script>
@@ -327,6 +329,9 @@ let RATING_LEVELS = [];
 let RATING_BY_ID = {};
 let CURRENT_TAB = 'manual';
 let ALL_MANUAL = [];
+// 22.10.2026: «לידים» = ידניים + מהאתר + כרטיסים שהוחזרו ללידים (crm_stage='lead'). «לקוחות בטיפול» = crm_stage='in_progress'.
+let STAGED_LEADS_TAB = [];
+let ALL_IN_PROGRESS = [];
 let LEAD_HAS_RECORDING = null;
 
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -453,6 +458,12 @@ async function loadAll(){
   ALL_SELLERS = pending.filter(BSDLeadLifecycle.isWebsite);
   ALL_BUYERS = [];
   ALL_PARTNERS = [];
+  const stagedOf = (stage) => [
+    ...ALL_BUSINESSES.filter(b => b.crm_stage === stage && !b.is_archived).map(b => ({ ...b, __staged:'business' })),
+    ...(leadData || []).filter(l => l.crm_stage === stage && !l.is_archived).map(l => ({ ...l, __staged:'buyer' }))
+  ].sort((a, b) => new Date(b.crm_stage_changed_at || b.created_at || 0) - new Date(a.crm_stage_changed_at || a.created_at || 0));
+  STAGED_LEADS_TAB = stagedOf('lead');
+  ALL_IN_PROGRESS = stagedOf('in_progress');
 
   const Y2026_START = new Date('2026-01-01T00:00:00');
   const leads2026Raw = (leadData || [])
@@ -484,7 +495,8 @@ async function loadAll(){
   Y2026_REVIEW_ROWS = reviewRows.filter(r => !r.is_hidden && !(r.review_status === 'הועבר' && r.transferred_to_id));
   Y2026_REVIEW_HIDDEN_ROWS = reviewRows.filter(r => r.is_hidden);
 
-  document.getElementById('countBusiness').textContent = ALL_MANUAL.length;
+  document.getElementById('countBusiness').textContent = ALL_MANUAL.length + ALL_SELLERS.length + STAGED_LEADS_TAB.length;
+  document.getElementById('countInProgress').textContent = ALL_IN_PROGRESS.length;
   document.getElementById('countSeller').textContent = ALL_SELLERS.length;
   document.getElementById('countBuyer').textContent = ALL_BUYERS.length;
   document.getElementById('countPartner').textContent = ALL_PARTNERS.length;
@@ -954,7 +966,8 @@ async function openHiddenY2026ReviewPanel(){
 }
 
 function currentRows(){
-  if (CURRENT_TAB === 'manual') return ALL_MANUAL;
+  if (CURRENT_TAB === 'manual') return [...[...ALL_MANUAL, ...ALL_SELLERS].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)), ...STAGED_LEADS_TAB];
+  if (CURRENT_TAB === 'in_progress') return ALL_IN_PROGRESS;
   if (CURRENT_TAB === 'seller') return ALL_SELLERS;
   if (CURRENT_TAB === 'buyer') return ALL_BUYERS;
   if (CURRENT_TAB === 'y2026') return ALL_LEADS_2026;
@@ -997,13 +1010,13 @@ function rowNameCell(r){
   }
   const basePersonName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || '—';
   const personName = (CURRENT_TAB === 'manual' || CURRENT_TAB === 'seller') ? leadNameWithBusinessLabel(basePersonName, r) : basePersonName;
-  const side = `<div style="margin-top:4px;" onclick="event.stopPropagation()">${leadSideBadge(r, { editable: canEditRecord(r.created_by) })}</div>`;
+  const side = `<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;" onclick="event.stopPropagation()">${leadSideBadge(r, { editable: canEditRecord(r.created_by) })}${CURRENT_TAB === 'manual' ? leadSourceBadge(r) : ''}</div>`;
   if (CURRENT_TAB === 'y2026'){
     const badges = [];
     if (r.status) badges.push(`<span class="badge" style="background:#eaf1fb;color:#2b5fa3;">${esc(r.status)}</span>`);
     return `<div class="primary-name">${esc(personName)}</div>${side}${badges.length ? `<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">${badges.join('')}</div>` : ''}`;
   }
-  if (CURRENT_TAB === 'seller' && r.website_intake_stage){
+  if ((CURRENT_TAB === 'seller' && r.website_intake_stage) || (CURRENT_TAB === 'manual' && r.website_intake_stage && /אתר|site123|website/i.test(r.source || ''))){
     return `<div class="primary-name">${esc(personName)}</div>${side}<div style="margin-top:4px;">${websiteStatusBadge(r)}</div>`;
   }
   const badge = ratingBadge(r);
@@ -1011,7 +1024,7 @@ function rowNameCell(r){
 }
 function rowCityCell(r){
   if (CURRENT_TAB === 'business') return esc(r.city || '—');
-  if (CURRENT_TAB === 'seller') return esc(r.business_city || r.city || '—');
+  if (CURRENT_TAB === 'seller' || (CURRENT_TAB === 'manual' && leadIsWebsite(r))) return esc(r.business_city || r.city || '—');
   if (CURRENT_TAB === 'y2026') return esc(r.business_city || r.requested_area || r.city || '—');
   return esc(r.requested_area || r.city || '—');
 }
@@ -1020,7 +1033,7 @@ function rowPhoneCell(r){
   return phone ? `<a href="tel:${esc(phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(phone)}</a>${waBtn(phone)}` : '—';
 }
 function rowNotesCell(r){
-  const body = (CURRENT_TAB === 'seller' && r.website_intake_stage) ? (r.website_purpose_guess || '—') : (r.notes || '—');
+  const body = ((CURRENT_TAB === 'seller' || CURRENT_TAB === 'manual') && /אתר|site123|website/i.test(r.source || '') && r.website_intake_stage) ? (r.website_purpose_guess || '—') : (r.notes || '—');
   if (!(LEAD_HAS_RECORDING instanceof Set)) return esc(body);
   const mark = LEAD_HAS_RECORDING.has(r.id) ? 'יש הקלטה' : 'אין הקלטה';
   return body && body !== '—' ? esc(mark + ' — ' + body) : esc(mark);
@@ -1110,6 +1123,7 @@ function renderTable(){
   }
   const tn = tableName();
   body.innerHTML = rows.map(r => {
+    if (r.__staged) return stagedRowHtml(r, callOn);
     const editable = canEditRecord(r.created_by);
     const isWebsiteLead = CURRENT_TAB === 'seller' || CURRENT_TAB === 'manual';
     const isY2026 = CURRENT_TAB === 'y2026';
@@ -1123,7 +1137,7 @@ function renderTable(){
               <a href="javascript:void(0)" onclick="openNotesPanel('${tn}','${r.id}','${esc((r.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(r.id))}</a>
               ${isAdmin ? `<a href="javascript:void(0)" onclick="hideFromY2026Confirm('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">🗑️ הסר מרשימת 2026 בלבד</a>` : ''}
     ` : `
-              ${isWebsiteLead ? `<a href="javascript:void(0)" onclick="openWebsiteLead('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">📋 פתח כרטיס ליד</a>` : (editable
+              ${isWebsiteLead ? `<a href="javascript:void(0)" onclick="openWebsiteLead('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">📋 פתח כרטיס ליד</a>${editable ? `<a href="javascript:void(0)" onclick="openWebsiteLeadForInProgress('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">⏳ העבר ללקוחות בטיפול</a>` : ''}` : (editable
                 ? `<a href="javascript:void(0)" onclick="openEdit('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">✏️ ערוך</a>`
                 : `<a href="javascript:void(0)" onclick="openReadOnly('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">👁️ צפייה (ליד של ${esc(userName(r.created_by))})</a>`)}
               <a href="javascript:void(0)" onclick="openNotesPanel('${tn}','${r.id}','${esc((r.internal_name||r.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(r.id))}</a>
@@ -1158,6 +1172,101 @@ function renderTable(){
   }).join('');
 }
 
+// ---------- 22.10.2026: לקוחות בטיפול / כרטיסים שהוחזרו ללידים ----------
+function leadSourceBadge(r){
+  if (r && r.__staged) return `<span class="badge" style="background:#f1ecff;color:#5b3fa3;">${r.__staged === 'business' ? 'הוחזר מעסקים' : 'הוחזר מקונים'}</span>`;
+  const web = leadIsWebsite(r);
+  const label = web ? 'מהאתר' : (r && r.source && r.source !== 'הזנה ידנית' ? r.source : 'ידני');
+  return `<span class="badge" style="background:${web ? '#e8f5ec' : '#eee6d4'};color:${web ? '#245c40' : '#665'};">מקור: ${esc(label)}</span>`;
+}
+function stagedTable(r){ return r.__staged === 'business' ? 'businesses' : 'leads'; }
+function stagedCardUrl(r){
+  return (r.__staged === 'business' ? 'businesses.html' : 'leads.html') + '?open=' + encodeURIComponent(r.id) + '&from=leads-hub';
+}
+function openStagedCard(id){
+  const r = currentRows().find(x => x.id === id && x.__staged);
+  if (r) location.href = stagedCardUrl(r);
+}
+function openWebsiteLeadForInProgress(id){
+  openWebsiteLead(id);
+  setTimeout(() => {
+    const b = document.getElementById('wlInProgressBtn');
+    if (b){ b.scrollIntoView({ block:'center' }); b.style.outline = '2px solid #e6c200'; }
+    toast('בחר בשדה «סוג הליד» קונה או מוכר, ולחץ «שמור והעבר ללקוחות בטיפול»');
+  }, 50);
+}
+async function moveStaged(id, stage){
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
+  const r = currentRows().find(x => x.id === id && x.__staged);
+  if (!r || !canEditRecord(r.created_by)){ toast('אין לך הרשאה להעביר רשומה זו'); return; }
+  try {
+    const row = await BSDCrmStage.move(stagedTable(r), id, stage, CURRENT_PROFILE.id, r.__staged === 'business' ? r.internal_name : r.full_name);
+    if (!row) return;
+    toast(stage ? 'הועבר אל «' + BSDCrmStage.label(stage) + '»' : (r.__staged === 'business' ? 'הועבר לרשימת העסקים' : 'הועבר לרשימת הקונים'));
+    await loadAll();
+  } catch(e){ toast('שגיאה: ' + e.message); }
+}
+async function stagedSendAgreement(id){
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
+  const r = currentRows().find(x => x.id === id && x.__staged);
+  if (!r || !canSendAgreement()){ toast('אין לך הרשאה לשלוח הסכם'); return; }
+  const isBiz = r.__staged === 'business';
+  if (r.agreement_status !== 'יש הסכם חתום'){
+    const patch = { agreement_status: 'נשלח הסכם לחתימה' };
+    if (!isBiz) patch.agreement_sent = true;
+    const { error } = await window.supabaseClient.from(stagedTable(r)).update(patch).eq('id', id);
+    if (error){ toast('שגיאה בעדכון סטטוס ההסכם: ' + error.message); return; }
+  }
+  const params = new URLSearchParams({
+    type: isBiz ? 'seller' : (r.type === 'partner' ? 'partner' : 'buyer'),
+    recordId: id,
+    name: isBiz ? (r.owner_name || '') : (r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ') || ''),
+    phone: (isBiz ? r.owner_phone : r.phone) || '',
+    biz: isBiz ? (r.internal_name || '') : (r.requested_field || '')
+  });
+  window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
+  toast('טופס ההסכם נפתח. הכרטיס נשאר ב«' + BSDCrmStage.label(r.crm_stage) + '»');
+  await loadAll();
+}
+function stagedRowHtml(r, callOn){
+  const isBiz = r.__staged === 'business';
+  const editable = canEditRecord(r.created_by);
+  const item = (onclick, text, color) => `<a href="javascript:void(0)" onclick="${onclick}" style="display:block;color:${color || '#fff'};text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">${text}</a>`;
+  const menu = [
+    item(`openStagedCard('${r.id}')`, isBiz ? '📋 פתח כרטיס עסק' : '📋 פתח כרטיס קונה'),
+    item(`openNotesPanel('${stagedTable(r)}','${r.id}','${esc(((isBiz ? r.internal_name : r.full_name) || 'רשומה').replace(/'/g,''))}')`, '📝 ' + esc(notesTooltip(r.id))),
+    (editable && canSendAgreement() && r.agreement_status !== 'יש הסכם חתום') ? item(`stagedSendAgreement('${r.id}')`, '📄 שלח הסכם') : '',
+    (editable && r.crm_stage !== 'in_progress') ? item(`moveStaged('${r.id}','in_progress')`, '⏳ העבר ללקוחות בטיפול') : '',
+    (editable && r.crm_stage !== 'lead') ? item(`moveStaged('${r.id}','lead')`, '↩️ החזר ללידים') : '',
+    editable ? item(`moveStaged('${r.id}',null)`, isBiz ? '✅ העבר לרשימת העסקים' : '✅ העבר לרשימת הקונים') : ''
+  ].join('');
+  const kind = `<span class="badge" style="background:${isBiz ? '#fdece0' : '#eaf1fb'};color:${isBiz ? '#a3521a' : '#2b5fa3'};">${isBiz ? 'עסק' : 'קונה'}</span>`;
+  const agr = r.agreement_status ? `<span class="badge" style="background:#eee6d4;color:#665;">${esc(r.agreement_status)}</span>` : '';
+  const title = isBiz ? (r.internal_name || '(ללא שם עסק)') : (r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ') || '—');
+  const sub = isBiz ? (r.owner_name || '') : (r.requested_field || '');
+  const phone = isBiz ? r.owner_phone : r.phone;
+  const city = isBiz ? (r.city || '—') : (r.requested_area || r.city || '—');
+  return `
+    <tr style="cursor:pointer;" onclick="openStagedCard('${r.id}')">
+      <td>
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
+            <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
+            <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:200px;z-index:70;overflow:hidden;">${menu}</div>
+          </div>
+          <div><div class="primary-name">${esc(title)}</div>${sub ? `<div class="sub-name">${esc(sub)}</div>` : ''}
+            <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">${kind}${CURRENT_TAB === 'manual' ? leadSourceBadge(r) : ''}${agr}</div></div>
+        </div>
+      </td>
+      <td class="phone-cell${callOn ? ' c-narrow' : ''}" dir="ltr" style="text-align:right;unicode-bidi:isolate;" onclick="event.stopPropagation()">${phone ? `<a href="tel:${esc(phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(phone)}</a>${waBtn(phone)}` : '—'}</td>
+      <td${callOn ? ' class="c-narrow c-city"' : ''}>${esc(city)}</td>
+      ${callOn ? `<td class="c-narrow c-status">—</td><td class="c-narrow">—</td>` : ''}
+      <td>${r.created_by ? `<b style="color:${creatorColor(r.created_by) || '#333'};">${esc(userName(r.created_by))}</b>` : 'לא ידוע'}</td>
+      <td>${fmtDate(r.crm_stage_changed_at || r.created_at)}</td>
+      <td class="notes-cell">${esc(r.notes || '—')}</td>
+    </tr>`;
+}
+
 function canEditRecord(createdBy){
   if (!CURRENT_PROFILE) return false;
   if (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager') return true;
@@ -1188,7 +1297,7 @@ function openReadOnly(id){
   if (CURRENT_TAB === 'business'){
     rows.push(['שם עסק', r.internal_name], ['בעלים', r.owner_name], ['טלפון', r.owner_phone],
       ['עיר', r.city], ['תחום', r.field], ['הערות', r.notes], ['🔎 חקר מקדים', r.pre_research]);
-  } else if (CURRENT_TAB === 'seller'){
+  } else if (CURRENT_TAB === 'seller' || CURRENT_TAB === 'manual'){
     const personName = r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ');
     rows.push(['שם', personName], ['מוכר או קונה', leadSideLabel(leadSide(r))], ['מצב טיפול', leadHandlingStatusValue(r)], ['טלפון', r.phone], ['שם העסק', r.business_name],
       ['תחום העסק', r.business_field], ['עיר העסק', r.business_city || r.city], ['הערות', r.notes], ['🔎 חקר מקדים', r.pre_research]);
@@ -1507,7 +1616,7 @@ async function openDeepLink(openId){
   const manual = ALL_MANUAL.find(x => x.id === openId);
   const seller = ALL_SELLERS.find(x => x.id === openId);
   if (manual || seller){
-    switchTab(manual ? 'manual' : 'seller');
+    switchTab('manual');
     history.replaceState(null, '', location.pathname);
     openWebsiteLead(openId);
     return;
@@ -1669,7 +1778,7 @@ function renderWebsiteLeadConversationForm(r){
         <option value="seller" ${leadCardTypeValue(r) === 'seller' ? 'selected' : ''}>מוכר</option>
       </select>
       <div id="wlTransferHint" style="font-size:.78rem;color:#245c40;font-weight:700;margin-top:6px;"></div>
-      <div style="font-size:.75rem;color:#777;margin-top:4px;">«שמור» שומר את הכרטיס והוא נשאר ברשימת הלידים. «שמור והעבר» שומר, מעביר לפי סוג הליד ומוציא אותו מרשימת הלידים. כל המידע וההערות עוברים לכרטיס החדש. לא נשלח שום הסכם.</div>
+      <div style="font-size:.75rem;color:#777;margin-top:4px;">«שמור» שומר את הכרטיס והוא נשאר ברשימת הלידים. «שמור והעבר» שומר, מעביר לפי סוג הליד לרשימת העסקים או הקונים ומוציא אותו מרשימת הלידים. «שמור והעבר ללקוחות בטיפול» יוצר את אותו כרטיס, אבל שם אותו ב«לקוחות בטיפול» עד שתחליט. כל המידע וההערות עוברים לכרטיס החדש. לא נשלח שום הסכם.</div>
     </div>
 
     <div class="wl-block" id="wlSaveError" style="display:none;background:#fdeceb;border:1px solid #e4b3ac;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#a02c1d;margin-top:8px;"></div>
@@ -1680,6 +1789,7 @@ function renderWebsiteLeadConversationForm(r){
       <button type="button" class="btn btn-ghost" onclick="deleteRecord('${r.id}')" style="color:#a02c1d;">העבר לארכיון</button>
       ${canSendAgreement() ? `<button type="button" class="btn btn-ghost" id="wlAgreementBtn" title="אופציונלי: מעביר כמו «שמור והעבר» וגם פותח את טופס ההסכם. שום הסכם לא יוצא עד ששולחים אותו מתוך הטופס." onclick="saveWebsiteLeadTransfer('${r.id}', { sendAgreement:true })">📄 שלח הסכם והעבר</button>` : ''}
       <button type="button" class="btn btn-ghost" id="wlSaveOnlyBtn" onclick="saveLeadOnly('${r.id}')">שמור</button>
+      <button type="button" class="btn btn-ghost" id="wlInProgressBtn" title="יוצר כרטיס מלא (עסק או קונה) שנמצא ב«לקוחות בטיפול»: לא מופיע ברשימה הראשית, באתר ובהתאמות עד שתעביר אותו" onclick="saveWebsiteLeadTransfer('${r.id}', { toInProgress:true })">⏳ שמור והעבר ללקוחות בטיפול</button>
       <button type="button" class="btn btn-navy" id="wlSaveBtn" onclick="saveWebsiteLeadTransfer('${r.id}')">שמור והעבר</button>
     </div>
   `;
@@ -2157,8 +2267,10 @@ async function saveLeadOnly(id){
     setLeadCardBusy(true, 'שומר...');
     const saved = await window.supabaseClient.from('leads').update(payload).eq('id', id);
     if (saved.error) throw new Error(saved.error.message);
+    if (payload.crm_stage) payload.crm_stage_changed_at = new Date().toISOString();
     const expected = { ...payload };
     delete expected.intake_reviewed_at;
+    delete expected.crm_stage_changed_at;
     const verify = await verifyLeadWrite(id, expected);
     if (!verify.ok) throw new Error('השמירה לא אושרה בבדיקה חוזרת: ' + verify.mismatches.join(' | '));
     if (window.BSDDataCache && CURRENT_PROFILE) window.BSDDataCache.remove('leads-page', CURRENT_PROFILE.id);
@@ -2284,6 +2396,7 @@ async function saveWebsiteLeadTransfer(id, opts){
       payload.requested_field = source.data.requested_field || payload.business_field || null;
       payload.requested_area = source.data.requested_area || payload.business_city || payload.city || null;
       payload.notes = websiteLeadTransferNotes({ ...source.data, ...payload });
+      if (opts.toInProgress){ payload.crm_stage = 'in_progress'; payload.crm_stage_changed_by = CURRENT_PROFILE.id; }
       // Same status change «📄 שלח הסכם» makes on the buyers screen, written
       // together with the transfer. A signed agreement is never downgraded.
       if (sendAgreement && source.data.agreement_status !== 'יש הסכם חתום'){
@@ -2305,6 +2418,17 @@ async function saveWebsiteLeadTransfer(id, opts){
       const notesWarning = await copyLeadNotesToBusiness(id, destination.id);
       if (notesWarning) agreementNote += ' ' + notesWarning;
     }
+    if (opts.toInProgress && destination){
+      // Only a card created by this transfer goes to «לקוחות בטיפול». An existing
+      // business that the lead was linked to stays where it is.
+      const fresh = !destination.crm_stage && destination.created_at && (Date.now() - new Date(destination.created_at).getTime()) < 15 * 60 * 1000;
+      if (fresh){
+        try { await BSDCrmStage.set('businesses', destination.id, 'in_progress', CURRENT_PROFILE.id); }
+        catch(e){ agreementNote += ' הכרטיס נוצר, אבל לא הועבר ללקוחות בטיפול: ' + e.message; }
+      } else if (!destination.crm_stage) {
+        agreementNote += ' העסק כבר היה קיים ברשימת העסקים ולכן נשאר שם.';
+      }
+    }
     const docWarning = await carryLeadDocuments(id, destination ? { business_id: destination.id } : { buyer_id: id });
     if (docWarning) agreementNote += ' ' + docWarning;
     if (sendAgreement && destination && destination.agreement_status !== 'יש הסכם חתום'){
@@ -2320,7 +2444,7 @@ async function saveWebsiteLeadTransfer(id, opts){
 
     const targetUrl = destination ? 'businesses.html?open=' + encodeURIComponent(destination.id) : 'leads.html?open=' + encodeURIComponent(id);
     okBox.style.display = 'block';
-    okBox.textContent = (category === 'seller' ? 'הכרטיס נשמר והועבר לעסקים למכירה.' : 'הכרטיס נשמר והועבר לקונים.') + agreementNote;
+    okBox.textContent = (opts.toInProgress ? 'הכרטיס נשמר והועבר ללקוחות בטיפול (' + (category === 'seller' ? 'עסק' : 'קונה') + ').' : (category === 'seller' ? 'הכרטיס נשמר והועבר לעסקים למכירה.' : 'הכרטיס נשמר והועבר לקונים.')) + agreementNote;
 
     if (sendAgreement){
       const agreementUrl = leadCardAgreementUrl(category, destination ? destination.id : id, {
@@ -2374,6 +2498,8 @@ async function rejectWebsiteLead(id){
     history.replaceState(null, '', location.pathname);
   } else if (openId){
     await openDeepLink(openId);
+  } else if (params.get('tab') === 'in_progress') {
+    switchTab('in_progress');
   }
 })();
 </script>
