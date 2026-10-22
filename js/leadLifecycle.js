@@ -8,7 +8,7 @@
   const phoneInbox = l => l.source === 'שיחה טלפונית נכנסת' && l.status !== 'הועבר לקונה' && l.status !== 'הועבר למוכר';
   function pending(leads, businesses){
     const linked = new Set(businesses.filter(b => b.seller_id).map(b => b.seller_id));
-    return leads.filter(l => !l.is_archived && !linked.has(l.id) &&
+    return leads.filter(l => !l.is_archived && !l.crm_stage && !linked.has(l.id) &&
       (open(l) || phoneInbox(l) || (l.type === 'seller' && !l.website_intake_stage)));
   }
   root.BSDLeadLifecycle = {open,isWebsite,pending,phoneInbox};

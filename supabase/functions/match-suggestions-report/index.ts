@@ -76,11 +76,13 @@ Deno.serve(async (req) => {
       .select('id, client_number, full_name, phone, phone2, email, city, address, status, agreement_status, buyer_type, requested_field, requested_categories, requested_area, budget, equity, financing_capacity, requested_revenue, requested_profit, involvement_level, partnership_willingness, notes, meeting_summary, intake_customer_wants, intake_important_details, intake_conversation_summary')
       .eq('type', 'buyer')
       .or('status.is.null,status.neq.סגור')
-      .or('is_archived.is.null,is_archived.eq.false'),
+      .or('is_archived.is.null,is_archived.eq.false')
+      .is('crm_stage', null), // 22.10.2026: לא כולל לקוחות בטיפול / שהוחזרו ללידים
     supabase.from('businesses')
       .select('id, business_number, internal_name, anon_display_name, field, category, subcategory, city, region, address, asking_price, annual_revenue, operating_profit, net_profit, employees_count, years_active, short_description, sale_reason, notes, anon_summary, internal_business_summary, website, owner_phone, anon_card_show_price')
       .eq('listing_status', 'active')
-      .or('is_archived.is.null,is_archived.eq.false'),
+      .or('is_archived.is.null,is_archived.eq.false')
+      .is('crm_stage', null), // 22.10.2026: לא כולל לקוחות בטיפול / שהוחזרו ללידים
     supabase.from('matches').select('id, buyer_id, business_id, status, created_at'),
     supabase.from('anon_distributions').select('buyer_id, business_id, sent_at, created_at').not('buyer_id', 'is', null),
   ]);

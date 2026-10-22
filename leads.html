@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610142200';
+    var PAGE_BUILD = '202610221200';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -296,6 +296,7 @@
 <script src="js/dedupeCheckModule.js?v=20260930dup1"></script>
 <script src="js/waSendModule.js?v=20261012-1"></script>
 <script src="js/archiveModule.js?v=202610112100"></script>
+<script src="js/crmStage.js?v=202610221200"></script>
 <script src="js/phoneCalls.js?v=202610142200"></script>
 <script>
 let ALL_LEADS = [];
@@ -808,6 +809,8 @@ function renderTable(){
   const sort = document.getElementById('fSort').value;
 
   let rows = ALL_LEADS.filter(l=>{
+    // 22.10.2026: כרטיסים ב«לקוחות בטיפול» / שהוחזרו ללידים מוצגים במסך הלידים, לא כאן
+    if (l.crm_stage) return false;
     // 08.10.2026 (בקשת ברוך): קונה עם הסכם חתום מופיע תמיד ברשימת הקונים, גם אם
     // הכרטיס עדיין מסומן כפנייה חדשה מהאתר. תצוגה בלבד - לא משנה את הנתונים.
     // Seller-type leads are not the businesses list. This screen is buyers and investors.
@@ -870,6 +873,7 @@ function renderTable(){
               ${isGrantOnlyViewer(l) ? '' : `<a href="javascript:void(0)" onclick="openNotesPanel('leads','${l.id}','${esc((l.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(l.id))}${notesIconStyle(l.id) ? ' 🔵' : ''}</a>`}
               ${(l.type === 'buyer' && !isGrantOnlyViewer(l)) ? `<a href="javascript:void(0)" onclick="openAddBizToMatchModal('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">➕ הוסף עסק להתאמה</a>` : ''}
               ${(canSendAgreement() && l.agreement_status !== 'יש הסכם חתום' && !isGrantOnlyViewer(l)) ? `<a href="javascript:void(0)" onclick="sendAgreementForLead('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
+              ${canManageLead(l) ? `<a href="javascript:void(0)" onclick="moveLeadStage('${l.id}','in_progress')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">⏳ העבר ללקוחות בטיפול</a><a href="javascript:void(0)" onclick="moveLeadStage('${l.id}','lead')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">↩️ החזר ללידים</a>` : ''}
               ${canManageLead(l) ? `<a href="javascript:void(0)" onclick="archiveLead('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 העבר לארכיון</a>` : ''}
             </div>
           </div>
@@ -1151,6 +1155,7 @@ function openLeadForm(id, forcedType, prefillData){
           ${lead.client_number ? `מספר קונה/משקיע: <b style="font-size:.95rem;">${esc(lead.client_number)}</b> · ` : ''}הוזן ע"י: <b>${esc(userName(lead.created_by))}</b> בתאריך ${fmtDate(lead.created_at)}
           ${(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin' && lead.internal_code) ? `<div style="margin-top:4px;font-size:.68rem;color:#aaa;">מזהה טכני (מנהל בלבד): ${esc(lead.internal_code)}</div>` : ''}
         </div>
+        ${(lead.crm_stage && !lead.is_archived) ? `<div class="field full" style="background:#fff7e0;border:1px solid #e6c200;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#5c4a00;">⏳ כרטיס זה נמצא ב«${esc(BSDCrmStage.label(lead.crm_stage,'leads'))}» — לא מוצג ברשימת הקונים ובהתאמות.${canManageLead(lead) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="moveLeadStage('${lead.id}',null)">✅ העבר לרשימת הקונים</button>${lead.crm_stage !== 'in_progress' ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="moveLeadStage('${lead.id}','in_progress')">⏳ העבר ללקוחות בטיפול</button>` : ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="moveLeadStage('${lead.id}','lead')">↩️ החזר ללידים</button>`}` : ''}</div>` : ''}
         ${lead.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 רשומה זו נמצאת בארכיון${lead.archive_reason ? ' — סיבה: '+esc(lead.archive_reason) : ''}${canRestoreLead(lead) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreLeadFromArchive('${lead.id}')">↩️ שחזר מהארכיון</button>` : ''}${canDeleteLead(lead) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#a33;" onclick="deleteLead('${lead.id}')">🗑️ מחיקה סופית</button>` : ''}</div>` : (canManageLead(lead) ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveLead('${lead.id}')">📁 העבר לארכיון</button></div>` : '')}` : ''}
         ${lead ? leadPreResearchViewHtml(lead) : ''}
         <div class="field"><label>מטפל כרגע</label><select id="handled_by">${userOptions(lead?.handled_by)}</select></div>
@@ -1800,6 +1805,21 @@ async function addNote(tableName, recordId){
   await markNotesRead(tableName, recordId);
 }
 
+async function moveLeadStage(id, stage){
+  document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
+  const l = ALL_LEADS.find(x=>x.id===id) || (await window.supabaseClient.from('leads').select('*').eq('id', id).maybeSingle()).data;
+  if (!l || !canManageLead(l)){ toast('אין לך הרשאה להעביר רשומה זו'); return; }
+  try {
+    const row = await BSDCrmStage.move('leads', id, stage, CURRENT_PROFILE.id, l.full_name);
+    if (!row) return;
+    l.crm_stage = row.crm_stage;
+    if (!ALL_LEADS.some(x => x.id === id)) ALL_LEADS.unshift(l);
+    closeModal();
+    if (typeof saveLeadsPageCache === 'function') saveLeadsPageCache();
+    renderTable();
+    toast(stage ? 'הועבר אל «' + BSDCrmStage.label(stage,'leads') + '» (במסך הלידים)' : 'הועבר לרשימת הקונים');
+  } catch(e){ toast('שגיאה: ' + e.message); }
+}
 async function archiveLead(id){
   document.querySelectorAll('.bsd-forms-menu').forEach(m => m.style.display = 'none');
   const l = ALL_LEADS.find(x=>x.id===id);
