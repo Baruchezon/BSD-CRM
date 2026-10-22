@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610221200';
+    var PAGE_BUILD = '202610221600';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -108,6 +108,38 @@
   .row-menu-btn:hover{background:#eee8d8;}
   .notes-cell{white-space:normal;word-break:break-word;max-width:320px;line-height:1.4;}
   .phone-cell{white-space:nowrap;min-width:100px;}
+  /* 22.10.2026 (בקשת ברוך): «לקוחות בטיפול», וגם כרטיסים שהוחזרו ל«לידים»
+     כשהם אותו stagedRowHtml — פס של שורה אחת. טקסט ארוך נחתך ב-ellipsis;
+     לחיצה פותחת את הכרטיס המלא. «לידים 2026» לא עובר כאן. */
+  table.staged-strips, table.staged-strips tbody{display:block;width:100%;}
+  table.staged-strips{background:transparent;box-shadow:none;border-radius:0;overflow:visible;}
+  table.staged-strips thead{display:none;}
+  table.staged-strips > tbody > tr.staged-strip{display:block;width:100%;box-sizing:border-box;margin:0 0 6px;background:#fff;border:1px solid #e4dfd2;border-radius:10px;box-shadow:0 1px 2px rgba(14,27,52,.05);}
+  table.staged-strips > tbody > tr.staged-strip > td{display:block;width:100%;box-sizing:border-box;padding:0;border:none;}
+  table.staged-strips > tbody > tr.empty-row{display:block;background:#fff;border:1px solid #e4dfd2;border-radius:10px;}
+  table tr.staged-strip > td{padding:3px 6px;}
+  table tr.staged-strip > td::before{content:none;display:none;}
+  .crm-strip{display:flex;align-items:center;gap:8px;box-sizing:border-box;height:40px;min-height:40px;max-height:40px;padding:0 4px;overflow:hidden;white-space:nowrap;font-size:.82rem;line-height:1.2;background:#fff;}
+  table:not(.staged-strips) tr.staged-strip .crm-strip{border:1px solid #e4dfd2;border-radius:8px;padding:0 8px;}
+  tr.staged-strip:hover .crm-strip{background:#faf8f2;}
+  .crm-strip-menu{position:relative;flex:0 0 auto;display:flex;align-items:center;}
+  .crm-strip .row-menu-btn{padding:0 7px;font-size:1rem;line-height:1.5;}
+  .crm-strip-name{flex:1 1 9em;min-width:4.2em;font-weight:800;color:var(--navy);}
+  .crm-strip-num{flex:0 1 8.5em;max-width:9.5em;color:#3d4a63;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate;text-align:end;}
+  .crm-strip .badge{flex:0 0 auto;padding:1px 8px;line-height:1.6;}
+  .crm-strip .badge.crm-strip-source{flex:0 1 auto;max-width:8.5em;}
+  .crm-strip-meta{flex:1 1 10em;min-width:4.2em;max-width:16em;color:#5c574c;font-size:.78rem;}
+  .crm-strip-ellip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+  @media (max-width:700px){
+    table tr.staged-strip{margin-bottom:6px;padding:0;border-radius:10px;}
+    table tr.staged-strip > td{display:block;width:100%;padding:0;border-bottom:none;}
+    table tr.staged-strip > td::before{content:none;display:none;}
+    .crm-strip{gap:6px;padding:0 6px;font-size:.78rem;}
+    .crm-strip-meta{flex-basis:7em;max-width:42%;font-size:.72rem;}
+    .crm-strip-num{flex-basis:6.2em;max-width:7.2em;}
+    .crm-strip .badge{padding:1px 6px;font-size:.68rem;}
+    .crm-strip .badge.crm-strip-source{max-width:5.6em;}
+  }
   .empty-row td{text-align:center;color:#999;padding:30px;}
 
   .overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:60;padding:40px 20px;}
@@ -1078,12 +1110,16 @@ function renderLeadsTableHead(){
   const head = document.getElementById('tableHead');
   const f = document.getElementById('fCallStatus');
   const on = isCallStatusTab();
+  const strips = CURRENT_TAB === 'in_progress';
   if (f) f.style.display = on ? '' : 'none';
   if (head){
     head.innerHTML = on
       ? '<th>שם / עסק</th><th class="c-narrow">טלפון</th><th class="c-narrow">עיר</th><th class="c-narrow">סטטוס</th><th class="c-narrow">שיחה אחרונה</th><th>הוזן ע"י</th><th>נוצר</th><th>הערות</th>'
       : '<th>שם / עסק</th><th>טלפון</th><th>עיר</th><th>הוזן ע"י</th><th>נוצר</th><th>הערות</th>';
-    const t = head.closest('table'); if (t) t.classList.toggle('call-cols', on);
+    const t = head.closest('table');
+    if (t){ t.classList.toggle('call-cols', on); t.classList.toggle('staged-strips', strips); }
+    const thead = head.parentElement;
+    if (thead) thead.hidden = strips;
   }
 }
 async function setLeadCallStatus(id, value, sel){
@@ -1228,6 +1264,19 @@ async function stagedSendAgreement(id){
   toast('טופס ההסכם נפתח. הכרטיס נשאר ב«' + BSDCrmStage.label(r.crm_stage) + '»');
   await loadAll();
 }
+function stagedStripSource(r){
+  const src = String((r && r.source) || '').replace(/\s+/g, ' ').trim();
+  if (/אתר|site123|website/i.test(src)) return 'מהאתר';
+  if (!src) return (r && r.__staged === 'business') ? 'עסקים' : 'ידני';
+  if (src === 'הזנה ידנית') return 'ידני';
+  return src;
+}
+function stagedStripStatus(r){
+  const status = String((r && (r.agreement_status || r.status)) || '').replace(/\s+/g, ' ').trim();
+  const date = fmtDate(r && (r.crm_stage_changed_at || r.created_at));
+  if (status && date && date !== '—') return status + ' · ' + date;
+  return status || date || '—';
+}
 function stagedRowHtml(r, callOn){
   const isBiz = r.__staged === 'business';
   const editable = canEditRecord(r.created_by);
@@ -1240,30 +1289,31 @@ function stagedRowHtml(r, callOn){
     (editable && r.crm_stage !== 'lead') ? item(`moveStaged('${r.id}','lead')`, '↩️ החזר ללידים') : '',
     editable ? item(`moveStaged('${r.id}',null)`, isBiz ? '✅ העבר לרשימת העסקים' : '✅ העבר לרשימת הקונים') : ''
   ].join('');
-  const kind = `<span class="badge" style="background:${isBiz ? '#fdece0' : '#eaf1fb'};color:${isBiz ? '#a3521a' : '#2b5fa3'};">${isBiz ? 'עסק' : 'קונה'}</span>`;
-  const agr = r.agreement_status ? `<span class="badge" style="background:#eee6d4;color:#665;">${esc(r.agreement_status)}</span>` : '';
-  const title = isBiz ? (r.internal_name || '(ללא שם עסק)') : (r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ') || '—');
-  const sub = isBiz ? (r.owner_name || '') : (r.requested_field || '');
-  const phone = isBiz ? r.owner_phone : r.phone;
-  const city = isBiz ? (r.city || '—') : (r.requested_area || r.city || '—');
+  const name = isBiz
+    ? ((r.internal_name && String(r.internal_name).trim()) || r.owner_name || '(ללא שם)')
+    : (r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ') || '—');
+  const number = isBiz ? (r.business_number || r.owner_phone || '') : (r.client_number || r.phone || '');
+  const typeLabel = isBiz ? 'עסק' : 'ליד';
+  const sourceLabel = stagedStripSource(r);
+  const sourceStyle = sourceLabel === 'מהאתר' ? 'background:#e8f5ec;color:#245c40;' : 'background:#eee6d4;color:#665;';
+  const statusDate = stagedStripStatus(r);
+  const tip = [name, number, typeLabel, sourceLabel, statusDate].filter(Boolean).join(' · ');
+  const cols = callOn ? 8 : 6;
   return `
-    <tr style="cursor:pointer;" onclick="openStagedCard('${r.id}')">
-      <td>
-        <div style="display:flex;align-items:flex-start;gap:8px;">
-          <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
+    <tr class="staged-strip" data-staged="${isBiz ? 'business' : 'lead'}" style="cursor:pointer;" title="${esc(tip)}" onclick="openStagedCard('${r.id}')">
+      <td colspan="${cols}">
+        <div class="crm-strip">
+          <div class="crm-strip-menu" onclick="event.stopPropagation()">
             <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
             <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:200px;z-index:70;overflow:hidden;">${menu}</div>
           </div>
-          <div><div class="primary-name">${esc(title)}</div>${sub ? `<div class="sub-name">${esc(sub)}</div>` : ''}
-            <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">${kind}${CURRENT_TAB === 'manual' ? leadSourceBadge(r) : ''}${agr}</div></div>
+          <span class="crm-strip-name crm-strip-ellip">${esc(name)}</span>
+          ${number ? `<span class="crm-strip-num crm-strip-ellip" dir="ltr">${esc(number)}</span>` : ''}
+          <span class="badge crm-strip-tag" style="background:${isBiz ? '#fdece0' : '#eaf1fb'};color:${isBiz ? '#a3521a' : '#2b5fa3'};">${typeLabel}</span>
+          <span class="badge crm-strip-source crm-strip-ellip" style="${sourceStyle}" title="${esc(sourceLabel)}">מקור: ${esc(sourceLabel)}</span>
+          <span class="crm-strip-meta crm-strip-ellip">${esc(statusDate)}</span>
         </div>
       </td>
-      <td class="phone-cell${callOn ? ' c-narrow' : ''}" dir="ltr" style="text-align:right;unicode-bidi:isolate;" onclick="event.stopPropagation()">${phone ? `<a href="tel:${esc(phone)}" style="color:inherit;text-decoration:none;">📞 ${fmtPhone(phone)}</a>${waBtn(phone)}` : '—'}</td>
-      <td${callOn ? ' class="c-narrow c-city"' : ''}>${esc(city)}</td>
-      ${callOn ? `<td class="c-narrow c-status">—</td><td class="c-narrow">—</td>` : ''}
-      <td>${r.created_by ? `<b style="color:${creatorColor(r.created_by) || '#333'};">${esc(userName(r.created_by))}</b>` : 'לא ידוע'}</td>
-      <td>${fmtDate(r.crm_stage_changed_at || r.created_at)}</td>
-      <td class="notes-cell">${esc(r.notes || '—')}</td>
     </tr>`;
 }
 
