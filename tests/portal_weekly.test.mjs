@@ -27,7 +27,7 @@ function renderers() {
   return ctx;
 }
 
-const weekly = { site_visitors: 52, site_entries: 105, for_sale_views: 70, business_views: 0 };
+const weekly = { site_visitors: 52, site_entries: 105, for_sale_views: 71, for_sale_visitors: 34, business_views: 0, business_visitors: 9 };
 const post = (extra = {}) => ({ platform: 'facebook', group_name: 'פורום עסקים באר שבע', posted_on: '2026-10-18', status: 'active', member_count: 17200, impressions: null, ...extra });
 
 test('weekly card hides a zero business-page line and never mentions Facebook impressions', () => {
@@ -35,14 +35,18 @@ test('weekly card hides a zero business-page line and never mentions Facebook im
   const hidden = weeklyHtml(weekly);
   assert.ok(hidden.includes('בשבוע האחרון'));
   assert.ok(hidden.includes('>105<') || hidden.includes('>105 ') || hidden.includes('105'));
-  assert.ok(!hidden.includes('52'), 'unique visitors are not the figure on the card');
+  assert.ok(hidden.includes('>71<') || hidden.includes('>71 ') || hidden.includes('71'));
+  assert.ok(!hidden.includes('52') && !hidden.includes('34') && !hidden.includes('>9<'), 'unique-visitor fields are not shown');
   assert.ok(hidden.includes('כניסות לאתר') && !hidden.includes('כניסות לאתר BSD'));
   assert.ok(hidden.includes('צפיות בעמוד «עסקים למכירה»'));
   assert.ok(!hidden.includes('צפיות בעמוד העסק שלך'));
   assert.ok(!hidden.includes('חשיפות') && !hidden.includes('פייסבוק'));
-  const shown = weeklyHtml({ ...weekly, business_views: 2 });
+  const shown = weeklyHtml({ ...weekly, business_views: 2, business_visitors: 1 });
   assert.ok(shown.includes('צפיות בעמוד העסק שלך באתר BSD'));
+  assert.match(shown, /<strong>2<\/strong> צפיות בעמוד העסק שלך באתר BSD/);
+  assert.ok(!shown.includes('>1<') && !shown.includes('>9<') && !shown.includes('52') && !shown.includes('34'));
   assert.equal(weeklyHtml(null), '');
+  assert.ok(!/_visitors/.test(js), 'the portal script never reads a visitors field');
 });
 
 test('media section is separate, counts groups, and hides impressions unless > 0', () => {
@@ -88,12 +92,15 @@ test('no posts in the last 7 days falls back to the latest batch, without dates'
 });
 
 test('home mounts the two sections apart, and the API does not invent impressions', () => {
-  assert.ok(js.includes("const PORTAL_BUILD='202610230400'"));
+  assert.ok(js.includes("const PORTAL_BUILD='202610230550'"));
   assert.ok(html.includes('id="weeklyStats"') && html.includes('id="mediaPosts"'));
   assert.ok(html.indexOf('id="weeklyStats"') < html.indexOf('id="mediaPosts"') && html.indexOf('id="mediaPosts"') < html.indexOf('id="kpis"'));
   assert.ok(js.includes("weeklyHtml(data.weekly)") && js.includes("mediaHtml(data.media)"));
-  assert.ok(handler.includes('site_visitors,site_entries,for_sale_views,business_views,facebook_group_posts,facebook_group_members,facebook_impressions,facebook_scope,facebook_posts'));
-  assert.ok(handler.includes('site_entries:w.data.site_entries'));
+  assert.ok(handler.includes('site_entries,for_sale_views,business_views,facebook_group_posts,facebook_group_members,facebook_impressions,facebook_scope,facebook_posts'));
+  assert.ok(handler.includes('weekly={site_entries:w.data.site_entries,for_sale_views:w.data.for_sale_views,business_views:w.data.business_views}'));
+  assert.ok(!/weekly=\{[^}]*_visitors/.test(handler), 'the dashboard weekly object has no visitors field');
+  assert.ok(entriesSql.includes('(select count(*) from fs)::int as fv'));
+  assert.ok(entriesSql.includes("(select count(*) from ev where ev.p like '%' || biz.bn || '%')::int"));
   assert.ok(entriesSql.includes('site_entries integer not null default 0'));
   assert.ok(entriesSql.includes('count(distinct session_id)'));
   assert.ok(entriesSql.includes('site_entries = excluded.site_entries'));
