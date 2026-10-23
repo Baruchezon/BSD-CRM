@@ -69,11 +69,13 @@ const TL_ICON={'שיחה':'☎','שליחת מידע':'✉','חתימה':'✍','
 function timelineHtml(list,limit){const rows=Array.isArray(list)?list:[];if(!rows.length)return '<p class="empty">טרם עודכנו פעולות לעסק זה. כל שיחה, שליחת מידע, חתימה ודוח חדש יופיעו כאן לפי התאריך.</p>';const shown=limit?rows.slice(0,limit):rows;
  return `<ol class="timeline-list">${shown.map(t=>`<li class="tl-item tl-${esc(t.type)}"><span class="tl-dot" aria-hidden="true">${TL_ICON[t.type]||'•'}</span><div class="tl-body"><div class="tl-meta"><time>${esc(date(t.date))}</time><span class="tl-type">${esc(t.type)}</span></div><p class="tl-title">${esc(t.title)}</p>${t.text?`<p class="tl-text">${esc(t.text)}</p>`:''}</div></li>`).join('')}</ol>${limit&&rows.length>limit?`<p class="oa-more"><button data-show-timeline>להצגת כל ${rows.length} הפעולות ←</button></p>`:''}`;}
 function kpisHtml(d,reports){const s=d.match_summary||{},o=(d.outreach||[]).length;return [['matches','קונים שהיה איתם קשר',s.contacted??s.total??0,'כל קונה שצוות BSD שוחח איתו על העסק, פעם אחת לכל קונה'],['matches','קונים שחתמו',s.signed||0,'חתמו על הסכם סודיות ותיווך'],['matches','קונים בתהליך פעיל',s.active||0,'קונים שהטיפול בהם עדיין נמשך'],['outreach','פניות יזומות',o,'אנשי קשר שפנינו אליהם ביוזמתנו'],['reports','דוחות שיווק זמינים',reports.length,'דוחות פעילות שיווקית לצפייה']].map(([tab,k,v,h])=>`<button class="kpi" data-tab="${tab}"><span class="kpi-k">${esc(k)}</span><b>${esc(v||0)}</b><small>${esc(h)}</small></button>`).join('');}
-// «בשבוע האחרון» (23.10.2026): כניסות לאתר = distinct sessions (site_entries), so a
-// repeat visit counts. The business-page line is omitted at 0.
+// «בשבוע האחרון» (23.10.2026): every figure is a total that includes repeats.
+// כניסות לאתר = site_entries (distinct sessions). The two page lines are
+// for_sale_views and business_views, both count(*) of page views.
+// Unique-visitor columns are not read. The business-page line is omitted at 0.
 // «פרסומי מדיה» is a separate section. Group line is never called חשיפות.
 // Impressions render only when a real value is greater than 0; missing stays blank, never 0.
-const PORTAL_BUILD='202610230400';
+const PORTAL_BUILD='202610230550';
 function recordedImpressions(v){if(v==null||v==='')return null;const n=Number(v);return Number.isFinite(n)&&n>0?n:null;}
 function weeklyHtml(w){if(!w)return '';const n=x=>Number(x||0).toLocaleString('he-IL');const rows=[['כניסות לאתר',w.site_entries],['צפיות בעמוד «עסקים למכירה»',w.for_sale_views]];if(Number(w.business_views)>0)rows.push(['צפיות בעמוד העסק שלך באתר BSD',w.business_views]);return '<section class="weekly-stats"><h3>בשבוע האחרון</h3><ul>'+rows.map(([l,v])=>`<li><strong>${n(v)}</strong> ${esc(l)}</li>`).join('')+'</ul></section>';}
 function mediaStatusLabel(s){const t=String(s||'').trim().toLowerCase().split(/\s+/)[0];if(t==='active'||t==='published')return 'פורסם';return esc(s||'');}
