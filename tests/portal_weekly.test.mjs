@@ -12,6 +12,7 @@ const js = read('portal/portal.js');
 const html = read('portal/index.html');
 const handler = read('supabase/functions/seller-portal-api/handler.ts');
 const sql = read('supabase/migrations/20261022190000_seller_portal_weekly_stats.sql');
+const entriesSql = read('supabase/migrations/20261023040000_seller_portal_site_entries.sql');
 
 function renderers() {
   const start = js.indexOf('function recordedImpressions');
@@ -26,15 +27,17 @@ function renderers() {
   return ctx;
 }
 
-const weekly = { site_visitors: 51, for_sale_views: 70, business_views: 0 };
+const weekly = { site_visitors: 52, site_entries: 105, for_sale_views: 70, business_views: 0 };
 const post = (extra = {}) => ({ platform: 'facebook', group_name: 'פורום עסקים באר שבע', posted_on: '2026-10-18', status: 'active', member_count: 17200, impressions: null, ...extra });
 
 test('weekly card hides a zero business-page line and never mentions Facebook impressions', () => {
   const { weeklyHtml } = renderers();
   const hidden = weeklyHtml(weekly);
   assert.ok(hidden.includes('בשבוע האחרון'));
-  assert.ok(hidden.includes('>51<') || hidden.includes('>51 ') || hidden.includes('51'));
-  assert.ok(hidden.includes('כניסות לאתר BSD') && hidden.includes('צפיות בעמוד «עסקים למכירה»'));
+  assert.ok(hidden.includes('>105<') || hidden.includes('>105 ') || hidden.includes('105'));
+  assert.ok(!hidden.includes('52'), 'unique visitors are not the figure on the card');
+  assert.ok(hidden.includes('כניסות לאתר') && !hidden.includes('כניסות לאתר BSD'));
+  assert.ok(hidden.includes('צפיות בעמוד «עסקים למכירה»'));
   assert.ok(!hidden.includes('צפיות בעמוד העסק שלך'));
   assert.ok(!hidden.includes('חשיפות') && !hidden.includes('פייסבוק'));
   const shown = weeklyHtml({ ...weekly, business_views: 2 });
@@ -85,11 +88,16 @@ test('no posts in the last 7 days falls back to the latest batch, without dates'
 });
 
 test('home mounts the two sections apart, and the API does not invent impressions', () => {
-  assert.ok(js.includes("const PORTAL_BUILD='202610221900'"));
+  assert.ok(js.includes("const PORTAL_BUILD='202610230400'"));
   assert.ok(html.includes('id="weeklyStats"') && html.includes('id="mediaPosts"'));
   assert.ok(html.indexOf('id="weeklyStats"') < html.indexOf('id="mediaPosts"') && html.indexOf('id="mediaPosts"') < html.indexOf('id="kpis"'));
   assert.ok(js.includes("weeklyHtml(data.weekly)") && js.includes("mediaHtml(data.media)"));
-  assert.ok(handler.includes('facebook_group_posts,facebook_group_members,facebook_impressions,facebook_scope,facebook_posts'));
+  assert.ok(handler.includes('site_visitors,site_entries,for_sale_views,business_views,facebook_group_posts,facebook_group_members,facebook_impressions,facebook_scope,facebook_posts'));
+  assert.ok(handler.includes('site_entries:w.data.site_entries'));
+  assert.ok(entriesSql.includes('site_entries integer not null default 0'));
+  assert.ok(entriesSql.includes('count(distinct session_id)'));
+  assert.ok(entriesSql.includes('site_entries = excluded.site_entries'));
+  assert.ok(entriesSql.includes('site_visitors = excluded.site_visitors'));
   assert.ok(handler.includes('weekly,media,'));
   assert.ok(!handler.includes('business_facebook_impressions'));
   assert.ok(!/create table[^;]*business_facebook_impressions/i.test(sql));
