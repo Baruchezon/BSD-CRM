@@ -537,9 +537,9 @@ export function createHandler(db:any,opts:Options){
     // impressions stays null until he records a real number; the portal hides it.
     let weekly:any=null,media:any=null;
     try{
-     const w=await db.from('seller_portal_weekly_stats').select('site_visitors,for_sale_views,business_views,facebook_group_posts,facebook_group_members,facebook_impressions,facebook_scope,facebook_posts').eq('business_id',business.id).maybeSingle();
+     const w=await db.from('seller_portal_weekly_stats').select('site_visitors,site_entries,for_sale_views,business_views,facebook_group_posts,facebook_group_members,facebook_impressions,facebook_scope,facebook_posts').eq('business_id',business.id).maybeSingle();
      if(w.data){
-      weekly={site_visitors:w.data.site_visitors,for_sale_views:w.data.for_sale_views,business_views:w.data.business_views};
+      weekly={site_visitors:w.data.site_visitors,site_entries:w.data.site_entries,for_sale_views:w.data.for_sale_views,business_views:w.data.business_views};
       const posts=Number(w.data.facebook_group_posts)||0;
       if(posts>0)media={scope:w.data.facebook_scope,group_posts:posts,group_members:w.data.facebook_group_members,impressions:w.data.facebook_impressions??null,posts:Array.isArray(w.data.facebook_posts)?w.data.facebook_posts:[]};
      }
