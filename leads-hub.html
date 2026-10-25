@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610221600';
+    var PAGE_BUILD = '202610251400';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -42,7 +42,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202610061550">
+<link rel="stylesheet" href="css/style.css?v=202610251400">
 <script src="js/bsdBlackBox.js?v=20261010"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
 <style>
@@ -106,7 +106,15 @@
   .sub-name{font-size:.75rem;color:#888;margin-top:2px;}
   .row-menu-btn{border:1.5px solid #d8d3c4;background:#f7f5ee;color:#333;cursor:pointer;font-size:1.1rem;font-weight:700;padding:2px 8px;border-radius:8px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.15);}
   .row-menu-btn:hover{background:#eee8d8;}
-  .notes-cell{white-space:normal;word-break:break-word;max-width:320px;line-height:1.4;}
+  .notes-cell{max-width:320px;line-height:1.35;vertical-align:middle;}
+  /* 25.10.2026 (בקשת ברוך): שורות הרשימה באותו גובה קומפקטי. הערות, לוג שיחה
+     והקלטות (אקסטרה מובייל) נחתכים ל-2 שורות ולא מגביהים את השורה.
+     הטקסט המלא נשאר בכרטיס ובריחוף. */
+  .notes-preview{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;text-overflow:ellipsis;white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.35;height:2.7em;max-height:2.7em;min-height:2.7em;min-width:0;max-width:100%;}
+  @media (max-width:700px){
+    td.notes-cell{max-width:none;overflow:hidden;}
+    td.notes-cell .notes-preview{flex:1 1 auto;width:100%;}
+  }
   .phone-cell{white-space:nowrap;min-width:100px;}
   /* 22.10.2026 (בקשת ברוך): «לקוחות בטיפול», וגם כרטיסים שהוחזרו ל«לידים»
      כשהם אותו stagedRowHtml — פס של שורה אחת. טקסט ארוך נחתך ב-ellipsis;
@@ -1066,9 +1074,13 @@ function rowPhoneCell(r){
 }
 function rowNotesCell(r){
   const body = ((CURRENT_TAB === 'seller' || CURRENT_TAB === 'manual') && /אתר|site123|website/i.test(r.source || '') && r.website_intake_stage) ? (r.website_purpose_guess || '—') : (r.notes || '—');
-  if (!(LEAD_HAS_RECORDING instanceof Set)) return esc(body);
-  const mark = LEAD_HAS_RECORDING.has(r.id) ? 'יש הקלטה' : 'אין הקלטה';
-  return body && body !== '—' ? esc(mark + ' — ' + body) : esc(mark);
+  let plain = body;
+  if (LEAD_HAS_RECORDING instanceof Set){
+    const mark = LEAD_HAS_RECORDING.has(r.id) ? 'יש הקלטה' : 'אין הקלטה';
+    plain = body && body !== '—' ? (mark + ' — ' + body) : mark;
+  }
+  const text = esc(plain);
+  return `<div class="notes-preview" title="${text}">${text}</div>`;
 }
 
 // Highlight only a documented «מהות השיחה». Whitespace-only does not count.
@@ -1203,7 +1215,7 @@ function renderTable(){
       <td class="c-narrow" style="white-space:nowrap;">${r.last_call_at ? esc(fmtDayMonth(r.last_call_at)) : '—'}</td>` : ''}
       <td>${r.created_by ? `<b style="color:${creatorColor(r.created_by) || '#333'};">${esc(userName(r.created_by))}</b>` : 'לא ידוע'}</td>
       <td>${fmtDate(r.created_at)}</td>
-      <td class="notes-cell">${rowNotesCell(r)}</td>
+      <td data-label="הערות" class="notes-cell">${rowNotesCell(r)}</td>
     </tr>`;
   }).join('');
 }
