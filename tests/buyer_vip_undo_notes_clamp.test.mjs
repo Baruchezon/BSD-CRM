@@ -22,6 +22,7 @@ test("buyer VIP checkbox: enabling stays gated by agreement and can be undone ri
 });
 
 test("buyers list: notes preview is clamped to a fixed height, full text kept in title", () => {
-  assert.match(leads, /\.notes-preview\{[^}]*-webkit-line-clamp:3;[^}]*overflow:hidden;[^}]*height:4\.2em;/);
+  assert.match(leads, /\.notes-preview\{[^}]*-webkit-line-clamp:2;[^}]*overflow:hidden;[^}]*height:2\.7em;/);
+  assert.doesNotMatch(leads, /\.notes-preview\{height:auto\}/);
   assert.match(leads, /<td data-label="הערות" class="notes-cell"><div class="notes-preview" title="\$\{esc\(l\.notes\|\|''\)\}">\$\{esc\(l\.notes\|\|'—'\)\}<\/div><\/td>/);
 });

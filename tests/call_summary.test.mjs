@@ -84,6 +84,14 @@ test('notes cell starts with the recording mark when the admin set is loaded', (
   const c = { CURRENT_TAB: 'manual', esc: s => s };
   vm.createContext(c);
   vm.runInContext(code + '\nLEAD_HAS_RECORDING = new Set(["with"]);\n', c);
-  assert.equal(c.rowNotesCell({ id: 'with', notes: 'הערה' }), 'יש הקלטה — הערה');
-  assert.equal(c.rowNotesCell({ id: 'without', notes: '' }), 'אין הקלטה');
+  const withRec = c.rowNotesCell({ id: 'with', notes: 'הערה' });
+  const without = c.rowNotesCell({ id: 'without', notes: '' });
+  assert.equal(withRec, '<div class="notes-preview" title="יש הקלטה — הערה">יש הקלטה — הערה</div>');
+  assert.equal(without, '<div class="notes-preview" title="אין הקלטה">אין הקלטה</div>');
+  const long = 'לוג שיחה אקסטרה מובייל '.repeat(80);
+  const clamped = c.rowNotesCell({ id: 'with', notes: long });
+  assert.match(clamped, /class="notes-preview"/);
+  assert.ok(clamped.includes(long.trim()), 'full note stays in the list cell; only the CSS clamps it');
+  assert.match(html, /\.notes-preview\{[^}]*-webkit-line-clamp:2;[^}]*overflow:hidden;[^}]*max-height:2\.7em;/);
+  assert.doesNotMatch(html, /\.notes-preview\{height:auto\}/);
 });

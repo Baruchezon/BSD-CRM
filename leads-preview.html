@@ -42,7 +42,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202610061550">
+<link rel="stylesheet" href="css/style.css?v=202610251400">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
 <style>
   .wrap{padding:24px 28px 60px;max-width:1300px;margin:0 auto;}
@@ -91,7 +91,13 @@
   .row-menu-btn{border:1.5px solid #d8d3c4;background:#f7f5ee;color:#333;cursor:pointer;font-size:1.1rem;font-weight:700;padding:2px 8px;border-radius:8px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.15);}
   .row-menu-btn:hover{background:#eee8d8;}
   .row-actions button{border:none;background:none;cursor:pointer;font-size:.9rem;padding:4px 6px;}
-  .notes-cell{white-space:normal;word-break:break-word;max-width:420px;line-height:1.4;}
+  .notes-cell{max-width:420px;line-height:1.35;vertical-align:middle;}
+  /* 25.10.2026 (בקשת ברוך): אותו חיתוך כמו ברשימת הקונים החיה — 2 שורות קבועות. */
+  .notes-preview{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;text-overflow:ellipsis;white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.35;height:2.7em;max-height:2.7em;min-height:2.7em;min-width:0;max-width:100%;}
+  @media (max-width:700px){
+    td.notes-cell{max-width:none;overflow:hidden;}
+    td.notes-cell .notes-preview{flex:1 1 auto;width:100%;}
+  }
   .email-cell{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help;}
   .phone-cell{white-space:nowrap;min-width:100px;}
   @media (max-width: 700px){ .phone-cell{min-width:0;} }
@@ -768,7 +774,7 @@ function renderTable(){
       <td data-label="סטטוס הסכם">${agreementBadge(l.agreement_status)}</td>
       <td data-label="נוצר">${fmtDate(l.created_at)}</td>
       <td data-label="עודכן">${fmtDate(l.updated_at)}</td>
-      <td data-label="הערות" class="notes-cell">${esc(l.notes||'—')}</td>
+      <td data-label="הערות" class="notes-cell"><div class="notes-preview" title="${esc(l.notes||'')}">${esc(l.notes||'—')}</div></td>
     </tr>`;
   }).join('');
 }

@@ -611,3 +611,28 @@ tbody tr:not(.empty-row),
   .records-table > tbody > tr.empty-row > td::before{ content:''; }
   .records-table .record-identity{ max-width:100%; }
 }
+
+/* 25.10.2026 (בקשת ברוך): תא הערות ברשימות (לידים, קונים) — תמיד 2 שורות.
+   לוג שיחה / הקלטה ארוכים לא מגביהים את השורה. הטקסט המלא נשאר ב-HTML
+   (ובכרטיס). עובד גם כש-td הופך ל-flex במובייל. */
+.notes-preview{
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  line-clamp:2;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:normal;
+  word-break:break-word;
+  overflow-wrap:anywhere;
+  line-height:1.35;
+  height:2.7em;
+  max-height:2.7em;
+  min-height:2.7em;
+  min-width:0;
+  max-width:100%;
+}
+@media (max-width:700px){
+  table td.notes-cell{ max-width:none; overflow:hidden; }
+  table td.notes-cell .notes-preview{ flex:1 1 auto; width:100%; }
+}
