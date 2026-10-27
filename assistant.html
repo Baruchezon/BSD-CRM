@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202610270430';
+    var PAGE_BUILD = '202610270450';
     window.PAGE_BUILD = PAGE_BUILD;
     var guardKey = 'bsd_ver_reload_guard:' + (location.pathname.split('/').pop() || 'index');
     function readGuard(){ try { return localStorage.getItem(guardKey); } catch(e){ try { return sessionStorage.getItem(guardKey); } catch(e2){ return 'storage-blocked'; } } }
@@ -34,17 +34,27 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css?v=202610061550">
+<link rel="stylesheet" href="css/style.css?v=202610270450">
 <script src="js/bsdBlackBox.js?v=20261010"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
 <style>
-  body{background:var(--bg);}
-  .pa-wrap{max-width:980px;margin:0 auto;padding:20px 18px 40px;display:flex;flex-direction:column;min-height:calc(100vh - 78px);}
-  .pa-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px;}
-  .pa-top h1{margin:0;color:var(--navy);font-size:1.45rem;}
-  .pa-top p{margin:6px 0 0;color:#5d6577;font-size:.86rem;line-height:1.6;max-width:680px;}
+  /* The composer stays inside the viewport. The old page grew past the
+     screen (log min-height + chips), so the field sat below the fold and
+     taps landed on nothing. */
+  body.pa-body{
+    background:var(--bg);
+    height:var(--pa-vh, 100dvh);
+    max-height:var(--pa-vh, 100dvh);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  body.pa-body .bsd-header{flex:0 0 auto;min-width:0;width:100%;}
+  .pa-wrap{flex:1 1 auto;min-height:0;width:100%;max-width:980px;margin:0 auto;padding:12px 16px 10px;display:flex;flex-direction:column;}
+  .pa-top{flex:0 0 auto;display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;}
+  .pa-top h1{margin:0;color:var(--navy);font-size:1.35rem;}
   .pa-back{border:1px solid #d8d3c4;background:#fff;color:var(--navy);border-radius:10px;padding:9px 14px;font-family:inherit;font-size:.85rem;font-weight:700;text-decoration:none;}
-  .pa-log{flex:1;background:#fff;border:1px solid #efeadb;border-radius:16px;padding:16px;box-shadow:0 4px 14px rgba(14,27,52,.05);overflow:auto;min-height:320px;}
+  .pa-log{flex:1 1 auto;min-height:0;background:#fff;border:1px solid #efeadb;border-radius:16px;padding:16px;box-shadow:0 4px 14px rgba(14,27,52,.05);overflow:auto;}
   .pa-msg{margin:0 0 14px;max-width:100%;}
   .pa-msg.user{display:flex;justify-content:flex-start;}
   .pa-user{background:var(--navy);color:#fff;border-radius:14px 14px 4px 14px;padding:10px 14px;max-width:80%;line-height:1.55;white-space:pre-wrap;}
@@ -59,22 +69,72 @@
   .pa-line{font-size:.84rem;color:#2f3647;line-height:1.55;margin-top:5px;}
   .pa-open{background:var(--gold);color:#1c2333;text-decoration:none;border-radius:9px;padding:7px 10px;font-size:.78rem;font-weight:800;white-space:nowrap;}
   .pa-open:hover{filter:brightness(.97);}
-  .pa-form{display:flex;gap:8px;margin-top:12px;}
-  .pa-form input{flex:1;border:1px solid #d8d3c4;border-radius:12px;padding:12px 14px;font-family:inherit;font-size:1rem;background:#fff;}
-  .pa-form button{background:var(--navy);color:#fff;border:none;border-radius:12px;padding:0 18px;font-family:inherit;font-weight:800;cursor:pointer;}
-  .pa-form button:disabled{opacity:.6;cursor:wait;}
-  .pa-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
-  .pa-chips button{border:1px solid #e1d8bf;background:#fff;color:var(--navy);border-radius:999px;padding:6px 10px;font-family:inherit;font-size:.75rem;cursor:pointer;}
+  .pa-form{
+    flex:0 0 auto;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    width:100%;
+    min-width:0;
+    position:relative;
+    z-index:5;
+    background:var(--bg);
+    padding-top:10px;
+    padding-bottom:max(8px, env(safe-area-inset-bottom));
+    pointer-events:auto;
+  }
+  .pa-form textarea{
+    display:block;
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    min-height:120px;
+    max-height:36dvh;
+    resize:vertical;
+    box-sizing:border-box;
+    border:1px solid #d8d3c4;
+    border-radius:14px;
+    padding:14px 16px;
+    margin:0;
+    font-family:inherit;
+    font-size:16px;
+    line-height:1.5;
+    background:#fff;
+    color:var(--text);
+    pointer-events:auto;
+    touch-action:manipulation;
+    user-select:text;
+    -webkit-user-select:text;
+    position:relative;
+    z-index:6;
+  }
+  .pa-form textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,162,75,.25);}
+  .pa-form button{
+    min-height:46px;
+    width:100%;
+    background:var(--navy);
+    color:#fff;
+    border:none;
+    border-radius:12px;
+    font-family:inherit;
+    font-size:16px;
+    font-weight:800;
+    cursor:pointer;
+    pointer-events:auto;
+    position:relative;
+    z-index:6;
+  }
   .pa-wait{color:#7b8293;font-size:.85rem;}
   .no-access{max-width:520px;margin:80px auto;text-align:center;background:#fff;border-radius:14px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,.15);}
   @media (max-width:700px){
-    .pa-wrap{padding:12px 10px 24px;}
+    .pa-wrap{padding:10px 10px 8px;}
     .pa-card-top{flex-direction:column;}
     .pa-user{max-width:100%;}
+    .pa-form textarea{min-height:108px;}
   }
 </style>
 </head>
-<body>
+<body class="pa-body">
 
 <div class="bsd-header">
   <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span id="bsdVerLabel" style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.2px;"></span></div></a>
@@ -91,24 +151,13 @@
 
 <div class="pa-wrap" id="mainWrap" style="display:none;">
   <div class="pa-top">
-    <div>
-      <h1>עוזר אישי</h1>
-      <p>שאל בעברית על אדם, עסק, התאמה, הערה או חתך. התשובה נבנית רק מנתונים שקיימים במערכת ושגלויים לפי ההרשאה שלך. לחיצה על «פתח כרטיס» פותחת את אותו מסך כמו בשאר המערכת. השיחה לא משנה נתונים.</p>
-    </div>
+    <h1>עוזר אישי</h1>
     <a class="pa-back" href="app.html">חזרה ללוח הבקרה</a>
   </div>
   <div class="pa-log" id="paLog" aria-live="polite"></div>
-  <div class="pa-chips" id="paChips">
-    <button type="button" data-q="מצא עסק לפי שם">מצא עסק לפי שם</button>
-    <button type="button" data-q="מצא קונה או מוכר לפי שם">מצא אדם לפי שם</button>
-    <button type="button" data-q="מתי העסק נכנס למערכת ומתי יצא">מתי נכנס ומתי יצא</button>
-    <button type="button" data-q="מה סטטוס ההתאמות">סטטוס התאמות</button>
-    <button type="button" data-q="מה נאמר בהערות ובפגישות">הערות ופגישות</button>
-    <button type="button" data-q="כמה עסקים בארכיון">כמה בארכיון</button>
-  </div>
-  <form class="pa-form" id="paForm">
-    <input id="paInput" name="q" maxlength="500" autocomplete="off" placeholder="למשל: מצא עסק לפי שם, או מתי קונה נכנס למערכת" aria-label="שאלה לעוזר">
-    <button type="submit" id="paSend">שאל</button>
+  <form class="pa-form" id="paForm" action="#" autocomplete="off">
+    <textarea id="paInput" name="q" rows="5" maxlength="2000" autocomplete="off" enterkeyhint="send" aria-label="הודעה"></textarea>
+    <button type="submit" id="paSend">שלח</button>
   </form>
 </div>
 
@@ -121,9 +170,9 @@
 <script src="js/config.js?v=20260930archive1"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
-<script src="js/permissions.js?v=202610270430"></script>
+<script src="js/permissions.js?v=202610270450"></script>
 <script src="js/bsd-search.js?v=202610081400"></script>
-<script src="js/personalAssistant.js?v=202610270430"></script>
+<script src="js/personalAssistant.js?v=202610270450"></script>
 <script>
 // 27.10.2026 (בקשת ברוך): עוזר אישי. קריאה בלבד דרך supabaseClient של המשתמש המחובר.
 const chat = [];
@@ -142,11 +191,22 @@ function render(){
   log.scrollTop = log.scrollHeight;
 }
 
+function syncViewport(){
+  const vv = window.visualViewport;
+  const h = vv ? Math.round(vv.height) : window.innerHeight;
+  document.documentElement.style.setProperty('--pa-vh', h + 'px');
+}
+syncViewport();
+if (window.visualViewport){
+  visualViewport.addEventListener('resize', syncViewport);
+  visualViewport.addEventListener('scroll', syncViewport);
+}
+window.addEventListener('resize', syncViewport);
+
 async function ask(text){
   const q = String(text || '').trim();
   if (!q || busy) return;
   busy = true;
-  document.getElementById('paSend').disabled = true;
   chat.push({ role:'user', text:q });
   chat.push({ role:'wait' });
   render();
@@ -161,24 +221,27 @@ async function ask(text){
   if (chat.length > 24) chat.splice(0, chat.length - 24);
   context = { cards: (result && result.cards) || [] };
   busy = false;
-  document.getElementById('paSend').disabled = false;
   render();
 }
 
+const paInput = document.getElementById('paInput');
+paInput.disabled = false;
+paInput.readOnly = false;
 document.getElementById('paForm').addEventListener('submit', (e) => {
   e.preventDefault();
-  const input = document.getElementById('paInput');
-  const value = input.value;
-  input.value = '';
+  const value = paInput.value;
+  if (!String(value || '').trim() || busy) return;
+  paInput.value = '';
   ask(value);
+  paInput.focus();
 });
-document.getElementById('paChips').addEventListener('click', (e) => {
-  const btn = e.target.closest('button');
-  if (!btn) return;
-  const input = document.getElementById('paInput');
-  input.value = btn.getAttribute('data-q') || '';
-  input.focus();
+paInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){
+    e.preventDefault();
+    document.getElementById('paForm').requestSubmit();
+  }
 });
+paInput.addEventListener('focus', syncViewport);
 
 (async function init(){
   const profile = await requireAuth();
@@ -191,10 +254,12 @@ document.getElementById('paChips').addEventListener('click', (e) => {
     return;
   }
   document.getElementById('headerUserInfo').textContent = (profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email;
-  document.getElementById('mainWrap').style.display = 'flex';
-  chat.push({ role:'assistant', result: { prose: 'אפשר לשאול על שם, על תאריך כניסה או יציאה, על סטטוס התאמה, או על מה שנשמר בהערות ובפגישות. אם יש כמה תוצאות, שאלה המשך כמו «מתי הוא נכנס» מתייחסת אליהן.', cards: [] } });
-  render();
-  document.getElementById('paInput').focus();
+  const wrap = document.getElementById('mainWrap');
+  wrap.style.display = 'flex';
+  syncViewport();
+  paInput.disabled = false;
+  paInput.readOnly = false;
+  paInput.focus();
 })();
 </script>
 </body>
