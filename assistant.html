@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<script>
+(function(){
+  try{
+    var PAGE_BUILD = '202610270430';
+    window.PAGE_BUILD = PAGE_BUILD;
+    var guardKey = 'bsd_ver_reload_guard:' + (location.pathname.split('/').pop() || 'index');
+    function readGuard(){ try { return localStorage.getItem(guardKey); } catch(e){ try { return sessionStorage.getItem(guardKey); } catch(e2){ return 'storage-blocked'; } } }
+    function writeGuard(v){ try { localStorage.setItem(guardKey, v); return true; } catch(e){ try { sessionStorage.setItem(guardKey, v); return true; } catch(e2){ return false; } } }
+    var loopGuard = readGuard();
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          if (!writeGuard(serverBuild)) return;
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BSD CRM - עוזר אישי</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css?v=202610061550">
+<script src="js/bsdBlackBox.js?v=20261010"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
+<style>
+  body{background:var(--bg);}
+  .pa-wrap{max-width:980px;margin:0 auto;padding:20px 18px 40px;display:flex;flex-direction:column;min-height:calc(100vh - 78px);}
+  .pa-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px;}
+  .pa-top h1{margin:0;color:var(--navy);font-size:1.45rem;}
+  .pa-top p{margin:6px 0 0;color:#5d6577;font-size:.86rem;line-height:1.6;max-width:680px;}
+  .pa-back{border:1px solid #d8d3c4;background:#fff;color:var(--navy);border-radius:10px;padding:9px 14px;font-family:inherit;font-size:.85rem;font-weight:700;text-decoration:none;}
+  .pa-log{flex:1;background:#fff;border:1px solid #efeadb;border-radius:16px;padding:16px;box-shadow:0 4px 14px rgba(14,27,52,.05);overflow:auto;min-height:320px;}
+  .pa-msg{margin:0 0 14px;max-width:100%;}
+  .pa-msg.user{display:flex;justify-content:flex-start;}
+  .pa-user{background:var(--navy);color:#fff;border-radius:14px 14px 4px 14px;padding:10px 14px;max-width:80%;line-height:1.55;white-space:pre-wrap;}
+  .pa-bot{background:#fbfaf6;border:1px solid #efe8d4;border-radius:14px;padding:12px 14px;}
+  .pa-prose{color:#1c2333;line-height:1.65;font-size:.95rem;}
+  .pa-cards{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
+  .pa-card{background:#fff;border:1px solid #ece6d4;border-radius:12px;padding:10px 12px;}
+  .pa-card-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;}
+  .pa-k{font-size:.72rem;color:#8a651e;font-weight:800;}
+  .pa-t{font-weight:800;color:var(--navy);font-size:1rem;}
+  .pa-s{color:#5d6577;font-size:.8rem;margin-top:2px;}
+  .pa-line{font-size:.84rem;color:#2f3647;line-height:1.55;margin-top:5px;}
+  .pa-open{background:var(--gold);color:#1c2333;text-decoration:none;border-radius:9px;padding:7px 10px;font-size:.78rem;font-weight:800;white-space:nowrap;}
+  .pa-open:hover{filter:brightness(.97);}
+  .pa-form{display:flex;gap:8px;margin-top:12px;}
+  .pa-form input{flex:1;border:1px solid #d8d3c4;border-radius:12px;padding:12px 14px;font-family:inherit;font-size:1rem;background:#fff;}
+  .pa-form button{background:var(--navy);color:#fff;border:none;border-radius:12px;padding:0 18px;font-family:inherit;font-weight:800;cursor:pointer;}
+  .pa-form button:disabled{opacity:.6;cursor:wait;}
+  .pa-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+  .pa-chips button{border:1px solid #e1d8bf;background:#fff;color:var(--navy);border-radius:999px;padding:6px 10px;font-family:inherit;font-size:.75rem;cursor:pointer;}
+  .pa-wait{color:#7b8293;font-size:.85rem;}
+  .no-access{max-width:520px;margin:80px auto;text-align:center;background:#fff;border-radius:14px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,.15);}
+  @media (max-width:700px){
+    .pa-wrap{padding:12px 10px 24px;}
+    .pa-card-top{flex-direction:column;}
+    .pa-user{max-width:100%;}
+  }
+</style>
+</head>
+<body>
+
+<div class="bsd-header">
+  <a href="app.html" style="text-decoration:none;color:inherit;"><div class="brand">BSD CRM <small>BSD Business Brokers Israel</small><span id="bsdVerLabel" style="display:block;font-size:.6rem;color:#8a93ab;font-weight:400;margin-top:1px;letter-spacing:.2px;"></span></div></a>
+  <div id="headerUserInfo" style="color:#ffdd33;font-size:1.05rem;font-weight:800;white-space:nowrap;margin-inline-start:16px;align-self:center;border:2px solid #ffdd33;border-radius:10px;padding:6px 14px;"></div>
+  <div class="nav">
+    <a href="app.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">לוח בקרה</a>
+    <a href="businesses.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">עסקים למכירה</a>
+    <a href="leads.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">קונים ומשקיעים</a>
+    <a href="matches-workspace.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">התאמות</a>
+    <a href="brokers.html" style="color:#cfd6e6;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:.85rem;">מתווכים</a>
+    <button class="btn btn-ghost" onclick="bsdLogout()" style="color:#fff;border-color:rgba(255,255,255,.5);background:transparent;">יציאה</button>
+  </div>
+</div>
+
+<div class="pa-wrap" id="mainWrap" style="display:none;">
+  <div class="pa-top">
+    <div>
+      <h1>עוזר אישי</h1>
+      <p>שאל בעברית על אדם, עסק, התאמה, הערה או חתך. התשובה נבנית רק מנתונים שקיימים במערכת ושגלויים לפי ההרשאה שלך. לחיצה על «פתח כרטיס» פותחת את אותו מסך כמו בשאר המערכת. השיחה לא משנה נתונים.</p>
+    </div>
+    <a class="pa-back" href="app.html">חזרה ללוח הבקרה</a>
+  </div>
+  <div class="pa-log" id="paLog" aria-live="polite"></div>
+  <div class="pa-chips" id="paChips">
+    <button type="button" data-q="מצא עסק לפי שם">מצא עסק לפי שם</button>
+    <button type="button" data-q="מצא קונה או מוכר לפי שם">מצא אדם לפי שם</button>
+    <button type="button" data-q="מתי העסק נכנס למערכת ומתי יצא">מתי נכנס ומתי יצא</button>
+    <button type="button" data-q="מה סטטוס ההתאמות">סטטוס התאמות</button>
+    <button type="button" data-q="מה נאמר בהערות ובפגישות">הערות ופגישות</button>
+    <button type="button" data-q="כמה עסקים בארכיון">כמה בארכיון</button>
+  </div>
+  <form class="pa-form" id="paForm">
+    <input id="paInput" name="q" maxlength="500" autocomplete="off" placeholder="למשל: מצא עסק לפי שם, או מתי קונה נכנס למערכת" aria-label="שאלה לעוזר">
+    <button type="submit" id="paSend">שאל</button>
+  </form>
+</div>
+
+<div class="no-access" id="noAccess" style="display:none;">
+  <h2>אין הרשאה</h2>
+  <p>העוזר האישי זמין למנהלים, או למשתמש שקיבל הרשאה לכפתור «התאמות AI חכמות».</p>
+  <a href="app.html" class="btn btn-primary" style="text-decoration:none;display:inline-block;margin-top:10px;">חזרה ללוח הבקרה</a>
+</div>
+
+<script src="js/config.js?v=20260930archive1"></script>
+<script src="js/supabaseClient.js?v=202608111530"></script>
+<script src="js/auth.js?v=202609241200"></script>
+<script src="js/permissions.js?v=202610270430"></script>
+<script src="js/bsd-search.js?v=202610081400"></script>
+<script src="js/personalAssistant.js?v=202610270430"></script>
+<script>
+// 27.10.2026 (בקשת ברוך): עוזר אישי. קריאה בלבד דרך supabaseClient של המשתמש המחובר.
+const chat = [];
+let context = { cards: [] };
+let busy = false;
+
+function esc(s){ if (s == null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function render(){
+  const log = document.getElementById('paLog');
+  log.innerHTML = chat.map(msg => {
+    if (msg.role === 'user') return '<div class="pa-msg user"><div class="pa-user">' + esc(msg.text) + '</div></div>';
+    if (msg.role === 'wait') return '<div class="pa-msg"><div class="pa-wait">מחפש בנתונים שגלויים לך…</div></div>';
+    return '<div class="pa-msg"><div class="pa-bot">' + window.BSDAssistant.renderAnswerHtml(msg.result) + '</div></div>';
+  }).join('');
+  log.scrollTop = log.scrollHeight;
+}
+
+async function ask(text){
+  const q = String(text || '').trim();
+  if (!q || busy) return;
+  busy = true;
+  document.getElementById('paSend').disabled = true;
+  chat.push({ role:'user', text:q });
+  chat.push({ role:'wait' });
+  render();
+  let result;
+  try {
+    result = await window.BSDAssistant.answerQuestion(q, { db: window.supabaseClient, context });
+  } catch (e) {
+    result = { prose: 'לא הצלחתי להשלים את החיפוש.', cards: [] };
+  }
+  chat.pop();
+  chat.push({ role:'assistant', result });
+  if (chat.length > 24) chat.splice(0, chat.length - 24);
+  context = { cards: (result && result.cards) || [] };
+  busy = false;
+  document.getElementById('paSend').disabled = false;
+  render();
+}
+
+document.getElementById('paForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = document.getElementById('paInput');
+  const value = input.value;
+  input.value = '';
+  ask(value);
+});
+document.getElementById('paChips').addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const input = document.getElementById('paInput');
+  input.value = btn.getAttribute('data-q') || '';
+  input.focus();
+});
+
+(async function init(){
+  const profile = await requireAuth();
+  if (!profile) return;
+  const allowed = typeof canUsePersonalAssistant === 'function'
+    ? canUsePersonalAssistant(profile)
+    : ((profile.role === 'admin' || profile.role === 'manager' || profile.can_use_ai_match === true) && profile.status !== 'blocked');
+  if (!allowed){
+    document.getElementById('noAccess').style.display = 'block';
+    return;
+  }
+  document.getElementById('headerUserInfo').textContent = (profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email;
+  document.getElementById('mainWrap').style.display = 'flex';
+  chat.push({ role:'assistant', result: { prose: 'אפשר לשאול על שם, על תאריך כניסה או יציאה, על סטטוס התאמה, או על מה שנשמר בהערות ובפגישות. אם יש כמה תוצאות, שאלה המשך כמו «מתי הוא נכנס» מתייחסת אליהן.', cards: [] } });
+  render();
+  document.getElementById('paInput').focus();
+})();
+</script>
+</body>
+</html>

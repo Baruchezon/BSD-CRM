@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202610101234';
+    var PAGE_BUILD = '202610270430';
     window.PAGE_BUILD = PAGE_BUILD;
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -772,7 +772,24 @@ document.getElementById('overlay').addEventListener('click', (e) => { if (e.targ
   ALL_USERS = users || [];
 
   await loadBrokers();
+  await maybeOpenBrokerFromUrl();
 })();
+
+// קישור עומק מ«עוזר אישי» וממסכים אחרים: brokers.html?open=<id>
+async function maybeOpenBrokerFromUrl(){
+  const openId = new URLSearchParams(location.search).get('open');
+  if (!openId) return;
+  let broker = ALL_BROKERS.find(x => x.id === openId) || ARCHIVED_BROKERS.find(x => x.id === openId);
+  if (!broker){
+    const { data } = await window.supabaseClient.from('brokers').select('*').eq('id', openId).maybeSingle();
+    if (data){
+      if (data.is_archived) ARCHIVED_BROKERS.push(data);
+      else ALL_BROKERS.push(data);
+      broker = data;
+    }
+  }
+  if (broker) openBrokerForm(broker.id);
+}
 </script>
 </body>
 </html>

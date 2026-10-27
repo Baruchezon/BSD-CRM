@@ -100,6 +100,13 @@ function canUseRecording(profile) {
 function canUseSurvey(profile) {
   return bsdIsAdminOrManager(profile) || !!(profile && profile.can_use_survey);
 }
+// עוזר אישי — אותו שער כמו «התאמות AI חכמות»: אדמין ומנהל תמיד,
+// ומשתמש אחר רק אם can_use_ai_match דולק. אין עמודת הרשאה חדשה.
+function canUsePersonalAssistant(profile) {
+  if (!profile || profile.status === 'blocked') return false;
+  if (profile.status && profile.status !== 'active') return false;
+  return bsdIsAdminOrManager(profile) || profile.can_use_ai_match === true;
+}
 function canUseSalesFile(profile) {
   return bsdIsAdminOrManager(profile) || !!(profile && profile.can_upload_sale_files);
 }
