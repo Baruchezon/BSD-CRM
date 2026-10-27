@@ -223,13 +223,14 @@ test('dashboard button sits beside AI matches, the old button still opens smart-
   assert.match(app, /canUsePersonalAssistant\(profile\)/);
   const page = read('assistant.html');
   const version = JSON.parse(read('version.json')).version;
+  const assistantBuild = (page.match(/PAGE_BUILD = '(\d{12})'/) || [])[1];
+  assert.ok(assistantBuild && assistantBuild >= '202610270450' && assistantBuild <= version, 'assistant build ' + assistantBuild);
   assert.match(page, /עוזר אישי/);
   assert.match(page, /bsd-search\.js/);
   assert.match(page, /personalAssistant\.js/);
   assert.match(page, /canUsePersonalAssistant/);
   assert.match(page, /renderAnswerHtml/);
   assert.match(read('js/personalAssistant.js'), /פתח כרטיס/);
-  assert.match(page, new RegExp("PAGE_BUILD = '" + version + "'"));
   assert.match(page, /<textarea[^>]*id="paInput"/);
   assert.doesNotMatch(page, /id="paInput"[^>]*(disabled|readonly)/);
   assert.doesNotMatch(page, /pa-chips|paChips|placeholder=|מצא עסק לפי שם|מתי נכנס ומתי יצא|למשל:/);

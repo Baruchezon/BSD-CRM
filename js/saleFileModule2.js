@@ -112,6 +112,7 @@ function sfCanManageFile(file){
 }
 
 let SF_CURRENT_BIZ = null;
+let SF_OPEN_CATEGORY = null;
 let SF_FILES_BY_CATEGORY = {};
 let SF_SEND_BUYERS_CACHE = null;
 let SF_SEND_BROKERS_CACHE = null;   // 03.09.2026 (מודול מתווכים) - מקביל ל-SF_SEND_BUYERS_CACHE, לא מחליף אותו
@@ -256,10 +257,12 @@ function openSaleFileCategory(bizId, categoryKey){
   const files = SF_FILES_BY_CATEGORY[categoryKey] || [];
   const panel = document.getElementById('saleFileCategoryPanel');
   if (!panel) return;
+  SF_OPEN_CATEGORY = categoryKey;
   const hasUploadPermission = sfCanUpload();
   const canUpload = hasUploadPermission && !isAndroidMobile();
   const isPhotoCat = categoryKey === 'business_photo';
   const rows = sfGroupForDisplay(files);
+  const canSelectFiles = rows.some(r => sfCanManageFile(r.latest));
   // 30.08.2026: הוסר "הפקת תקציר PDF חדש" (היה כאן כפילות מיותרת מול
   // הפקת התקצירים הקיימת כבר במקום אחר בתיק המכירה - לפי הנחיה מפורשת).
   // generateAndSaveSummaryPdf עצמה לא נמחקה, רק הכפתורים כאן שקראו לה.
@@ -269,6 +272,14 @@ function openSaleFileCategory(bizId, categoryKey){
         <div style="font-weight:700;color:#0e1b34;">${cat.icon} ${esc(cat.label)}</div>
         <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="document.getElementById('saleFileCategoryPanel').innerHTML=''">סגור</button>
       </div>
+      ${canSelectFiles ? `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;font-weight:700;cursor:pointer;">
+          <input type="checkbox" id="sfSelectAll" onchange="sfToggleSelectAll(this.checked)" style="width:16px;height:16px;margin:0;">
+          בחר הכל
+        </label>
+        <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="deleteSelectedSaleFiles()">מחק נבחרים</button>
+      </div>` : ''}
       <div id="sfFilesList">
         ${rows.length === 0
           ? `<div style="color:#5a6172;font-size:.85rem;margin-bottom:10px;">לא קיים עדיין קובץ ${esc(cat.label)}</div>` +
@@ -324,9 +335,13 @@ function warmSaleFilePreview(paths){
 function sfFileRow(f, canManage, bizId, categoryKey){
   const isAuto = f.source === 'auto_generated';
   const updatedDiffers = f.updated_at && f.updated_at !== f.created_at;
+  const pick = canManage
+    ? `<input type="checkbox" class="sf-file-check" data-file-id="${esc(f.id)}" onchange="sfSyncSelectAll()" aria-label="בחר קובץ" style="width:16px;height:16px;flex:none;margin:0;">`
+    : '';
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e5e1d5;font-size:.83rem;flex-wrap:wrap;gap:4px;">
-      <span>📄 ${esc(f.file_name)} <span style="color:#8a93ab;font-size:.75rem;">${f.confidentiality_level === 1 ? '· אנונימי' : '· חסוי'}</span> ${sfSourceBadge(f)}
+      ${pick}
+      <span style="flex:1;min-width:160px;">📄 ${esc(f.file_name)} <span style="color:#8a93ab;font-size:.75rem;">${f.confidentiality_level === 1 ? '· אנונימי' : '· חסוי'}</span> ${sfSourceBadge(f)}
         <span style="color:#b3a98a;font-size:.7rem;">נוצר: ${fmtDateTime ? fmtDateTime(f.created_at) : ''}${updatedDiffers ? (' · עודכן: ' + fmtDateTime(f.updated_at)) : ''}${f.version_number ? (' · גרסה ' + f.version_number) : ''}${f.uploaded_by ? (' · ' + (typeof userName === 'function' ? userName(f.uploaded_by) : '')) : ''}</span>
       </span>
       <span style="display:flex;gap:4px;flex-wrap:wrap;">
@@ -587,6 +602,64 @@ async function changeSaleFileCategory(fileId, currentBucketKey){
   toast('הקטגוריה עודכנה');
   await sfLogAudit(SF_CURRENT_BIZ, 'change_sale_file_category', { file_id: fileId, old_bucket: currentBucketKey, new_bucket: newCat.key });
   await loadSaleFileModule(SF_CURRENT_BIZ);
+}
+
+function sfToggleSelectAll(checked){
+  document.querySelectorAll('#saleFileCategoryPanel .sf-file-check').forEach(box => { box.checked = !!checked; });
+  sfSyncSelectAll();
+}
+
+function sfSyncSelectAll(){
+  const boxes = Array.from(document.querySelectorAll('#saleFileCategoryPanel .sf-file-check'));
+  const all = document.getElementById('sfSelectAll');
+  if (!all) return;
+  const picked = boxes.filter(box => box.checked).length;
+  all.checked = boxes.length > 0 && picked === boxes.length;
+  all.indeterminate = picked > 0 && picked < boxes.length;
+}
+
+async function deleteSelectedSaleFiles(){
+  const ids = Array.from(document.querySelectorAll('#saleFileCategoryPanel .sf-file-check:checked')).map(el => el.dataset.fileId).filter(Boolean);
+  const chosen = ids.map(id => sfAllActiveFiles().find(f => f.id === id)).filter(Boolean);
+  if (!chosen.length){ toast('לא נבחרו קבצים למחיקה'); return; }
+  const list = chosen.map(f => '• ' + f.file_name).join('\n');
+  const lead = chosen.length === 1
+    ? `למחוק את "${chosen[0].file_name}" מתיק המכירה?`
+    : `למחוק ${chosen.length} קבצים שנבחרו מתיק המכירה?\n\n${list}`;
+  const tail = (chosen.length === 1 ? 'הקובץ יוסר' : 'הקבצים יוסרו') + ' גם מפורטל בעל העסק. (נשמר בגיבוי וניתן לשחזר.)';
+  if (!confirm(`${lead}\n\n${tail}`)) return;
+
+  let vipFileId = null;
+  if (chosen.some(f => sfBucketKeyForFile(f) === 'anonymous_summary')){
+    const st = await sfVipStatusFor(SF_CURRENT_BIZ);
+    if (st && st.publication && st.publication.enabled) vipFileId = st.publication.anonymous_file_id || null;
+  }
+  const blocked = [];
+  const deletable = [];
+  chosen.forEach(file => {
+    if (vipFileId && file.id === vipFileId) blocked.push(file.file_name);
+    else deletable.push(file);
+  });
+  if (!deletable.length){
+    toast('⚠️ הקבצים שנבחרו מוצגים כרגע ב-VIP - השתמש ב«🔄 החלף בקובץ חדש» במקום מחיקה');
+    return;
+  }
+  const { error } = await window.supabaseClient.from('business_sale_files')
+    .update({ status: 'deleted', deleted_at: new Date().toISOString() })
+    .in('id', deletable.map(f => f.id))
+    .eq('business_id', SF_CURRENT_BIZ);
+  if (error){ toast('שגיאה במחיקה: ' + error.message); return; }
+  toast(blocked.length
+    ? `נמחקו ${deletable.length} קבצים. לא נמחקו (מוצגים ב-VIP): ${blocked.join(', ')}`
+    : (deletable.length === 1 ? 'הקובץ נמחק' : `נמחקו ${deletable.length} קבצים`));
+  await sfLogAudit(SF_CURRENT_BIZ, 'delete_sale_file', {
+    file_ids: deletable.map(f => f.id),
+    file_names: deletable.map(f => f.file_name),
+    blocked_vip: blocked
+  });
+  const cat = SF_OPEN_CATEGORY;
+  await loadSaleFileModule(SF_CURRENT_BIZ);
+  if (cat) openSaleFileCategory(SF_CURRENT_BIZ, cat);
 }
 
 async function deleteSaleFile(fileId){
