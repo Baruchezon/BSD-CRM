@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610101234';
+    var PAGE_BUILD = '202610270430';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -170,6 +170,9 @@
       <button id="aiMatchBtn" onclick="runAiMatchSuggestions()" title="מסך מלא עם התאמות חדשות בלבד (50%+) והסבר לכל התאמה" style="background:var(--gold);color:#1c2333;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;margin-left:10px;">
         🧠 התאמות AI חכמות
       </button>
+      <button id="personalAssistantBtn" onclick="openPersonalAssistant()" title="שאלה בעברית על אדם, עסק, התאמה או חתך, עם קישור לכרטיס" style="background:#fff;color:var(--navy);border:2px solid var(--gold);border-radius:10px;padding:10px 18px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;margin-left:10px;">
+        עוזר אישי
+      </button>
       <button id="surveyBtn" onclick="openSurveyModal()" style="background:var(--navy);color:#fff;border:none;border-radius:10px;padding:12px 20px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;">
         🔍 סקר
       </button>
@@ -249,7 +252,7 @@
 <script src="js/config.js?v=20260930archive1"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
-<script src="js/permissions.js?v=202608251215"></script>
+<script src="js/permissions.js?v=202610270430"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/taskActions.js?v=202610211000"></script>
 <script src="js/push.js?v=202610211000"></script>
@@ -607,6 +610,11 @@ function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace
 // וכפתור שליחה למייל (אותה פונקציה match-suggestions-report, גרסה 6).
 function runAiMatchSuggestions(){
   window.location.href = 'smart-matches.html';
+}
+
+// 27.10.2026 (בקשת ברוך): «עוזר אישי» — מסך שיחה לקריאה בלבד. לא נוגע בכפתור ההתאמות.
+function openPersonalAssistant(){
+  window.location.href = 'assistant.html';
 }
 
 let SURVEY_TARGET_TYPE = 'business';
@@ -1103,6 +1111,8 @@ window.bsdOnLeadPush = function(){ if (CURRENT_PROFILE) checkNewLeadPopup(CURREN
   const surveyBtn = document.getElementById('surveyBtn');
   if (!fullAccess && !profile.can_use_ai_match) aiBtn.style.display = 'none';
   if (!fullAccess && !profile.can_use_survey) surveyBtn.style.display = 'none';
+  const assistantBtn = document.getElementById('personalAssistantBtn');
+  if (assistantBtn && typeof canUsePersonalAssistant === 'function' && !canUsePersonalAssistant(profile)) assistantBtn.style.display = 'none';
 
   const restoredDashboard = restoreDashboardCache();
   if (!restoredDashboard){
