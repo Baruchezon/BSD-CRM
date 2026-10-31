@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610270621';
+    var PAGE_BUILD = '202610311830';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -542,6 +542,7 @@
 <script src="js/standaloneRecording.js?v=20261012-1"></script>
 <script src="js/pdfPipeline.js?v=20261012-1"></script>
 <script src="js/saleFileModule2.js?v=202610270621"></script>
+<script src="js/listReturn.js?v=202610311830"></script>
 <script src="js/econAnalysisFill.js?v=202610111800"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=20261012-1"></script>
@@ -619,8 +620,10 @@ function toast(msg){
   box.appendChild(el);
   setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
 }
+let bizSuppressHistoryBack = false;
 function openBizFormFromDup(id){
-  closeModal();
+  bizSuppressHistoryBack = true;
+  try { closeModal(); } finally { bizSuppressHistoryBack = false; }
   openBizForm(id);
 }
 
@@ -629,16 +632,32 @@ function cancelBizForm(){
 }
 
 function closeModal(){
+  const st = history.state;
+  const backToLeads = !bizSuppressHistoryBack && st && st.bsdCardType === 'business' && st.bsdFrom === 'leads-hub';
   document.getElementById('overlay').classList.remove('open');
   document.getElementById('overlay').classList.remove('biz-fullpage'); // ניקוי מצב "עמוד מלא" של כרטיס העסק (bsdTabifyBizForm),
   document.getElementById('modalBox').classList.remove('biz-fullpage-modal'); // כדי ששאר המודאלים (ליד/התאמה וכו') ייפתחו כרגיל בפעם הבאה
   document.getElementById('modalBox').innerHTML = '';
-  if (history.state && history.state.bsdCardType === 'business'){
+  // Opened from the leads list: Back returns to that list, not to the businesses screen.
+  if (backToLeads){ history.back(); return; }
+  if (!bizSuppressHistoryBack && st && st.bsdCardType === 'business'){
     history.replaceState({ bsdListType:'businesses' }, '', location.pathname);
   }
 }
 
 function enterBusinessCardHistory(id){
+  const fromHub = (window.BSDListReturn && BSDListReturn.cameFromHub(location.search)) || (history.state && history.state.bsdFrom === 'leads-hub');
+  if (fromHub && window.BSDListReturn){
+    BSDListReturn.applyHistory(BSDListReturn.planCardEntry({
+      href: location.href,
+      state: history.state,
+      fromHub: true,
+      cardType: 'business',
+      listType: 'businesses',
+      recordId: id || null
+    }));
+    return;
+  }
   const cardState = { bsdCardType:'business', recordId:id || null };
   if (history.state && history.state.bsdCardType === 'business'){
     history.replaceState(cardState, '', location.pathname + (id ? '?card=' + encodeURIComponent(id) : '?new=1'));
@@ -651,7 +670,8 @@ function enterBusinessCardHistory(id){
 window.addEventListener('popstate', function(event){
   const overlay = document.getElementById('overlay');
   if (overlay && overlay.classList.contains('open') && (!event.state || event.state.bsdCardType !== 'business')){
-    closeModal();
+    bizSuppressHistoryBack = true;
+    try { closeModal(); } finally { bizSuppressHistoryBack = false; }
   }
 });
 
@@ -5505,7 +5525,7 @@ async function saveBiz(e){
     if (strongMatches.length){
       const decision = await bsdShowDupConfirmDialog({ matches: dupMatches, entityLabel: 'עסק' });
       if (decision.action === 'cancel'){ bsdSetButtonLoading(submitBtn, false); return; }
-      if (decision.action === 'open'){ closeModal(); openBizForm(decision.id); return; }
+      if (decision.action === 'open'){ openBizFormFromDup(decision.id); return; }
       if (decision.action === 'override'){ payload.dedupe_override_reason = decision.reason; }
     }
   }

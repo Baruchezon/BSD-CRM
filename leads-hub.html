@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610251400';
+    var PAGE_BUILD = '202610311830';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -350,6 +350,7 @@
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/phoneCalls.js?v=202610142200"></script>
 <script src="js/push.js?v=202610051500"></script>
+<script src="js/listReturn.js?v=202610311830"></script>
 <script>
 let ALL_BUSINESSES = [];
 let ALL_SELLERS = [];
@@ -414,10 +415,128 @@ function toast(msg){
   box.appendChild(el);
   setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
 }
-function closeModal(){
-  document.getElementById('overlay').classList.remove('open');
-  document.getElementById('modalBox').innerHTML = '';
+let hubSuppressHistoryBack = false;
+try { if (window.BSDListReturn) BSDListReturn.armScrollRestoration(); } catch (e) {}
+
+function hideHubOverlay(){
+  const overlay = document.getElementById('overlay');
+  if (overlay) overlay.classList.remove('open');
+  const box = document.getElementById('modalBox');
+  if (box) box.innerHTML = '';
 }
+function closeModal(){
+  const st = history.state;
+  const back = !hubSuppressHistoryBack && st && st.bsdCardType === 'hub-lead';
+  hideHubOverlay();
+  // סגירה / ביטול בכרטיס = אותו צעד היסטוריה כמו כפתור Back של הדפדפן.
+  if (back) history.back();
+}
+function captureHubListState(anchorId){
+  const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const needs = document.getElementById('y2026FilterNeedsReview');
+  const inner = document.querySelector('#legacyY2026AndOtherTabsSection .table-scroll-inner');
+  return {
+    v: 1,
+    tab: (typeof CURRENT_TAB !== 'undefined' && CURRENT_TAB) ? CURRENT_TAB : 'manual',
+    y2026Mode: (typeof Y2026_VIEW_MODE !== 'undefined' && Y2026_VIEW_MODE) ? Y2026_VIEW_MODE : 'new',
+    showExists: typeof Y2026_SHOW_EXISTS_ELSEWHERE !== 'undefined' && !!Y2026_SHOW_EXISTS_ELSEWHERE,
+    search: val('fSearch'),
+    callStatus: val('fCallStatus'),
+    y2026Search: val('y2026ReviewSearch'),
+    y2026Class: val('y2026FilterClassification'),
+    y2026Exists: val('y2026FilterExists'),
+    y2026Agreement: val('y2026FilterAgreement'),
+    y2026Status: val('y2026FilterStatus'),
+    y2026Needs: !!(needs && needs.checked),
+    scroll: window.BSDListReturn ? BSDListReturn.snapshotScroll() : { x: 0, y: 0 },
+    tableX: inner ? inner.scrollLeft : 0,
+    anchorId: anchorId || null
+  };
+}
+let hubRestorePending = null;
+function finishHubRestore(){
+  const state = hubRestorePending;
+  if (!state || !window.BSDListReturn) return;
+  const inner = document.querySelector('#legacyY2026AndOtherTabsSection .table-scroll-inner');
+  if (inner && state.tableX) inner.scrollLeft = state.tableX;
+  BSDListReturn.applyScroll(state.scroll);
+  BSDListReturn.revealRow(state.anchorId);
+  const safe = state.anchorId && (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(String(state.anchorId)) : String(state.anchorId).replace(/[^A-Za-z0-9_-]/g, ''));
+  const row = safe && document.querySelector('[data-lead-id="' + safe + '"]');
+  if (state.anchorId && !row && !state._retried){ state._retried = true; return; }
+  hubRestorePending = null;
+}
+function restoreHubListState(state){
+  if (!state || state.v !== 1) return;
+  hubRestorePending = state;
+  const set = (id, value) => { const el = document.getElementById(id); if (el && value != null) el.value = value; };
+  set('fSearch', state.search || '');
+  set('fCallStatus', state.callStatus || '');
+  set('y2026ReviewSearch', state.y2026Search || '');
+  set('y2026FilterClassification', state.y2026Class || '');
+  set('y2026FilterExists', state.y2026Exists || '');
+  set('y2026FilterAgreement', state.y2026Agreement || '');
+  set('y2026FilterStatus', state.y2026Status || '');
+  const needs = document.getElementById('y2026FilterNeedsReview');
+  if (needs) needs.checked = !!state.y2026Needs;
+  if (state.y2026Mode === 'legacy' || state.y2026Mode === 'new') Y2026_VIEW_MODE = state.y2026Mode;
+  Y2026_SHOW_EXISTS_ELSEWHERE = !!state.showExists;
+  if (typeof switchTab === 'function') switchTab(state.tab || 'manual');
+  const inner = document.querySelector('#legacyY2026AndOtherTabsSection .table-scroll-inner');
+  if (inner && state.tableX) inner.scrollLeft = state.tableX;
+  finishHubRestore();
+}
+function enterHubCardHistory(id){
+  if (!window.BSDListReturn) return;
+  const plan = BSDListReturn.planCardEntry({
+    href: location.href,
+    state: history.state,
+    cardType: 'hub-lead',
+    listType: 'leads-hub',
+    recordId: id || null,
+    listSnapshot: captureHubListState(id)
+  });
+  BSDListReturn.applyHistory(plan);
+}
+function leaveHubForCard(url, anchorId){
+  const list = captureHubListState(anchorId);
+  if (window.BSDListReturn){
+    BSDListReturn.saveHub(list);
+    try { history.replaceState({ bsdListType:'leads-hub', list: list }, '', BSDListReturn.listUrl(location.href)); }
+    catch (e) {}
+  }
+  location.href = url;
+}
+function hubReturnSnapshot(){
+  const st = history.state;
+  if (st && st.bsdListType === 'leads-hub' && st.list) return st.list;
+  if (st && st.bsdCardType === 'hub-lead' && st.list && !new URLSearchParams(location.search).get('open')){
+    if (window.BSDListReturn){
+      history.replaceState({ bsdListType:'leads-hub', list: st.list }, '', BSDListReturn.listUrl(location.href));
+    }
+    return st.list;
+  }
+  if (!window.BSDListReturn) return null;
+  if (BSDListReturn.navigationType() === 'back_forward') return BSDListReturn.takeHub();
+  BSDListReturn.takeHub();
+  return null;
+}
+window.addEventListener('popstate', function(event){
+  hubSuppressHistoryBack = true;
+  try {
+    const overlay = document.getElementById('overlay');
+    const stillCard = event.state && event.state.bsdCardType === 'hub-lead';
+    if (overlay && overlay.classList.contains('open') && !stillCard) hideHubOverlay();
+    if (!stillCard && event.state && event.state.bsdListType === 'leads-hub' && event.state.list){
+      restoreHubListState(event.state.list);
+    }
+  } finally {
+    hubSuppressHistoryBack = false;
+  }
+});
+window.addEventListener('pageshow', function(ev){
+  if (ev.persisted && window.BSDListReturn) BSDListReturn.takeHub();
+});
 
 async function loadUsers(){
   const { data } = await window.supabaseClient.rpc('get_active_users_basic');
@@ -700,12 +819,13 @@ async function renderY2026ReviewTable(){
 
   if (rows.length === 0){
     body.innerHTML = '<tr class="empty-row"><td colspan="5">אין רשומות תואמות</td></tr>';
+    finishHubRestore();
     return;
   }
   body.innerHTML = rows.map(r => {
     const matches = Y2026_REVIEW_MATCHES_CACHE[r.id] || [];
     return `
-    <tr style="cursor:pointer;" onclick="openY2026ReviewDetail('${r.id}')">
+    <tr style="cursor:pointer;" data-lead-id="${esc(r.id)}" onclick="openY2026ReviewDetail('${r.id}')">
       <td>
         <div class="primary-name">${esc(r.full_name || 'שם לא זוהה')}</div>
         <div class="sub-name">${esc(r.phone || '—')}${r.email ? ' · ' + esc(r.email) : ''}</div>
@@ -716,6 +836,7 @@ async function renderY2026ReviewTable(){
       <td>${esc(reviewStatusLabel(r))}</td>
     </tr>`;
   }).join('');
+  finishHubRestore();
 }
 
 function y2026AgreementSummary(matches){
@@ -786,6 +907,7 @@ async function openY2026ReviewDetail(id){
         ${isAdmin && r.is_hidden && !isExistingBuyerOrBusiness(matches) ? `<button onclick="closeModal();hardDeleteY2026ReviewConfirm('${r.id}')" style="background:#fff;border:1px solid #7a0016;color:#7a0016;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">🗑️ מחק לצמיתות מ"לידים 2026"</button>` : ''}`}
     </div>
   `;
+  enterHubCardHistory(id);
   document.getElementById('overlay').classList.add('open');
 }
 async function saveY2026ReviewEdit(id){
@@ -1167,6 +1289,7 @@ function renderTable(){
   const body = document.getElementById('leadsBody');
   if (rows.length === 0){
     body.innerHTML = `<tr class="empty-row"><td colspan="${colCount}">אין רשומות בקטגוריה זו</td></tr>`;
+    finishHubRestore();
     return;
   }
   const tn = tableName();
@@ -1195,7 +1318,7 @@ function renderTable(){
     const callStatus = callOn ? leadCallStatusValue(r) : '';
     const rowCls = LEAD_CALL_ROW_CLASS[callStatus] || '';
     return `
-    <tr class="${rowCls}" style="cursor:pointer;" onclick="${rowClickAction}">
+    <tr class="${rowCls}" data-lead-id="${esc(r.id)}" style="cursor:pointer;" onclick="${rowClickAction}">
       <td>
         <div style="display:flex;align-items:flex-start;gap:8px;">
           <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
@@ -1218,6 +1341,7 @@ function renderTable(){
       <td data-label="הערות" class="notes-cell">${rowNotesCell(r)}</td>
     </tr>`;
   }).join('');
+  finishHubRestore();
 }
 
 // ---------- 22.10.2026: לקוחות בטיפול / כרטיסים שהוחזרו ללידים ----------
@@ -1233,7 +1357,7 @@ function stagedCardUrl(r){
 }
 function openStagedCard(id){
   const r = currentRows().find(x => x.id === id && x.__staged);
-  if (r) location.href = stagedCardUrl(r);
+  if (r) leaveHubForCard(stagedCardUrl(r), id);
 }
 function openWebsiteLeadForInProgress(id){
   openWebsiteLead(id);
@@ -1312,7 +1436,7 @@ function stagedRowHtml(r, callOn){
   const tip = [name, number, typeLabel, sourceLabel, statusDate].filter(Boolean).join(' · ');
   const cols = callOn ? 8 : 6;
   return `
-    <tr class="staged-strip" data-staged="${isBiz ? 'business' : 'lead'}" style="cursor:pointer;" title="${esc(tip)}" onclick="openStagedCard('${r.id}')">
+    <tr class="staged-strip" data-staged="${isBiz ? 'business' : 'lead'}" data-lead-id="${esc(r.id)}" style="cursor:pointer;" title="${esc(tip)}" onclick="openStagedCard('${r.id}')">
       <td colspan="${cols}">
         <div class="crm-strip">
           <div class="crm-strip-menu" onclick="event.stopPropagation()">
@@ -1344,17 +1468,15 @@ function canSendAgreement(){
 // כדי לא לשכפל את כל הלוגיקה. פותחים את העמוד המתאים עם ?open=<id>
 // (רק למי שמורשה לערוך את הליד הזה - ראה canEditRecord)
 function openEdit(id){
-  if (CURRENT_TAB === 'business'){
-    location.href = 'businesses.html?open=' + encodeURIComponent(id) + '&from=leads-hub';
-  } else {
-    location.href = 'leads.html?open=' + encodeURIComponent(id) + '&from=leads-hub';
-  }
+  const page = CURRENT_TAB === 'business' ? 'businesses.html' : 'leads.html';
+  leaveHubForCard(page + '?open=' + encodeURIComponent(id) + '&from=leads-hub', id);
 }
 
 // תצוגה בלבד - למי שרואה ליד שלא הוא הכניס: פרטים בלי אפשרות עריכה/שמירה
 function openReadOnly(id){
   const r = currentRows().find(x => x.id === id);
   if (!r){ toast('רשומה לא נמצאה'); return; }
+  enterHubCardHistory(id);
   const rows = [];
   if (CURRENT_TAB === 'business'){
     rows.push(['שם עסק', r.internal_name], ['בעלים', r.owner_name], ['טלפון', r.owner_phone],
@@ -1694,7 +1816,7 @@ async function openDeepLink(openId){
   // «פתח כרטיס קיים»: a buyer already moved to קונים ומשקיעים is not in this list.
   const looked = existing.data || (await window.supabaseClient.from('leads').select('id,type').eq('id', openId).maybeSingle()).data;
   if (looked && (looked.type === 'buyer' || looked.type === 'partner')){
-    location.href = 'leads.html?open=' + encodeURIComponent(openId);
+    leaveHubForCard('leads.html?open=' + encodeURIComponent(openId) + '&from=leads-hub', openId);
     return;
   }
   history.replaceState(null, '', location.pathname);
@@ -1705,6 +1827,7 @@ function openWebsiteLead(id){
   const r = [...ALL_MANUAL, ...ALL_SELLERS].find(x => x.id === id);
   if (!r){ toast('הליד לא נמצא'); return; }
   if (!canEditRecord(r.created_by)){ openReadOnly(id); return; }
+  enterHubCardHistory(id);
   renderWebsiteLeadConversationForm(r);
 }
 
@@ -2562,6 +2685,10 @@ async function rejectWebsiteLead(id){
     await openDeepLink(openId);
   } else if (params.get('tab') === 'in_progress') {
     switchTab('in_progress');
+  }
+  if (!openId){
+    const snap = hubReturnSnapshot();
+    if (snap) restoreHubListState(snap);
   }
 })();
 </script>
