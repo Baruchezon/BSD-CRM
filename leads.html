@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610251400';
+    var PAGE_BUILD = '202610311830';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -301,6 +301,7 @@
 <script src="js/archiveModule.js?v=202610112100"></script>
 <script src="js/crmStage.js?v=202610221200"></script>
 <script src="js/phoneCalls.js?v=202610142200"></script>
+<script src="js/listReturn.js?v=202610311830"></script>
 <script>
 let ALL_LEADS = [];
 let ARCHIVED_LEADS = [];
@@ -342,36 +343,109 @@ function toast(msg){
   setTimeout(()=>{ if (el.parentElement) el.remove(); }, isError ? 8000 : 3500);
 }
 function openLeadFormFromDup(id){
-  closeModal();
+  leadSuppressHistoryBack = true;
+  try { hideLeadOverlay(); } finally { leadSuppressHistoryBack = false; }
   openLeadForm(id);
+}
+
+let leadSuppressHistoryBack = false;
+try { if (window.BSDListReturn) BSDListReturn.armScrollRestoration(); } catch (e) {}
+
+function captureLeadsListState(anchorId){
+  const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const inner = document.querySelector('#leadsTableWrap .table-scroll-inner');
+  return {
+    v: 1,
+    search: val('fSearch'),
+    type: val('fType') || 'buyer',
+    agreement: val('fAgreement') || 'all',
+    createdBy: val('fCreatedBy') || 'all',
+    sort: val('fSort') || 'updated_desc',
+    view: (typeof LEAD_VIEW_MODE !== 'undefined' && LEAD_VIEW_MODE) ? LEAD_VIEW_MODE : 'active',
+    scroll: window.BSDListReturn ? BSDListReturn.snapshotScroll() : { x: 0, y: 0 },
+    tableX: inner ? inner.scrollLeft : 0,
+    anchorId: anchorId || null
+  };
+}
+function restoreLeadsListState(state){
+  if (!state || state.v !== 1) return;
+  const set = (id, value) => { const el = document.getElementById(id); if (el && value != null) el.value = value; };
+  set('fSearch', state.search || '');
+  set('fAgreement', state.agreement || 'all');
+  set('fCreatedBy', state.createdBy || 'all');
+  set('fSort', state.sort || 'updated_desc');
+  if (state.view === 'archive'){
+    if (typeof setLeadViewMode === 'function') setLeadViewMode('archive');
+  } else {
+    if (typeof LEAD_VIEW_MODE !== 'undefined' && LEAD_VIEW_MODE === 'archive' && typeof setLeadViewMode === 'function') setLeadViewMode('active');
+    if (typeof switchLeadTypeTab === 'function') switchLeadTypeTab(state.type || 'buyer');
+    else { set('fType', state.type || 'buyer'); if (typeof renderTable === 'function') renderTable(); }
+  }
+  const inner = document.querySelector('#leadsTableWrap .table-scroll-inner');
+  if (inner && state.tableX != null) inner.scrollLeft = state.tableX;
+  if (window.BSDListReturn){
+    BSDListReturn.applyScroll(state.scroll);
+    BSDListReturn.revealRow(state.anchorId);
+  }
+}
+function restoreLeadsListFromHistory(){
+  const st = history.state;
+  if (!st || !st.list || st.bsdFrom === 'leads-hub') return;
+  if (new URLSearchParams(location.search).get('open')) return;
+  const overlay = document.getElementById('overlay');
+  // A card that just opened must keep its history entry. Collapsing it here
+  // would make the next Back skip the list and land on the dashboard.
+  if (st.bsdCardType === 'lead' && overlay && overlay.classList.contains('open')) return;
+  restoreLeadsListState(st.list);
+  if (st.bsdCardType === 'lead' && window.BSDListReturn){
+    history.replaceState({ bsdListType:'leads', list: st.list }, '', BSDListReturn.listUrl(location.href));
+  }
 }
 
 function cancelLeadForm(){
   closeModal();
 }
 
+function hideLeadOverlay(){
+  const overlay = document.getElementById('overlay');
+  if (overlay) overlay.classList.remove('open');
+  const box = document.getElementById('modalBox');
+  if (box) box.innerHTML = '';
+}
 function closeModal(){
-  document.getElementById('overlay').classList.remove('open');
-  document.getElementById('modalBox').innerHTML = '';
-  if (history.state && history.state.bsdCardType === 'lead'){
-    history.replaceState({ bsdListType:'leads' }, '', location.pathname);
-  }
+  const st = history.state;
+  const back = !leadSuppressHistoryBack && st && st.bsdCardType === 'lead';
+  hideLeadOverlay();
+  // In-app close uses the same history step as the browser Back button.
+  if (back) history.back();
 }
 
 function enterLeadCardHistory(id){
-  const cardState = { bsdCardType:'lead', recordId:id || null };
-  if (history.state && history.state.bsdCardType === 'lead'){
-    history.replaceState(cardState, '', location.pathname + (id ? '?card=' + encodeURIComponent(id) : '?new=1'));
-    return;
-  }
-  history.replaceState({ bsdListType:'leads' }, '', location.pathname);
-  history.pushState(cardState, '', location.pathname + (id ? '?card=' + encodeURIComponent(id) : '?new=1'));
+  if (!window.BSDListReturn) return;
+  const fromHub = BSDListReturn.cameFromHub(location.search) || (history.state && history.state.bsdFrom === 'leads-hub');
+  const plan = BSDListReturn.planCardEntry({
+    href: location.href,
+    state: history.state,
+    fromHub: fromHub,
+    cardType: 'lead',
+    listType: 'leads',
+    recordId: id || null,
+    listSnapshot: fromHub ? null : captureLeadsListState(id)
+  });
+  BSDListReturn.applyHistory(plan);
 }
 
 window.addEventListener('popstate', function(event){
-  const overlay = document.getElementById('overlay');
-  if (overlay && overlay.classList.contains('open') && (!event.state || event.state.bsdCardType !== 'lead')){
-    closeModal();
+  leadSuppressHistoryBack = true;
+  try {
+    const overlay = document.getElementById('overlay');
+    const stillCard = event.state && event.state.bsdCardType === 'lead';
+    if (overlay && overlay.classList.contains('open') && !stillCard) hideLeadOverlay();
+    if (!stillCard && event.state && event.state.list && event.state.bsdListType === 'leads'){
+      restoreLeadsListState(event.state.list);
+    }
+  } finally {
+    leadSuppressHistoryBack = false;
   }
 });
 
@@ -756,8 +830,12 @@ async function maybeHandleUrlParams(){
     // (למשל אחרי שמירה מוצלחת, ש-saveLead קורא לה) maybeHandleUrlParams רץ שוב,
     // עדיין רואה open=<id> באותו URL, ופותח את אותו הטופס מחדש - לולאה אינסופית
     // שנראית כאילו "שמירה" תמיד מחזירה לאותו מסך בדיוק, ורק "ביטול" יוצא ממנה.
-    params.delete('open');
-    history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params.toString() : ''));
+    // לא מוחקים את מצב הכרטיס ש-enterLeadCardHistory הרגע שם — replaceState(null)
+    // היה מוחק את סימון "הגענו מרשימת הלידים" ואת תמונת המסננים.
+    if (location.search.indexOf('open=') !== -1){
+      params.delete('open');
+      history.replaceState(history.state, '', location.pathname + (params.toString() ? '?' + params.toString() : ''));
+    }
   } else if (params.get('new') === '1'){
     const t = params.get('type') === 'partner' ? 'partner' : params.get('type') === 'seller' ? 'seller' : 'buyer';
     const pf = {
@@ -768,9 +846,11 @@ async function maybeHandleUrlParams(){
       notes: params.get('pf_notes') || null
     };
     openLeadForm(null, t, pf);
-    params.delete('new'); params.delete('type');
-    params.delete('pf_first_name'); params.delete('pf_last_name'); params.delete('pf_phone'); params.delete('pf_email'); params.delete('pf_notes');
-    history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params.toString() : ''));
+    if (!(history.state && history.state.bsdCardType === 'lead')){
+      params.delete('new'); params.delete('type');
+      params.delete('pf_first_name'); params.delete('pf_last_name'); params.delete('pf_phone'); params.delete('pf_email'); params.delete('pf_notes');
+      history.replaceState(history.state, '', location.pathname + (params.toString() ? '?' + params.toString() : ''));
+    }
   }
 }
 
@@ -866,7 +946,7 @@ function renderTable(){
     const statusEmoji = rowCls === 'row-signed' ? '✅ ' : (rowCls === 'row-sent' ? '🟠 ' : '');
     const nameCell = leadIdentityCell(l, personName, statusEmoji);
 
-    return `<tr class="${rowCls}" style="cursor:pointer;" onclick="openLeadForm('${l.id}')">
+    return `<tr class="${rowCls}" data-lead-id="${esc(l.id)}" style="cursor:pointer;" onclick="openLeadForm('${l.id}')">
       <td data-label="שם / עסק">
         <div class="record-identity">
           <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
@@ -1633,7 +1713,12 @@ async function saveLead(e){
       }] : dupMatches);
       const decision = await bsdShowDupConfirmDialog({ matches: combined, entityLabel: type === 'buyer' ? 'קונה' : 'ליד' });
       if (decision.action === 'cancel'){ bsdSetButtonLoading(submitBtn, false); return; }
-      if (decision.action === 'open'){ closeModal(); openLeadForm(decision.id); return; }
+      if (decision.action === 'open'){
+        leadSuppressHistoryBack = true;
+        try { hideLeadOverlay(); } finally { leadSuppressHistoryBack = false; }
+        openLeadForm(decision.id);
+        return;
+      }
       if (decision.action === 'override'){ payload.dedupe_override_reason = decision.reason; }
     }
     payload.created_by = CURRENT_PROFILE ? CURRENT_PROFILE.id : null;
@@ -1966,6 +2051,7 @@ function renderArchiveLeadsTable(){
   const loaded = await loadLeads({ revalidate:true, preserveExisting:restored, skipUrlHandling:restored });
   switchLeadTypeTab('buyer');
   if (restored) await maybeHandleUrlParams();
+  restoreLeadsListFromHistory();
   if (!loaded) return;
   Promise.allSettled([loadUsers(), loadRatingLevels(), loadMatchCounts(), loadNotesSummary('leads')])
     .then(() => {
