@@ -419,6 +419,7 @@
 <script src="js/searchSelect.js?v=202608111530"></script>
 <script src="js/bsd-search.js?v=202610081400"></script>
 <script src="js/standaloneRecording.js?v=20261012-1"></script>
+<script src="js/meetingPrepForm.js?v=20261101"></script>
 <script src="js/pdfPipeline.js?v=20261012-1"></script>
 <script src="js/saleFileModule2.js?v=202610270621"></script>
 <script src="js/notesRecording.js?v=2"></script>
@@ -1516,6 +1517,7 @@ function openBizForm(id){
       <div class="section-h" style="margin-top:14px;">🎙️ הקלטות ותמלולים</div>
       <div class="field full">
         ${CURRENT_PROFILE.can_record!==false ? `<button type="button" class="btn btn-ghost" onclick="window.openStandaloneRecording({type:'business', id:'${biz.id}', label:'${esc((biz.internal_name||'עסק').replace(/'/g,''))}', currentProfile:CURRENT_PROFILE, onSaved: () => loadBizMeetings('${biz.id}')})">🔴 הקלט שיחה/פגישה</button>` : ''}
+        <button type="button" class="btn btn-ghost" style="margin:8px 0;font-weight:700;" onclick="BSDMeetingPrep.open(ALL_BIZ.find(b=>b.id==='${biz.id}')).catch(e=>toast(e.message,true))">📄 טופס הכנה לפגישה | הדפסה וסיכום</button>
         <div id="bizMeetingsList" style="margin-top:10px;font-size:.82rem;">טוען...</div>
       </div>
       <div class="section-h" style="margin-top:14px;">קבצים מצורפים</div>
