@@ -5,15 +5,16 @@
   const pick = (obj, keys) => keys.map(k => obj[k]).find(v => v !== null && v !== undefined && String(v).trim() !== '') ?? '';
   const fields = [
     ['מחיר מבוקש',['asking_price','price','sale_price']],
-    ['תחום פעילות',['category','business_type','industry']],
+    ['תחום פעילות',['field','business_type','industry']],
     ['שטח העסק',['area_sqm','area','size_sqm']],
     ['מחזור שנתי',['annual_revenue','revenue','turnover']],
-    ['רווח שנתי',['annual_profit','net_profit','profit']],
-    ['מספר עובדים',['employee_count','employees_count','employees']],
+    ['רווח תפעולי',['operating_profit']],
+    ['רווח נקי',['net_profit']],
+    ['מספר עובדים',['employees_count','employee_count','employees']],
     ['שכר דירה',['monthly_rent','rent']],
     ['תקופת שכירות',['lease_term','lease_end_date']],
     ['מלאי וציוד',['equipment','inventory']],
-    ['סיבת מכירה',['reason_for_sale','sale_reason']]
+    ['סיבת מכירה',['sale_reason','reason_for_sale']]
   ];
   const printStyles = String.raw`
     @page { size: A4; margin: 12mm; }
@@ -23,7 +24,7 @@
     .meta{font-size:12px;margin-bottom:8px}.tbl{width:100%;border-collapse:collapse;font-size:11px}
     .tbl td,.tbl th{border:1px solid #bbc2cb;padding:5px;vertical-align:top;text-align:right}
     .tbl th{background:#f0f1f4}.remarks{height:26px;min-width:110px}
-    .history{font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:90mm;overflow:hidden}
+    .history{font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}.source{margin:5px 0;line-height:1.5;break-inside:avoid}
     .line{border-bottom:1px solid #aeb4bf;height:23px}
     .meeting-section{break-inside:avoid}.screenonly{margin:12px 0}
     @media print{.screenonly{display:none!important}.page-break{break-before:page}}
@@ -33,16 +34,30 @@
   const noteText = m => [m.summary_text,m.decisions,m.notes].filter(Boolean).join(' | ');
   function template(biz, meetings, edits) {
     const rows = fields.map(([label,keys]) => `<tr><td>${esc(label)}</td><td>${esc(pick(biz,keys)) || 'לא נמסר'}</td><td class="remarks">${esc(edits?.[label] || '')}</td></tr>`).join('');
-    const history = meetings.slice(0,6).map(m => `${formattedDate(m.meeting_date)} | ${m.meeting_type || 'שיחה'}: ${noteText(m)}`).filter(Boolean).join('\n');
+    const history = meetings
+      .filter(m => noteText(m).trim())
+      .slice(0,12)
+      .map(m => `${formattedDate(m.meeting_date)} | ${m.meeting_type || 'שיחה'}: ${noteText(m)}`).join('\n');
     const name = pick(biz,['internal_name','business_name','name']) || 'עסק';
+    const core = [
+      ['מה העסק עושה',biz.short_description],
+      ['חקר שוק ראשוני',biz.pre_research],
+      ['מידע והערות נוספים',biz.notes],
+      ['סיבת מכירה',biz.sale_reason],
+      ['שיחות ופגישות קודמות',history]
+    ].filter(([title,value]) => String(value || '').trim())
+     .map(([title,value]) => `<div class="source"><strong>${esc(title)}:</strong> ${esc(value)}</div>`).join('');
+    const identity = [['בעל העסק',biz.owner_name],['טלפון',biz.owner_phone],['ח.פ / ת.ז',biz.id_number],['כתובת',biz.address],['עיר',biz.city],['קטגוריה',biz.category],['תת קטגוריה',biz.subcategory]]
+      .filter(([_,v]) => v != null && String(v).trim()).map(([k,v]) => `${esc(k)}: ${esc(v)}`).join(' | ');
     return `<h1>BSD | טופס הכנה וסיכום פגישה</h1>
       <div class="meta"><strong>עסק:</strong> ${esc(name)} &nbsp; <strong>מספר:</strong> ${esc(biz.business_number || '')}
       &nbsp; <strong>תאריך:</strong> ${esc(edits?.date || dateToday())}</div>
-      <section class="meeting-section"><h2>פרטי העסק | השלמות בפגישה</h2>
+      <div class="meta">${identity}</div>
+      <section><h2>המידע הקיים על העסק והנאמר בשיחות</h2>
+        <div class="history">${core || 'טרם תועד מידע על העסק במקורות הזמינים.'}</div></section>
+      <section class="meeting-section"><h2>נתונים קיימים והשלמה בפגישה</h2>
       <table class="tbl"><thead><tr><th>נושא</th><th>מידע קיים</th><th>עדכון בפגישה</th></tr></thead><tbody>${rows}</tbody></table></section>
-      <section><h2>מידע קודם ושיחות מתועדות</h2>
-      <div class="history">${esc(history || 'לא נמצאו סיכומי שיחות מתועדים בפגישות המשויכות ישירות לעסק.')}</div></section>
-      <section class="meeting-section"><h2>עיקרי הפגישה והערות</h2>${edits?.summary ? `<p style="white-space:pre-wrap;font-size:12px">${esc(edits.summary)}</p>` : Array.from({length:5},()=>'<div class="line"></div>').join('')}</section>
+      <section class="meeting-section"><h2>עיקרי הפגישה והערות</h2>${edits?.summary ? `<p style="white-space:pre-wrap;font-size:12px">${esc(edits.summary)}</p>` : Array.from({length:4},()=>'<div class="line"></div>').join('')}</section>
       <section class="meeting-section"><h2>החלטות ומשימות להמשך</h2>${edits?.next ? `<p style="white-space:pre-wrap;font-size:12px">${esc(edits.next)}</p>` : Array.from({length:3},()=>'<div class="line"></div>').join('')}</section>`;
   }
   let active = null;
@@ -93,7 +108,7 @@
     };
     el('bsdPrepSave').onclick=async()=>{
       const e=edits();
-      if(!e.summary.trim()){el('bsdPrepStatus').textContent='יש להקליד או להכתיב סיכום לפני שמירה';return;}
+      if(!e.summary.trim()){el('bsdPrepStatus').textContent='יש להקליד סיכום לפני שמירה';return;}
       if(!window.confirm('לשמור סיכום פגישה חדש בכרטיס העסק?'))return;
       const row={business_id:biz.id,meeting_type:el('bsdPrepType').value,meeting_date:e.date,summary_text:e.summary,decisions:e.next,status:'טיוטה'};
       el('bsdPrepSave').disabled=true;
