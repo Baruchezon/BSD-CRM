@@ -3890,7 +3890,7 @@ function openAnonDraftPreview(bizId, draft){
   // 06.10.2026: ה-AI כותב לפי מה שמופיע כרגע במסך (כולל שינויים שלא נשמרו) - כבר לא צריך אזהרה על "נתונים שמורים".
   const unsavedHtml = '';
   const concernsHtml = (draft.concerns && draft.concerns.length)
-    ? `<div style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.8rem;color:#8a2c1f;">⚠️ ה-AI או הבדיקה האוטומטית סימנו חשש: ${draft.concerns.map(esc).join(' · ')} — תקן ידנית למטה לפני האישור.</div>`
+    ? `<div style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.8rem;color:#8a2c1f;">⚠️ ה-AI או הבדיקה האוטומטית סימנו חשש: ${draft.concerns.map(esc).join(' · ')} — באפשרותך לערוך את הנוסח או לבחור להמשיך לאחר אישור מפורש.</div>`
     : '';
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:14px;max-width:640px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
@@ -3921,7 +3921,26 @@ async function confirmAnonDraft(bizId){
   const anon_summary = document.getElementById('anonDraftSummary').value.trim() || null;
   if (statusEl){ statusEl.style.color = '#999'; statusEl.textContent = 'שומר...'; }
   try {
-    const res = await invokeAnonCardFn({ business_id: bizId, action: 'confirm', anon_display_name, anon_summary });
+    const payload = { business_id: bizId, action: 'confirm', anon_display_name, anon_summary };
+    // Always run the server scan first; only its flagged 422 response permits an override.
+    let { data: res, error: firstError } = await bsdInvokeAiFn('generate-anonymous-card', { body: payload });
+    if (firstError) {
+      let details = null;
+      try { details = await firstError.context?.json?.(); } catch (_e) {}
+      if (details?.requires_explicit_confirmation === true && Array.isArray(details.concerns)) {
+        const warning = details.concerns.join('\n• ');
+        const approved = window.confirm('⚠️ בדיקת האנונימיות מצאה חששות:\n• ' + warning +
+          '\n\nהאם להמשיך ולשמור את התקציר למרות החששות?\nאישור יאפשר את השמירה; ביטול יחזיר לעריכה.');
+        if (!approved) {
+          if (statusEl){ statusEl.style.color = '#9b681a'; statusEl.textContent = 'השמירה בוטלה. ניתן לערוך ולאשר שוב.'; }
+          return;
+        }
+        res = await invokeAnonCardFn({ ...payload, accept_anonymity_risk: true });
+        bsdLogActivity('anon_summary_risk_override', 'businesses', bizId, { concern_count: details.concerns.length });
+      } else {
+        throw new Error(anonFunctionErrorMessage(firstError, details));
+      }
+    }
     bsdLogActivity('generate_anon_summary', 'businesses', bizId);
     closeAnonDraftPreview();
     // 04.10.2026: נשארים באותו מסך (לשונית התקצירים). בעבר כאן היה loadBusinesses()+openBizForm():
