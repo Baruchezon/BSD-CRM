@@ -23,7 +23,7 @@
     h2{font-size:13px;margin:12px 0 6px}
     .meta{font-size:12px;margin-bottom:8px}.tbl{width:100%;border-collapse:collapse;font-size:11px}
     .tbl td,.tbl th{border:1px solid #bbc2cb;padding:5px;vertical-align:top;text-align:right}
-    .tbl th{background:#f0f1f4}.remarks{height:26px;min-width:110px}
+    .tbl th{background:#f0f1f4}.remarks{height:26px;min-width:90px}.tbl td:nth-child(2){width:56%}.tbl td:nth-child(3){width:30%}
     .history{font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}.source{margin:5px 0;line-height:1.5;break-inside:avoid}
     .line{border-bottom:1px solid #aeb4bf;height:23px}
     .meeting-section{break-inside:avoid}.screenonly{margin:12px 0}
@@ -33,32 +33,32 @@
   const dateToday = () => new Date().toLocaleDateString('en-CA');
   const noteText = m => [m.summary_text,m.decisions,m.notes].filter(Boolean).join(' | ');
   function template(biz, meetings, edits) {
-    const rows = fields.map(([label,keys]) => `<tr><td>${esc(label)}</td><td>${esc(pick(biz,keys)) || 'לא נמסר'}</td><td class="remarks">${esc(edits?.[label] || '')}</td></tr>`).join('');
-    const history = meetings
-      .filter(m => noteText(m).trim())
-      .slice(0,12)
-      .map(m => `${formattedDate(m.meeting_date)} | ${m.meeting_type || 'שיחה'}: ${noteText(m)}`).join('\n');
-    const name = pick(biz,['internal_name','business_name','name']) || 'עסק';
-    const core = [
-      ['מה העסק עושה',biz.short_description],
-      ['חקר שוק ראשוני',biz.pre_research],
-      ['מידע והערות נוספים',biz.notes],
-      ['סיבת מכירה',biz.sale_reason],
-      ['שיחות ופגישות קודמות',history]
-    ].filter(([title,value]) => String(value || '').trim())
-     .map(([title,value]) => `<div class="source"><strong>${esc(title)}:</strong> ${esc(value)}</div>`).join('');
-    const identity = [['בעל העסק',biz.owner_name],['טלפון',biz.owner_phone],['ח.פ / ת.ז',biz.id_number],['כתובת',biz.address],['עיר',biz.city],['קטגוריה',biz.category],['תת קטגוריה',biz.subcategory]]
-      .filter(([_,v]) => v != null && String(v).trim()).map(([k,v]) => `${esc(k)}: ${esc(v)}`).join(' | ');
-    return `<h1>BSD | טופס הכנה וסיכום פגישה</h1>
-      <div class="meta"><strong>עסק:</strong> ${esc(name)} &nbsp; <strong>מספר:</strong> ${esc(biz.business_number || '')}
-      &nbsp; <strong>תאריך:</strong> ${esc(edits?.date || dateToday())}</div>
-      <div class="meta">${identity}</div>
-      <section><h2>המידע הקיים על העסק והנאמר בשיחות</h2>
-        <div class="history">${core || 'טרם תועד מידע על העסק במקורות הזמינים.'}</div></section>
-      <section class="meeting-section"><h2>נתונים קיימים והשלמה בפגישה</h2>
-      <table class="tbl"><thead><tr><th>נושא</th><th>מידע קיים</th><th>עדכון בפגישה</th></tr></thead><tbody>${rows}</tbody></table></section>
-      <section class="meeting-section"><h2>עיקרי הפגישה והערות</h2>${edits?.summary ? `<p style="white-space:pre-wrap;font-size:12px">${esc(edits.summary)}</p>` : Array.from({length:4},()=>'<div class="line"></div>').join('')}</section>
-      <section class="meeting-section"><h2>החלטות ומשימות להמשך</h2>${edits?.next ? `<p style="white-space:pre-wrap;font-size:12px">${esc(edits.next)}</p>` : Array.from({length:3},()=>'<div class="line"></div>').join('')}</section>`;
+    const concise = (v,max=380) => {
+      const text=String(v||'').replace(/\s+/g,' ').trim();
+      if(text.length<=max)return text;
+      const cut=text.slice(0,max);return cut.slice(0,Math.max(cut.lastIndexOf('. '),cut.lastIndexOf(' '),max-45)).trim()+'…';
+    };
+    const rows = fields.map(([label,keys]) => `<tr><td>${esc(label)}</td><td>${esc(pick(biz,keys))||'לא ידוע'}</td><td class="remarks">${esc(edits?.[label]||'')}</td></tr>`).join('');
+    const calls=meetings.filter(m => /שיח|טלפון/i.test(m.meeting_type||'') && noteText(m).trim()).slice(0,2);
+    const conversation=calls.length ? calls.map(m=>`${formattedDate(m.meeting_date)}: ${concise(noteText(m),360)}`).join(' | ') :
+      (meetings.find(m=>noteText(m).trim()) ? `תיעוד קודם (${formattedDate(meetings.find(m=>noteText(m).trim()).meeting_date)}): ${concise(noteText(meetings.find(m=>noteText(m).trim())),300)}` : 'לא נמצא סיכום שיחה מתועד');
+    const sections=[
+      ['מהות שיחת הטלפון',conversation],
+      ['מה העסק עושה',concise(biz.short_description,330)],
+      ['חקר שוק קצר',concise(biz.pre_research,280)],
+      ['ביקורות וממצאים',concise(biz.market_reviews||biz.reviews_summary||'',160)]
+    ];
+    const name=pick(biz,['internal_name','business_name','name'])||'עסק';
+    const details=[['שם העסק',name],['איש קשר',biz.owner_name],['טלפון',biz.owner_phone],['אימייל',biz.owner_email],['ח.פ / ת.ז',biz.id_number],['כתובת',biz.address],['תחום פעילות',biz.field],['קטגוריה',biz.category]];
+    const detailRows=details.map(([label,value])=>`<tr><th>${esc(label)}</th><td>${esc(value||'לא ידוע')}</td><td class="remarks"></td></tr>`).join('');
+    const sectionRows=sections.map(([label,value])=>`<tr><th>${esc(label)}</th><td>${esc(value||'לא תועד')}</td><td class="remarks"></td></tr>`).join('');
+    return `<h1>BSD | טופס פגישה עם בעל עסק</h1>
+      <div class="meta"><strong>תאריך פגישה:</strong> ${esc(edits?.date||'________________')} &nbsp; <strong>מספר עסק:</strong> ${esc(biz.business_number||'')}</div>
+      <section><h2>פרטי העסק ואיש הקשר</h2><table class="tbl"><thead><tr><th>פרט</th><th>מידע קיים</th><th>תיקון / השלמה</th></tr></thead><tbody>${detailRows}</tbody></table></section>
+      <section><h2>רקע לפגישה</h2><table class="tbl"><thead><tr><th>נושא</th><th>מה ידוע לנו</th><th>תיקון / הערות</th></tr></thead><tbody>${sectionRows}</tbody></table></section>
+      <section><h2>נתונים עסקיים</h2><table class="tbl"><thead><tr><th>נושא</th><th>מידע קיים</th><th>תיקון / השלמה</th></tr></thead><tbody>${rows}</tbody></table></section>
+      <section class="meeting-section"><h2>עיקרי הפגישה והשלמות</h2>${edits?.summary?`<p style="white-space:pre-wrap">${esc(edits.summary)}</p>`:Array.from({length:4},()=>'<div class="line"></div>').join('')}</section>
+      <section class="meeting-section"><h2>החלטות והמשך טיפול</h2>${edits?.next?`<p style="white-space:pre-wrap">${esc(edits.next)}</p>`:Array.from({length:2},()=>'<div class="line"></div>').join('')}</section>`;
   }
   let active = null;
   async function open(biz) {
