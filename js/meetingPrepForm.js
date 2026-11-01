@@ -15,7 +15,7 @@
     ['מלאי וציוד',['equipment','inventory']],
     ['סיבת מכירה',['reason_for_sale','sale_reason']]
   ];
-  const printStyles = String.raw\`
+  const printStyles = String.raw`
     @page { size: A4; margin: 12mm; }
     html,body {direction:rtl;font-family:Arial,sans-serif;color:#17243a;background:#fff;}
     h1{font-size:19px;margin:0 0 8px;border-bottom:3px solid #bea05b;padding-bottom:8px}
@@ -27,23 +27,23 @@
     .line{border-bottom:1px solid #aeb4bf;height:23px}
     .meeting-section{break-inside:avoid}.screenonly{margin:12px 0}
     @media print{.screenonly{display:none!important}.page-break{break-before:page}}
-  \`;
+  `;
   const formattedDate = d => d ? new Date(d + (d.length === 10 ? 'T12:00:00' : '')).toLocaleDateString('he-IL') : '';
   const dateToday = () => new Date().toLocaleDateString('en-CA');
   const noteText = m => [m.summary_text,m.decisions,m.notes].filter(Boolean).join(' | ');
   function template(biz, meetings, edits) {
-    const rows = fields.map(([label,keys]) => \`<tr><td>\${esc(label)}</td><td>\${esc(pick(biz,keys)) || 'לא נמסר'}</td><td class="remarks">\${esc(edits?.[label] || '')}</td></tr>\`).join('');
-    const history = meetings.slice(0,6).map(m => \`\${formattedDate(m.meeting_date)} | \${m.meeting_type || 'שיחה'}: \${noteText(m)}\`).filter(Boolean).join('\n');
+    const rows = fields.map(([label,keys]) => `<tr><td>${esc(label)}</td><td>${esc(pick(biz,keys)) || 'לא נמסר'}</td><td class="remarks">${esc(edits?.[label] || '')}</td></tr>`).join('');
+    const history = meetings.slice(0,6).map(m => `${formattedDate(m.meeting_date)} | ${m.meeting_type || 'שיחה'}: ${noteText(m)}`).filter(Boolean).join('\n');
     const name = pick(biz,['internal_name','business_name','name']) || 'עסק';
-    return \`<h1>BSD | טופס הכנה וסיכום פגישה</h1>
-      <div class="meta"><strong>עסק:</strong> \${esc(name)} &nbsp; <strong>מספר:</strong> \${esc(biz.business_number || '')}
-      &nbsp; <strong>תאריך:</strong> \${esc(edits?.date || dateToday())}</div>
+    return `<h1>BSD | טופס הכנה וסיכום פגישה</h1>
+      <div class="meta"><strong>עסק:</strong> ${esc(name)} &nbsp; <strong>מספר:</strong> ${esc(biz.business_number || '')}
+      &nbsp; <strong>תאריך:</strong> ${esc(edits?.date || dateToday())}</div>
       <section class="meeting-section"><h2>פרטי העסק | השלמות בפגישה</h2>
-      <table class="tbl"><thead><tr><th>נושא</th><th>מידע קיים</th><th>עדכון בפגישה</th></tr></thead><tbody>\${rows}</tbody></table></section>
+      <table class="tbl"><thead><tr><th>נושא</th><th>מידע קיים</th><th>עדכון בפגישה</th></tr></thead><tbody>${rows}</tbody></table></section>
       <section><h2>מידע קודם ושיחות מתועדות</h2>
-      <div class="history">\${esc(history || 'לא נמצאו סיכומי שיחות מתועדים בפגישות המשויכות ישירות לעסק.')}</div></section>
-      <section class="meeting-section"><h2>עיקרי הפגישה והערות</h2>\${edits?.summary ? \`<p style="white-space:pre-wrap;font-size:12px">\${esc(edits.summary)}</p>\` : Array.from({length:5},()=>'<div class="line"></div>').join('')}</section>
-      <section class="meeting-section"><h2>החלטות ומשימות להמשך</h2>\${edits?.next ? \`<p style="white-space:pre-wrap;font-size:12px">\${esc(edits.next)}</p>\` : Array.from({length:3},()=>'<div class="line"></div>').join('')}</section>\`;
+      <div class="history">${esc(history || 'לא נמצאו סיכומי שיחות מתועדים בפגישות המשויכות ישירות לעסק.')}</div></section>
+      <section class="meeting-section"><h2>עיקרי הפגישה והערות</h2>${edits?.summary ? `<p style="white-space:pre-wrap;font-size:12px">${esc(edits.summary)}</p>` : Array.from({length:5},()=>'<div class="line"></div>').join('')}</section>
+      <section class="meeting-section"><h2>החלטות ומשימות להמשך</h2>${edits?.next ? `<p style="white-space:pre-wrap;font-size:12px">${esc(edits.next)}</p>` : Array.from({length:3},()=>'<div class="line"></div>').join('')}</section>`;
   }
   let active = null;
   async function open(biz) {
@@ -59,7 +59,7 @@
     const overlay=document.createElement('div'); overlay.id='bsdMeetingPrepOverlay';
     overlay.dir='rtl';
     overlay.style.cssText='position:fixed;inset:0;z-index:999999;background:#f3f5f8;overflow:auto;padding:16px;font-family:Arial,sans-serif';
-    overlay.innerHTML = \`<style id="bsdPrepStyle">\${printStyles}</style>
+    overlay.innerHTML = `<style id="bsdPrepStyle">${printStyles}</style>
       <div style="max-width:850px;margin:auto">
       <div class="screenonly" style="display:flex;flex-wrap:wrap;gap:8px">
         <button type="button" id="bsdPrepClose">סגור</button>
@@ -69,14 +69,14 @@
         <span id="bsdPrepStatus" role="status" aria-live="polite"></span>
       </div>
       <div class="screenonly" style="display:grid;gap:8px;background:white;padding:12px;border:1px solid #d5dbe5;border-radius:8px">
-        <label>תאריך פגישה <input id="bsdPrepDate" type="date" value="\${dateToday()}"></label>
+        <label>תאריך פגישה <input id="bsdPrepDate" type="date" value="${dateToday()}"></label>
         <label>סוג פגישה <select id="bsdPrepType"><option>פגישה</option><option>שיחת טלפון</option><option>שיחת וידאו</option><option>פגישת המשך</option></select></label>
         <label>סיכום / תמלול <textarea id="bsdPrepSummary" rows="5" style="width:100%"></textarea></label>
         <label>החלטות והמשך טיפול <textarea id="bsdPrepNext" rows="3" style="width:100%"></textarea></label>
         <small>ההכתבה היא תמלול מקומי בדפדפן כאשר הוא תומך בכך. יש לבדוק ולאשר את הטקסט לפני השמירה.</small>
       </div>
-      <div id="bsdPrepPaper" style="background:white;padding:12mm;margin:10px auto;width:210mm;max-width:100%;box-sizing:border-box">\${template(biz,meetings,{})}</div>
-      </div>\`;
+      <div id="bsdPrepPaper" style="background:white;padding:12mm;margin:10px auto;width:210mm;max-width:100%;box-sizing:border-box">${template(biz,meetings,{})}</div>
+      </div>`;
     document.body.appendChild(overlay);
     active={biz,meetings,overlay};
     const el=id=>overlay.querySelector('#'+id);
