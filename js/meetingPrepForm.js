@@ -91,6 +91,26 @@
       <div id="bsdPrepPaper" style="background:white;padding:12mm;margin:10px auto;width:210mm;max-width:100%;box-sizing:border-box">${template(biz,meetings,{})}</div>
       </div>`;
     document.body.appendChild(overlay);
+    // Add a temporary history entry for the meeting form. Browser Back should
+    // close the form and reveal the same business card, not navigate to Leads.
+    const parentState = history.state && typeof history.state === 'object' ? history.state : {};
+    const meetingHistory = parentState.bsdCardType === 'business';
+    if (meetingHistory) history.pushState({ ...parentState, bsdMeetingPrep: true }, '', location.href);
+    let closing = false;
+    const onBack = () => {
+      if (closing) return;
+      closing = true;
+      window.removeEventListener('popstate', onBack);
+      overlay.remove();
+    };
+    if (meetingHistory) window.addEventListener('popstate', onBack);
+    const closePrep = () => {
+      if (closing) return;
+      closing = true;
+      window.removeEventListener('popstate', onBack);
+      overlay.remove();
+      if (meetingHistory && history.state && history.state.bsdMeetingPrep) history.back();
+    };
     active={biz,meetings,overlay};
     const el=id=>overlay.querySelector('#'+id);
     const edits=()=>({date:el('bsdPrepDate').value,summary:el('bsdPrepSummary').value,next:el('bsdPrepNext').value});
@@ -98,7 +118,7 @@
     el('bsdPrepSummary').addEventListener('input',refresh);
     el('bsdPrepNext').addEventListener('input',refresh);
     el('bsdPrepDate').addEventListener('change',refresh);
-    el('bsdPrepClose').onclick=()=>overlay.remove();
+    el('bsdPrepClose').onclick=closePrep;
     el('bsdPrepPrint').onclick=()=>{
       refresh();
       const w=window.open('','_blank');
