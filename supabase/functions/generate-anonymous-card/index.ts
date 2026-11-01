@@ -266,8 +266,15 @@ Deno.serve(async (req: Request) => {
       const finalSummary = typeof body.anon_summary === 'string' ? body.anon_summary.trim() || null : null;
       const scanTarget = [finalDisplayName, finalSummary].filter(Boolean).join(' ');
       const concerns = localSafetyScan(scanTarget, biz);
+      if (concerns.length && body.accept_anonymity_risk !== true) {
+        return jsonResponse({ error: 'זוהה מידע שעלול לזהות את העסק. ניתן להמשיך לאחר אישור מפורש.', concerns, requires_explicit_confirmation: true }, 422);
+      }
+      // Explicit approval is allowed only after normal admin/manager authentication.
+      // Keep warnings and audit the intentional exception without disclosing content.
       if (concerns.length) {
-        return jsonResponse({ error: 'הטקסט מכיל מידע שעלול לזהות את העסק - לא נשמר', concerns }, 422);
+        console.warn('BSD anonymous summary risk accepted by authorized user', {
+          business_id, approved_by: userData.user.id, concern_count: concerns.length
+        });
       }
       // תיקון 21.08.2026: ה-hash היה בנוי על internal_name (לא באמת משפיע
       // על התקציר) ולא כלל תחום/קטגוריה/עיר/נתונים כמותיים/סיבת מכירה
