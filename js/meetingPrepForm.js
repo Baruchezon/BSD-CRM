@@ -18,16 +18,16 @@
   ];
   const printStyles = String.raw`
     @page { size: A4; margin: 12mm; }
-    html,body {direction:rtl;font-family:Arial,sans-serif;color:#17243a;background:#fff;}
-    h1{font-size:19px;margin:0 0 8px;border-bottom:3px solid #bea05b;padding-bottom:8px}
-    h2{font-size:13px;margin:12px 0 6px}
-    .meta{font-size:12px;margin-bottom:8px}.tbl{width:100%;border-collapse:collapse;font-size:11px}
+    html,body {direction:rtl;font-family:Arial,sans-serif;color:#17243a;background:#fff;font-size:14pt;}
+    h1{font-size:18pt;margin:0 0 8px;border-bottom:3px solid #bea05b;padding-bottom:8px}
+    h2{font-size:15pt;margin:12px 0 6px}
+    .meta{font-size:14pt;margin-bottom:8px}.tbl{width:100%;border-collapse:collapse;font-size:14pt}
     .tbl td,.tbl th{border:1px solid #bbc2cb;padding:5px;vertical-align:top;text-align:right}
     .tbl th{background:#f0f1f4}.remarks{height:26px;min-width:90px}.tbl td:nth-child(2){width:56%}.tbl td:nth-child(3){width:30%}
-    .history{font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}.source{margin:5px 0;line-height:1.5;break-inside:avoid}
-    .line{border-bottom:1px solid #aeb4bf;height:23px}
+    .history{font-size:14pt;white-space:pre-wrap;overflow-wrap:anywhere}.source{margin:5px 0;line-height:1.5;break-inside:avoid}
+    .line{border-bottom:1px solid #aeb4bf;height:28px}
     .meeting-section{break-inside:avoid}.screenonly{margin:12px 0}
-    @media print{.screenonly{display:none!important}.page-break{break-before:page}}
+    @media print{.screenonly{display:none!important}.page-break{break-before:page} body,table,td,th,p,div,span,strong{font-size:14pt!important;line-height:1.35}}
   `;
   const formattedDate = d => d ? new Date(d + (d.length === 10 ? 'T12:00:00' : '')).toLocaleDateString('he-IL') : '';
   const dateToday = () => new Date().toLocaleDateString('en-CA');
