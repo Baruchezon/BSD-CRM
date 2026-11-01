@@ -65,15 +65,13 @@
         <button type="button" id="bsdPrepClose">סגור</button>
         <button type="button" id="bsdPrepPrint">הדפסה / שמירה כ PDF</button>
         <button type="button" id="bsdPrepSave">שמור סיכום בכרטיס העסק</button>
-        <button type="button" id="bsdPrepDictate">הכתבה קולית</button>
         <span id="bsdPrepStatus" role="status" aria-live="polite"></span>
       </div>
       <div class="screenonly" style="display:grid;gap:8px;background:white;padding:12px;border:1px solid #d5dbe5;border-radius:8px">
         <label>תאריך פגישה <input id="bsdPrepDate" type="date" value="${dateToday()}"></label>
         <label>סוג פגישה <select id="bsdPrepType"><option>פגישה</option><option>שיחת טלפון</option><option>שיחת וידאו</option><option>פגישת המשך</option></select></label>
-        <label>סיכום / תמלול <textarea id="bsdPrepSummary" rows="5" style="width:100%"></textarea></label>
+        <label>סיכום הפגישה <textarea id="bsdPrepSummary" rows="5" style="width:100%"></textarea></label>
         <label>החלטות והמשך טיפול <textarea id="bsdPrepNext" rows="3" style="width:100%"></textarea></label>
-        <small>ההכתבה היא תמלול מקומי בדפדפן כאשר הוא תומך בכך. יש לבדוק ולאשר את הטקסט לפני השמירה.</small>
       </div>
       <div id="bsdPrepPaper" style="background:white;padding:12mm;margin:10px auto;width:210mm;max-width:100%;box-sizing:border-box">${template(biz,meetings,{})}</div>
       </div>`;
@@ -106,14 +104,6 @@
         if(typeof window.loadBizMeetings==='function')await window.loadBizMeetings(biz.id);
       }catch(err){el('bsdPrepStatus').textContent='השמירה נכשלה: '+(err.message||err);}
       finally{el('bsdPrepSave').disabled=false;}
-    };
-    el('bsdPrepDictate').onclick=()=>{
-      const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-      if(!Recognition){el('bsdPrepStatus').textContent='אין תמיכה בהכתבה בדפדפן זה';return;}
-      const rec=new Recognition();rec.lang='he-IL';rec.interimResults=false;
-      rec.onresult=ev=>{el('bsdPrepSummary').value+=(el('bsdPrepSummary').value?'\n':'')+Array.from(ev.results).map(r=>r[0].transcript).join(' ');refresh();};
-      rec.onerror=ev=>el('bsdPrepStatus').textContent='שגיאת מיקרופון: '+ev.error;
-      rec.start();el('bsdPrepStatus').textContent='מקשיב להכתבה...';
     };
   }
   window.BSDMeetingPrep={open};
