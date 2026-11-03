@@ -91,15 +91,15 @@ test('owner gets the internal name; a broker does not, even with a signed agreem
   assert.match(broker.subject, /חומרי מכירה - עסק אנונימי/);
 });
 
-test('build 202610142200 in version.json; sale-file script stays 202610130800', () => {
+test('businesses.html build matches version.json, and every sale-file script tag is cache-busted together', () => {
   const html = fs.readFileSync(new URL('../businesses.html', import.meta.url), 'utf8');
   const preview = fs.readFileSync(new URL('../businesses-preview.html', import.meta.url), 'utf8');
   const report = fs.readFileSync(new URL('../business-report-builder.html', import.meta.url), 'utf8');
-  assert.match(html, /var PAGE_BUILD = '202610142200';/);
-  assert.match(html, /saleFileModule2\.js\?v=202610130800/);
-  assert.match(preview, /saleFileModule2\.js\?v=202610130800/);
-  assert.match(report, /saleFileModule2\.js\?v=202610130800/);
-  assert.equal(JSON.parse(fs.readFileSync(new URL('../version.json', import.meta.url), 'utf8')).version, '202610142200');
+  const version = JSON.parse(fs.readFileSync(new URL('../version.json', import.meta.url), 'utf8')).version;
+  assert.match(html, new RegExp(`var PAGE_BUILD = '${version}';`));
+  assert.match(html, new RegExp(`saleFileModule2\\.js\\?v=${version}`));
+  assert.match(preview, new RegExp(`saleFileModule2\\.js\\?v=${version}`));
+  assert.match(report, new RegExp(`saleFileModule2\\.js\\?v=${version}`));
 });
 
 test('both send functions use the preview text and do not rebuild the internal name', () => {
