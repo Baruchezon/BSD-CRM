@@ -32,6 +32,7 @@
 // מקבילה חדשה.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { evaluateSaleFileAccess, missingSaleFileEmailMessage } from '../_shared/sale-file-send-rules.js';
 
 function cleanEnv(v: string | undefined): string {
   return (v || '').trim();
@@ -192,13 +193,10 @@ Deno.serve(async (req: Request) => {
     }
     log('buyer_ok', { has_email: !!buyer.email, agreement_status: buyer.agreement_status || null });
     if (!buyer.email) {
-      await logAttempt({ buyer_id: recipientId, reason: 'buyer_missing_email', status: 'failed' }, actorId, business_id);
-      return jsonResponse(400, { error: recipientType === 'broker' ? 'למתווך הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס המתווך קודם' : recipientType === 'owner' ? 'לבעל העסק הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס העסק (לשונית בעלים) קודם' : 'לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם' });
+      await logAttempt({ buyer_id: recipientId, recipient_type: recipientType, reason: 'buyer_missing_email', status: 'failed' }, actorId, business_id);
+      return jsonResponse(400, { error: missingSaleFileEmailMessage(recipientType) });
     }
     const buyerName = buyer.full_name || [buyer.first_name, buyer.last_name].filter(Boolean).join(' ') || (recipientType === 'broker' ? 'מתווך' : recipientType === 'owner' ? 'בעל העסק' : 'קונה');
-    // 05.09.2026: בעל העסק תמיד "signed" - הוא הבעלים של המידע, אין מושג
-    // הסכם סודיות מולו כמו שיש מול קונה/מתווך חיצוניים (החלטת עיצוב מפורשת).
-    const signed = recipientType === 'owner' ? true : buyer.agreement_status === 'יש הסכם חתום';
 
     // 3. שליפת הקבצים מה-DB לפי business_id+id בלבד - מתעלמים לגמרי משם קובץ/
     //    רמת סודיות/נתיב שהלקוח אולי שלח; רק מה שבאמת רשום כרגע ב-DB קובע.
@@ -211,30 +209,28 @@ Deno.serve(async (req: Request) => {
     if (filesErr) { log('files_lookup_error', { message: filesErr.message }); return jsonResponse(500, { error: 'שגיאה בשליפת הקבצים: ' + filesErr.message }); }
     log('files_ok', { found_count: (files || []).length, requested_count: file_ids.length });
 
-    const foundIds = new Set((files || []).map((f) => f.id));
-    const missing = file_ids.filter((id: string) => !foundIds.has(id));
-    if (missing.length) {
-      await logAttempt({ recipient_id: recipientId, recipient_type: recipientType, file_ids, missing_file_ids: missing, status: 'failed', reason: 'file_not_found_or_inactive' }, actorId, business_id);
-      return jsonResponse(400, { error: 'קובץ אחד או יותר לא נמצא בתיק המכירה של העסק הזה (ייתכן שנמחק) - רענן ונסה שוב' });
-    }
-
     // 4. הכלל המרכזי - נאכף כאן, לא רק בממשק: קובץ חסוי (confidentiality_level=2)
     //    מותר אך ורק לקונה עם agreement_status === 'יש הסכם חתום'. ספק במצב
     //    ההסכם = חסימה (ברירת המחדל היא חסימה, לפי סעיף 7 בהנחיה).
-    const disallowed = (files || []).filter((f) => !signed && f.confidentiality_level === 2);
-    if (disallowed.length) {
+    //    05.09.2026: בעל העסק תמיד "signed" - הוא הבעלים של המידע.
+    const access = evaluateSaleFileAccess({
+      recipientType, agreementStatus: buyer.agreement_status, file_ids, files: files || [],
+    });
+    if (!access.ok) {
       await logAttempt({
         recipient_id: recipientId, recipient_type: recipientType, buyer_email: buyer.email, file_ids,
-        disallowed_files: disallowed.map((f) => ({ id: f.id, name: f.file_name })),
+        missing_file_ids: access.missing || null,
+        disallowed_files: (access.disallowed || []).map((f) => ({ id: f.id, name: f.file_name })),
         agreement_status_at_send: buyer.agreement_status || 'אין הסכם',
-        status: 'blocked',
+        status: access.reason === 'confidentiality_blocked' ? 'blocked' : 'failed',
+        reason: access.reason,
       }, actorId, business_id);
-      const names = disallowed.map((f) => f.file_name).join(', ');
-      return jsonResponse(403, {
-        error: `לא ניתן לשלוח את הקבצים הבאים: ${names}. ${recipientType === 'broker' ? 'למתווך' : recipientType === 'owner' ? 'לבעל העסק' : 'לקונה'} אין הסכם סודיות חתום.`,
-        disallowed_file_ids: disallowed.map((f) => f.id),
+      return jsonResponse(access.status, {
+        error: access.error,
+        ...(access.disallowed ? { disallowed_file_ids: access.disallowed.map((f) => f.id) } : {}),
       });
     }
+    const signed = access.signed;
 
     // 5. יצירת קישורי הורדה מאובטחים - נוצרים כאן, בשרת, ולעולם לא מתקבלים מהלקוח
     log('signed_urls_start', { count: (files || []).length });
@@ -260,14 +256,36 @@ Deno.serve(async (req: Request) => {
     }
     log('signed_urls_ok', { count: linkItems.length });
 
-    if (!RESEND_API_KEY) {
-      log('resend_not_configured');
-      await logAttempt({ buyer_id, file_ids, status: 'failed', reason: 'resend_not_configured' }, actorId, business_id);
-      return jsonResponse(500, { error: 'RESEND_API_KEY לא מוגדר ב-Secrets של הפונקציה' });
-    }
-
     const finalSubject = (subject && String(subject).trim()) || `חומרי מכירה${signed ? '' : ' (אנונימי)'}`;
     const safeIntroText = (intro_text && String(intro_text)) || `שלום ${buyerName},\n\nמצורפים קישורים להורדת החומרים (בתוקף לשבוע):`;
+
+    // Staging check: same auth, recipient, confidentiality and signed links,
+    // but Resend is not called and no match row is written. The response says
+    // dry_run so a caller cannot mistake it for a delivered email.
+    if (body && body.dry_run === true) {
+      log('dry_run', { to: buyer.email, resend_configured: !!RESEND_API_KEY, files: linkItems.length });
+      await logAttempt({
+        recipient_id: recipientId, recipient_type: recipientType, buyer_email: buyer.email, file_ids,
+        file_names: (files || []).map((f) => f.file_name),
+        status: 'dry_run', reason: 'dry_run', resend_configured: !!RESEND_API_KEY,
+      }, actorId, business_id);
+      return jsonResponse(200, {
+        ok: true,
+        dry_run: true,
+        to: buyer.email,
+        subject: finalSubject,
+        file_names: (files || []).map((f) => f.file_name),
+        file_count: linkItems.length,
+        resend_configured: !!RESEND_API_KEY,
+        match_action: 'skipped',
+      });
+    }
+
+    if (!RESEND_API_KEY) {
+      log('resend_not_configured');
+      await logAttempt({ recipient_id: recipientId, recipient_type: recipientType, file_ids, status: 'failed', reason: 'resend_not_configured' }, actorId, business_id);
+      return jsonResponse(500, { error: 'שליחת המייל לא הוגדרה בשרת (מפתח RESEND חסר). פנה למנהל המערכת — שום מייל לא יצא.' });
+    }
     const safeIntroHtml = intro_html ? String(intro_html) : `<p style="font-size:15px;">${esc(safeIntroText).replace(/\n/g, '<br>')}</p>`;
 
     const bodyText =

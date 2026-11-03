@@ -70,7 +70,7 @@ async function sfDiagnoseUploadFailure(err, rawFile){
   lines.push(`קובץ: ${rawFile ? rawFile.name : '?'} | גודל: ${rawFile ? rawFile.size : '?'} bytes | type: ${rawFile ? (rawFile.type || '(ריק)') : '?'}`);
   lines.push(`שם שגיאה (err.name): ${(err && err.name) || '?'}`);
   lines.push(`הודעת שגיאה (err.message): ${(err && err.message) || '?'}`);
-  lines.push(`navigator.onLine: ${navigator.onLine}`);
+  lines.push(`navigator.onLine: ${typeof navigator !== 'undefined' ? navigator.onLine : '?'}`);
   try {
     const { data: sessionData, error: sessErr } = await window.supabaseClient.auth.getSession();
     const s = sessionData && sessionData.session;
@@ -90,7 +90,55 @@ async function sfDiagnoseUploadFailure(err, rawFile){
     });
     lines.push(`בדיקת חיבור ל-Storage bucket: status ${res.status}, ${Date.now() - t0}ms`);
   } catch(e){ lines.push(`בדיקת חיבור ל-Storage bucket: נכשלה - ${e.name}: ${e.message}`); }
-  alert(lines.join('\n'));
+  console.error(lines.join('\n'));
+  return lines.join('\n');
+}
+
+function sfIsImageFile(file){
+  if (!file) return false;
+  const type = String(file.type || '').toLowerCase();
+  if (type.startsWith('image/')) return true;
+  if (type && type !== 'application/octet-stream') return false;
+  return /\.(jpe?g|png|gif|webp|heic|heif|bmp)$/i.test(file.name || '');
+}
+
+function sfSaleFileStoragePath(bizId, categoryKey, fileName, now, rand){
+  const extMatch = String(fileName || '').match(/\.[A-Za-z0-9]+$/);
+  const safeExt = extMatch ? extMatch[0].toLowerCase() : '';
+  const safeRand = rand || Math.random().toString(36).slice(2, 8);
+  const stamp = now || Date.now();
+  return `${bizId}/sale-file/${categoryKey}/${stamp}_${safeRand}${safeExt}`;
+}
+
+// Fields written for a manual upload. The bucket key (what the card shows)
+// is not always the DB category: market research is other+document_type,
+// which is also how the seller portal picks the latest file.
+function sfManualUploadFields(categoryKey, rawFile, storedFile, path, bizId, userId){
+  const cat = sfCategoryMeta(categoryKey);
+  if (!SALE_FILE_CATEGORIES.some(c => c.key === categoryKey)) throw new Error('קטגוריה לא מזוהה');
+  const ext = (String(rawFile.name || '').match(/\.[A-Za-z0-9]+$/) || [''])[0];
+  return {
+    business_id: bizId,
+    category: cat.dbCategory,
+    document_type: cat.dbDocumentType,
+    file_name: rawFile.name,
+    storage_path: path,
+    file_type: rawFile.type || ext,
+    file_size: storedFile.size,
+    confidentiality_level: cat.confidentiality,
+    uploaded_by: userId,
+    source: 'manual_upload',
+    status: 'active',
+  };
+}
+
+function sfHebrewUploadError(message){
+  const m = String(message || '');
+  if (/document_type/i.test(m) && /check|constraint/i.test(m)) return 'סוג המסמך לא מורשה בשמירה. נסה שוב, או פנה למנהל. (' + m + ')';
+  if (/row-level security|42501|permission denied|new row violates/i.test(m)) return 'אין הרשאה לשמור את הקובץ בתיק המכירה. צריך הרשאת העלאה (מנהל, או «העלאת קבצי תיק מכירה»).';
+  if (/Failed to fetch|network error|Load failed/i.test(m)) return 'ההעלאה נכשלה בגלל בעיית רשת. בדוק את החיבור ונסה שוב.';
+  if (/אין session|AuthSessionMissing|JWT|401/i.test(m)) return 'ההתחברות פגה. התחבר מחדש ונסה להעלות שוב.';
+  return m || 'ההעלאה נכשלה';
 }
 
 function sfIsAdminOrManager(){
@@ -120,6 +168,7 @@ let SF_SEND_BROKERS_CACHE = null;   // 03.09.2026 (מודול מתווכים) - 
 // אבל תמיד אובייקט יחיד (לא מפתח לפי id) - יש בעל עסק אחד בלבד לכל עסק, אין בחירה מרשימה.
 let SF_SEND_OWNER_CACHE = null;
 let SF_SEND_RECIPIENT_TYPE = 'buyer';   // 'buyer' | 'broker' | 'owner' - איזה select/אזור גלוי כרגע במודאל השליחה
+let SF_PENDING_SEND = null;             // הנמען והקבצים שנבחרו בתצוגה המקדימה — לא בתוך onclick
 // 19.10.2026: חיפוש ידני במודאל «שליחת חומרים». הרשימה הריקה נשארת כל הקונים
 // (כמו קודם); ברגע שמקלידים, הסינון רץ על כל הקונים הפעילים שנטענו — לא על
 // חלון קצר של ה-select. SF_SEND_BUYER_ROWS הוא המערך המלא, לפי סדר השליפה.
@@ -258,9 +307,9 @@ function openSaleFileCategory(bizId, categoryKey){
   const panel = document.getElementById('saleFileCategoryPanel');
   if (!panel) return;
   SF_OPEN_CATEGORY = categoryKey;
-  const hasUploadPermission = sfCanUpload();
-  const canUpload = hasUploadPermission && !isAndroidMobile();
+  const canUpload = sfCanUpload();
   const isPhotoCat = categoryKey === 'business_photo';
+  const onAndroid = typeof isAndroidMobile === 'function' && isAndroidMobile();
   const rows = sfGroupForDisplay(files);
   const canSelectFiles = rows.some(r => sfCanManageFile(r.latest));
   // 30.08.2026: הוסר "הפקת תקציר PDF חדש" (היה כאן כפילות מיותרת מול
@@ -299,20 +348,24 @@ function openSaleFileCategory(bizId, categoryKey){
       </div>
       ${canUpload ? `
       <div style="margin-top:12px;border-top:1px solid #e5e1d5;padding-top:10px;">
+        ${onAndroid ? `<div style="color:#5a6172;background:#f7f5ef;border-radius:8px;padding:8px 10px;font-size:.78rem;margin-bottom:8px;">בטלפון: בחר קובץ — ההעלאה מתחילה מיד. אם נפתחת רק גלריה, בחר «קבצים» / Files.</div>` : ''}
         <input type="file" id="sfUploadInput" multiple>
         <button type="button" class="btn btn-ghost" id="sfUploadBtn" style="margin-inline-start:8px;" onclick="uploadSaleFiles('${bizId}','${categoryKey}')">⬆️ העלה</button>
         ${isPhotoCat ? `<div style="font-size:.75rem;color:#8a93ab;margin-top:4px;">עד ${SALE_FILE_MAX_PHOTOS} תמונות סה"כ (תמונות ידחסו אוטומטית)</div>` : ''}
-        <div id="sfUploadStatus" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
-      </div>` : (hasUploadPermission && isAndroidMobile() ? `
-      <div style="margin-top:12px;border-top:1px solid #e5e1d5;padding-top:10px;color:#8a5a00;background:#fff8e6;border-radius:8px;padding:10px 12px;font-size:.82rem;">
-        📱 העלאת קבצים זמינה כרגע מהמחשב בלבד
-      </div>` : '')}
+        <div id="sfUploadStatus" role="status" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
+      </div>` : ''}
       <div style="margin-top:12px;border-top:1px solid #e5e1d5;padding-top:10px;text-align:end;">
         <button type="button" class="btn btn-primary" style="font-size:.78rem;padding:6px 14px;" onclick="sfOpenSendModalForCurrentBiz('${bizId}')">📤 שלח לקונה / מתווך</button>
       </div>
     </div>
   `;
   warmSaleFilePreview(rows.map(r => r.latest && r.latest.storage_path).filter(Boolean).slice(0, 3));
+  const uploadInput = document.getElementById('sfUploadInput');
+  if (uploadInput){
+    uploadInput.addEventListener('change', () => {
+      if (uploadInput.files && uploadInput.files.length) uploadSaleFiles(bizId, categoryKey, { fromChange: true });
+    });
+  }
 }
 
 function warmSaleFilePreview(paths){
@@ -471,103 +524,109 @@ function sfCompressImage(file, maxDim = 1600, quality = 0.8){
   });
 }
 
-async function uploadSaleFiles(bizId, categoryKey){
+let SF_UPLOAD_BUSY = false;
+
+async function uploadSaleFiles(bizId, categoryKey, opts){
+  opts = opts || {};
   if (!sfCanUpload()){ toast('אין לך הרשאת העלאת קבצים'); return; }
   const input = document.getElementById('sfUploadInput');
   const statusEl = document.getElementById('sfUploadStatus');
   const uploadBtn = document.getElementById('sfUploadBtn');
+  if (!input){ toast('חלון ההעלאה נסגר. פתח את הקטגוריה מחדש ובחר קובץ.'); return; }
   const files = Array.from(input.files || []);
-  if (!files.length){ toast('יש לבחור קובץ קודם'); return; }
-  bsdSetButtonLoading(uploadBtn, true, 'מעלה...');
-
-  if (categoryKey === 'business_photo'){
-    const existing = (SF_FILES_BY_CATEGORY['business_photo'] || []).length;
-    if (existing + files.length > SALE_FILE_MAX_PHOTOS){
-      toast(`ניתן להעלות עד ${SALE_FILE_MAX_PHOTOS} תמונות סה"כ (קיימות ${existing})`);
-      bsdSetButtonLoading(uploadBtn, false);
-      return;
-    }
+  if (!files.length){
+    if (!opts.fromChange) toast('יש לבחור קובץ קודם');
+    return;
   }
+  if (SF_UPLOAD_BUSY) return;
+  SF_UPLOAD_BUSY = true;
+  if (typeof bsdSetButtonLoading === 'function') bsdSetButtonLoading(uploadBtn, true, 'מעלה...');
 
-  const cat = sfCategoryMeta(categoryKey);
   let okCount = 0, failCount = 0;
   const errorMessages = [];
   const uploadedNames = [];
-  for (const rawFile of files){
-    // בעבר הסינון "רק תמונות" נעשה ע"י accept="image/*" על ה-input, אבל זה
-    // גרם ל-Chrome באנדרואיד לפתוח את ה-Photo Picker המובנה של המערכת במקום
-    // הבורר הרגיל - וה-Photo Picker הזה לא מציג אפשרות "Browse"/Google Drive
-    // בכלל. לכן ה-input עכשיו פתוח לכל סוגי הקבצים, והסינון "רק תמונות"
-    // לקטגוריית תמונות עסק נעשה כאן, אחרי הבחירה, כדי לשמור על הבורר המלא.
-    if (categoryKey === 'business_photo' && rawFile.type && !rawFile.type.startsWith('image/')){
-      const msg = `"${rawFile.name}" אינו קובץ תמונה - דולג (קטגוריה זו מיועדת לתמונות בלבד)`;
-      toast(msg); errorMessages.push(msg); failCount++; continue;
-    }
-    if (rawFile.size > SALE_FILE_MAX_MB * 1024 * 1024){
-      const msg = `הקובץ "${rawFile.name}" גדול מדי (מקסימום ${SALE_FILE_MAX_MB}MB) - דולג`;
-      toast(msg); errorMessages.push(msg); failCount++; continue;
-    }
-    let file = rawFile;
-    if (categoryKey === 'business_photo' && rawFile.type.startsWith('image/')){
-      try { file = await sfCompressImage(rawFile); }
-      catch(e){ /* אם הדחיסה נכשלת, מעלים את הקובץ המקורי במקום לחסום */ }
-    }
-    if (statusEl) statusEl.textContent = `מעלה את "${rawFile.name}"...`;
-    // מפתח האחסון חייב להיות ASCII בלבד (Supabase Storage דוחה "Invalid key" עבור
-    // שמות קבצים בעברית, גם אחרי encodeURIComponent) - אין בעיה, כי השם המקורי
-    // האמיתי כבר נשמר בעמודת file_name בטבלה ולא צריך להיגזר מהמפתח באחסון.
-    const extMatch = rawFile.name.match(/\.[A-Za-z0-9]+$/);
-    const safeExt = extMatch ? extMatch[0] : '';
-    const safeRand = Math.random().toString(36).slice(2, 8);
-    const path = `${bizId}/sale-file/${categoryKey}/${Date.now()}_${safeRand}${safeExt}`;
-    try {
-      const { error: upErr } = await bsdUploadFile(SALE_FILE_BUCKET, path, file, {
-        contentType: file.type || undefined,
-        onProgress: pct => { if (statusEl) statusEl.textContent = `מעלה את "${rawFile.name}" - ${pct}%`; }
-      });
-      if (upErr){
-        console.error('sale-file storage upload error:', upErr, { bizId, categoryKey, fileName: rawFile.name });
-        const msg = `שגיאה בהעלאת "${rawFile.name}": ${upErr.message}`;
-        toast(msg); errorMessages.push(msg); failCount++;
-        await sfDiagnoseUploadFailure(upErr, rawFile);
-        continue;
+  try {
+    if (categoryKey === 'business_photo'){
+      const existing = (SF_FILES_BY_CATEGORY['business_photo'] || []).length;
+      if (existing + files.length > SALE_FILE_MAX_PHOTOS){
+        const msg = `ניתן להעלות עד ${SALE_FILE_MAX_PHOTOS} תמונות סה"כ (קיימות ${existing})`;
+        toast(msg);
+        if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
+        return;
       }
-      const { error: dbErr } = await window.supabaseClient.from('business_sale_files').insert({
-        business_id: bizId,
-        category: cat.dbCategory,
-        document_type: cat.dbDocumentType,
-        file_name: rawFile.name,
-        storage_path: path,
-        file_type: rawFile.type || (rawFile.name.match(/\.[A-Za-z0-9]+$/) || [''])[0],
-        file_size: file.size,
-        confidentiality_level: cat.confidentiality,
-        uploaded_by: CURRENT_PROFILE.id
-      });
-      if (dbErr){
-        console.error('sale-file DB insert error:', dbErr, { bizId, categoryKey, fileName: rawFile.name });
-        const msg = `הקובץ "${rawFile.name}" הועלה אך רישום נכשל: ${dbErr.message}`;
+    }
+
+    for (const rawFile of files){
+      // אין accept="image/*" על ה-input: ב-Chrome באנדרואיד זה פותח רק את
+      // בוחר התמונות בלי «קבצים». הסינון לתמונות נעשה כאן, אחרי הבחירה,
+      // וגם כשהטלפון לא מדווח סוג קובץ (רק לפי הסיומת).
+      if (categoryKey === 'business_photo' && !sfIsImageFile(rawFile)){
+        const msg = `"${rawFile.name}" אינו קובץ תמונה - דולג (קטגוריה זו מיועדת לתמונות בלבד)`;
         toast(msg); errorMessages.push(msg); failCount++; continue;
       }
-      okCount++;
-      uploadedNames.push(rawFile.name);
-    } catch(e){
-      console.error('sale-file unexpected upload exception:', e, { bizId, categoryKey, fileName: rawFile.name });
-      const msg = `שגיאה בלתי צפויה בהעלאת "${rawFile.name}": ${e && e.message ? e.message : String(e)}`;
-      toast(msg); errorMessages.push(msg); failCount++;
+      if (rawFile.size > SALE_FILE_MAX_MB * 1024 * 1024){
+        const msg = `הקובץ "${rawFile.name}" גדול מדי (מקסימום ${SALE_FILE_MAX_MB}MB) - דולג`;
+        toast(msg); errorMessages.push(msg); failCount++; continue;
+      }
+      let file = rawFile;
+      if (categoryKey === 'business_photo' && sfIsImageFile(rawFile)){
+        try { file = await sfCompressImage(rawFile); }
+        catch(e){ /* אם הדחיסה נכשלת, מעלים את הקובץ המקורי במקום לחסום */ }
+      }
+      if (statusEl) statusEl.textContent = `מעלה את "${rawFile.name}"...`;
+      const path = sfSaleFileStoragePath(bizId, categoryKey, rawFile.name);
+      try {
+        const { error: upErr } = await bsdUploadFile(SALE_FILE_BUCKET, path, file, {
+          contentType: file.type || undefined,
+          onProgress: pct => { if (statusEl) statusEl.textContent = `מעלה את "${rawFile.name}" - ${pct}%`; }
+        });
+        if (upErr){
+          console.error('sale-file storage upload error:', upErr, { bizId, categoryKey, fileName: rawFile.name });
+          await sfDiagnoseUploadFailure(upErr, rawFile);
+          const msg = `שגיאה בהעלאת "${rawFile.name}": ${sfHebrewUploadError(upErr.message)}`;
+          toast(msg); errorMessages.push(msg); failCount++;
+          continue;
+        }
+        const row = sfManualUploadFields(categoryKey, rawFile, file, path, bizId, CURRENT_PROFILE && CURRENT_PROFILE.id);
+        const { error: dbErr } = await window.supabaseClient.from('business_sale_files').insert(row);
+        if (dbErr){
+          console.error('sale-file DB insert error:', dbErr, { bizId, categoryKey, fileName: rawFile.name });
+          const msg = `הקובץ "${rawFile.name}" הועלה אך לא נרשם בכרטיס: ${sfHebrewUploadError(dbErr.message)}`;
+          toast(msg); errorMessages.push(msg); failCount++; continue;
+        }
+        okCount++;
+        uploadedNames.push(rawFile.name);
+      } catch(e){
+        console.error('sale-file unexpected upload exception:', e, { bizId, categoryKey, fileName: rawFile.name });
+        const msg = `שגיאה בלתי צפויה בהעלאת "${rawFile.name}": ${sfHebrewUploadError(e && e.message ? e.message : String(e))}`;
+        toast(msg); errorMessages.push(msg); failCount++;
+      }
     }
-  }
-  input.value = '';
-  if (okCount){
-    if (statusEl) statusEl.textContent = '';
-    toast(`הועלו בהצלחה ${okCount} קבצים${failCount ? `, ${failCount} נכשלו` : ''}`);
-    await sfLogAudit(bizId, 'upload_sale_files', { category: categoryKey, file_names: uploadedNames, count: okCount });
-    await loadSaleFileModule(bizId);
-    openSaleFileCategory(bizId, categoryKey);
-  } else if (failCount){
-    // כשל מוחלט: לא בונים מחדש את הפאנל (זה היה מוחק את הודעת השגיאה) -
-    // משאירים את הטקסט האדום גלוי עד שהמשתמש ינסה שוב.
-    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${errorMessages.map(esc).join('<br>')}</span>`;
-    bsdSetButtonLoading(uploadBtn, false);
+    if (okCount){
+      const summary = `הועלו בהצלחה ${okCount} ${okCount === 1 ? 'קובץ' : 'קבצים'}${failCount ? `, ${failCount} נכשלו` : ''}`;
+      toast(summary);
+      if (failCount && statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${errorMessages.map(esc).join('<br>')}</span>`;
+      await sfLogAudit(bizId, 'upload_sale_files', { category: categoryKey, file_names: uploadedNames, count: okCount });
+      try {
+        await loadSaleFileModule(bizId);
+        openSaleFileCategory(bizId, categoryKey);
+      } catch (refreshErr) {
+        toast('הקבצים נשמרו, אבל רענון הרשימה נכשל. סגור ופתח את הקטגוריה שוב. ' + ((refreshErr && refreshErr.message) || ''));
+      }
+      if (failCount && typeof alert === 'function') alert('חלק מהקבצים לא הועלו:\n\n' + errorMessages.join('\n'));
+    } else if (failCount){
+      if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${errorMessages.map(esc).join('<br>')}</span>`;
+      if (typeof alert === 'function') alert('ההעלאה נכשלה:\n\n' + errorMessages.join('\n'));
+    }
+  } catch (e) {
+    const msg = 'ההעלאה נעצרה: ' + sfHebrewUploadError(e && e.message ? e.message : String(e));
+    toast(msg);
+    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
+    console.error('[uploadSaleFiles]', e);
+  } finally {
+    SF_UPLOAD_BUSY = false;
+    try { input.value = ''; } catch (_e) {}
+    if (typeof bsdSetButtonLoading === 'function') bsdSetButtonLoading(uploadBtn, false);
   }
 }
 
@@ -1176,23 +1235,24 @@ function sfShowSendPreview(bizId, bizName){
       recipientId = brokerSel.value;
       if (!recipientId){ fail('יש לבחור מתווך'); return; }
       recipient = SF_SEND_BROKERS_CACHE[recipientId];
-      if (!recipient?.email){ fail('למתווך הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס המתווך קודם'); return; }
+      if (!recipient){ fail('פרטי המתווך לא נטענו. סגור ופתח את המסך מחדש.'); return; }
       recipientLabel = '🔵 מתווך / סוכן';
     } else if (recipientType === 'owner'){
       // 05.09.2026 (שליחה לבעל העסק): אין select לבחור ממנו - הנמען הוא
       // תמיד בעל העסק היחיד של ה-bizId הזה. recipientId מוגדר כ-bizId עצמו
       // כדי לשמור על אותה חתימת פונקציה (sfConfirmSend/sfConfirmSendWhatsApp)
       // בלי לשנות אותה - השרת מזהה בעל עסק לפי business_id ולא לפי recipientId נפרד.
+      // אימייל חסר לא חוסם את המסך: אפשר עדיין לבחור WhatsApp אם יש טלפון.
       recipientId = bizId;
       recipient = SF_SEND_OWNER_CACHE;
-      if (!recipient?.email){ fail('לבעל העסק הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס העסק (לשונית "בעלים ויצירת קשר") קודם'); return; }
+      if (!recipient){ fail('לא נמצאו פרטי בעל עסק שמורים לעסק הזה.'); return; }
       recipientLabel = '🏠 בעל העסק';
     } else {
       const buyerSel = document.getElementById('sfSendBuyer');
       recipientId = buyerSel.value;
       if (!recipientId){ fail('יש לבחור קונה'); return; }
       recipient = SF_SEND_BUYERS_CACHE[recipientId];
-      if (!recipient?.email){ fail('לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם'); return; }
+      if (!recipient){ fail('פרטי הקונה לא נטענו. סגור ופתח את המסך מחדש.'); return; }
     }
 
     const selected = Array.from(document.querySelectorAll('.sfSendFileChk:checked'));
@@ -1216,14 +1276,32 @@ function sfShowSendPreview(bizId, bizName){
     const messageBizName = sfMessageBizName(bizForName, recipientType, recipient ? recipient.agreement_status : undefined);
     const defaultSubject = `חומרי מכירה${signed ? ' - ' + messageBizName : ' (אנונימי)'}`;
     const defaultBody = `שלום ${recipientName},\n\nמצורפים קישורים להורדת החומרים בנוגע ל${messageBizName} (בתוקף לשבוע):`;
+    const phoneOk = sfNormalizePhoneForWa(recipient.phone).valid;
+    const emailMissingNote = recipient.email ? '' : `<div style="color:#b3402c;font-weight:700;margin-bottom:8px;">אין כתובת אימייל שמורה. «שלח מייל» לא יישלח עד שתוסיף אימייל בכרטיס. אפשר לבחור WhatsApp אם יש טלפון תקין.</div>`;
+    const phoneMissingNote = phoneOk ? '' : `<div style="color:#8a5a00;font-weight:700;margin-bottom:8px;">אין מספר טלפון תקין ל-WhatsApp. אפשר לשלוח במייל אם יש כתובת.</div>`;
+
+    SF_PENDING_SEND = {
+      bizId, recipientId, recipientType, fileIds,
+      recipient: {
+        email: recipient.email || '',
+        phone: recipient.phone || '',
+        full_name: recipient.full_name || '',
+        first_name: recipient.first_name || '',
+        last_name: recipient.last_name || '',
+        agreement_status: recipient.agreement_status,
+        status: recipient.status,
+      },
+    };
 
     const body = document.getElementById('sfSendModalBody');
     body.innerHTML = `
       <h3 style="margin:0 0 14px;color:var(--navy);border-right:4px solid var(--gold);padding-right:10px;">📄 תצוגה מקדימה לפני שליחה</h3>
       <div style="background:#f7f5ef;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.85rem;">
-        <div><b>${esc(recipientName)}</b> ${recipientType==='broker' ? `<span style="background:#7a3fd1;color:#fff;font-weight:800;font-size:.68rem;padding:2px 8px;border-radius:10px;">${recipientLabel}</span>` : (recipientType==='owner' ? `<span style="background:#1f7a45;color:#fff;font-weight:800;font-size:.68rem;padding:2px 8px;border-radius:10px;">${recipientLabel}</span>` : '')} · ${esc(recipient.email)}</div>
+        <div><b>${esc(recipientName)}</b> ${recipientType==='broker' ? `<span style="background:#7a3fd1;color:#fff;font-weight:800;font-size:.68rem;padding:2px 8px;border-radius:10px;">${recipientLabel}</span>` : (recipientType==='owner' ? `<span style="background:#1f7a45;color:#fff;font-weight:800;font-size:.68rem;padding:2px 8px;border-radius:10px;">${recipientLabel}</span>` : '')} · ${esc(recipient.email || 'אין אימייל')} · ${esc(recipient.phone || 'אין טלפון')}</div>
         <div style="color:#5a6172;">${esc(bizName)}</div>
       </div>
+      ${emailMissingNote}
+      ${phoneMissingNote}
       <div style="font-weight:700;font-size:.85rem;color:var(--navy);margin-bottom:6px;">קבצים מצורפים:</div>
       <div style="margin-bottom:12px;font-size:.83rem;">
         ${selected.map(c => `<div>📄 ${esc(c.dataset.name)} <span style="color:#8a93ab;font-size:.75rem;">(${esc(c.dataset.cat)})</span></div>`).join('')}
@@ -1234,11 +1312,12 @@ function sfShowSendPreview(bizId, bizName){
       <div class="field"><label>תוכן ההודעה</label>
         <textarea id="sfPreviewBody" rows="5" style="width:100%;">${esc(defaultBody)}</textarea>
       </div>
-      <div id="sfSendStatus" style="font-size:.8rem;min-height:18px;margin-top:6px;"></div>
-    <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <div style="font-size:.75rem;color:#5a6172;margin-top:8px;">בחר ערוץ: מייל יוצא מהשרת אל כתובת הנמען. WhatsApp פותח צ׳אט במכשיר שלך — צריך ללחוץ «שליחה» שם. בשני הערוצים הקבצים הם קישורי הורדה לשבוע, לא קובץ מצורף. אין כאן שליחה אוטומטית דרך WhatsApp של מטא.</div>
+      <div id="sfSendStatus" role="alert" style="font-size:.85rem;min-height:18px;margin-top:6px;"></div>
+    <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;flex-wrap:wrap;">
       <button type="button" class="btn btn-ghost" onclick="document.getElementById('sfSendOverlay').remove()">ביטול</button>
-      <button type="button" class="btn btn-secondary" id="sfSendWaBtn" onclick="sfConfirmSendWhatsApp('${bizId}', '${recipientId}', ${esc(JSON.stringify(fileIds))}, '${recipientType}')">📱 שלח בWhatsApp</button>
-      <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend('${bizId}', '${recipientId}', ${esc(JSON.stringify(fileIds))}, '${recipientType}')">📤 שלח מייל ל${recipientType==='broker' ? 'מתווך' : (recipientType==='owner' ? 'בעל העסק' : 'קונה')}</button>
+      <button type="button" class="btn btn-secondary" id="sfSendWaBtn" onclick="sfConfirmSendWhatsApp()">📱 שלח בWhatsApp</button>
+      <button type="button" class="btn btn-primary" id="sfSendBtn" onclick="sfConfirmSend()">📤 שלח מייל ל${recipientType==='broker' ? 'מתווך' : (recipientType==='owner' ? 'בעל העסק' : 'קונה')}</button>
     </div>`;
   } catch(e){
     console.error('sfShowSendPreview error:', e);
@@ -1260,14 +1339,170 @@ function sfWithClientTimeout(promise, ms, label){
   });
 }
 
+// wa.me breaks or drops the message when the URL is too long. Signed file
+// links are long, so a long message is copied and the chat opens with a
+// short note telling the user to paste.
+const SF_WA_URL_LIMIT = 1800;
+
+function sfPlanWhatsAppDelivery(e164, introText, links){
+  const messageText = String(introText || 'שלום,') + '\n\n' + (links || []).map(l => `${l.name}:\n${l.url}`).join('\n\n');
+  const fullUrl = `https://wa.me/${e164}?text=${encodeURIComponent(messageText)}`;
+  if (fullUrl.length <= SF_WA_URL_LIMIT){
+    return {
+      mode: 'full', url: fullUrl, copyText: null, messageText,
+      toast: 'נפתחה שיחת WhatsApp. לחץ «שליחה» בתוך הוואטסאפ — הקבצים הם קישורי הורדה, לא צירוף.',
+      notice: 'נפתחה שיחת WhatsApp עם מספר הנמען, ההודעה וקישורי ההורדה. הקבצים לא מצורפים כקובץ. יש ללחוץ «שליחה» בתוך WhatsApp כדי שההודעה באמת תישלח.',
+    };
+  }
+  const short = 'שלום, קישורי ההורדה הוכנו. ההודעה ארוכה מדי לקישור של WhatsApp — הדבק אותה כאן (אם לא הועתקה, היא מוצגת במסך השליחה) ואז לחץ שליחה.';
+  return {
+    mode: 'clipboard',
+    url: `https://wa.me/${e164}?text=${encodeURIComponent(short)}`,
+    copyText: messageText,
+    messageText,
+    toast: 'נפתחה שיחת WhatsApp. ההודעה עם קישורי ההורדה הועתקה — הדבק אותה בצ׳אט ולחץ «שליחה».',
+    notice: 'וואטסאפ לא מקבל הודעה ארוכה כל כך בתוך הקישור. נפתחה השיחה עם הנמען, וההודעה המלאה עם קישורי ההורדה (בתוקף לשבוע) מוכנה להדבקה. הקבצים עצמם לא מצורפים.',
+  };
+}
+
+function sfNavigatePreparedWindow(win, url){
+  try {
+    if (win && !win.closed){
+      win.location.href = url;
+      return true;
+    }
+  } catch (_e){}
+  try {
+    const opened = window.open(url, '_blank', 'noopener');
+    return !!(opened && !opened.closed);
+  } catch (_e){
+    return false;
+  }
+}
+
+async function sfCopyText(text){
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_e){}
+  return false;
+}
+
+function sfTakePendingSend(bizId, recipientId, fileIds, recipientType){
+  const pending = SF_PENDING_SEND || null;
+  let ids = null;
+  if (Array.isArray(fileIds) && fileIds.length) ids = fileIds;
+  else if (typeof fileIds === 'string' && fileIds){
+    try { const parsed = JSON.parse(fileIds); if (Array.isArray(parsed)) ids = parsed; } catch (_e){}
+  }
+  const type = recipientType || (pending && pending.recipientType) || 'buyer';
+  return {
+    bizId: bizId || (pending && pending.bizId) || null,
+    recipientId: recipientId || (pending && pending.recipientId) || null,
+    fileIds: ids || (pending && pending.fileIds) || [],
+    recipientType: type === 'broker' ? 'broker' : (type === 'owner' ? 'owner' : 'buyer'),
+    recipient: pending && pending.recipient,
+  };
+}
+
+function sfResolveRecipient(send){
+  if (send.recipient) return send.recipient;
+  if (send.recipientType === 'broker') return SF_SEND_BROKERS_CACHE ? SF_SEND_BROKERS_CACHE[send.recipientId] : null;
+  if (send.recipientType === 'owner') return SF_SEND_OWNER_CACHE;
+  return SF_SEND_BUYERS_CACHE ? SF_SEND_BUYERS_CACHE[send.recipientId] : null;
+}
+
+function sfMissingEmailMessage(recipientType){
+  if (recipientType === 'broker') return 'למתווך הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס המתווך קודם';
+  if (recipientType === 'owner') return 'לבעל העסק הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס העסק (לשונית "בעלים ויצירת קשר") קודם';
+  return 'לקונה הזה אין כתובת אימייל שמורה - יש להוסיף אחת בכרטיס הקונה קודם';
+}
+
+function sfShowSendFeedback(msg, isError){
+  if (typeof toast === 'function') toast(msg);
+  const statusEl = document.getElementById('sfSendStatus');
+  if (statusEl){
+    statusEl.setAttribute('role', 'alert');
+    statusEl.innerHTML = `<span style="color:${isError ? '#b3402c' : '#1f7a45'};font-weight:700;">${esc(msg)}</span>`;
+  }
+}
+
+async function sfReadInvokeContext(err){
+  if (!err) return null;
+  const ctx = err.context;
+  if (!ctx) return null;
+  if (typeof ctx.json === 'function'){
+    try {
+      const clone = typeof ctx.clone === 'function' ? ctx.clone() : ctx;
+      return await clone.json();
+    } catch (_e){
+      try { const t = await ctx.text(); return t ? { message: t.slice(0, 400) } : null; } catch (_e2){ return null; }
+    }
+  }
+  if (typeof ctx === 'string'){
+    try { return JSON.parse(ctx); } catch (_e){ return { message: ctx.slice(0, 400) }; }
+  }
+  if (typeof ctx === 'object') return ctx;
+  return null;
+}
+
+async function sfDescribeInvokeFailure(result, err){
+  const chunks = [];
+  const push = v => { if (v && typeof v === 'string' && v.trim()) chunks.push(v.trim()); };
+  push(result && (result.error || result.message));
+  const body = await sfReadInvokeContext(err);
+  if (body) push(body.error || body.message || body.msg);
+  const status = Number((err && (err.status || err.statusCode)) || (body && body.status) || (err && err.context && err.context.status) || 0);
+  const msg = err && err.message ? String(err.message) : '';
+  if (status === 401 || /jwt|unauthorized|invalid jwt|לא מחובר/i.test(msg + ' ' + chunks.join(' '))){
+    return 'ההתחברות פגה. התחבר מחדש ונסה שוב. שום דבר לא נשלח.';
+  }
+  if (/Failed to fetch|Failed to send a request to the Edge Function|NetworkError|Load failed|הבקשה נתקעה/i.test(msg)){
+    return msg.includes('הבקשה נתקעה') ? msg : 'אין חיבור לשרת. בדוק את האינטרנט ונסה שוב. שום דבר לא נשלח.';
+  }
+  const hebrew = chunks.find(c => /[\u0590-\u05FF]/.test(c));
+  if (hebrew) return hebrew;
+  if (chunks.length) return chunks[0];
+  if (msg && !/non-2xx/i.test(msg)) return msg;
+  return 'השליחה נכשלה בשרת בלי פירוט. שום דבר לא נשלח. בדוק אימייל של הנמען, הסכם חתום לקבצים חסויים, ושמפתח המייל מוגדר.';
+}
+
+function sfInvokeEdge(name, invokeBody){
+  const call = () => {
+    if (window.BSDSession && typeof window.BSDSession.invoke === 'function'){
+      return window.BSDSession.invoke(name, { body: invokeBody });
+    }
+    return window.supabaseClient.functions.invoke(name, { body: invokeBody });
+  };
+  return sfWithClientTimeout(call(), 25000, name);
+}
+
 async function sfConfirmSend(bizId, recipientId, fileIds, recipientType){
-  recipientType = recipientType === 'broker' ? 'broker' : (recipientType === 'owner' ? 'owner' : 'buyer');
+  const send = sfTakePendingSend(bizId, recipientId, fileIds, recipientType);
+  bizId = send.bizId;
+  recipientId = send.recipientId;
+  fileIds = send.fileIds;
+  recipientType = send.recipientType;
   const btn = document.getElementById('sfSendBtn');
   const statusEl = document.getElementById('sfSendStatus');
-  if (btn) bsdSetButtonLoading(btn, true, 'שולח...');
+  if (!bizId || !recipientId || !fileIds.length){
+    sfShowSendFeedback('פרטי השליחה חסרים. סגור את החלון, בחר נמען וקבצים, ונסה שוב. שום דבר לא נשלח.', true);
+    return;
+  }
+  const recipient = sfResolveRecipient(send);
+  if (!recipient || !recipient.email){
+    sfShowSendFeedback(sfMissingEmailMessage(recipientType), true);
+    return;
+  }
+  if (btn && typeof bsdSetButtonLoading === 'function') bsdSetButtonLoading(btn, true, 'שולח...');
   try {
-    const subject = document.getElementById('sfPreviewSubject').value.trim();
-    const introText = document.getElementById('sfPreviewBody').value;
+    const subjectEl = document.getElementById('sfPreviewSubject');
+    const bodyEl = document.getElementById('sfPreviewBody');
+    if (!subjectEl || !bodyEl) throw new Error('תצוגת השליחה נסגרה. פתח אותה מחדש.');
+    const subject = subjectEl.value.trim();
+    const introText = bodyEl.value;
     if (!subject) throw new Error('נושא המייל לא יכול להיות ריק');
 
     if (statusEl) statusEl.textContent = 'שולח מייל...';
@@ -1278,22 +1513,19 @@ async function sfConfirmSend(bizId, recipientId, fileIds, recipientType){
     // 03.09.2026 (מודול מתווכים, שלב 3): recipient_type/broker_id נוספו
     // כפרמטרים אופציונליים - כשrecipientType='buyer' (ברירת המחדל, המצב
     // היחיד שהיה קיים קודם) הבקשה זהה לחלוטין למה שנשלח קודם.
-    const invokeBody = { business_id: bizId, file_ids: fileIds, subject, intro_text: introText, reply_to: CURRENT_PROFILE.email, recipient_type: recipientType };
+    const invokeBody = { business_id: bizId, file_ids: fileIds, subject, intro_text: introText, reply_to: (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && CURRENT_PROFILE.email) || undefined, recipient_type: recipientType };
     // 05.09.2026 (שליחה לבעל העסק): אין buyer_id/broker_id למקרה owner - הזיהוי
     // נעשה ע"י השרת אך ורק לפי business_id (הבעלים היחיד של אותו עסק).
     if (recipientType === 'broker') invokeBody.broker_id = recipientId;
     else if (recipientType !== 'owner') invokeBody.buyer_id = recipientId;
-    const { data: sendResult, error: sendErr } = await sfWithClientTimeout(
-      window.supabaseClient.functions.invoke('send-sale-files-to-buyer', { body: invokeBody }),
-      25000, recipientType === 'broker' ? 'שליחת מייל למתווך' : (recipientType === 'owner' ? 'שליחת מייל לבעל העסק' : 'שליחת מייל לקונה')
-    );
+    const { data: sendResult, error: sendErr } = await sfInvokeEdge('send-sale-files-to-buyer', invokeBody);
     console.log('[sfConfirmSend] תשובה התקבלה', { sendResult, sendErr });
-    if (sendErr || sendResult?.error){
-      let detail = sendResult?.error || sendErr?.message || 'שגיאה לא ידועה';
-      if (sendErr && sendErr.context && typeof sendErr.context.json === 'function'){
-        try { const b = await sendErr.context.json(); if (b?.error) detail = b.error; } catch(e2){}
+    if (sendErr || sendResult?.error || sendResult?.dry_run){
+      if (sendResult?.dry_run && !sendErr){
+        const configured = sendResult.resend_configured ? 'מפתח המייל מוגדר בשרת.' : 'מפתח המייל חסר בשרת — שליחה אמיתית תיכשל.';
+        throw new Error(`בדיקה בלבד: המייל לא נשלח אל ${sendResult.to || 'הנמען'}. ${configured}`);
       }
-      throw new Error(detail);
+      throw new Error(await sfDescribeInvokeFailure(sendResult, sendErr));
     }
 
     // 03.09.2026: תיעוד ההתאמה עצמו קורה בשרת (בתוך send-sale-files-to-buyer,
@@ -1310,16 +1542,16 @@ async function sfConfirmSend(bizId, recipientId, fileIds, recipientType){
       ? (sendResult?.match_action === 'created' ? 'ההתאמה החדשה נוצרה ותועדה.' : sendResult?.match_action === 'updated' ? 'השליחה נוספה להתאמה קיימת.' : 'החומרים נשלחו בהצלחה')
       : (sendResult?.match_action === 'created' ? 'השליחה בוצעה ונוצרה התאמה חדשה.' : sendResult?.match_action === 'updated' ? 'השליחה בוצעה והפעילות נוספה להתאמה הקיימת.' : 'החומרים נשלחו בהצלחה');
     toast(matchMsg);
-    document.getElementById('sfSendOverlay').remove();
+    const overlay = document.getElementById('sfSendOverlay');
+    if (overlay) overlay.remove();
   } catch(e){
     console.error('[sfConfirmSend] שגיאה:', e);
     const msg = (e && e.message) ? e.message : String(e);
-    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
-    else toast('שגיאה: ' + msg);
+    sfShowSendFeedback(msg, true);
   } finally {
     // finally ולא רק בתוך ה-catch: מבטיח שהכפתור תמיד חוזר למצב רגיל,
     // גם אם ייפול חריג לא צפוי שלא נתפס במפורש למעלה.
-    if (btn) bsdSetButtonLoading(btn, false);
+    if (btn && typeof bsdSetButtonLoading === 'function') bsdSetButtonLoading(btn, false);
   }
 }
 
@@ -1446,21 +1678,20 @@ async function sfDocumentMatchAfterSend(bizId, recipientId, fileIds, channelLabe
 }
 
 async function sfConfirmSendWhatsApp(bizId, recipientId, fileIds, recipientType){
-  recipientType = recipientType === 'broker' ? 'broker' : (recipientType === 'owner' ? 'owner' : 'buyer');
+  const send = sfTakePendingSend(bizId, recipientId, fileIds, recipientType);
+  bizId = send.bizId;
+  recipientId = send.recipientId;
+  fileIds = send.fileIds;
+  recipientType = send.recipientType;
   const btn = document.getElementById('sfSendWaBtn');
   const statusEl = document.getElementById('sfSendStatus');
-  const recipient = recipientType === 'broker'
-    ? (SF_SEND_BROKERS_CACHE ? SF_SEND_BROKERS_CACHE[recipientId] : null)
-    : recipientType === 'owner'
-    ? SF_SEND_OWNER_CACHE
-    : (SF_SEND_BUYERS_CACHE ? SF_SEND_BUYERS_CACHE[recipientId] : null);
-  if (!recipient){
-    const who = recipientType === 'broker' ? 'המתווך' : (recipientType === 'owner' ? 'בעל העסק' : 'הקונה');
-    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">שגיאה: פרטי ${who} לא נטענו - סגור ופתח את המסך מחדש</span>`;
+  const recipient = sfResolveRecipient(send);
+  if (!bizId || !recipientId || !fileIds.length || !recipient){
+    sfShowSendFeedback('פרטי השליחה חסרים. סגור את החלון, בחר נמען וקבצים, ונסה שוב. שום צ׳אט לא נפתח.', true);
     return;
   }
   if (recipientType === 'broker' && recipient.status === 'חסום'){
-    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">🚫 מתווך זה חסום - לא ניתן לשלוח אליו חומרים חדשים</span>`;
+    sfShowSendFeedback('מתווך זה חסום - לא ניתן לשלוח אליו חומרים חדשים', true);
     return;
   }
 
@@ -1472,8 +1703,7 @@ async function sfConfirmSendWhatsApp(bizId, recipientId, fileIds, recipientType)
     const msg = phoneCheck.reason === 'missing'
       ? `${who} הזה אין מספר טלפון שמור - יש להוסיף אחד בכרטיס ${cardName} קודם`
       : `מספר הטלפון של ${cardName} אינו תקין ל-WhatsApp - יש לתקן אותו בכרטיס ${cardName}`;
-    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
-    else toast(msg);
+    sfShowSendFeedback(msg, true);
     return;
   }
 
@@ -1482,7 +1712,7 @@ async function sfConfirmSendWhatsApp(bizId, recipientId, fileIds, recipientType)
   // באותה מסך בדיוק: חלון WhatsApp אחד ויחיד, נפתח מיד עם הלחיצה).
   const win = window.open('', '_blank');
 
-  if (btn) bsdSetButtonLoading(btn, true, 'מכין...');
+  if (btn && typeof bsdSetButtonLoading === 'function') bsdSetButtonLoading(btn, true, 'מכין...');
   try {
     const subjectEl = document.getElementById('sfPreviewSubject');
     const bodyEl = document.getElementById('sfPreviewBody');
@@ -1493,35 +1723,40 @@ async function sfConfirmSendWhatsApp(bizId, recipientId, fileIds, recipientType)
     // 05.09.2026: אין buyer_id/broker_id למקרה owner - זהה לטיפול המקביל ב-sfConfirmSend.
     if (recipientType === 'broker') linkBody.broker_id = recipientId;
     else if (recipientType !== 'owner') linkBody.buyer_id = recipientId;
-    const { data: linkResult, error: linkErr } = await sfWithClientTimeout(
-      window.supabaseClient.functions.invoke('get-sale-files-signed-links', { body: linkBody }),
-      25000, 'הכנת קישורים ל-WhatsApp'
-    );
+    const { data: linkResult, error: linkErr } = await sfInvokeEdge('get-sale-files-signed-links', linkBody);
     console.log('[sfConfirmSendWhatsApp] תשובה התקבלה', { linkResult, linkErr });
     if (linkErr || linkResult?.error){
-      let detail = linkResult?.error || linkErr?.message || 'שגיאה לא ידועה';
-      if (linkErr && linkErr.context && typeof linkErr.context.json === 'function'){
-        try { const b = await linkErr.context.json(); if (b?.error) detail = b.error; } catch(e2){}
-      }
-      throw new Error(detail);
+      throw new Error(await sfDescribeInvokeFailure(linkResult, linkErr));
     }
     const links = Array.isArray(linkResult?.links) ? linkResult.links : [];
     if (!links.length) throw new Error('לא נמצאו קבצים זמינים לשליחה');
 
-    const messageText = introText + '\n\n' + links.map(l => `${l.name}:\n${l.url}`).join('\n\n');
-    const waUrl = `https://wa.me/${phoneCheck.e164}?text=${encodeURIComponent(messageText)}`;
-    if (win && !win.closed) { win.location.href = waUrl; } else { window.open(waUrl, '_blank'); }
+    const serverPhone = sfNormalizePhoneForWa(linkResult && linkResult.buyer_phone);
+    const e164 = serverPhone.valid ? serverPhone.e164 : phoneCheck.e164;
+    const plan = sfPlanWhatsAppDelivery(e164, introText, links);
+    let copied = false;
+    if (plan.copyText) copied = await sfCopyText(plan.copyText);
+    const opened = sfNavigatePreparedWindow(win, plan.url);
 
-    if (statusEl) statusEl.innerHTML = '<span style="color:#1f7a45;">✅ נפתחה שיחת WhatsApp עם הודעה מוכנה, כולל קישורי הורדה מאובטחים לקבצים שנבחרו. הלחיצה על Send בפועל היא בידיך בתוך WhatsApp.</span>';
-
-    // 03.09.2026: תיעוד אוטומטי במרכז ההתאמות - תוספת בלבד, אחרי ששורת
-    // ההצלחה למעלה כבר נקבעה. לא נוגע בשום דבר קודם בפונקציה הזו. נוסח
-    // ההודעה למתווך תואם בדיוק את מה שנדרש במפורש בהנחיה; נוסח הקונה
-    // נשאר בדיוק כפי שהיה.
-    if (recipientType === 'owner'){
-      // 05.09.2026: אין תיעוד matches לבעל העסק (ראו sfDocumentMatchAfterSend) -
-      // אין צורך אפילו לקרוא לפונקציה, ואין toast נוסף מעבר להודעת ההצלחה שכבר הוצגה למעלה.
+    const fallback = `<div style="margin-top:8px;"><a href="${esc(plan.url)}" target="_blank" rel="noopener" style="font-weight:700;">פתח את WhatsApp</a></div>`;
+    const pasteBox = plan.copyText ? `<textarea readonly rows="6" style="width:100%;margin-top:8px;font-size:.78rem;">${esc(plan.copyText)}</textarea>` : '';
+    if (opened && plan.mode === 'full'){
+      sfShowSendFeedback(plan.toast, false);
+      if (statusEl) statusEl.innerHTML += `<div style="color:#1f7a45;font-weight:400;margin-top:4px;">${esc(plan.notice)}</div>`;
+    } else if (opened && copied){
+      sfShowSendFeedback(plan.toast, false);
+      if (statusEl) statusEl.innerHTML += `<div style="color:#1f7a45;font-weight:400;margin-top:4px;">${esc(plan.notice)}</div>${pasteBox}`;
+    } else if (opened){
+      sfShowSendFeedback('נפתחה שיחת WhatsApp, אבל ההעתקה נכשלה. העתק את ההודעה מהתיבה למטה, הדבק בצ׳אט ולחץ «שליחה».', true);
+      if (statusEl) statusEl.innerHTML += pasteBox;
     } else {
+      try { if (win && !win.closed) win.close(); } catch (_e){}
+      sfShowSendFeedback('הדפדפן חסם את חלון הוואטסאפ. לחץ על «פתח את WhatsApp» במסך הזה. שום הודעה לא נשלחה עד שתלחץ שליחה בתוך WhatsApp.', true);
+      if (statusEl) statusEl.innerHTML += fallback + pasteBox;
+    }
+
+    // תיעוד רק אם חלון הוואטסאפ באמת נפתח. חסימת חלון אינה שליחה.
+    if (recipientType !== 'owner' && opened){
       sfDocumentMatchAfterSend(bizId, recipientId, fileIds, 'WhatsApp', recipientType).then((matchResult) => {
         if (recipientType === 'broker'){
           if (matchResult.action === 'created') toast('ההתאמה החדשה נוצרה ותועדה.');
@@ -1536,10 +1771,9 @@ async function sfConfirmSendWhatsApp(bizId, recipientId, fileIds, recipientType)
     console.error('[sfConfirmSendWhatsApp] שגיאה:', e);
     const msg = (e && e.message) ? e.message : String(e);
     if (win && !win.closed){ try { win.close(); } catch(_e){} }
-    if (statusEl) statusEl.innerHTML = `<span style="color:#b3402c;">${esc(msg)}</span>`;
-    else toast('שגיאה: ' + msg);
+    sfShowSendFeedback(msg, true);
   } finally {
-    if (btn) bsdSetButtonLoading(btn, false);
+    if (btn && typeof bsdSetButtonLoading === 'function') bsdSetButtonLoading(btn, false);
   }
 }
 

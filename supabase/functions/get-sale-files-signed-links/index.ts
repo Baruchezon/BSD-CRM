@@ -20,6 +20,7 @@
 // נפרד ('get_whatsapp_links') כדי להבדיל מרישומי המייל.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { evaluateSaleFileAccess } from '../_shared/sale-file-send-rules.js';
 
 const SIGNED_URL_SECONDS = 60 * 60 * 24 * 7; // שבוע - זהה לקבוע במייל
 const SALE_FILE_BUCKET = 'business-files';
@@ -140,9 +141,6 @@ Deno.serve(async (req: Request) => {
       if (!leadBuyer) { log('buyer_not_found'); return jsonResponse(404, { error: 'קונה לא נמצא' }); }
       buyer = leadBuyer;
     }
-    // 05.09.2026: בעל העסק תמיד "signed" - זהה להחלטת העיצוב ב-send-sale-files-to-buyer.
-    const signed = recipientType === 'owner' ? true : buyer.agreement_status === 'יש הסכם חתום';
-
     // שליפת הקבצים מה-DB בלבד - מתעלמים משם/רמת סודיות שהלקוח שלח
     const { data: files, error: filesErr } = await supabase
       .from('business_sale_files')
@@ -152,26 +150,23 @@ Deno.serve(async (req: Request) => {
       .in('id', file_ids);
     if (filesErr) { log('files_lookup_error', { message: filesErr.message }); return jsonResponse(500, { error: 'שגיאה בשליפת הקבצים: ' + filesErr.message }); }
 
-    const foundIds = new Set((files || []).map((f) => f.id));
-    const missing = file_ids.filter((id: string) => !foundIds.has(id));
-    if (missing.length) {
-      await logAttempt({ recipient_id: recipientId, recipient_type: recipientType, file_ids, missing_file_ids: missing, status: 'failed', reason: 'file_not_found_or_inactive' }, actorId, business_id);
-      return jsonResponse(400, { error: 'קובץ אחד או יותר לא נמצא בתיק המכירה של העסק הזה (ייתכן שנמחק) - רענן ונסה שוב' });
-    }
-
-    // אותו כלל הרשאה בדיוק כמו במייל - נאכף שוב, עצמאית, בשרת
-    const disallowed = (files || []).filter((f) => !signed && f.confidentiality_level === 2);
-    if (disallowed.length) {
+    // אותו כלל הרשאה בדיוק כמו במייל - נאכף שוב, עצמאית, בשרת.
+    // בעל העסק תמיד "signed" (evaluateSaleFileAccess).
+    const access = evaluateSaleFileAccess({
+      recipientType, agreementStatus: buyer.agreement_status, file_ids, files: files || [],
+    });
+    if (!access.ok) {
       await logAttempt({
         recipient_id: recipientId, recipient_type: recipientType, file_ids,
-        disallowed_files: disallowed.map((f) => ({ id: f.id, name: f.file_name })),
+        missing_file_ids: access.missing || null,
+        disallowed_files: (access.disallowed || []).map((f) => ({ id: f.id, name: f.file_name })),
         agreement_status_at_send: buyer.agreement_status || 'אין הסכם',
-        status: 'blocked',
+        status: access.reason === 'confidentiality_blocked' ? 'blocked' : 'failed',
+        reason: access.reason,
       }, actorId, business_id);
-      const names = disallowed.map((f) => f.file_name).join(', ');
-      return jsonResponse(403, {
-        error: `לא ניתן לשלוח את הקבצים הבאים: ${names}. ${recipientType === 'broker' ? 'למתווך' : recipientType === 'owner' ? 'לבעל העסק' : 'לקונה'} אין הסכם סודיות חתום.`,
-        disallowed_file_ids: disallowed.map((f) => f.id),
+      return jsonResponse(access.status, {
+        error: access.error,
+        ...(access.disallowed ? { disallowed_file_ids: access.disallowed.map((f) => f.id) } : {}),
       });
     }
 
