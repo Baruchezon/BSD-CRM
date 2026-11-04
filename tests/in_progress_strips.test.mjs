@@ -1,110 +1,59 @@
-// 22.10.2026: «לקוחות בטיפול» (and returned cards on «לידים», same stagedRowHtml)
-// render as a one-line strip. «לידים 2026» keeps its own table.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-
-const html = fs.readFileSync(new URL('../leads-hub.html', import.meta.url), 'utf8');
-
-function render(record, callOn){
-  const start = html.indexOf('function stagedStripSource(');
-  const end = html.indexOf('function canEditRecord(');
-  const code = html.slice(start, end);
-  const c = {
-    record,
-    result: '',
-    CURRENT_TAB: 'in_progress',
-    stagedTable: r => r.__staged === 'business' ? 'businesses' : 'leads',
-    canEditRecord: () => true,
-    canSendAgreement: () => true,
-    notesTooltip: () => 'הערות',
-    fmtDate: iso => iso ? '22.10.2026' : '—',
-    esc(s){ if (s === undefined || s === null) return ''; return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
-  };
-  vm.createContext(c);
-  vm.runInContext(code + `\nresult = stagedRowHtml(record, ${callOn ? 'true' : 'false'});`, c);
-  return c.result;
+const html = fs.readFileSync(new URL('../leads-hub.html', import.meta.url),'utf8');
+const fn = name => html.slice(html.indexOf('function '+name+'('), html.indexOf('\n}', html.indexOf('function '+name+'('))+2);
+function harness(editable=true){
+ const c={esc:s=>String(s??'').replaceAll('<','&lt;'),canEditRecord:()=>editable,canSendAgreement:()=>true,
+ stagedTable:r=>r.__staged==='business'?'businesses':'leads',notesTooltip:()=> 'הערות',
+ leadBusinessLabel:r=>r.business_name||'',leadSourceBadge:()=>'<span>מקור</span>',
+ leadCallStatusValue:()=> 'not_contacted',LEAD_CALL_ROW_CLASS:{},LEAD_CALL_STATUSES:[['not_contacted','ממתין']],
+ leadCallStatusOptions:()=>'<option>ממתין</option>',nextDueHtml:()=>'',fmtDayMonth:()=>'',
+ fmtPhone:p=>p,fmtDate:()=> '04.11.2026',waBtn:p=>`<a href="https://wa.me/${p}">WhatsApp</a>`,
+ creatorColor:()=>'',userName:()=> 'משתמש',rowNotesCell:r=>r.notes||'—'};
+ vm.createContext(c);vm.runInContext(fn('stagedRowHtml'),c);return c;
 }
-
-const longNotes = 'הערה ארוכה מאוד שחוזרת על עצמה '.repeat(40);
-
-test('in-progress business and lead render as one compact strip with key fields only', () => {
-  const biz = render({
-    id: 'b1', __staged: 'business', crm_stage: 'in_progress', created_by: 'u',
-    internal_name: 'מסעדה ארוכה מאוד בשם שלא נגמר באמצע הרחוב הראשי',
-    business_number: 'BSD-B-1042', owner_phone: '0501234567', source: '',
-    agreement_status: 'נשלח הסכם לחתימה', crm_stage_changed_at: '2026-10-22T12:00:00Z',
-    notes: longNotes, city: 'תל אביב', owner_name: 'דנה'
-  }, false);
-  const lead = render({
-    id: 'l1', __staged: 'buyer', crm_stage: 'in_progress', created_by: 'u',
-    full_name: 'יוסי כהן', client_number: 'BSD-C-88', phone: '0520000000',
-    source: 'אתר BSD החדש', status: 'ממתין לשיחה', notes: longNotes
-  }, false);
-  for (const row of [biz, lead]){
-    assert.match(row, /class="staged-strip"/);
-    assert.match(row, /class="crm-strip"/);
-    assert.match(row, /crm-strip-ellip/);
-    assert.match(row, /onclick="openStagedCard\('/);
-    assert.match(row, /toggleFormsMenu\(event\)/);
-    assert.match(row, /החזר ללידים/);
-    assert.equal(row.includes(longNotes.trim()), false);
-    assert.equal((row.match(/<tr\b/g) || []).length, 1);
-    assert.equal((row.match(/<td\b/g) || []).length, 1);
-  }
-  assert.match(biz, /data-staged="business"/);
-  assert.match(biz, />עסק</);
-  assert.match(biz, /BSD-B-1042/);
-  assert.match(biz, /מקור: עסקים/);
-  assert.match(biz, /נשלח הסכם לחתימה · 22\.10\.2026/);
-  assert.match(lead, /data-staged="lead"/);
-  assert.match(lead, />ליד</);
-  assert.match(lead, /BSD-C-88/);
-  assert.match(lead, /מקור: מהאתר/);
-  assert.match(lead, /openStagedCard\('l1'\)/);
+for(const kind of ['business','buyer']) test(kind+' renders full actionable table rows',()=>{
+ const c=harness();const r={id:'r1',__staged:kind,crm_stage:'in_progress',owner_name:'בעל העסק',internal_name:'מאפייה',full_name:'קונה',phone:'0520000000',owner_phone:'0500000000',business_number:'BSD-B-42',notes:'תוכן השיחה',created_by:'u'};
+ const row=c.stagedRowHtml(r,true);
+ assert.equal((row.match(/<td\b/g)||[]).length,8);
+ const phone=kind==='business'?r.owner_phone:r.phone;
+ assert.ok(row.includes('href="tel:'+phone+'"'));assert.ok(row.includes('https://wa.me/'+phone));
+ assert.ok(row.includes(kind==='business'?r.owner_name:r.full_name));
+ assert.ok(row.includes('notes-cell'));assert.ok(row.includes(r.notes));
+ assert.ok(row.includes("deleteRecord('r1')"));assert.ok(row.includes("stagedSendAgreement('r1')"));
+ assert.ok(row.includes('toggleFormsMenu(event)'));assert.ok(row.includes("openStagedCard('r1')"));
+ assert.ok(!row.includes('colspan='));assert.ok(!row.includes('tel:BSD-B-42'));
+ assert.equal(row.includes('setLeadCallStatus('),kind!=='business');
 });
-
-test('returned-to-leads rows use the same strip and keep the move-to-in-progress action', () => {
-  const row = render({
-    id: 'b2', __staged: 'business', crm_stage: 'lead', created_by: 'u',
-    internal_name: 'מאפייה', owner_phone: '0509999999', source: 'פייסבוק',
-    notes: longNotes
-  }, true);
-  assert.match(row, /colspan="8"/);
-  assert.match(row, /class="crm-strip"/);
-  assert.match(row, /העבר ללקוחות בטיפול/);
-  assert.match(row, /מקור: פייסבוק/);
-  assert.match(row, /0509999999/);
-  assert.equal(row.includes('notes-cell'), false);
-  assert.equal(row.includes(longNotes.trim()), false);
+test('read only rows omit mutating actions',()=>{
+ const row=harness(false).stagedRowHtml({id:'x',__staged:'business'},false);
+ assert.ok(!row.includes('deleteRecord('));assert.ok(!row.includes('stagedSendAgreement('));assert.ok(!row.includes('moveStaged('));
+ assert.equal((row.match(/<td\b/g)||[]).length,6);
 });
-
-test('strip CSS is a single line with text-overflow ellipsis, including on mobile', () => {
-  const css = html.slice(html.indexOf('.crm-strip{'), html.indexOf('.crm-strip-menu{'));
-  assert.match(css, /height:40px/);
-  assert.match(css, /max-height:40px/);
-  assert.match(css, /white-space:nowrap/);
-  assert.match(css, /overflow:hidden/);
-  assert.match(html, /\.crm-strip-ellip\{[^}]*text-overflow:ellipsis/);
-  assert.match(html, /\.crm-strip-ellip\{[^}]*white-space:nowrap/);
-  assert.match(html, /@media \(max-width:700px\)\{[\s\S]*table tr\.staged-strip > td\{display:block/);
+test('archive routes staged records to their actual table',async()=>{
+ for(const kind of ['business','buyer',null]){
+  const writes=[];const row={id:'r1',__staged:kind};
+  const c={currentRows:()=>[row],canEditRecord:()=>true,stagedTable:r=>r.__staged==='business'?'businesses':'leads',
+  openArchiveReasonModal:async(t,save)=>save('לא רלוונטי'),updateArchiveRecord:async(...args)=>writes.push(args),closeModal(){},loadAll:async()=>{},toast(){}};
+  vm.createContext(c);vm.runInContext('async '+fn('deleteRecord'),c);await c.deleteRecord('r1');await new Promise(r=>setImmediate(r));
+  assert.deepEqual(writes,[[kind==='business'?'businesses':'leads','r1',true,'לא רלוונטי']]);
+ }
 });
-
-test('לידים 2026 does not use the compact strip', () => {
-  const review = html.slice(html.indexOf('async function renderY2026ReviewTable'), html.indexOf('function y2026AgreementSummary'));
-  assert.equal(review.includes('crm-strip'), false);
-  assert.equal(review.includes('stagedRowHtml'), false);
-  const table = html.slice(html.indexOf('function renderTable()'), html.indexOf('function leadSourceBadge'));
-  assert.match(table, /if \(r\.__staged\) return stagedRowHtml/);
-  const y2026 = table.slice(table.indexOf("CURRENT_TAB === 'y2026'"));
-  assert.equal(y2026.includes('crm-strip'), false);
-  assert.equal(y2026.includes('stagedRowHtml'), false);
-  assert.match(y2026, /notes-cell/);
+test('lead menu selects the requested destination and focuses the corresponding save button',()=>{
+ for(const category of ['buyer','seller',null]){
+  const target={value:''};const actions=[];const c={ALL_MANUAL:[{id:'x'}],ALL_SELLERS:[],canEditRecord:()=>true,canSendAgreement:()=>true,
+   document:{querySelectorAll:()=>[],getElementById:id=>id==='wlTransferTarget'?target:{scrollIntoView(){},focus(){actions.push(id)}}},openWebsiteLead:id=>actions.push(id),toast(){}};
+  vm.createContext(c);vm.runInContext(fn('openLeadAction'),c);c.openLeadAction('x',category,!category);
+  assert.equal(target.value,category||'');assert.deepEqual(actions,['x',category?'wlSaveBtn':'wlAgreementBtn']);
+ }
+ assert.ok(html.includes("openLeadAction('${r.id}','buyer')"));assert.ok(html.includes("openLeadAction('${r.id}','seller')"));
+ assert.ok(html.includes("openLeadAction('${r.id}',null,true)"));
 });
-
-test('in-progress tab switches the shared table into strip mode; other tabs do not', () => {
-  const head = html.slice(html.indexOf('function renderLeadsTableHead()'), html.indexOf('async function setLeadCallStatus'));
-  assert.match(head, /CURRENT_TAB === 'in_progress'/);
-  assert.match(head, /staged-strips/);
+test('in progress has visible table headers and 2026 keeps its independent renderer',()=>{
+ assert.ok(fn('isCallStatusTab').includes("CURRENT_TAB === 'in_progress'"));
+ assert.ok(fn('renderLeadsTableHead').includes('thead.hidden = false'));
+ const review=html.slice(html.indexOf('async function renderY2026ReviewTable'),html.indexOf('function y2026AgreementSummary'));
+ assert.ok(!review.includes('stagedRowHtml'));
 });
