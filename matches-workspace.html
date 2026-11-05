@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202610181800';
+    var PAGE_BUILD = '202611052310';
     window.PAGE_BUILD = PAGE_BUILD;
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -92,6 +92,10 @@
   .view-toggle-btn.active{background:var(--navy);color:#fff;border-color:var(--navy);}
   .search-row{display:flex;gap:8px;flex-wrap:wrap;}
   .search-row input, .search-row select{padding:10px 14px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:13.5px;background:#fff;}
+  .creator-filter{flex:0 1 280px;min-width:220px;}
+  .creator-filter label{display:block;font-size:13px;font-weight:700;margin-bottom:4px;}
+  .creator-filter .ss-input{width:100%;box-sizing:border-box;}
+  .search-row{align-items:flex-end;}
   .search-row input#searchBox{flex:1;min-width:0;width:100%;font-size:16px;}
 
   .quickviews{display:flex;gap:7px;flex-wrap:wrap;}
@@ -309,6 +313,10 @@
   </div>
   <div class="search-row">
     <input type="text" id="searchBox" placeholder="חיפוש: שם עסק, מספר, שם קונה, מספר, טלפון, מטפל, סטטוס, הערה, משימה...">
+    <div class="creator-filter">
+      <label for="matchCreatorSelect_input">נוצר על ידי</label>
+      <div id="matchCreatorFilter"></div>
+    </div>
   </div>
   <div class="filter-panel" id="filterPanel" style="display:none;">
     <div class="quickviews" id="quickviews"></div>
@@ -326,7 +334,7 @@
 <script>
 let CURRENT_PROFILE = null;
 let ALL_LEADS = [], ALL_BROKERS = [], ALL_BUSINESSES = {}, ALL_MATCHES = [], ALL_PROFILES = {}, ALL_TASKS = [], ALL_ACTIVITY = [], ALL_OUTREACH = [];
-let searchTerm = "", activeQuickView = "", currentView = "business";
+let searchTerm = "", activeQuickView = "", currentView = "business", createdByFilter = "";
 const OPEN_NODES = new Set();
 
 const STATUS_COLOR = {
@@ -569,6 +577,7 @@ function restoreMatchesPageCache(){
   ALL_PROFILES = c.profiles || {};
   ALL_TASKS = c.tasks || [];
   ALL_ACTIVITY = c.activity || [];
+  buildCreatorFilter();
   buildQuickViews();
   buildStatStrip();
   render();
@@ -602,6 +611,7 @@ async function loadEverything(){
     ALL_ACTIVITY = activity || [];
   }
   await loadOutreach();
+  buildCreatorFilter();
   buildQuickViews();
   buildStatStrip();
   render();
@@ -695,9 +705,27 @@ function matchPhoneHit(m, q){
   return BSDSearch.phoneMatch(q, [cp?.phone, cp?.phone2]);
 }
 
+function buildCreatorFilter(){
+  const users = Object.values(ALL_PROFILES)
+    .filter(p=>p.full_name)
+    .sort((a,b)=>a.full_name.localeCompare(b.full_name, 'he'));
+  document.getElementById('matchCreatorFilter').innerHTML = window.searchSelectHTML({
+    boxId: 'matchCreatorSelect', valueId: 'matchCreatorId',
+    placeholder: 'הקלד שם משתמש לבחירה...',
+    selectedValue: createdByFilter || 'all',
+    selectedLabel: createdByFilter ? (ALL_PROFILES[createdByFilter]?.full_name || '') : ''
+  });
+  window.initSearchSelect('matchCreatorSelect', users, {
+    valueId: 'matchCreatorId', getId: p=>p.id, getLabel: p=>p.full_name,
+    allowClear: true, clearLabel: 'כל המשתמשים',
+    onChange: id=>{ createdByFilter = id === 'all' ? '' : id; render(); }
+  });
+}
+
 function filteredMatches(){
   const q = searchTerm.trim();
   return ALL_MATCHES.filter(m=>{
+    if (createdByFilter && m.created_by !== createdByFilter) return false;
     if (statFilter && matchStatBucket(m) !== statFilter) return false;
     if (activeQuickView && !matchMatchesQuickView(m, activeQuickView)) return false;
     if (q && !searchHit(q, [matchSearchHay(m)]) && !matchPhoneHit(m, q)) return false;
@@ -755,7 +783,7 @@ function renderByBusiness(){
   // התאמות, ולכן חיפוש עסק בלי התאמות (למשל "דקור") החזיר ריק. בחיפוש - מוסיפים
   // גם כל עסק פעיל שתואם, עם כפתור "הוסף קונה" כדי לחבר אליו קונים.
   const q = searchTerm.trim();
-  if (q && !statFilter && !activeQuickView){
+  if (q && !statFilter && !activeQuickView && !createdByFilter){
     Object.values(ALL_BUSINESSES).forEach(b=>{
       if (!b.is_archived && !bizIds.includes(b.id) && searchHit(q, bizSearchFields(b))) bizIds.push(b.id);
     });
@@ -834,7 +862,7 @@ function renderByBuyer(){
   const groupKeys = [...new Set(rows.map(m=> (m.counterparty_type==='broker'?'broker:':'buyer:') + (m.counterparty_type==='broker'?m.broker_id:m.buyer_id)))];
   // 18.10.2026: בחיפוש - גם קונים שעדיין אין להם התאמות, כדי לחבר אותם לעסק.
   const qb = searchTerm.trim();
-  if (qb && !statFilter && !activeQuickView){
+  if (qb && !statFilter && !activeQuickView && !createdByFilter){
     ALL_LEADS.forEach(l=>{
       const k = 'buyer:' + l.id;
       if (!l.is_archived && !groupKeys.includes(k) && (searchHit(qb, buyerSearchFields(l)) || (window.BSDSearch && BSDSearch.phoneMatch(qb, [l.phone, l.phone2])))) groupKeys.push(k);
