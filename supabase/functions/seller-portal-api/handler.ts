@@ -36,19 +36,28 @@ export function createHandler(db:any,opts:Options){
   return {documents,reports,extras};
  };
  // Buyers matched to the seller's OWN business (05.10.2026). Every query is scoped by
- // business id; buyer rows are read with agreement columns only (never name, phone,
- // email, ID number or internal notes). Only notes marked visible_to_client are read.
+ // business id. Buyer rows are display name and agreement columns only: never phone,
+ // email, ID number or internal notes. Staff authors are profiles.full_name only.
+ // Only notes marked visible_to_client are read.
  const ownerMatches=async(id:string)=>{
   const matches=(await query(db.from('matches').select('id,business_id,buyer_id,buyer_source,counterparty_type,status,legacy_status,status_changed_at,last_action_at,created_at').eq('business_id',id).limit(300))).filter((m:any)=>m.business_id===id&&m.buyer_id&&(m.counterparty_type??'buyer')==='buyer');
   if(!matches.length)return buildOwnerMatches({businessId:id,matches:[],buyers:[]});
   const mids=matches.map((m:any)=>m.id),bids=[...new Set(matches.map((m:any)=>m.buyer_id))];
-  const [buyers,permissions,anonSends,fullSends,history,notes]=await Promise.all([
+  // performed_by / created_by join profiles for full_name only. Phone and email stay out of the select.
+  const noteSelect='match_id,action_type,description,buyer_response,follow_up_date,occurred_at,created_at,visible_to_client,deleted_at,performed_by,created_by,performer:profiles!performed_by(full_name),creator:profiles!created_by(full_name)';
+  const [buyers,permissions,anonSends,fullSends,history,notesRaw]=await Promise.all([
    query(db.from('leads').select('id,type,full_name,first_name,last_name,company,agreement_status,agreement_sent,agreement_signed_date').in('id',bids).eq('type','buyer')),
    query(db.from('seller_portal_match_permissions').select('match_id,visible,disclose_identity').in('match_id',mids)),
    query(db.from('anon_distributions').select('business_id,buyer_id,distribution_type,delivery_status,sent_at,created_at').eq('business_id',id).in('buyer_id',bids)),
    query(db.from('audit_log').select('record_id,details,occurred_at').eq('action','send_sale_files_to_buyer').eq('record_id',id).limit(500)),
    query(db.from('match_status_history').select('match_id,status,changed_at').in('match_id',mids)),
-   query(db.from('match_activity_log').select('match_id,action_type,description,buyer_response,follow_up_date,occurred_at,created_at,visible_to_client,deleted_at').in('match_id',mids).eq('visible_to_client',true).is('deleted_at',null))]);
+   query(db.from('match_activity_log').select(noteSelect).in('match_id',mids).eq('visible_to_client',true).is('deleted_at',null))]);
+  const staffName=(v:unknown)=>{const s=String(v??'').replace(/\s+/g,' ').trim().slice(0,80);if(!s||s.includes('@')||(s.match(/\d/g)||[]).length>=6)return '';return s;};
+  const actorIds=[...new Set((notesRaw||[]).flatMap((n:any)=>[n?.performed_by,n?.created_by].filter(uuid)))];
+  const profiles=actorIds.length?await query(db.from('profiles').select('id,full_name').in('id',actorIds)):[];
+  const nameById=new Map((profiles||[]).map((p:any)=>[p?.id,staffName(p?.full_name)]));
+  const embedded=(rel:any)=>staffName((Array.isArray(rel)?rel[0]:rel)?.full_name);
+  const notes=(notesRaw||[]).map((n:any)=>({match_id:n.match_id,action_type:n.action_type,description:n.description,buyer_response:n.buyer_response,follow_up_date:n.follow_up_date,occurred_at:n.occurred_at,created_at:n.created_at,visible_to_client:n.visible_to_client,deleted_at:n.deleted_at,author_name:(typeof n.performed_by==='string'&&nameById.get(n.performed_by))||(typeof n.created_by==='string'&&nameById.get(n.created_by))||embedded(n.performer)||embedded(n.creator)||''}));
   const fileIds=[...new Set(fullSends.flatMap((s:any)=>Array.isArray(s.details?.file_ids)?s.details.file_ids:[]).filter(uuid))];
   const files=fileIds.length?await query(db.from('business_sale_files').select('id,business_id,category,document_type,file_name').eq('business_id',id).in('id',fileIds)):[];
   return buildOwnerMatches({businessId:id,matches,buyers,permissions,anonSends,fullSends,files,history,notes});
