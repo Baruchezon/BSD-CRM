@@ -2,6 +2,7 @@
 set -euo pipefail
 node --check portal/config.js
 node --check portal/portal.js
+node tests/portal_note_author.test.mjs
 node --check js/portal-admin.js
 node --check js/portal-ad-reports.js
 node --check js/config.js

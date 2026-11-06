@@ -10,8 +10,11 @@ import {documentBucket, DOC_LABELS} from './latest-files.ts';
 // (previous rule:) buyers are NEVER named to the owner. Each buyer is «קונה פוטנציאלי #N»,
 // N stable by match creation order. `activity` lists every visible_to_client=true,
 // non-deleted match_activity_log row: date, action description, buyer response.
-// Never returned: buyer id, phone, email, ID number, internal CRM notes,
-// handler names, prices, commissions or anything about other businesses.
+// `author` is the staff member's profiles.full_name (performed_by, else created_by).
+// A missing name is «צוות BSD». A note that is only the buyer name, or shorter than 15
+// characters, is replaced with a fuller sentence. Never returned: buyer id, phone, email,
+// ID number, internal CRM notes (`note`), staff phone/email, prices, commissions,
+// or anything about other businesses.
 export const SIGNED_STATUS = 'יש הסכם חתום';
 const SENT_STATUS = 'נשלח הסכם לחתימה';
 // CRM match status -> [owner-facing label, progress step 1..5, closed]
@@ -59,6 +62,25 @@ export function splitDescription(d: unknown): {topic: string; shared: string} {
   return {topic: clean(raw.slice(0, k), 1200), shared: clean(raw.slice(k + 1 + SHARED_PREFIX.length), 1200)};
 }
 export const CALL_TYPE = 'שיחה';
+export const BSD_TEAM = 'צוות BSD';
+export const PORTAL_TEXT_FALLBACK = 'התנהלה שיחה עם הלקוח, קיבל פרטים ראשונים. ממתינים לתגובות, ניצור איתו קשר בעוד כמה ימים.';
+const readableName = (v: unknown) => {
+  const s = clean(v, 80);
+  if (!s || s.includes('@') || (s.match(/\d/g) || []).length >= 6) return '';
+  return s;
+};
+const embeddedName = (rel: any) => readableName((Array.isArray(rel) ? rel[0] : rel)?.full_name);
+export function authorOf(n: any): string {
+  return readableName(n?.author_name) || embeddedName(n?.performer) || embeddedName(n?.creator) || BSD_TEAM;
+}
+const contactOnly = (s: string) => s.includes('@') || ((s.match(/\d/g) || []).length >= 6 && /^[\d+\-().\s]+$/.test(s));
+const publicField = (v: string) => contactOnly(v) ? '' : v;
+// Owner-facing narrative only. A buyer name, a bare phone/email, or anything under 15 characters is not a useful update.
+export function portalNarrative(text: string, names: string[] = []): string {
+  if (!text) return '';
+  if (text.length < 15 || contactOnly(text) || names.some(n => n && n === text)) return PORTAL_TEXT_FALLBACK;
+  return text;
+}
 const dateOnly = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? '')) ? String(v) : null);
 // 20.10.2026 hotfix: a company is shown only if it looks like a name. Anything with 5+ digits
 // (ID / company number / phone typed into the field) or equal to the lead's id_number/phone is dropped.
@@ -100,8 +122,19 @@ export function buildOwnerMatches(i: Input) {
   const nameOf = new Map(shown.map(m => {const l = buyers.get(m.buyer_id), co = safeCompany(l); return [m.id, co ? `${buyerName(l)} · ${co}` : buyerName(l)];}));
   const visibleNotes = (i.notes || []).filter(n => n && num.has(n.match_id) && n.visible_to_client === true && !n.deleted_at);
   const srcOf = new Map(shown.map(m => [m.id, sourceLabel(m.buyer_source)]));
+  const labelsOf = (matchId: string) => {
+    const display = nameOf.get(matchId) || '';
+    return [...new Set([display, display.split(' · ')[0]].map(s => clean(s, 200)).filter(Boolean))];
+  };
+  const narrative = (matchId: string, text: string) => portalNarrative(text, labelsOf(matchId));
+  // Build the sentence from the topic and the shared line separately, so a bare phone or email cannot ride along inside description.
+  const ownerText = (matchId: string, description: unknown, limit: number) => {
+    const d = splitDescription(description);
+    const shared = publicField(d.shared);
+    return clean([narrative(matchId, d.topic), shared ? `${SHARED_PREFIX} ${shared}` : ''].filter(Boolean).join(' '), limit);
+  };
   const activity = visibleNotes
-    .map(n => ({source: srcOf.get(n.match_id) ?? null, date: iso(n.occurred_at || n.created_at), buyer: nameOf.get(n.match_id)!, action: clean(n.description, 1200), response: clean(n.buyer_response, 600)}))
+    .map(n => ({source: srcOf.get(n.match_id) ?? null, date: iso(n.occurred_at || n.created_at), buyer: nameOf.get(n.match_id)!, action: ownerText(n.match_id, n.description, 1200), response: publicField(clean(n.buyer_response, 600)), author: authorOf(n)}))
     .filter(a => a.action || a.response)
     .sort((a, b) => t(b.date) - t(a.date));
   const rows = shown
@@ -141,10 +174,10 @@ export function buildOwnerMatches(i: Input) {
       const step = closed ? 0 : signed ? Math.max(statusStep, 3) : Math.min(statusStep, 2);
       const stageLabel = !signed && statusStep > 2 ? 'קיבל מידע ראשוני על העסק' : label;
       const mine = visibleNotes.filter(n => n.match_id === m.id).sort((a, b) => t(b.occurred_at || b.created_at) - t(a.occurred_at || a.created_at));
-      const notes = mine.map(n => ({text: clean(n.description, 300), date: iso(n.occurred_at || n.created_at)})).filter(n => n.text).slice(0, 3);
+      const notes = mine.map(n => ({text: ownerText(m.id, n.description, 300), date: iso(n.occurred_at || n.created_at), author: authorOf(n)})).filter(n => n.text).slice(0, 3);
       // Buyer card: every owner-visible entry for THIS match, newest first. Nothing is inferred.
       const contacts = mine.map(n => {const d = splitDescription(n.description);
-        return {date: iso(n.occurred_at || n.created_at), type: clean(n.action_type, 40) || 'עדכון', topic: d.topic, shared: d.shared, response: clean(n.buyer_response, 600), follow_up: dateOnly(n.follow_up_date)};})
+        return {date: iso(n.occurred_at || n.created_at), type: clean(n.action_type, 40) || 'עדכון', topic: narrative(m.id, d.topic), shared: publicField(d.shared), response: publicField(clean(n.buyer_response, 600)), follow_up: dateOnly(n.follow_up_date), author: authorOf(n)};})
         .filter(c => c.topic || c.shared || c.response);
       const last = contacts[0] || null;
       const followUp = contacts.find(c => c.follow_up)?.follow_up ?? null;
