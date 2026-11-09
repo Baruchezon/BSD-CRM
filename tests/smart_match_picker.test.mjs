@@ -50,6 +50,23 @@ test('buyers match the same way and both lists sort in Hebrew', () => {
   assert.ok(pick.matches(buyers, 'מ').length >= 1);
 });
 
+test('score buckets keep 75, 61, 50 and the rest in that order', () => {
+  const b = pick.scoreBucket;
+  assert.equal(b(99), 'high');
+  assert.equal(b(75), 'high');
+  assert.equal(b(74), 'good');
+  assert.equal(b(61), 'good');
+  assert.equal(b(60), 'mid');
+  assert.equal(b(50), 'mid');
+  assert.equal(b(49), 'low');
+  assert.equal(b(0), 'low');
+  assert.equal(pick.defaultBucket({ high: 2, good: 4, mid: 1, low: 9 }), 'high');
+  assert.equal(pick.defaultBucket({ high: 0, good: 3, mid: 1, low: 0 }), 'good');
+  assert.equal(pick.defaultBucket({ high: 0, good: 0, mid: 0, low: 5 }), 'low');
+  assert.equal(pick.defaultBucket({}), 'all');
+  assert.equal(pick.BUCKETS.map(x => x.id).join(','), 'high,good,mid,low');
+});
+
 test('the smart matches screen uses one search box and runs on the click', () => {
   const page = fs.readFileSync(new URL('../smart-matches.html', import.meta.url), 'utf8');
   assert.match(page, /BSDSmartPick\.matches/);
@@ -57,4 +74,14 @@ test('the smart matches screen uses one search box and runs on the click', () =>
   assert.match(page, /loadSuggestions\(\)/);
   assert.doesNotMatch(page, /בחר עסק מהרשימה/);
   assert.match(page, /עסק<\/button><button type="button" data-v="buyer">קונה/);
+  assert.match(page, /75% ומעלה/);
+  assert.match(page, /61%–74%/);
+  assert.match(page, /50%–60%/);
+  assert.match(page, /מתחת ל-50%/);
+  assert.match(page, /id="smListScroll"/);
+  assert.match(page, /bucket: STATE\.bucket/);
+  assert.match(page, /listScroll/);
+  assert.match(page, /selectBucket/);
+  assert.match(page, /scrollTop = 0/);
+  assert.doesNotMatch(page, /id="fMin"/);
 });

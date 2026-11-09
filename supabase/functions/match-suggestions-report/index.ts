@@ -149,15 +149,18 @@ Deno.serve(async (req) => {
     }
   }
 
-  const result = buildSuggestions({ buyers, businesses, matches: matchesRes.data ?? [], distributions: distRes.data ?? [], notes });
+  // כל הציון חוזר למסך, כדי שאפשר לסנן 75+ / 61–74 / 50–60 / מתחת ל-50 בלי קריאה נוספת.
+  // המייל נשאר על הרף הקודם (61 ומעלה).
+  const result = buildSuggestions({ buyers, businesses, matches: matchesRes.data ?? [], distributions: distRes.data ?? [], notes }, { minScore: 0 });
   const shownBuyerIds = [...new Set([...result.suggestions, ...result.already_matched].map((s: any) => s.buyer_id).filter(Boolean))];
   const callsByBuyer = fullAccess ? await latestCallGists(supabase, shownBuyerIds) : new Map();
   const suggestions = decorateForClient(result.suggestions, { buyers, businesses, fullAccess, notes, callsByBuyer });
   const alreadyMatched = decorateForClient(result.already_matched, { buyers, businesses, fullAccess, notes, callsByBuyer });
 
   const dateStr = new Date().toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' });
+  const mailSuggestions = suggestions.filter((s: any) => s.score >= MIN_SCORE);
   if (sendEmail) {
-    const html = buildEmailHtml(suggestions, result.stats, dateStr);
+    const html = buildEmailHtml(mailSuggestions, result.stats, dateStr);
     const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -165,7 +168,7 @@ Deno.serve(async (req) => {
         from: 'צוות BSD <info@bsd-bbi.co.il>', // 09.10.2026 (Baruch): all BSD system emails from info@
         reply_to: 'info@bsd-bbi.co.il',
         to: [reportToEmail],
-        subject: `התאמות AI חכמות - ${dateStr} (${suggestions.length} הצעות חדשות)`,
+        subject: `התאמות AI חכמות - ${dateStr} (${mailSuggestions.length} הצעות חדשות)`,
         html
       })
     });
@@ -176,7 +179,7 @@ Deno.serve(async (req) => {
   }
 
   return jsonResponse({
-    ok: true, engine_version: ENGINE_VERSION, min_score: MIN_SCORE, generated_at: new Date().toISOString(),
+    ok: true, engine_version: ENGINE_VERSION, min_score: 0, generated_at: new Date().toISOString(),
     count: suggestions.length, stats: result.stats, suggestions, already_matched: alreadyMatched,
     contact_details: fullAccess, emailed: sendEmail, selection,
   });
