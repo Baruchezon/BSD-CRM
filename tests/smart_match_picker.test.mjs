@@ -67,6 +67,29 @@ test('score buckets keep 75, 61, 50 and the rest in that order', () => {
   assert.equal(pick.BUCKETS.map(x => x.id).join(','), 'high,good,mid,low');
 });
 
+test('business search can narrow by sector and status, then group and sort', () => {
+  const rows = [
+    { id: 'a', name: 'איזון תעשיות', field: 'תעשייה', status: 'פעיל', created_at: '2026-07-01', match_count: 2, number: 'BSD-B-1' },
+    { id: 'b', name: 'מאפיית פארין', field: 'מאפייה', status: 'יש הסכם חתום', created_at: '2026-09-02', match_count: 5, number: 'BSD-B-2' },
+    { id: 'c', name: 'דולצה מיה', field: 'מאפייה', status: 'פעיל', created_at: '2026-08-01', match_count: 1, number: 'BSD-B-3' },
+  ];
+  const named = pick.businessView(rows, { query: 'מ', sort: 'name', group: true });
+  assert.equal(named.groups.map(g => g.label).join('|'), 'מאפייה');
+  assert.equal(named.rows.map(r => r.id).join(','), 'c,b');
+  const newest = pick.businessView(rows, { query: '', field: 'מאפייה', sort: 'new', group: false });
+  assert.equal(newest.rows.map(r => r.id).join(','), 'b,c');
+  const popular = pick.businessView(rows, { status: 'פעיל', sort: 'matches', group: true });
+  assert.equal(popular.rows.map(r => r.id).join(','), 'a,c');
+  assert.equal(pick.businessView(rows, { query: '' }).rows.length, 0);
+});
+
+test('back moves one smart-matches screen at a time', () => {
+  assert.equal(pick.planSmartStep('picker', 'results'), 'push');
+  assert.equal(pick.planSmartStep(undefined, 'results'), 'push');
+  assert.equal(pick.planSmartStep('results', 'results'), 'replace');
+  assert.equal(pick.planSmartStep('results', 'picker'), 'back');
+});
+
 test('the smart matches screen uses one search box and runs on the click', () => {
   const page = fs.readFileSync(new URL('../smart-matches.html', import.meta.url), 'utf8');
   assert.match(page, /BSDSmartPick\.matches/);
@@ -81,6 +104,12 @@ test('the smart matches screen uses one search box and runs on the click', () =>
   assert.match(page, /id="smListScroll"/);
   assert.match(page, /bucket: STATE\.bucket/);
   assert.match(page, /listScroll/);
+  assert.match(page, /קיבוץ לפי תחום/);
+  assert.match(page, /לפי מספר התאמות/);
+  assert.match(page, /function smartBack\(\)\{ history\.back\(\); \}/);
+  assert.match(page, /history\.pushState/);
+  assert.match(page, /popstate/);
+  assert.doesNotMatch(page, /חזרה ללוח הבקרה/);
   assert.match(page, /selectBucket/);
   assert.match(page, /scrollTop = 0/);
   assert.doesNotMatch(page, /id="fMin"/);

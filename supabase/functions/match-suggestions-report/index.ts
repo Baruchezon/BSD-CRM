@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
       .or('is_archived.is.null,is_archived.eq.false')
       .is('crm_stage', null)), // 22.10.2026: לא כולל לקוחות בטיפול / שהוחזרו ללידים
     readAll(() => supabase.from('businesses')
-      .select('id, business_number, id_number, internal_name, anon_display_name, field, category, subcategory, city, region, address, asking_price, annual_revenue, operating_profit, net_profit, employees_count, years_active, short_description, sale_reason, notes, anon_summary, internal_business_summary, website, owner_phone, anon_card_show_price')
+      .select('id, business_number, id_number, internal_name, anon_display_name, field, category, subcategory, city, region, address, asking_price, annual_revenue, operating_profit, net_profit, employees_count, years_active, short_description, sale_reason, notes, anon_summary, internal_business_summary, website, owner_phone, anon_card_show_price, created_at, status, agreement_status')
       .eq('listing_status', 'active')
       .or('is_archived.is.null,is_archived.eq.false')
       .is('crm_stage', null)), // 22.10.2026: לא כולל לקוחות בטיפול / שהוחזרו ללידים
@@ -128,9 +128,22 @@ Deno.serve(async (req) => {
     businesses = scopeBusinessesForAgent(businesses, levels);
   }
   if (body?.action === 'options') {
+    const matchCounts: Record<string, number> = {};
+    for (const m of matchesRes.data ?? []) {
+      if (m?.business_id) matchCounts[m.business_id] = (matchCounts[m.business_id] || 0) + 1;
+    }
     return jsonResponse({ ok: true, engine_version: ENGINE_VERSION,
       buyers: buyers.map((b: any) => ({ id: b.id, name: b.full_name || 'קונה ללא שם', number: b.client_number || '', detail: [b.requested_field, b.requested_area].filter(Boolean).join(' · '), phones: visiblePhones(fullAccess, [b.phone, b.phone2]) })),
-      businesses: businesses.map((b: any) => ({ id: b.id, name: b.internal_name || b.anon_display_name || 'עסק ללא שם', number: b.business_number || '', id_number: b._anon_scope ? '' : (b.id_number || ''), detail: [b.field, b.city].filter(Boolean).join(' · '), phones: visiblePhones(fullAccess && !b._anon_scope, [b.owner_phone]) })),
+      businesses: businesses.map((b: any) => ({
+        id: b.id, name: b.internal_name || b.anon_display_name || 'עסק ללא שם', number: b.business_number || '',
+        id_number: b._anon_scope ? '' : (b.id_number || ''),
+        detail: [b.field, b.city].filter(Boolean).join(' · '),
+        field: String(b.field || b.category || '').trim(),
+        created_at: b.created_at || '',
+        status: b._anon_scope ? '' : (String(b.status || '').trim() || String(b.agreement_status || '').trim()),
+        match_count: matchCounts[b.id] || 0,
+        phones: visiblePhones(fullAccess && !b._anon_scope, [b.owner_phone]),
+      })),
     });
   }
   const selected = selectRecords({ buyers, businesses }, selection);

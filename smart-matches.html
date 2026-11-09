@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202611092251';
+    var PAGE_BUILD = '202611092340';
     window.PAGE_BUILD = PAGE_BUILD;
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -67,6 +67,14 @@
   .sm-drop-item small{color:#6b7285;font-size:.75rem;}
   .sm-drop-item:hover,.sm-drop-item.on{background:#f7f1dc;}
   .sm-drop-empty{padding:10px 12px;color:#7b8293;font-size:.8rem;}
+  .sm-drop-head{position:sticky;top:0;padding:6px 12px;font-size:.72rem;font-weight:800;color:#8a5a00;background:#fff6df;border-bottom:1px solid #f0e2b8;}
+  .sm-biz-tools{display:flex;flex-direction:column;gap:8px;flex:1 1 100%;}
+  .sm-biz-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .sm-biz-row label{font-size:.78rem;color:#3d465c;font-weight:700;display:inline-flex;align-items:center;gap:6px;}
+  .sm-biz-row select{padding:7px 10px;border-radius:9px;border:1px solid #d8d3c4;font-family:inherit;background:#fff;font-weight:600;}
+  .sm-field-chips{display:flex;gap:6px;overflow:auto;padding-bottom:2px;scrollbar-width:thin;}
+  .sm-field-chip{border:1px solid #d8d3c4;background:#fff;border-radius:999px;padding:5px 10px;font-family:inherit;font-size:.75rem;font-weight:800;color:#0e1b34;cursor:pointer;white-space:nowrap;}
+  .sm-field-chip.on{background:#0e1b34;color:#fff;border-color:#0e1b34;}
   .sm-brief{margin-top:8px;background:#f8f4e8;border:1px solid #efe4c4;border-radius:10px;padding:8px 10px;font-size:.82rem;line-height:1.5;color:#2c3344;}
   .sm-brief-latest{color:#3d465c;margin-top:2px;}
   .sm-more{border:0;background:transparent;color:#1d5fa8;font-weight:800;cursor:pointer;font-family:inherit;padding:2px 0 0;font-size:.78rem;}
@@ -174,7 +182,7 @@
     <div class="sm-actions">
       <button class="sm-btn gold" id="smRefresh" onclick="loadSuggestions()">🔎 חפש התאמות</button>
       <button disabled class="sm-btn primary" id="smMail" onclick="emailSuggestions()">📧 שלח את הרשימה למייל</button>
-      <a class="sm-btn" href="app.html">→ חזרה ללוח הבקרה</a>
+      <button type="button" class="sm-btn" id="smBack" onclick="smartBack()">→ חזרה</button>
     </div>
   </div>
 
@@ -186,6 +194,19 @@
     </div>
     <input type="hidden" id="targetId" value="">
     <span id="targetStatus" role="status" aria-live="polite">טוען רשימה…</span>
+    <div id="bizTools" class="sm-biz-tools">
+      <div class="sm-field-chips" id="bizFieldChips" role="group" aria-label="תחום"></div>
+      <div class="sm-biz-row">
+        <label>תחום <select id="bizField" aria-label="תחום"><option value="">כל התחומים</option></select></label>
+        <label id="bizStatusWrap">סטטוס <select id="bizStatus" aria-label="סטטוס"><option value="">כל הסטטוסים</option></select></label>
+        <label>מיון <select id="bizSort" aria-label="מיון">
+          <option value="name">לפי שם</option>
+          <option value="new">לפי חדש</option>
+          <option value="matches">לפי מספר התאמות</option>
+        </select></label>
+        <label class="sm-check"><input type="checkbox" id="bizGroup" checked> קיבוץ לפי תחום</label>
+      </div>
+    </div>
   </div>
   <div class="sm-kpis" id="smKpis"></div>
 
@@ -207,7 +228,7 @@
 <div class="no-access" id="noAccess" style="display:none;">
   <h2>אין הרשאה</h2>
   <p>הכפתור «התאמות AI חכמות» זמין למנהלים, או למשתמש שקיבל הרשאה מיוחדת במסך המשתמשים.</p>
-  <a href="app.html" class="btn btn-primary" style="text-decoration:none;display:inline-block;margin-top:10px;">חזרה ללוח הבקרה</a>
+  <a href="app.html" class="btn btn-primary" style="text-decoration:none;display:inline-block;margin-top:10px;">חזרה</a>
 </div>
 
 <div id="toastBox"></div>
@@ -216,7 +237,7 @@
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
 <script src="js/bsd-search.js?v=202611092100"></script>
-<script src="js/smart-match-picker.js?v=202611092251"></script>
+<script src="js/smart-match-picker.js?v=202611092340"></script>
 <script src="js/listReturn.js?v=202611092100"></script>
 <script>
 // 05.10.2026 (בקשת ברוך): מסך מלא לכפתור «התאמות AI חכמות» (שדרוג "קבל הצעות התאמה חכמות").
@@ -268,13 +289,45 @@ function closeDrop(){
   document.getElementById('targetSearch').setAttribute('aria-expanded', 'false');
   PICK_HI = -1;
 }
-function paintDrop(rows){
+function pickerFilters(){
+  return {
+    query: document.getElementById('targetSearch').value,
+    field: document.getElementById('bizField').value,
+    status: document.getElementById('bizStatus').value,
+    sort: document.getElementById('bizSort').value,
+    group: document.getElementById('bizGroup').checked && TARGET_TYPE === 'business'
+  };
+}
+function visiblePick(){
+  const filters = pickerFilters();
+  if (TARGET_TYPE !== 'business'){
+    const q = String(filters.query || '').trim();
+    const rows = q ? window.BSDSmartPick.matches(activeRows(), q) : [];
+    return { rows: rows, groups: rows.length ? [{ label: '', rows: rows }] : [] };
+  }
+  return window.BSDSmartPick.businessView(activeRows(), filters);
+}
+function paintDrop(groups){
   const list = document.getElementById('targetList');
   const input = document.getElementById('targetSearch');
-  const shown = rows.slice(0, 12);
-  list.innerHTML = shown.length
-    ? shown.map((r, i) => `<button type="button" class="sm-drop-item${i === PICK_HI ? ' on' : ''}" role="option" data-i="${i}"><b>${esc(r.name)}</b><small>${esc([r.number, r.detail].filter(Boolean).join(' · '))}</small></button>`).join('') + (rows.length > shown.length ? `<div class="sm-drop-empty">יש עוד ${rows.length - shown.length}. המשיכו להקליד.</div>` : '')
-    : '<div class="sm-drop-empty">אין התאמה. נסו עוד אות, בלי גרשיים, או מספר.</div>';
+  const flat = [];
+  (groups || []).forEach(g => (g.rows || []).forEach(r => flat.push(r)));
+  const shown = flat.slice(0, 40);
+  PICK_ROWS = shown;
+  let html = '', cursor = 0;
+  if (!shown.length) html = '<div class="sm-drop-empty">אין התאמה. נסו עוד אות, בלי גרשיים, או מספר.</div>';
+  else (groups || []).forEach(g => {
+    const rows = (g.rows || []).filter(r => shown.indexOf(r) >= 0);
+    if (!rows.length) return;
+    if (g.label) html += `<div class="sm-drop-head">${esc(g.label)}</div>`;
+    rows.forEach(r => {
+      const extra = [r.number, r.detail, r.status, r.match_count ? (r.match_count + ' התאמות') : ''].filter(Boolean).join(' · ');
+      html += `<button type="button" class="sm-drop-item${cursor === PICK_HI ? ' on' : ''}" role="option" data-i="${cursor}"><b>${esc(r.name)}</b><small>${esc(extra)}</small></button>`;
+      cursor++;
+    });
+  });
+  if (flat.length > shown.length) html += `<div class="sm-drop-empty">יש עוד ${flat.length - shown.length}. המשיכו להקליד או צמצמו תחום.</div>`;
+  list.innerHTML = html;
   list.hidden = false;
   input.setAttribute('aria-expanded', 'true');
   list.querySelectorAll('.sm-drop-item').forEach(btn => btn.addEventListener('mousedown', (e) => {
@@ -284,24 +337,51 @@ function paintDrop(rows){
   }));
 }
 function refreshDrop(){
-  const q = document.getElementById('targetSearch').value;
-  const rows = window.BSDSmartPick.matches(activeRows(), q);
-  PICK_ROWS = rows;
-  PICK_HI = rows.length ? 0 : -1;
+  const view = visiblePick();
+  PICK_ROWS = view.rows || [];
+  PICK_HI = PICK_ROWS.length ? 0 : -1;
   const status = document.getElementById('targetStatus');
-  if (String(q || '').trim().length < 1){ closeDrop(); status.textContent = readyText(); return; }
-  status.textContent = rows.length + ' תוצאות';
-  paintDrop(rows);
+  const filters = pickerFilters();
+  const narrowed = String(filters.query || '').trim() || filters.field || filters.status;
+  if (!narrowed || TARGET_TYPE !== 'business' && !String(filters.query || '').trim()){ closeDrop(); status.textContent = readyText(); return; }
+  status.textContent = PICK_ROWS.length + ' תוצאות';
+  paintDrop(view.groups);
 }
+function pageUrl(side, id){
+  const url = new URL(location.href);
+  url.searchParams.delete('_cb');
+  if (side && id){ url.searchParams.set('side', side); url.searchParams.set('id', id); }
+  else { url.searchParams.delete('side'); url.searchParams.delete('id'); }
+  return url.pathname + url.search;
+}
+function pickerState(){
+  const filters = pickerFilters();
+  return { bsdSmart: true, view: 'picker', side: TARGET_TYPE, query: filters.query, field: filters.field, status: filters.status, sort: filters.sort, grouped: document.getElementById('bizGroup').checked };
+}
+function resultsHistoryState(){
+  return {
+    bsdSmart: true, view: 'results', side: TARGET_TYPE, id: document.getElementById('targetId').value,
+    bucket: STATE.bucket, listScroll: (document.getElementById('smListScroll') || {}).scrollTop || 0
+  };
+}
+function rememberResults(){
+  const id = document.getElementById('targetId').value;
+  if (!id || !history.state || history.state.view !== 'results') return;
+  history.replaceState(resultsHistoryState(), '', pageUrl(TARGET_TYPE, id));
+}
+function smartBack(){ history.back(); }
 function chooseTarget(row){
   document.getElementById('targetId').value = row.id;
   document.getElementById('targetSearch').value = row.name || '';
   closeDrop();
-  const url = new URL(location.href);
-  url.searchParams.set('side', TARGET_TYPE);
-  url.searchParams.set('id', row.id);
-  url.searchParams.delete('_cb');
-  history.replaceState({ bsdSmart: true, side: TARGET_TYPE, id: row.id }, '', url.pathname + url.search);
+  const step = window.BSDSmartPick.planSmartStep(history.state && history.state.view, 'results');
+  const url = pageUrl(TARGET_TYPE, row.id);
+  if (step === 'push'){
+    if (!history.state || history.state.view !== 'picker') history.replaceState(pickerState(), '', pageUrl());
+    history.pushState({ bsdSmart: true, view: 'results', side: TARGET_TYPE, id: row.id }, '', url);
+  } else {
+    history.replaceState({ bsdSmart: true, view: 'results', side: TARGET_TYPE, id: row.id, bucket: STATE.bucket }, '', url);
+  }
   loadSuggestions();
 }
 function captureView(){
@@ -396,20 +476,104 @@ targetSearch.addEventListener('keydown', (e) => {
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.sm-combo')) closeDrop();
 });
+function seedBizFilters(){
+  const rows = TARGETS.businesses || [];
+  const fields = [...new Set(rows.map(r => window.BSDSmartPick.fieldOf(r)).filter(f => f && f !== 'ללא תחום'))].sort((a,b) => a.localeCompare(b, 'he'));
+  const statuses = [...new Set(rows.map(r => window.BSDSmartPick.statusOf(r)).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'he'));
+  const fieldSel = document.getElementById('bizField');
+  const curF = fieldSel.value;
+  fieldSel.innerHTML = '<option value="">כל התחומים</option>' + fields.map(f => `<option ${f===curF?'selected':''}>${esc(f)}</option>`).join('');
+  const chips = document.getElementById('bizFieldChips');
+  chips.innerHTML = ['', ...fields].map(f => `<button type="button" class="sm-field-chip${(curF||'')===f?' on':''}" data-field="${esc(f)}">${esc(f || 'כל התחומים')}</button>`).join('');
+  chips.querySelectorAll('.sm-field-chip').forEach(btn => btn.addEventListener('click', () => {
+    fieldSel.value = btn.getAttribute('data-field') || '';
+    syncFieldChips();
+    syncPickerHistory();
+    refreshDrop();
+  }));
+  const statusSel = document.getElementById('bizStatus');
+  const wrap = document.getElementById('bizStatusWrap');
+  if (statuses.length){
+    wrap.style.display = '';
+    const curS = statusSel.value;
+    statusSel.innerHTML = '<option value="">כל הסטטוסים</option>' + statuses.map(s => `<option ${s===curS?'selected':''}>${esc(s)}</option>`).join('');
+  } else wrap.style.display = 'none';
+}
+function syncFieldChips(){
+  const v = document.getElementById('bizField').value;
+  document.querySelectorAll('#bizFieldChips .sm-field-chip').forEach(btn => btn.classList.toggle('on', (btn.getAttribute('data-field') || '') === v));
+}
+function syncPickerHistory(){
+  if (!history.state || history.state.view !== 'picker') return;
+  history.replaceState(pickerState(), '', pageUrl());
+}
+function applySide(side){
+  TARGET_TYPE = side === 'buyer' ? 'buyer' : 'business';
+  document.querySelectorAll('#targetType button').forEach(b => b.classList.toggle('on', b.dataset.v === TARGET_TYPE));
+  document.getElementById('bizTools').style.display = TARGET_TYPE === 'business' ? '' : 'none';
+}
+function showPicker(st){
+  applySide(st && st.side);
+  resetResults();
+  document.getElementById('targetId').value = '';
+  document.getElementById('targetSearch').value = (st && st.query) || '';
+  document.getElementById('bizField').value = (st && st.field) || '';
+  document.getElementById('bizStatus').value = (st && st.status) || '';
+  document.getElementById('bizSort').value = (st && st.sort) || 'name';
+  document.getElementById('bizGroup').checked = !st || st.grouped !== false;
+  syncFieldChips();
+  document.getElementById('targetStatus').textContent = readyText();
+  refreshDrop();
+}
+function showResults(st){
+  if (!st || !st.id) return;
+  applySide(st.side);
+  document.getElementById('targetId').value = st.id;
+  const row = activeRows().find(r => r.id === st.id);
+  if (row) document.getElementById('targetSearch').value = row.name || '';
+  let saved = null;
+  try { saved = JSON.parse(sessionStorage.getItem('bsd:smart-matches:view') || 'null'); } catch (e) { saved = null; }
+  if (saved && saved.id === st.id && saved.side === TARGET_TYPE && saved.data){
+    STATE.bucket = st.bucket || saved.bucket || '';
+    STATE.group = saved.group || 'list';
+    document.getElementById('fText').value = saved.text || '';
+    document.getElementById('fExisting').checked = saved.existing !== false;
+    DATA = saved.data;
+    document.getElementById('smMail').disabled = false;
+    document.getElementById('smFilters').style.display = '';
+    buildSectorFilter();
+    if (saved.sector) document.getElementById('fSector').value = saved.sector;
+    render();
+    const sc = document.getElementById('smListScroll');
+    if (sc) sc.scrollTop = st.listScroll || saved.listScroll || 0;
+    return;
+  }
+  STATE.bucket = st.bucket || '';
+  loadSuggestions();
+}
 document.querySelectorAll('#targetType button').forEach(b => b.addEventListener('click', () => {
-  TARGET_TYPE = b.dataset.v;
-  document.querySelectorAll('#targetType button').forEach(x => x.classList.toggle('on', x === b));
+  applySide(b.dataset.v);
   document.getElementById('targetSearch').value = '';
   document.getElementById('targetId').value = '';
   closeDrop();
   resetResults();
   document.getElementById('targetStatus').textContent = readyText();
-  const url = new URL(location.href);
-  url.searchParams.delete('side'); url.searchParams.delete('id'); url.searchParams.delete('_cb');
-  history.replaceState({ bsdSmart: true }, '', url.pathname + url.search);
+  history.replaceState(pickerState(), '', pageUrl());
 }));
+['bizField','bizStatus','bizSort'].forEach(id => document.getElementById(id).addEventListener('change', () => {
+  if (id === 'bizField') syncFieldChips();
+  syncPickerHistory();
+  refreshDrop();
+}));
+document.getElementById('bizGroup').addEventListener('change', () => { syncPickerHistory(); refreshDrop(); });
 document.getElementById('smList').addEventListener('pointerdown', (e) => {
-  if (e.target.closest('a[href*="from=smart-matches"]')) saveView();
+  if (e.target.closest('a[href*="from=smart-matches"]')){ saveView(); rememberResults(); }
+});
+window.addEventListener('popstate', (e) => {
+  const st = e.state;
+  if (!st || !st.bsdSmart) return;
+  if (st.view === 'picker') showPicker(st);
+  else if (st.view === 'results') showResults(st);
 });
 
 async function callFn(sendEmail, action){
@@ -528,6 +692,7 @@ function selectBucket(id){
   STATE.bucket = id;
   render({ scrollList: true });
   saveView();
+  rememberResults();
 }
 
 function cardHtml(s, idx){
@@ -658,7 +823,20 @@ document.querySelectorAll('#fGroup button').forEach(b => b.addEventListener('cli
   document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email);
   document.getElementById('mainWrap').style.display = 'block';
   if (window.BSDListReturn) BSDListReturn.armScrollRestoration();
-  if (await loadTargets()) restoreView();
+  if (await loadTargets()){
+    seedBizFilters();
+    const st = history.state;
+    if (st && st.bsdSmart && st.view === 'picker'){ showPicker(st); return; }
+    if (!(st && st.bsdSmart && st.view === 'results')){
+      const params = new URLSearchParams(location.search);
+      const side = params.get('side'), id = params.get('id');
+      if ((side === 'business' || side === 'buyer') && id){
+        history.replaceState(pickerState(), '', pageUrl());
+        history.pushState({ bsdSmart: true, view: 'results', side: side, id: id }, '', pageUrl(side, id));
+      } else history.replaceState(pickerState(), '', pageUrl());
+    }
+    restoreView();
+  }
 })();
 </script>
 </body>
