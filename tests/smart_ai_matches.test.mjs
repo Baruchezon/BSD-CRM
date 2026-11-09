@@ -112,6 +112,8 @@ test('contact details only for admin/manager', () => {
 test('edge function: read-only, same auth, uses the engine; page + button wired', () => {
   const fn = readFileSync(new URL('../supabase/functions/match-suggestions-report/index.ts', import.meta.url), 'utf8');
   assert.match(fn, /from '\.\/engine\.js'/);
+  assert.match(fn, /minScore: 0/);
+  assert.match(fn, /s\.score >= MIN_SCORE/);
   assert.match(fn, /callerProfile\.status === 'active' && \(fullAccess \|\| callerProfile\.can_use_ai_match === true\)/);
   assert.doesNotMatch(fn, /\.(insert|update|upsert|delete)\(/);
   assert.doesNotMatch(fn, /anthropic|openai|generativelanguage/i);

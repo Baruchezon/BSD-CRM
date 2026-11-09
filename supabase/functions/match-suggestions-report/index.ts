@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
       .or('is_archived.is.null,is_archived.eq.false')
       .is('crm_stage', null)), // 22.10.2026: לא כולל לקוחות בטיפול / שהוחזרו ללידים
     readAll(() => supabase.from('businesses')
-      .select('id, business_number, id_number, internal_name, anon_display_name, field, category, subcategory, city, region, address, asking_price, annual_revenue, operating_profit, net_profit, employees_count, years_active, short_description, sale_reason, notes, anon_summary, internal_business_summary, website, owner_phone, anon_card_show_price')
+      .select('id, business_number, id_number, internal_name, anon_display_name, field, category, subcategory, city, region, address, asking_price, annual_revenue, operating_profit, net_profit, employees_count, years_active, short_description, sale_reason, notes, anon_summary, internal_business_summary, website, owner_phone, anon_card_show_price, created_at, status, agreement_status')
       .eq('listing_status', 'active')
       .or('is_archived.is.null,is_archived.eq.false')
       .is('crm_stage', null)), // 22.10.2026: לא כולל לקוחות בטיפול / שהוחזרו ללידים
@@ -128,9 +128,22 @@ Deno.serve(async (req) => {
     businesses = scopeBusinessesForAgent(businesses, levels);
   }
   if (body?.action === 'options') {
+    const matchCounts: Record<string, number> = {};
+    for (const m of matchesRes.data ?? []) {
+      if (m?.business_id) matchCounts[m.business_id] = (matchCounts[m.business_id] || 0) + 1;
+    }
     return jsonResponse({ ok: true, engine_version: ENGINE_VERSION,
       buyers: buyers.map((b: any) => ({ id: b.id, name: b.full_name || 'קונה ללא שם', number: b.client_number || '', detail: [b.requested_field, b.requested_area].filter(Boolean).join(' · '), phones: visiblePhones(fullAccess, [b.phone, b.phone2]) })),
-      businesses: businesses.map((b: any) => ({ id: b.id, name: b.internal_name || b.anon_display_name || 'עסק ללא שם', number: b.business_number || '', id_number: b._anon_scope ? '' : (b.id_number || ''), detail: [b.field, b.city].filter(Boolean).join(' · '), phones: visiblePhones(fullAccess && !b._anon_scope, [b.owner_phone]) })),
+      businesses: businesses.map((b: any) => ({
+        id: b.id, name: b.internal_name || b.anon_display_name || 'עסק ללא שם', number: b.business_number || '',
+        id_number: b._anon_scope ? '' : (b.id_number || ''),
+        detail: [b.field, b.city].filter(Boolean).join(' · '),
+        field: String(b.field || b.category || '').trim(),
+        created_at: b.created_at || '',
+        status: b._anon_scope ? '' : (String(b.status || '').trim() || String(b.agreement_status || '').trim()),
+        match_count: matchCounts[b.id] || 0,
+        phones: visiblePhones(fullAccess && !b._anon_scope, [b.owner_phone]),
+      })),
     });
   }
   const selected = selectRecords({ buyers, businesses }, selection);
@@ -149,15 +162,18 @@ Deno.serve(async (req) => {
     }
   }
 
-  const result = buildSuggestions({ buyers, businesses, matches: matchesRes.data ?? [], distributions: distRes.data ?? [], notes });
+  // כל הציון חוזר למסך, כדי שאפשר לסנן 75+ / 61–74 / 50–60 / מתחת ל-50 בלי קריאה נוספת.
+  // המייל נשאר על הרף הקודם (61 ומעלה).
+  const result = buildSuggestions({ buyers, businesses, matches: matchesRes.data ?? [], distributions: distRes.data ?? [], notes }, { minScore: 0 });
   const shownBuyerIds = [...new Set([...result.suggestions, ...result.already_matched].map((s: any) => s.buyer_id).filter(Boolean))];
   const callsByBuyer = fullAccess ? await latestCallGists(supabase, shownBuyerIds) : new Map();
   const suggestions = decorateForClient(result.suggestions, { buyers, businesses, fullAccess, notes, callsByBuyer });
   const alreadyMatched = decorateForClient(result.already_matched, { buyers, businesses, fullAccess, notes, callsByBuyer });
 
   const dateStr = new Date().toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' });
+  const mailSuggestions = suggestions.filter((s: any) => s.score >= MIN_SCORE);
   if (sendEmail) {
-    const html = buildEmailHtml(suggestions, result.stats, dateStr);
+    const html = buildEmailHtml(mailSuggestions, result.stats, dateStr);
     const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -165,7 +181,7 @@ Deno.serve(async (req) => {
         from: 'צוות BSD <info@bsd-bbi.co.il>', // 09.10.2026 (Baruch): all BSD system emails from info@
         reply_to: 'info@bsd-bbi.co.il',
         to: [reportToEmail],
-        subject: `התאמות AI חכמות - ${dateStr} (${suggestions.length} הצעות חדשות)`,
+        subject: `התאמות AI חכמות - ${dateStr} (${mailSuggestions.length} הצעות חדשות)`,
         html
       })
     });
@@ -176,7 +192,7 @@ Deno.serve(async (req) => {
   }
 
   return jsonResponse({
-    ok: true, engine_version: ENGINE_VERSION, min_score: MIN_SCORE, generated_at: new Date().toISOString(),
+    ok: true, engine_version: ENGINE_VERSION, min_score: 0, generated_at: new Date().toISOString(),
     count: suggestions.length, stats: result.stats, suggestions, already_matched: alreadyMatched,
     contact_details: fullAccess, emailed: sendEmail, selection,
   });
