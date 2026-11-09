@@ -10,7 +10,7 @@
 // holding the public key. Response format for authorized callers is unchanged.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { readAll, parseSelection, selectRecords } from './selection.js';
+import { readAll, parseSelection, selectRecords, visiblePhones } from './selection.js';
 import { buildSuggestions, decorateForClient, scopeBusinessesForAgent, ENGINE_VERSION, MIN_SCORE } from './engine.js';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -26,6 +26,29 @@ const CORS_HEADERS = {
 
 function jsonResponse(obj: unknown, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+}
+
+async function latestCallGists(supabase: any, buyerIds: string[]) {
+  const gist = new Map<string, { gist: string, at: string }>();
+  if (!buyerIds.length) return gist;
+  try {
+    for (let offset = 0; offset < buyerIds.length; offset += 80) {
+      const chunk = buyerIds.slice(offset, offset + 80);
+      const res = await readAll(() => supabase.from('phone_calls')
+        .select('lead_id, started_at, ai_gist')
+        .in('lead_id', chunk)
+        .eq('is_test', false));
+      if (res.error) return gist;
+      for (const row of res.data || []) {
+        const text = String(row.ai_gist || '').trim();
+        if (!row.lead_id || !text) continue;
+        const at = row.started_at || '';
+        const prev = gist.get(row.lead_id);
+        if (!prev || at > prev.at) gist.set(row.lead_id, { gist: text, at });
+      }
+    }
+  } catch (_e) { /* ההתאמות מוצגות גם בלי תקציר שיחה */ }
+  return gist;
 }
 
 Deno.serve(async (req) => {
@@ -84,7 +107,7 @@ Deno.serve(async (req) => {
       .or('is_archived.is.null,is_archived.eq.false')
       .is('crm_stage', null)), // 22.10.2026: לא כולל לקוחות בטיפול / שהוחזרו ללידים
     readAll(() => supabase.from('businesses')
-      .select('id, business_number, internal_name, anon_display_name, field, category, subcategory, city, region, address, asking_price, annual_revenue, operating_profit, net_profit, employees_count, years_active, short_description, sale_reason, notes, anon_summary, internal_business_summary, website, owner_phone, anon_card_show_price')
+      .select('id, business_number, id_number, internal_name, anon_display_name, field, category, subcategory, city, region, address, asking_price, annual_revenue, operating_profit, net_profit, employees_count, years_active, short_description, sale_reason, notes, anon_summary, internal_business_summary, website, owner_phone, anon_card_show_price')
       .eq('listing_status', 'active')
       .or('is_archived.is.null,is_archived.eq.false')
       .is('crm_stage', null)), // 22.10.2026: לא כולל לקוחות בטיפול / שהוחזרו ללידים
@@ -106,8 +129,8 @@ Deno.serve(async (req) => {
   }
   if (body?.action === 'options') {
     return jsonResponse({ ok: true, engine_version: ENGINE_VERSION,
-      buyers: buyers.map((b: any) => ({ id: b.id, name: b.full_name || 'קונה ללא שם', number: b.client_number || '', detail: [b.requested_field, b.requested_area].filter(Boolean).join(' · ') })),
-      businesses: businesses.map((b: any) => ({ id: b.id, name: b.internal_name || b.anon_display_name || 'עסק ללא שם', number: b.business_number || '', detail: [b.field, b.city].filter(Boolean).join(' · ') })),
+      buyers: buyers.map((b: any) => ({ id: b.id, name: b.full_name || 'קונה ללא שם', number: b.client_number || '', detail: [b.requested_field, b.requested_area].filter(Boolean).join(' · '), phones: visiblePhones(fullAccess, [b.phone, b.phone2]) })),
+      businesses: businesses.map((b: any) => ({ id: b.id, name: b.internal_name || b.anon_display_name || 'עסק ללא שם', number: b.business_number || '', id_number: b._anon_scope ? '' : (b.id_number || ''), detail: [b.field, b.city].filter(Boolean).join(' · '), phones: visiblePhones(fullAccess && !b._anon_scope, [b.owner_phone]) })),
     });
   }
   const selected = selectRecords({ buyers, businesses }, selection);
@@ -120,15 +143,17 @@ Deno.serve(async (req) => {
   if (ids.length) {
     for (let offset = 0; offset < ids.length; offset += 100) {
       const chunk = ids.slice(offset, offset + 100);
-      const n = await readAll(() => supabase.from('record_notes').select('table_name, record_id, note_text').in('table_name', ['leads', 'businesses']).in('record_id', chunk));
+      const n = await readAll(() => supabase.from('record_notes').select('table_name, record_id, note_text, created_at').in('table_name', ['leads', 'businesses']).in('record_id', chunk));
       if (n.error) return jsonResponse({ error: 'שגיאה בקריאת הערות: ' + n.error.message }, 500);
       notes.push(...n.data);
     }
   }
 
   const result = buildSuggestions({ buyers, businesses, matches: matchesRes.data ?? [], distributions: distRes.data ?? [], notes });
-  const suggestions = decorateForClient(result.suggestions, { buyers, businesses, fullAccess });
-  const alreadyMatched = decorateForClient(result.already_matched, { buyers, businesses, fullAccess });
+  const shownBuyerIds = [...new Set([...result.suggestions, ...result.already_matched].map((s: any) => s.buyer_id).filter(Boolean))];
+  const callsByBuyer = fullAccess ? await latestCallGists(supabase, shownBuyerIds) : new Map();
+  const suggestions = decorateForClient(result.suggestions, { buyers, businesses, fullAccess, notes, callsByBuyer });
+  const alreadyMatched = decorateForClient(result.already_matched, { buyers, businesses, fullAccess, notes, callsByBuyer });
 
   const dateStr = new Date().toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' });
   if (sendEmail) {

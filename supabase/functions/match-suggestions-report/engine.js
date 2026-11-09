@@ -679,23 +679,113 @@ export function scopeBusinessesForAgent(businesses, levels) {
   return out;
 }
 
+function oneLine(v){ return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
+function asText(v){
+  if (v == null) return '';
+  if (Array.isArray(v)) return v.map(asText).filter(Boolean).join(', ');
+  if (typeof v === 'object') return '';
+  return oneLine(v);
+}
+function clipText(v, max){
+  const t = oneLine(v);
+  if (t.length <= max) return t;
+  return t.slice(0, max - 1).trimEnd() + '…';
+}
+function moneyPhrase(n){
+  const x = Number(n);
+  if (!x || !Number.isFinite(x)) return '';
+  if (x >= 1000000) return (Math.round(x / 100000) / 10).toLocaleString('he-IL') + ' מיליון ₪';
+  if (x >= 1000) return Math.round(x / 1000).toLocaleString('he-IL') + ' אלף ₪';
+  return Math.round(x).toLocaleString('he-IL') + ' ₪';
+}
+function newestNote(notes){
+  const rows = (notes || []).map(n => ({
+    text: oneLine(n && (n.note_text || n.text || (typeof n === 'string' ? n : ''))),
+    at: n && n.created_at ? Date.parse(n.created_at) || 0 : 0,
+  })).filter(n => n.text);
+  rows.sort((a, b) => b.at - a.at);
+  return rows[0] || null;
+}
+function briefFromSources(sources){
+  const rows = (sources || []).map(s => ({ label: s.label, text: oneLine(s.text), at: s.at || 0 })).filter(s => s.text);
+  const dated = rows.filter(s => s.at).sort((a, b) => b.at - a.at);
+  const pick = dated[0] || rows[0];
+  if (!pick) return { latest: '', more: '' };
+  const latest = clipText(pick.label + ': ' + pick.text, 170);
+  const shown = latest.replace(/^[^:]+:\s*/, '');
+  const more = pick.text.length > shown.length + 12 ? clipText(pick.text, 420) : '';
+  return { latest, more };
+}
+
+/**
+ * תקציר קצר לכרטיס ההתאמה, בלי לפתוח את הכרטיס.
+ * עסק אנונימי: רק תחום, אזור, מחיר אם מותר, ותקציר אנונימי. בלי הערות פנימיות.
+ * תקציר שיחה נכלל רק אם הועבר (הקריאה מעבירה אותו למנהל/אדמין בלבד).
+ * @param {'buyer'|'business'} kind
+ * @param {any} row
+ * @param {{ notes?: any[], call?: { gist?: string, at?: string } | null, anon?: boolean }} [extras]
+ * @returns {{ looking: string, latest: string, more: string }}
+ */
+export function buildPartyBrief(kind, row, extras = {}) {
+  row = row || {};
+  const notes = Array.isArray(extras.notes) ? extras.notes : [];
+  const anon = !!(extras.anon || row._anon_scope);
+  if (kind === 'buyer') {
+    const field = asText(row.requested_field) || asText(row.requested_categories);
+    const bits = [field, asText(row.requested_area)].filter(Boolean);
+    const budget = moneyPhrase(row.budget);
+    const equity = moneyPhrase(row.equity);
+    if (budget) bits.push('תקציב ' + budget);
+    else if (equity) bits.push('הון עצמי ' + equity);
+    const other = [asText(row.involvement_level), asText(row.partnership_willingness)].filter(Boolean);
+    if (other.length) bits.push(other.join(', '));
+    const note = newestNote(notes);
+    const spoken = briefFromSources([
+      extras.call && extras.call.gist ? { label: 'שיחה אחרונה', text: extras.call.gist, at: Date.parse(extras.call.at || '') || 0 } : null,
+      note ? { label: 'הערה אחרונה', text: note.text, at: note.at } : null,
+      { label: 'סיכום פגישה', text: row.meeting_summary, at: 0 },
+      { label: 'שיחת היכרות', text: row.intake_conversation_summary || row.intake_customer_wants, at: 0 },
+    ].filter(Boolean));
+    return { looking: bits.length ? clipText('מחפש: ' + bits.join(' · '), 180) : '', latest: spoken.latest, more: spoken.more };
+  }
+  const field = asText(row.field) || asText(row.category);
+  const place = asText(row.city) || asText(row.region);
+  const price = (!anon || row.anon_card_show_price) ? moneyPhrase(row.asking_price) : '';
+  const bits = [field, place, price ? 'מחיר ' + price : ''].filter(Boolean);
+  const looking = bits.length ? clipText((anon ? 'העסק: ' : 'למכירה: ') + bits.join(' · '), 180) : '';
+  if (anon) {
+    const summary = asText(row.anon_summary);
+    const spoken = briefFromSources(summary ? [{ label: 'תקציר', text: summary, at: 0 }] : []);
+    return { looking, latest: spoken.latest, more: spoken.more };
+  }
+  const note = newestNote(notes);
+  const spoken = briefFromSources([
+    note ? { label: 'הערה אחרונה', text: note.text, at: note.at } : null,
+    { label: 'תיאור', text: row.short_description, at: 0 },
+    { label: 'סיבת מכירה', text: row.sale_reason, at: 0 },
+  ].filter(Boolean));
+  return { looking, latest: spoken.latest, more: spoken.more };
+}
+
 // מוסיף לכל הצעה פרטי תצוגה (שם, מספר, עיר, קישורים) - משותף לפונקציה ולבדיקות.
 // פרטי קשר (טלפון/מייל/טלפון בעל העסק) רק כש-fullAccess (מנהל/אדמין).
 /**
  * @param {any[]} list
- * @param {{ buyers: any[], businesses: any[], fullAccess: boolean }} ctx
+ * @param {{ buyers: any[], businesses: any[], fullAccess: boolean, notes?: any[], callsByBuyer?: Map<string, { gist: string, at: string }> }} ctx
  * @returns {any[]}
  */
-export function decorateForClient(list, { buyers, businesses, fullAccess }) {
+export function decorateForClient(list, { buyers, businesses, fullAccess, notes = [], callsByBuyer = null }) {
   const buyerById = new Map(buyers.map(b => [b.id, b]));
   const bizById = new Map(businesses.map(b => [b.id, b]));
   const num = v => (v === null || v === undefined || v === '' ? null : Number(v));
   const clean = v => String(v || '').replace(/\s+/g, ' ').trim();
+  const notesFor = (table, id) => (notes || []).filter(n => n && n.table_name === table && n.record_id === id);
   return list.map(s => {
     const b = buyerById.get(s.buyer_id) || {};
     const z = bizById.get(s.business_id) || {};
     const buyerName = clean(b.full_name) || '—';
     const bizName = clean(z.internal_name || z.anon_display_name) || '—';
+    const call = fullAccess && callsByBuyer ? callsByBuyer.get(b.id) || null : null;
     return {
       ...s,
       level: s.tier,                                   // high | good | check
@@ -703,6 +793,8 @@ export function decorateForClient(list, { buyers, businesses, fullAccess }) {
       buyer: buyerName, business: bizName,             // תאימות לדף הישן
       reason: s.summary,                               // תאימות לדף הישן
       financing: false,
+      buyer_brief: buildPartyBrief('buyer', b, { notes: notesFor('leads', b.id), call }),
+      business_brief: buildPartyBrief('business', z, { notes: z._anon_scope ? [] : notesFor('businesses', z.id), anon: !!z._anon_scope }),
       buyer_info: {
         id: b.id, name: buyerName, client_number: b.client_number || '', city: clean(b.city),
         agreement_status: b.agreement_status || '', status: b.status || '',

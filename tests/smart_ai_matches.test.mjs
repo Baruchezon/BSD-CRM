@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildSuggestions, decorateForClient, budgetFromText, fem, MIN_SCORE } from '../supabase/functions/match-suggestions-report/engine.js';
+import { buildSuggestions, decorateForClient, buildPartyBrief, budgetFromText, fem, MIN_SCORE } from '../supabase/functions/match-suggestions-report/engine.js';
 
 const biz = (o) => ({ id: o.id, business_number: 'BSD-B-' + o.id, internal_name: o.name, field: o.field || '', category: '', city: o.city || '', region: '', asking_price: o.price ?? null, short_description: o.desc || '', anon_summary: '', notes: '', owner_phone: '050-1111111', website: o.website || '' });
 const buyer = (o) => ({ id: o.id, client_number: 'BSD-C-' + o.id, full_name: o.name, phone: '052-2222222', email: 'x@example.com', city: o.city || '', requested_field: o.field || '', requested_categories: '', requested_area: o.area || '', budget: o.budget ?? null, notes: o.notes || '' });
@@ -123,4 +123,51 @@ test('edge function: read-only, same auth, uses the engine; page + button wired'
   assert.match(page, /leads\.html\?open=/); assert.match(page, /businesses\.html\?open=/);
   assert.match(page, /למה זה מתאים/); assert.match(page, /מה לא מתאים \/ לשים לב/); assert.match(page, /איך הגענו ל-/);
   assert.match(page, /!fullAccess && !profile\.can_use_ai_match/);
+  assert.match(page, /id="targetSearch"/);
+  assert.match(page, /from=smart-matches/);
+  assert.doesNotMatch(page, /<select id="targetId"/);
+  assert.match(page, /buyer_brief/);
+});
+
+test('match card brief is short, Hebrew, and hides anonymous internals and calls', () => {
+  const buyer = buildPartyBrief('buyer', {
+    requested_field: 'מסעדה', requested_area: 'מרכז', budget: 800000,
+    meeting_summary: 'ישן מאוד', notes: 'לא להשתמש בשדה הזה'
+  }, {
+    notes: [{ note_text: 'מעוניין להיות פעיל בעסק ולפתוח סניף נוסף באזור המרכז אחרי שיסיים את המימון', created_at: '2026-11-01T10:00:00Z' }],
+    call: { gist: 'ביקש מאפייה עם ישיבה, לא מזון מהיר', at: '2026-11-08T10:00:00Z' }
+  });
+  assert.match(buyer.looking, /מסעדה/);
+  assert.match(buyer.looking, /מרכז/);
+  assert.match(buyer.looking, /800 אלף/);
+  assert.match(buyer.latest, /^שיחה אחרונה:/);
+  assert.match(buyer.latest, /מאפייה/);
+  assert.ok(buyer.latest.length < 180);
+  const noteOnly = buildPartyBrief('buyer', { requested_field: 'מאפייה', requested_area: 'ירושלים' }, {
+    notes: [{ note_text: 'דיברנו אתמול והוא רוצה מאפייה קטנה עם תפעול יומי', created_at: '2026-10-02T08:00:00Z' }]
+  });
+  assert.match(noteOnly.latest, /הערה אחרונה/);
+  assert.doesNotMatch(noteOnly.latest, /שיחה/);
+  const anon = buildPartyBrief('business', {
+    _anon_scope: true, field: 'מסעדה', city: 'חיפה', asking_price: 650000, anon_card_show_price: false,
+    anon_summary: 'מסעדה שכונתית פעילה עם קהל קבוע', internal_name: 'שם סודי', notes: 'הערה פנימית אסורה', owner_phone: '050-0000000'
+  }, { notes: [{ note_text: 'הערה פנימית אסורה', created_at: '2026-11-01T00:00:00Z' }] });
+  assert.match(anon.looking, /מסעדה/);
+  assert.match(anon.looking, /חיפה/);
+  assert.match(anon.latest, /תקציר/);
+  assert.doesNotMatch(anon.looking + anon.latest + anon.more, /סודי|אסורה|050|650/);
+  const openBiz = buildPartyBrief('business', { field: 'נגריה', city: 'באר שבע', asking_price: 1200000, short_description: 'מפעל מטבחים פעיל' }, {});
+  assert.match(openBiz.looking, /נגריה/);
+  assert.match(openBiz.looking, /1\.2 מיליון/);
+  assert.match(openBiz.latest, /תיאור/);
+  const decorated = decorateForClient([{ buyer_id: 'b1', business_id: 'z1', tier: 'good', score: 70, summary: 'התאמה', business_sector: 'מאפיה' }], {
+    buyers: [{ id: 'b1', full_name: 'דן', phone: '052-2222222', requested_field: 'מאפייה' }],
+    businesses: [{ id: 'z1', internal_name: 'מאפייה', field: 'מאפיה', city: 'ירושלים', _anon_scope: true, anon_summary: 'מאפייה', notes: 'פנימי', owner_phone: '050-1111111' }],
+    fullAccess: false,
+    notes: [{ table_name: 'businesses', record_id: 'z1', note_text: 'פנימי', created_at: '2026-11-01' }],
+    callsByBuyer: new Map([['b1', { gist: 'שיחה סודית', at: '2026-11-08' }]])
+  })[0];
+  assert.equal(decorated.buyer_info.phone, '');
+  assert.doesNotMatch(decorated.buyer_brief.latest, /שיחה סודית/);
+  assert.doesNotMatch(decorated.business_brief.latest + decorated.business_brief.more, /פנימי/);
 });

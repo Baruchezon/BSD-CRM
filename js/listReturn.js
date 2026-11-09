@@ -31,10 +31,16 @@
     }
     return serialize(u);
   }
-  function cameFromHub(searchOrHref){
+  function queryFrom(searchOrHref){
     const raw = String(searchOrHref || '');
     const q = raw.indexOf('?') >= 0 ? raw.slice(raw.indexOf('?')) : (raw.charAt(0) === '?' ? raw : '');
-    return new URLSearchParams(q).get('from') === 'leads-hub';
+    return new URLSearchParams(q);
+  }
+  function cameFromHub(searchOrHref){
+    return queryFrom(searchOrHref).get('from') === 'leads-hub';
+  }
+  function cameFromSmartMatches(searchOrHref){
+    return queryFrom(searchOrHref).get('from') === 'smart-matches';
   }
 
   // Returns the history operations for opening a card.
@@ -44,18 +50,21 @@
     opts = opts || {};
     const cardType = opts.cardType;
     const fromHub = !!opts.fromHub || !!(opts.state && opts.state.bsdFrom === 'leads-hub');
+    const fromSmart = !fromHub && (!!opts.fromSmart || cameFromSmartMatches(opts.href || '') || !!(opts.state && opts.state.bsdFrom === 'smart-matches'));
     const already = !!(opts.state && opts.state.bsdCardType === cardType);
     const cardState = {
       bsdCardType: cardType,
       recordId: opts.recordId || null,
-      bsdFrom: fromHub ? 'leads-hub' : null,
+      bsdFrom: fromHub ? 'leads-hub' : (fromSmart ? 'smart-matches' : null),
       list: opts.listSnapshot || (opts.state && opts.state.list) || null
     };
     const card = cardUrl(opts.href || '/', opts.recordId || null);
     if (already){
       return { ops: [{ op: 'replace', state: Object.assign({}, opts.state, cardState), url: card }] };
     }
-    if (fromHub && cardType !== 'hub-lead'){
+    // A card opened from another screen must not insert the buyers/businesses
+    // list in front of Back. The previous entry stays the caller.
+    if ((fromHub || fromSmart) && cardType !== 'hub-lead'){
       return { ops: [{ op: 'replace', state: cardState, url: card }] };
     }
     const listState = { bsdListType: opts.listType || 'leads', list: opts.listSnapshot || null };
@@ -130,6 +139,7 @@
     listUrl: listUrl,
     cardUrl: cardUrl,
     cameFromHub: cameFromHub,
+    cameFromSmartMatches: cameFromSmartMatches,
     planCardEntry: planCardEntry,
     applyHistory: applyHistory,
     snapshotScroll: snapshotScroll,
