@@ -1314,7 +1314,7 @@ function renderTable(){
     if (search){
       const bizNumDigits = (b.business_number||'').match(/(\d{3,4})$/)?.[1] || '';
       const hay = [b.internal_name, b.owner_name, b.owner_phone, b.city, b.field, b.category, b.subcategory, b.status, String(b.asking_price||''),
-        b.short_description, b.sale_reason, b.region, b.address, b.source, b.notes, b.id_number, b.entity_type, b.removal_reason, b.sold_to,
+        b.short_description, b.sale_reason, b.region, b.address, b.source, b.notes, b.id_number, b.legal_name, b.entity_type, b.removal_reason, b.sold_to,
         b.business_number, b.business_number ? b.business_number.replace(/^BSD-B-/,'') : '', bizNumDigits, BROKER_NAME_BY_ID[b.referred_by_broker_id]||''].join(' ').toLowerCase();
       if (!hay.includes(search) && !(window.BSDSearch && BSDSearch.phoneMatch(search, [b.owner_phone]))) return false;
     }
@@ -1422,6 +1422,17 @@ function canRestoreBiz(b){
   document.getElementById(id).addEventListener('change', renderTable);
 });
 
+function entityTypeOptions(current){
+  const cur = String(current || '');
+  const standard = [
+    ['', '—'],
+    ['ח.פ.', 'ח.פ.'],
+    ['עוסק מורשה', 'עוסק מורשה'],
+  ];
+  const known = standard.some(([v]) => v === cur);
+  const extra = cur && !known ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : '';
+  return standard.map(([v, label]) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${label}</option>`).join('') + extra;
+}
 function fieldRow(id,label,value,type='text'){
   return `<div class="field"><label>${label}</label><input type="${type}" id="${id}" value="${esc(value||'')}"></div>`;
 }
@@ -1705,7 +1716,9 @@ function openBizForm(id){
         ${(biz && biz.crm_stage && !biz.is_archived) ? `<div class="field full" style="background:#fff7e0;border:1px solid #e6c200;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#5c4a00;">⏳ כרטיס זה נמצא ב«${esc(BSDCrmStage.label(biz.crm_stage,'businesses'))}» — לא מוצג ברשימת העסקים, באתר, בפיד ובהתאמות.${canManageBiz(biz) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="moveBizStage('${biz.id}',null)">✅ העבר לרשימת העסקים</button>${biz.crm_stage !== 'in_progress' ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="moveBizStage('${biz.id}','in_progress')">⏳ העבר ללקוחות בטיפול</button>` : ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="moveBizStage('${biz.id}','lead')">↩️ החזר ללידים</button>`}` : ''}</div>` : ''}
         ${biz?.is_archived ? `<div class="field full" style="background:#fdeceb;border:1px solid #e08a80;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a2c1f;">📁 עסק זה נמצא בארכיון${biz.archive_reason ? ' — סיבה: '+esc(biz.archive_reason) : ''}${canRestoreBiz(biz) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="restoreBizFromArchive('${biz.id}')">↩️ שחזר מהארכיון</button>` : ''}${canManageBiz(biz) ? ` <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#a33;" onclick="deleteBiz('${biz.id}')">🗑️ מחיקה סופית</button>` : ''}</div>` : (biz && canManageBiz(biz) ? `<div class="field full" style="text-align:left;"><button type="button" class="btn btn-ghost" style="padding:3px 12px;font-size:.75rem;color:#a33;" onclick="archiveBiz('${biz.id}')">📁 העבר לארכיון</button></div>` : '')}
         ${fieldRow('internal_name','שם העסק', biz?.internal_name)}
-        ${fieldRow('id_number','ח.פ / ת.ז', biz?.id_number)}
+        ${fieldRow('legal_name','שם משפטי / חברה', biz?.legal_name)}
+        ${fieldRow('id_number','ח.פ / עוסק מורשה', biz?.id_number)}
+        <div class="field"><label>סוג המספר</label><select id="entity_type">${entityTypeOptions(biz?.entity_type)}</select></div>
         ${fieldRow('address','כתובת', biz?.address)}
         ${fieldRow('city','עיר', biz?.city)}
         ${fieldRow('field','תחום פעילות', biz?.field)}
@@ -5368,6 +5381,8 @@ async function saveBiz(e){
     short_description: g('short_description'),
     owner_name: g('owner_name'), owner_phone: g('owner_phone'), owner_email: g('owner_email'),
     id_number: g('id_number'),
+    legal_name: g('legal_name'),
+    entity_type: g('entity_type') || null,
     notes: g('notes'),
     field: g('field'), category: g('category'), subcategory: g('subcategory'),
     city: g('city'), region: g('region'), address: g('address'),
@@ -5632,6 +5647,7 @@ async function sendAgreementForBiz(id){
   const params = new URLSearchParams({
     type: 'seller',
     recordId: id,
+    recordTable: 'businesses',
     name: b.owner_name || '',
     phone: b.owner_phone || '',
     biz: b.internal_name || ''

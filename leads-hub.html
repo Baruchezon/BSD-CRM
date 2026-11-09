@@ -1358,12 +1358,14 @@ async function stagedSendAgreement(id){
     if (error){ toast('שגיאה בעדכון סטטוס ההסכם: ' + error.message); return; }
   }
   const params = new URLSearchParams({
-    type: isBiz ? 'seller' : (r.type === 'partner' ? 'partner' : 'buyer'),
+    type: isBiz ? 'seller' : (r.type === 'partner' ? 'partner' : (r.type === 'seller' ? 'seller' : 'buyer')),
     recordId: id,
+    recordTable: isBiz ? 'businesses' : 'leads',
     name: isBiz ? (r.owner_name || '') : (r.full_name || [r.first_name, r.last_name].filter(Boolean).join(' ') || ''),
     phone: (isBiz ? r.owner_phone : r.phone) || '',
     biz: isBiz ? (r.internal_name || '') : (r.requested_field || '')
   });
+  if (!isBiz && r.type) params.set('leadType', r.type);
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
   toast('טופס ההסכם נפתח. הכרטיס נשאר ב«' + BSDCrmStage.label(r.crm_stage) + '»');
   await loadAll();
@@ -1542,10 +1544,12 @@ async function sendAgreement(id){
   const params = new URLSearchParams({
     type: CURRENT_TAB === 'business' ? 'seller' : CURRENT_TAB,
     recordId: id,
+    recordTable: tn,
     name: personName,
     phone: phone || '',
     biz: bizField
   });
+  if (tn === 'leads' && r.type) params.set('leadType', r.type);
   window.open('https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html?' + params.toString(), '_blank');
 
   toast(r.agreement_status === 'יש הסכם חתום' ? 'נפתח ההסכם החתום ללא שינוי סטטוס' : 'נשלח הסכם — הרשומה עברה לרשימה הראשית');
