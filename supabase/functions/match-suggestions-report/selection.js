@@ -18,6 +18,10 @@ export function parseSelection(body) {
   }
   return { type, id };
 }
+export function visiblePhones(fullAccess, values) {
+  if (!fullAccess) return [];
+  return (values || []).map(v => String(v || '').trim()).filter(Boolean);
+}
 export function selectRecords({ buyers, businesses }, { type, id }) {
   const selectedBuyers = type === 'buyer' ? buyers.filter(b => b.id === id) : buyers;
   const selectedBusinesses = type === 'business' ? businesses.filter(b => b.id === id) : businesses;

@@ -120,6 +120,47 @@ test('reopening a card replaces the card entry instead of stacking another Back 
   assert.equal(back(stack).state.list.search, 'א');
 });
 
+test('a buyer card opened from smart matches returns to that screen, not the buyers list', () => {
+  const stack = [
+    { url: '/app.html', state: null },
+    { url: '/smart-matches.html?side=business&id=Z1', state: { bsdSmart: true, side: 'business', id: 'Z1' } }
+  ];
+  stack.push({ url: '/leads.html?open=B7&from=smart-matches', state: null });
+  run(stack, R.planCardEntry({
+    href: '/leads.html?open=B7&from=smart-matches',
+    state: null,
+    fromSmart: true,
+    cardType: 'lead',
+    listType: 'leads',
+    recordId: 'B7'
+  }));
+  assert.equal(stack.length, 3, 'must not insert the buyers list');
+  assert.match(stack[2].url, /card=B7/);
+  assert.match(stack[2].url, /from=smart-matches/);
+  assert.equal(stack[2].state.bsdFrom, 'smart-matches');
+  assert.equal(R.cameFromSmartMatches(stack[2].url), true);
+  const landed = back(stack);
+  assert.equal(landed.url, '/smart-matches.html?side=business&id=Z1');
+  assert.equal(landed.state.id, 'Z1');
+  assert.equal(landed.state.side, 'business');
+});
+
+test('a business card opened from smart matches returns to that screen', () => {
+  const stack = [
+    { url: '/smart-matches.html?side=buyer&id=B1', state: { bsdSmart: true, side: 'buyer', id: 'B1' } },
+    { url: '/businesses.html?open=Z3&from=smart-matches', state: null }
+  ];
+  run(stack, R.planCardEntry({
+    href: stack[1].url,
+    state: null,
+    cardType: 'business',
+    recordId: 'Z3'
+  }));
+  assert.equal(stack.length, 2);
+  assert.equal(stack[1].state.bsdFrom, 'smart-matches');
+  assert.equal(back(stack).url, '/smart-matches.html?side=buyer&id=B1');
+});
+
 test('leads hub and buyers pages wire Back through the shared history plan', () => {
   const hub = fs.readFileSync(new URL('../leads-hub.html', import.meta.url), 'utf8');
   const leads = fs.readFileSync(new URL('../leads.html', import.meta.url), 'utf8');
@@ -130,5 +171,8 @@ test('leads hub and buyers pages wire Back through the shared history plan', () 
   assert.match(leads, /planCardEntry/);
   assert.match(leads, /restoreLeadsListState/);
   assert.match(biz, /bsdFrom === 'leads-hub'/);
+  assert.match(leads, /fromSmart/);
+  assert.match(biz, /smart-matches/);
+  assert.match(fs.readFileSync(new URL('../smart-matches.html', import.meta.url), 'utf8'), /from=smart-matches/);
   assert.doesNotMatch(leads, /location\.href = 'leads-hub\.html'/);
 });

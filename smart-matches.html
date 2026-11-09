@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202611091800';
+    var PAGE_BUILD = '202611092100';
     window.PAGE_BUILD = PAGE_BUILD;
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -58,6 +58,20 @@
   .sm-filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#fff;border:1px solid #efeadb;border-radius:12px;padding:10px 12px;margin-bottom:14px;position:sticky;top:0;z-index:5;box-shadow:0 4px 12px rgba(14,27,52,.06);}
   .sm-filters input[type=search],.sm-filters select{padding:8px 11px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;font-size:.85rem;background:#fff;}
   .sm-filters input[type=search]{min-width:230px;flex:1;}
+  .sm-combo{position:relative;flex:1;min-width:240px;}
+  .sm-combo input[type=search]{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #d8d3c4;border-radius:10px;font-family:inherit;font-size:.95rem;background:#fff;}
+  .sm-combo input[type=search]:focus{outline:2px solid var(--gold);border-color:var(--gold);}
+  .sm-drop{position:absolute;z-index:30;top:calc(100% + 4px);right:0;left:0;background:#fff;border:1px solid #e6dfca;border-radius:12px;box-shadow:0 12px 28px rgba(14,27,52,.16);max-height:320px;overflow:auto;}
+  .sm-drop-item{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:right;border:0;border-bottom:1px solid #f3efe4;background:#fff;padding:9px 12px;font-family:inherit;cursor:pointer;color:var(--navy);}
+  .sm-drop-item b{font-size:.92rem;}
+  .sm-drop-item small{color:#6b7285;font-size:.75rem;}
+  .sm-drop-item:hover,.sm-drop-item.on{background:#f7f1dc;}
+  .sm-drop-empty{padding:10px 12px;color:#7b8293;font-size:.8rem;}
+  .sm-brief{margin-top:8px;background:#f8f4e8;border:1px solid #efe4c4;border-radius:10px;padding:8px 10px;font-size:.82rem;line-height:1.5;color:#2c3344;}
+  .sm-brief-latest{color:#3d465c;margin-top:2px;}
+  .sm-more{border:0;background:transparent;color:#1d5fa8;font-weight:800;cursor:pointer;font-family:inherit;padding:2px 0 0;font-size:.78rem;}
+  .sm-brief-more{display:none;margin-top:4px;color:#3d465c;}
+  .sm-brief.open .sm-brief-more{display:block;}
   .sm-filters label{font-size:.8rem;color:#4b5263;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
   .sm-seg{display:inline-flex;border:1px solid #d8d3c4;border-radius:9px;overflow:hidden;}
   .sm-seg button{border:0;background:#fff;padding:8px 11px;font-family:inherit;font-size:.8rem;cursor:pointer;color:#4b5263;}
@@ -147,10 +161,13 @@
   </div>
 
   <div class="sm-filters" style="position:static;" id="smSelection">
-    <div class="sm-seg" id="targetType"><button class="on" data-v="business">בחר עסק</button><button data-v="buyer">בחר קונה</button></div>
-    <label for="targetSearch">חיפוש שם או מספר</label><input type="search" id="targetSearch" placeholder="הקלד שם או מספר…" oninput="buildTargetOptions()">
-    <label for="targetId" id="targetLabel">עסק</label><select id="targetId" onchange="resetResults()" style="flex:1;min-width:200px;"><option value="">טוען רשימה…</option></select>
-    <span id="targetStatus" role="status" aria-live="polite"></span>
+    <div class="sm-seg" id="targetType" role="group" aria-label="מה לחפש"><button class="on" type="button" data-v="business">עסק</button><button type="button" data-v="buyer">קונה</button></div>
+    <div class="sm-combo">
+      <input type="search" id="targetSearch" placeholder="הקלד שם, מספר או טלפון…" autocomplete="off" autocorrect="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="targetList" aria-autocomplete="list" disabled>
+      <div class="sm-drop" id="targetList" role="listbox" hidden></div>
+    </div>
+    <input type="hidden" id="targetId" value="">
+    <span id="targetStatus" role="status" aria-live="polite">טוען רשימה…</span>
   </div>
   <div class="sm-kpis" id="smKpis"></div>
 
@@ -167,7 +184,7 @@
     <label><input type="checkbox" id="fExisting" checked onchange="render()"> הצג גם כאלה שכבר קיימות כהתאמה</label>
   </div>
 
-  <div id="smList"><div class="sm-empty">בחר עסק או קונה ולחץ על חפש התאמות.</div></div>
+  <div id="smList"><div class="sm-empty">הקלידו שם, מספר או טלפון ובחרו מהרשימה. ההתאמות יופיעו כאן.</div></div>
 </div>
 
 <div class="no-access" id="noAccess" style="display:none;">
@@ -181,6 +198,9 @@
 <script src="js/config.js?v=20260930archive1"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
+<script src="js/bsd-search.js?v=202611092100"></script>
+<script src="js/smart-match-picker.js?v=202611092100"></script>
+<script src="js/listReturn.js?v=202611092100"></script>
 <script>
 // 05.10.2026 (בקשת ברוך): מסך מלא לכפתור «התאמות AI חכמות» (שדרוג "קבל הצעות התאמה חכמות").
 // הדף רק קורא - לא יוצר התאמות ולא משנה שום נתון. הנתונים מגיעים מהפונקציה match-suggestions-report (v6).
@@ -216,37 +236,165 @@ function resetResults(){
   document.getElementById('smMail').disabled = true;
   document.getElementById('smRefresh').disabled = false;
   document.getElementById('smRefresh').textContent = '🔎 חפש התאמות';
-  document.getElementById('smList').innerHTML = '<div class="sm-empty">בחר עסק או קונה ולחץ על חפש התאמות.</div>';
+  document.getElementById('smList').innerHTML = '<div class="sm-empty">הקלידו שם, מספר או טלפון ובחרו מהרשימה. ההתאמות יופיעו כאן.</div>';
 }
-function buildTargetOptions(){
-  const sel = document.getElementById('targetId'), current = sel.value;
-  const q = document.getElementById('targetSearch').value.trim().toLocaleLowerCase('he');
-  const all = TARGET_TYPE === 'business' ? TARGETS.businesses : TARGETS.buyers;
-  const rows = all.filter(r => [r.name, r.number, r.detail].join(' ').toLocaleLowerCase('he').includes(q));
-  sel.innerHTML = '<option value="">בחר ' + (TARGET_TYPE === 'business' ? 'עסק' : 'קונה') + ' מהרשימה</option>' + rows.map(r => `<option value="${esc(r.id)}">${esc([r.name, r.number, r.detail].filter(Boolean).join(' · '))}</option>`).join('');
-  if (rows.some(r => r.id === current)) sel.value = current;
-  else if (current) resetResults();
-  document.getElementById('targetStatus').textContent = rows.length + ' ברשימה';
+let PICK_ROWS = [], PICK_HI = -1;
+function activeRows(){ return TARGET_TYPE === 'business' ? (TARGETS.businesses || []) : (TARGETS.buyers || []); }
+function readyText(){
+  const n = activeRows().length;
+  return n + (TARGET_TYPE === 'business' ? ' עסקים' : ' קונים') + ' מוכנים לחיפוש';
+}
+function closeDrop(){
+  const list = document.getElementById('targetList');
+  list.hidden = true;
+  list.innerHTML = '';
+  document.getElementById('targetSearch').setAttribute('aria-expanded', 'false');
+  PICK_HI = -1;
+}
+function paintDrop(rows){
+  const list = document.getElementById('targetList');
+  const input = document.getElementById('targetSearch');
+  const shown = rows.slice(0, 12);
+  list.innerHTML = shown.length
+    ? shown.map((r, i) => `<button type="button" class="sm-drop-item${i === PICK_HI ? ' on' : ''}" role="option" data-i="${i}"><b>${esc(r.name)}</b><small>${esc([r.number, r.detail].filter(Boolean).join(' · '))}</small></button>`).join('') + (rows.length > shown.length ? `<div class="sm-drop-empty">יש עוד ${rows.length - shown.length}. המשיכו להקליד.</div>` : '')
+    : '<div class="sm-drop-empty">אין התאמה. נסו עוד אות, בלי גרשיים, או מספר.</div>';
+  list.hidden = false;
+  input.setAttribute('aria-expanded', 'true');
+  list.querySelectorAll('.sm-drop-item').forEach(btn => btn.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const row = PICK_ROWS[Number(btn.getAttribute('data-i'))];
+    if (row) chooseTarget(row);
+  }));
+}
+function refreshDrop(){
+  const q = document.getElementById('targetSearch').value;
+  const rows = window.BSDSmartPick.matches(activeRows(), q);
+  PICK_ROWS = rows;
+  PICK_HI = rows.length ? 0 : -1;
+  const status = document.getElementById('targetStatus');
+  if (String(q || '').trim().length < 1){ closeDrop(); status.textContent = readyText(); return; }
+  status.textContent = rows.length + ' תוצאות';
+  paintDrop(rows);
+}
+function chooseTarget(row){
+  document.getElementById('targetId').value = row.id;
+  document.getElementById('targetSearch').value = row.name || '';
+  closeDrop();
+  const url = new URL(location.href);
+  url.searchParams.set('side', TARGET_TYPE);
+  url.searchParams.set('id', row.id);
+  url.searchParams.delete('_cb');
+  history.replaceState({ bsdSmart: true, side: TARGET_TYPE, id: row.id }, '', url.pathname + url.search);
+  loadSuggestions();
+}
+function captureView(){
+  const scroll = window.BSDListReturn ? BSDListReturn.snapshotScroll() : { x: 0, y: window.scrollY || 0 };
+  return {
+    v: 1, side: TARGET_TYPE, id: document.getElementById('targetId').value,
+    label: document.getElementById('targetSearch').value, scroll,
+    level: STATE.level, group: STATE.group,
+    text: document.getElementById('fText').value,
+    sector: document.getElementById('fSector').value,
+    min: document.getElementById('fMin').value,
+    existing: document.getElementById('fExisting').checked,
+    data: DATA
+  };
+}
+function saveView(){
+  try {
+    const view = captureView();
+    if (!view.id || !view.data) return;
+    sessionStorage.setItem('bsd:smart-matches:view', JSON.stringify(view));
+  } catch (e) {}
 }
 async function loadTargets(){
+  const input = document.getElementById('targetSearch');
   try {
-    TARGETS = await callFn(false, 'options');
-    if (!(TARGETS.engine_version >= 7)) throw new Error('מנוע ההתאמות בשרת עדיין מתעדכן');
-    for (const key of ['buyers', 'businesses']) TARGETS[key].sort((a,b) => a.name.localeCompare(b.name, 'he'));
-    buildTargetOptions();
+    const data = await callFn(false, 'options');
+    if (!(data.engine_version >= 7) || !Array.isArray(data.businesses) || !Array.isArray(data.buyers)) throw new Error('מנוע ההתאמות בשרת עדיין מתעדכן');
+    TARGETS = { buyers: window.BSDSmartPick.sortRows(data.buyers), businesses: window.BSDSmartPick.sortRows(data.businesses) };
+    input.disabled = false;
+    document.getElementById('targetStatus').textContent = readyText();
+    return true;
   } catch(e) {
-    document.getElementById('targetId').innerHTML = '<option value="">לא ניתן לטעון רשימה</option>';
-    document.getElementById('smList').innerHTML = `<div class="sm-error">${esc(e.message)}<br><button class="sm-btn" onclick="loadTargets()">נסה שוב</button></div>`;
+    input.disabled = true;
+    document.getElementById('targetStatus').textContent = '';
+    document.getElementById('smList').innerHTML = `<div class="sm-error">${esc(e.message)}<br><button class="sm-btn" onclick="loadTargets().then(ok => { if (ok) restoreView(); })">נסה שוב</button></div>`;
+    return false;
   }
 }
+function restoreView(){
+  const params = new URLSearchParams(location.search);
+  const side = params.get('side');
+  const id = params.get('id');
+  if (side !== 'business' && side !== 'buyer' || !id) return false;
+  TARGET_TYPE = side;
+  document.querySelectorAll('#targetType button').forEach(b => b.classList.toggle('on', b.dataset.v === side));
+  document.getElementById('targetId').value = id;
+  let saved = null;
+  try { saved = JSON.parse(sessionStorage.getItem('bsd:smart-matches:view') || 'null'); } catch (e) { saved = null; }
+  const row = activeRows().find(r => r.id === id);
+  document.getElementById('targetSearch').value = (saved && saved.id === id && saved.label) || (row && row.name) || '';
+  const same = saved && saved.v === 1 && saved.id === id && saved.side === side && saved.data && saved.data.selection && saved.data.selection.id === id;
+  if (!same){ loadSuggestions(); return true; }
+  STATE.level = saved.level || '';
+  STATE.group = saved.group || 'list';
+  document.getElementById('fText').value = saved.text || '';
+  document.getElementById('fMin').value = saved.min || '61';
+  document.getElementById('fMinV').textContent = (saved.min || '61') + '%';
+  document.getElementById('fExisting').checked = saved.existing !== false;
+  document.querySelectorAll('#fLevel button').forEach(b => b.classList.toggle('on', b.dataset.v === STATE.level));
+  document.querySelectorAll('#fGroup button').forEach(b => b.classList.toggle('on', b.dataset.v === STATE.group));
+  DATA = saved.data;
+  document.getElementById('smMail').disabled = false;
+  buildSectorFilter();
+  if (saved.sector) document.getElementById('fSector').value = saved.sector;
+  document.getElementById('smFilters').style.display = '';
+  render();
+  const scroll = saved.scroll || { x: 0, y: 0 };
+  const apply = () => { if (window.BSDListReturn) BSDListReturn.applyScroll(scroll); else window.scrollTo(scroll.x || 0, scroll.y || 0); };
+  apply();
+  setTimeout(apply, 50);
+  return true;
+}
+const targetSearch = document.getElementById('targetSearch');
+targetSearch.addEventListener('input', () => {
+  if (document.getElementById('targetId').value) document.getElementById('targetId').value = '';
+  refreshDrop();
+});
+targetSearch.addEventListener('focus', () => {
+  if (document.getElementById('targetId').value && targetSearch.value.trim()) return;
+  refreshDrop();
+});
+targetSearch.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape'){ closeDrop(); return; }
+  const shown = Math.min(PICK_ROWS.length, 12);
+  if (!shown || document.getElementById('targetList').hidden){
+    if (e.key === 'Enter') refreshDrop();
+    return;
+  }
+  if (e.key === 'ArrowDown'){ e.preventDefault(); PICK_HI = Math.min(shown - 1, PICK_HI + 1); paintDrop(PICK_ROWS); }
+  else if (e.key === 'ArrowUp'){ e.preventDefault(); PICK_HI = Math.max(0, PICK_HI - 1); paintDrop(PICK_ROWS); }
+  else if (e.key === 'Enter' && PICK_HI >= 0){ e.preventDefault(); chooseTarget(PICK_ROWS[PICK_HI]); }
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.sm-combo')) closeDrop();
+});
 document.querySelectorAll('#targetType button').forEach(b => b.addEventListener('click', () => {
   TARGET_TYPE = b.dataset.v;
   document.querySelectorAll('#targetType button').forEach(x => x.classList.toggle('on', x === b));
-  document.getElementById('targetLabel').textContent = TARGET_TYPE === 'business' ? 'עסק' : 'קונה';
   document.getElementById('targetSearch').value = '';
   document.getElementById('targetId').value = '';
-  resetResults(); buildTargetOptions();
+  closeDrop();
+  resetResults();
+  document.getElementById('targetStatus').textContent = readyText();
+  const url = new URL(location.href);
+  url.searchParams.delete('side'); url.searchParams.delete('id'); url.searchParams.delete('_cb');
+  history.replaceState({ bsdSmart: true }, '', url.pathname + url.search);
 }));
+document.getElementById('smList').addEventListener('pointerdown', (e) => {
+  if (e.target.closest('a[href*="from=smart-matches"]')) saveView();
+});
 
 async function callFn(sendEmail, action){
   const { data: { session } } = await window.supabaseClient.auth.getSession();
@@ -262,7 +410,7 @@ async function callFn(sendEmail, action){
 }
 
 async function loadSuggestions(){
-  if (!document.getElementById('targetId').value) { toast('יש לבחור עסק או קונה מהרשימה', true); return; }
+  if (!document.getElementById('targetId').value) { toast('הקלידו שם ובחרו עסק או קונה מהרשימה', true); return; }
   const currentRequest = ++requestId;
   DATA = null; document.getElementById('smMail').disabled = true;
   const btn = document.getElementById('smRefresh');
@@ -281,6 +429,7 @@ async function loadSuggestions(){
     buildSectorFilter();
     document.getElementById('smFilters').style.display = '';
     render();
+    saveView();
   } catch (e) {
     if (currentRequest !== requestId) return;
     document.getElementById('smList').innerHTML = `<div class="sm-error">לא הצלחנו לחשב התאמות: ${esc(e.message)}<br><br><button class="sm-btn" onclick="loadSuggestions()">נסה שוב</button></div>`;
@@ -364,8 +513,8 @@ function cardHtml(s, idx){
   const bizLinks = [];
   if (z.owner_phone) bizLinks.push(`<a class="ic" href="${telHref(z.owner_phone)}" ${stop} title="טלפון בעל העסק">📞 בעל העסק</a>`);
   if (z.website) bizLinks.push(`<a class="ic" href="${esc(siteHref(z.website))}" target="_blank" rel="noopener" ${stop}>🌐 אתר העסק</a>`);
-  const leadUrl = 'leads.html?open=' + encodeURIComponent(s.buyer_id);
-  const bizUrl = 'businesses.html?open=' + encodeURIComponent(s.business_id);
+  const leadUrl = 'leads.html?open=' + encodeURIComponent(s.buyer_id) + '&from=smart-matches';
+  const bizUrl = 'businesses.html?open=' + encodeURIComponent(s.business_id) + '&from=smart-matches';
   const total = s.how.reduce((a,h)=>a+h.pts,0);
   const howHtml = s.how.map(h => {
     const pct = h.max ? Math.max(0, Math.min(100, Math.round(Math.abs(h.pts) / h.max * 100))) : 0;
@@ -381,6 +530,7 @@ function cardHtml(s, idx){
           <a href="${bizUrl}" ${stop} title="פתח את כרטיס העסק">🏪 ${esc(s.business)}</a>${z.number?`<span class="chip gray">${esc(z.number)}</span>`:''}
         </div>
         <div class="sm-sum">${esc(s.summary)}</div>
+        ${briefHtml(TARGET_TYPE === 'business' ? s.buyer_brief : s.business_brief)}
         <div class="sm-chips">${chips.join('')}</div>
         <div class="sm-toggle"><span class="t1">▼ לחץ להסבר המלא: איך הגענו לזה, למה זה מתאים ומה לא</span><span class="t2">▲ סגור הסבר</span></div>
       </div>
@@ -407,6 +557,16 @@ function cardHtml(s, idx){
 }
 
 function toggleCard(row){ const card = row.closest('.sm-card'); card.classList.toggle('open'); row.setAttribute('aria-expanded', card.classList.contains('open') ? 'true' : 'false'); }
+function briefHtml(b){
+  if (!b || (!b.looking && !b.latest)) return '';
+  const more = b.more ? `<button type="button" class="sm-more" onclick="event.stopPropagation();toggleBrief(this)">עוד</button><div class="sm-brief-more">${esc(b.more)}</div>` : '';
+  return `<div class="sm-brief">${b.looking ? `<div>${esc(b.looking)}</div>` : ''}${b.latest ? `<div class="sm-brief-latest">${esc(b.latest)}</div>` : ''}${more}</div>`;
+}
+function toggleBrief(btn){
+  const box = btn.closest('.sm-brief');
+  box.classList.toggle('open');
+  btn.textContent = box.classList.contains('open') ? 'פחות' : 'עוד';
+}
 
 function render(){
   if (!DATA) return;
@@ -425,8 +585,8 @@ function render(){
   box.innerHTML = [...groups.values()].sort((a,b) => b[0].score - a[0].score).map(g => {
     const s = g[0];
     const title = STATE.group === 'buyer'
-      ? `👤 <a href="leads.html?open=${encodeURIComponent(s.buyer_id)}">${esc(s.buyer)}</a> <small>${esc(s.buyer_info?.city||'')} · ${g.length} עסקים מתאימים</small>`
-      : `🏪 <a href="businesses.html?open=${encodeURIComponent(s.business_id)}">${esc(s.business)}</a> <small>${esc(s.business_info?.sector||'')} · ${esc(s.business_info?.city||'')} · ${g.length} קונים מתאימים</small>`;
+      ? `👤 <a href="leads.html?open=${encodeURIComponent(s.buyer_id)}&from=smart-matches">${esc(s.buyer)}</a> <small>${esc(s.buyer_info?.city||'')} · ${g.length} עסקים מתאימים</small>`
+      : `🏪 <a href="businesses.html?open=${encodeURIComponent(s.business_id)}&from=smart-matches">${esc(s.business)}</a> <small>${esc(s.business_info?.sector||'')} · ${esc(s.business_info?.city||'')} · ${g.length} קונים מתאימים</small>`;
     return `<div class="sm-group-h">${title}</div>` + g.map(x => cardHtml(x, i++)).join('');
   }).join('');
 }
@@ -441,7 +601,8 @@ document.querySelectorAll('#fGroup button').forEach(b => b.addEventListener('cli
   if (!fullAccess && !profile.can_use_ai_match){ document.getElementById('noAccess').style.display = 'block'; return; }
   document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email);
   document.getElementById('mainWrap').style.display = 'block';
-  await loadTargets();
+  if (window.BSDListReturn) BSDListReturn.armScrollRestoration();
+  if (await loadTargets()) restoreView();
 })();
 </script>
 </body>

@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611030400';
+    var PAGE_BUILD = '202611092100';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -544,7 +544,7 @@
 <script src="js/meetingPrepForm.js?v=20261109"></script>
 <script src="js/pdfPipeline.js?v=20261012-1"></script>
 <script src="js/saleFileModule2.js?v=202611030400"></script>
-<script src="js/listReturn.js?v=202610311830"></script>
+<script src="js/listReturn.js?v=202611092100"></script>
 <script src="js/econAnalysisFill.js?v=202610111800"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/waSendModule.js?v=20261012-1"></script>
@@ -635,13 +635,13 @@ function cancelBizForm(){
 
 function closeModal(){
   const st = history.state;
-  const backToLeads = !bizSuppressHistoryBack && st && st.bsdCardType === 'business' && st.bsdFrom === 'leads-hub';
+  const backToCaller = !bizSuppressHistoryBack && st && st.bsdCardType === 'business' && (st.bsdFrom === 'leads-hub' || st.bsdFrom === 'smart-matches');
   document.getElementById('overlay').classList.remove('open');
   document.getElementById('overlay').classList.remove('biz-fullpage'); // ניקוי מצב "עמוד מלא" של כרטיס העסק (bsdTabifyBizForm),
   document.getElementById('modalBox').classList.remove('biz-fullpage-modal'); // כדי ששאר המודאלים (ליד/התאמה וכו') ייפתחו כרגיל בפעם הבאה
   document.getElementById('modalBox').innerHTML = '';
-  // Opened from the leads list: Back returns to that list, not to the businesses screen.
-  if (backToLeads){ history.back(); return; }
+  // Opened from another screen: Back returns there, not to the businesses list.
+  if (backToCaller){ history.back(); return; }
   if (!bizSuppressHistoryBack && st && st.bsdCardType === 'business'){
     history.replaceState({ bsdListType:'businesses' }, '', location.pathname);
   }
@@ -649,11 +649,13 @@ function closeModal(){
 
 function enterBusinessCardHistory(id){
   const fromHub = (window.BSDListReturn && BSDListReturn.cameFromHub(location.search)) || (history.state && history.state.bsdFrom === 'leads-hub');
-  if (fromHub && window.BSDListReturn){
+  const fromSmart = (window.BSDListReturn && BSDListReturn.cameFromSmartMatches(location.search)) || (history.state && history.state.bsdFrom === 'smart-matches');
+  if ((fromHub || fromSmart) && window.BSDListReturn){
     BSDListReturn.applyHistory(BSDListReturn.planCardEntry({
       href: location.href,
       state: history.state,
-      fromHub: true,
+      fromHub: fromHub,
+      fromSmart: fromSmart,
       cardType: 'business',
       listType: 'businesses',
       recordId: id || null
