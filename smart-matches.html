@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202610101234';
+    var PAGE_BUILD = '202611091800';
     window.PAGE_BUILD = PAGE_BUILD;
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -137,31 +137,37 @@
   <div class="sm-top">
     <div>
       <h1>🧠 התאמות AI חכמות</h1>
-      <p id="smIntro">המערכת עוברת על כל העסקים הפעילים ועל כל הקונים הפעילים - תחום, מחיר מול תקציב, מיקום (עסק אונליין לא תלוי מקום, מפעל אולי אפשר להעביר) ומה שכתוב בהערות - ומציגה רק התאמות <b>חדשות</b> (שעדיין לא נפתחו במערכת) מ-50% ומעלה. לחיצה על שורה פותחת הסבר מלא.</p>
+      <p id="smIntro">בחר עסק כדי למצוא עבורו קונים, או בחר קונה כדי למצוא עבורו עסקים. המערכת משווה תחום, תקציב, מיקום והערות ומציגה רק התאמות מעל 60%. הציון הוא דירוג התאמה לפי המידע הקיים.</p>
     </div>
     <div class="sm-actions">
-      <button class="sm-btn gold" id="smRefresh" onclick="loadSuggestions()">🔄 חשב מחדש</button>
-      <button class="sm-btn primary" id="smMail" onclick="emailSuggestions()">📧 שלח את הרשימה למייל</button>
+      <button class="sm-btn gold" id="smRefresh" onclick="loadSuggestions()">🔎 חפש התאמות</button>
+      <button disabled class="sm-btn primary" id="smMail" onclick="emailSuggestions()">📧 שלח את הרשימה למייל</button>
       <a class="sm-btn" href="app.html">→ חזרה ללוח הבקרה</a>
     </div>
   </div>
 
+  <div class="sm-filters" style="position:static;" id="smSelection">
+    <div class="sm-seg" id="targetType"><button class="on" data-v="business">בחר עסק</button><button data-v="buyer">בחר קונה</button></div>
+    <label for="targetSearch">חיפוש שם או מספר</label><input type="search" id="targetSearch" placeholder="הקלד שם או מספר…" oninput="buildTargetOptions()">
+    <label for="targetId" id="targetLabel">עסק</label><select id="targetId" onchange="resetResults()" style="flex:1;min-width:200px;"><option value="">טוען רשימה…</option></select>
+    <span id="targetStatus" role="status" aria-live="polite"></span>
+  </div>
   <div class="sm-kpis" id="smKpis"></div>
 
   <div class="sm-filters" id="smFilters" style="display:none;">
     <input type="search" id="fText" placeholder="חיפוש לפי שם קונה, עסק, עיר, תחום…" oninput="render()">
     <div class="sm-seg" id="fLevel">
-      <button data-v="" class="on">הכל</button><button data-v="high">גבוהה 75%+</button><button data-v="good">טובה 60-74%</button><button data-v="check">שווה בדיקה 50-59%</button>
+      <button data-v="" class="on">הכל</button><button data-v="high">גבוהה 75%+</button><button data-v="good">טובה 61 עד 74%</button>
     </div>
     <select id="fSector" onchange="render()"><option value="">כל התחומים</option></select>
-    <label>מינימום <input type="range" id="fMin" min="50" max="95" step="5" value="50" oninput="document.getElementById('fMinV').textContent=this.value+'%';render()"> <b id="fMinV">50%</b></label>
+    <label>מינימום <input type="range" id="fMin" min="61" max="99" step="1" value="61" oninput="document.getElementById('fMinV').textContent=this.value+'%';render()"> <b id="fMinV">61%</b></label>
     <div class="sm-seg" id="fGroup">
       <button data-v="list" class="on">רשימה</button><button data-v="buyer">לפי קונה</button><button data-v="business">לפי עסק</button>
     </div>
-    <label><input type="checkbox" id="fExisting" onchange="render()"> הצג גם כאלה שכבר קיימות כהתאמה</label>
+    <label><input type="checkbox" id="fExisting" checked onchange="render()"> הצג גם כאלה שכבר קיימות כהתאמה</label>
   </div>
 
-  <div id="smList"><div class="sm-loading"><div class="spin"></div>המערכת לומדת את כל העסקים והקונים ומחשבת התאמות…</div></div>
+  <div id="smList"><div class="sm-empty">בחר עסק או קונה ולחץ על חפש התאמות.</div></div>
 </div>
 
 <div class="no-access" id="noAccess" style="display:none;">
@@ -193,13 +199,61 @@ function siteHref(u){ u=String(u||'').trim(); return /^https?:\/\//i.test(u) ? u
 const LEVEL_LABEL = { high:'גבוהה', good:'טובה', check:'שווה בדיקה' };
 
 let DATA = null, STATE = { level:'', group:'list' };
+let TARGETS = { buyers: [], businesses: [] }, TARGET_TYPE = 'business', requestId = 0;
+function resetResults(){
+  requestId++;
+  DATA = null;
+  STATE.level = ''; STATE.group = 'list';
+  document.querySelectorAll('#fLevel button').forEach(b => b.classList.toggle('on', b.dataset.v === ''));
+  document.querySelectorAll('#fGroup button').forEach(b => b.classList.toggle('on', b.dataset.v === 'list'));
+  document.getElementById('fText').value = '';
+  document.getElementById('fSector').value = '';
+  document.getElementById('fMin').value = '61';
+  document.getElementById('fMinV').textContent = '61%';
+  document.getElementById('smIntro').textContent = 'בחר עסק כדי למצוא עבורו קונים, או קונה כדי למצוא עבורו עסקים. מוצגות רק התאמות מעל 60%.';
+  document.getElementById('smKpis').innerHTML = '';
+  document.getElementById('smFilters').style.display = 'none';
+  document.getElementById('smMail').disabled = true;
+  document.getElementById('smRefresh').disabled = false;
+  document.getElementById('smRefresh').textContent = '🔎 חפש התאמות';
+  document.getElementById('smList').innerHTML = '<div class="sm-empty">בחר עסק או קונה ולחץ על חפש התאמות.</div>';
+}
+function buildTargetOptions(){
+  const sel = document.getElementById('targetId'), current = sel.value;
+  const q = document.getElementById('targetSearch').value.trim().toLocaleLowerCase('he');
+  const all = TARGET_TYPE === 'business' ? TARGETS.businesses : TARGETS.buyers;
+  const rows = all.filter(r => [r.name, r.number, r.detail].join(' ').toLocaleLowerCase('he').includes(q));
+  sel.innerHTML = '<option value="">בחר ' + (TARGET_TYPE === 'business' ? 'עסק' : 'קונה') + ' מהרשימה</option>' + rows.map(r => `<option value="${esc(r.id)}">${esc([r.name, r.number, r.detail].filter(Boolean).join(' · '))}</option>`).join('');
+  if (rows.some(r => r.id === current)) sel.value = current;
+  else if (current) resetResults();
+  document.getElementById('targetStatus').textContent = rows.length + ' ברשימה';
+}
+async function loadTargets(){
+  try {
+    TARGETS = await callFn(false, 'options');
+    if (!(TARGETS.engine_version >= 7)) throw new Error('מנוע ההתאמות בשרת עדיין מתעדכן');
+    for (const key of ['buyers', 'businesses']) TARGETS[key].sort((a,b) => a.name.localeCompare(b.name, 'he'));
+    buildTargetOptions();
+  } catch(e) {
+    document.getElementById('targetId').innerHTML = '<option value="">לא ניתן לטעון רשימה</option>';
+    document.getElementById('smList').innerHTML = `<div class="sm-error">${esc(e.message)}<br><button class="sm-btn" onclick="loadTargets()">נסה שוב</button></div>`;
+  }
+}
+document.querySelectorAll('#targetType button').forEach(b => b.addEventListener('click', () => {
+  TARGET_TYPE = b.dataset.v;
+  document.querySelectorAll('#targetType button').forEach(x => x.classList.toggle('on', x === b));
+  document.getElementById('targetLabel').textContent = TARGET_TYPE === 'business' ? 'עסק' : 'קונה';
+  document.getElementById('targetSearch').value = '';
+  document.getElementById('targetId').value = '';
+  resetResults(); buildTargetOptions();
+}));
 
-async function callFn(sendEmail){
+async function callFn(sendEmail, action){
   const { data: { session } } = await window.supabaseClient.auth.getSession();
   const res = await fetch(window.BSD_CONFIG.SUPABASE_URL + '/functions/v1/match-suggestions-report', {
     method:'POST',
     headers:{ 'Authorization':'Bearer ' + (session?.access_token || ''), 'apikey': window.BSD_CONFIG.SUPABASE_PUBLISHABLE_KEY, 'Content-Type':'application/json' },
-    body: JSON.stringify({ send_email: !!sendEmail })
+    body: JSON.stringify(action === 'options' ? { action } : { send_email: !!sendEmail, target_type: TARGET_TYPE, target_id: document.getElementById('targetId').value })
   });
   let data = {};
   try { data = await res.json(); } catch(_e) {}
@@ -208,23 +262,30 @@ async function callFn(sendEmail){
 }
 
 async function loadSuggestions(){
+  if (!document.getElementById('targetId').value) { toast('יש לבחור עסק או קונה מהרשימה', true); return; }
+  const currentRequest = ++requestId;
+  DATA = null; document.getElementById('smMail').disabled = true;
   const btn = document.getElementById('smRefresh');
   btn.disabled = true; btn.textContent = '⏳ מחשב…';
   document.getElementById('smList').innerHTML = '<div class="sm-loading"><div class="spin"></div>המערכת לומדת את כל העסקים והקונים ומחשבת התאמות…</div>';
   try {
-    DATA = await callFn(false);
-    if (!DATA.engine_version) {
+    const result = await callFn(false);
+    if (currentRequest !== requestId) return;
+    DATA = result;
+    if (DATA.engine_version < 7 || !DATA.selection?.id) {
       // הפונקציה בשרת עדיין בגרסה הישנה (כל הצירופים, בלי הסברים) - לא מציגים נתונים חלקיים
       document.getElementById('smList').innerHTML = '<div class="sm-error">מנוע ההתאמות בשרת עדיין לא עודכן לגרסה החדשה. אחרי העדכון הדף יציג את ההתאמות כאן.</div>';
       return;
     }
+    document.getElementById('smMail').disabled = false;
     buildSectorFilter();
     document.getElementById('smFilters').style.display = '';
     render();
   } catch (e) {
+    if (currentRequest !== requestId) return;
     document.getElementById('smList').innerHTML = `<div class="sm-error">לא הצלחנו לחשב התאמות: ${esc(e.message)}<br><br><button class="sm-btn" onclick="loadSuggestions()">נסה שוב</button></div>`;
   } finally {
-    btn.disabled = false; btn.textContent = '🔄 חשב מחדש';
+    if (currentRequest === requestId) { btn.disabled = false; btn.textContent = '🔎 חפש התאמות'; }
   }
 }
 
@@ -253,7 +314,7 @@ function filtered(){
   const withExisting = document.getElementById('fExisting').checked;
   const list = [...(DATA.suggestions||[]).map(s => ({...s, _existing:false})), ...(withExisting ? (DATA.already_matched||[]).map(s => ({...s, _existing:true})) : [])];
   return list.filter(s => {
-    if (s.score < min) return false;
+    if (s.score <= 60 || s.score < min) return false;
     if (STATE.level && s.level !== STATE.level) return false;
     if (sector && s.business_info?.sector !== sector) return false;
     if (q){
@@ -261,7 +322,7 @@ function filtered(){
       if (!hay.includes(q)) return false;
     }
     return true;
-  }).sort((a,b) => (a._existing - b._existing) || b.score - a.score);
+  }).sort((a,b) => b.score - a.score || (a._existing - b._existing));
 }
 
 function renderKpis(){
@@ -269,14 +330,16 @@ function renderKpis(){
   const sug = DATA.suggestions || [];
   const k = (n, l, v) => `<div class="sm-kpi ${v!==undefined?'click':''} ${v!==undefined && STATE.level===v?'on':''}" ${v!==undefined?`onclick="setLevel('${v}')"`:''}><div class="n">${n}</div><div class="l">${l}</div></div>`;
   document.getElementById('smKpis').innerHTML =
-    k(sug.length, 'התאמות חדשות (50%+)', '') +
+    k(sug.length, 'התאמות חדשות מעל 60%', '') +
     k(sug.filter(s=>s.level==='high').length, 'התאמה גבוהה (75%+)', 'high') +
-    k(sug.filter(s=>s.level==='good').length, 'התאמה טובה (60-74%)', 'good') +
-    k(sug.filter(s=>s.level==='check').length, 'שווה בדיקה (50-59%)', 'check') +
+    k(sug.filter(s=>s.level==='good').length, 'התאמה טובה 61 עד 74%', 'good') +
+    k((DATA.already_matched||[]).length, 'התאמות שכבר קיימות') +
     k(`${st.buyers||0} / ${st.businesses||0}`, 'קונים / עסקים שנבדקו') +
     k(st.buyers_without_info||0, 'קונים בלי מספיק מידע (אין תחום/הערות)');
   const gen = DATA.generated_at ? new Date(DATA.generated_at).toLocaleString('he-IL',{timeZone:'Asia/Jerusalem'}) : '';
-  document.getElementById('smIntro').innerHTML = `עברנו על <b>${st.buyers||0}</b> קונים פעילים ועל <b>${st.businesses||0}</b> עסקים פעילים (${(st.pairs_checked||0).toLocaleString('he-IL')} צירופים). מוצגות רק התאמות <b>חדשות</b> - כאלה שעדיין לא נפתחו במערכת - מ-50% ומעלה. ${st.already_matched ? `עוד ${st.already_matched} צירופים טובים כבר קיימים כהתאמה (אפשר להציג אותם בסימון למטה).` : ''} לחיצה על שורה פותחת הסבר מלא. <span style="color:#9aa1b0;">חושב: ${esc(gen)}</span>`;
+  const all = TARGET_TYPE === 'business' ? TARGETS.businesses : TARGETS.buyers;
+  const selected = all.find(r => r.id === DATA.selection?.id);
+  document.getElementById('smIntro').innerHTML = `תוצאות עבור <b>${esc(selected?.name || '')}</b>. נבדקו ${st.buyers||0} קונים מול ${st.businesses||0} עסקים. מוצגות התאמות מעל 60%, מהגבוהה לנמוכה. לחיצה על תוצאה מציגה הסבר ופערים. הציון הוא דירוג התאמה לפי המידע הקיים. חושב: ${esc(gen)}`;
 }
 
 function setLevel(v){ STATE.level = v; document.querySelectorAll('#fLevel button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); render(); }
@@ -351,7 +414,7 @@ function render(){
   const list = filtered();
   const box = document.getElementById('smList');
   if (!list.length){
-    box.innerHTML = `<div class="sm-empty">${(DATA.suggestions||[]).length ? 'אין התאמות שעונות על הסינון.' : 'אין כרגע התאמות חדשות מ-50% ומעלה. כדאי להוסיף לקונים תחום/אזור/תקציב בהערות - זה משפר את ההתאמות.'}</div>`;
+    box.innerHTML = `<div class="sm-empty">${(DATA.suggestions||[]).length ? 'אין התאמות שעונות על הסינון.' : 'לא נמצאו התאמות מעל 60% עבור הבחירה. כדאי להשלים תחום, תקציב ואזור בכרטיס ובהערות.'}</div>`;
     return;
   }
   if (STATE.group === 'list'){ box.innerHTML = list.map(cardHtml).join(''); return; }
@@ -378,7 +441,7 @@ document.querySelectorAll('#fGroup button').forEach(b => b.addEventListener('cli
   if (!fullAccess && !profile.can_use_ai_match){ document.getElementById('noAccess').style.display = 'block'; return; }
   document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email);
   document.getElementById('mainWrap').style.display = 'block';
-  await loadSuggestions();
+  await loadTargets();
 })();
 </script>
 </body>

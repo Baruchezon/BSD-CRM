@@ -40,7 +40,7 @@ test('only NEW pairs are suggested; an existing match is reported separately as 
   assert.equal(r.already_matched[0].existing_match.status, 'מידע ראשוני נשלח');
 });
 
-test('nothing below 50% is returned', () => {
+test('nothing at or below 60% is returned', () => {
   const r = run([buyer({ id: 'b1', name: 'רון', city: 'חיפה', notes: 'פתוח לכל תחום' })],
                 [biz({ id: 'z1', name: 'מכבסת הדר', field: 'מכבסה', city: 'אילת', price: 300000 })]);
   assert.ok(r.suggestions.every(s => s.score >= MIN_SCORE));
@@ -89,8 +89,8 @@ test('buyer mentioned the business in the notes but no match exists -> flagged a
 });
 
 test('female buyer gets correct wording; quotes are left untouched', () => {
-  const r = run([buyer({ id: 'b1', name: 'מאי דניאל', city: 'כפר יונה', notes: 'שמי מאי ואני נמצאת בחיפוש. מחפשת עסק הפצה B2B' })],
-                [biz({ id: 'z1', name: 'גודסט', field: 'סיטונאות', city: 'נתניה', desc: 'יבואן ומפיץ' })]);
+  const r = run([buyer({ id: 'b1', name: 'מאי דניאל', city: 'כפר יונה', budget: 1000000, notes: 'שמי מאי ואני נמצאת בחיפוש. מחפשת עסק הפצה B2B' })],
+                [biz({ id: 'z1', name: 'גודסט', field: 'סיטונאות', city: 'נתניה', price: 800000, desc: 'יבואן ומפיץ' })]);
   const s = find(r, 'b1', 'z1');
   assert.ok(s, 'suggested');
   assert.ok(s.why.some(w => /מאי מחפשת/.test(w)), s.why.join(' | '));
