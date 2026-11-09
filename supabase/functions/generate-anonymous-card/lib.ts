@@ -113,7 +113,7 @@ export function redactIdentifiers(text: string, biz: Record<string, unknown>): s
     const first = name.split(/\s+/)[0].replace(/["״'׳]/g, '');
     if (first.length >= 3) exact.push(first);
   }
-  for (const k of ['owner_name', 'anonymous_name', 'address', 'website', 'owner_email', 'owner_phone']) {
+  for (const k of ['owner_name', 'legal_name', 'anonymous_name', 'address', 'website', 'owner_email', 'owner_phone']) {
     const v = str(biz[k]);
     if (v.length >= 3) exact.push(v);
   }
@@ -243,7 +243,7 @@ export function localSafetyScan(text: string, biz: Record<string, unknown>): str
 
   // התאמה ישירה לזיהויים אמיתיים של העסק (רק מזהים בני 3+ תווים, כדי לא ליפול על מילים כלליות)
   const identifiers: Array<[string, unknown]> = [
-    ['שם העסק', biz.internal_name], ['שם אנונימי קיים', biz.anonymous_name],
+    ['שם העסק', biz.internal_name], ['שם משפטי', biz.legal_name], ['שם אנונימי קיים', biz.anonymous_name],
     ['שם הבעלים', biz.owner_name], ['כתובת', biz.address], ['אתר', biz.website],
     ['ח.פ', biz.id_number], ['טלפון בעלים', biz.owner_phone], ['אימייל בעלים', biz.owner_email],
   ];

@@ -1185,6 +1185,13 @@ function truncate(s, n){
   if (!s) return '—';
   return s.length > n ? esc(s.slice(0,n)) + '…' : esc(s);
 }
+function leadEntityTypeOptions(current){
+  const cur = String(current || '');
+  const standard = [['', '—'], ['ת.ז.', 'ת.ז.'], ['ח.פ.', 'ח.פ.'], ['עוסק מורשה', 'עוסק מורשה']];
+  const known = standard.some(([v]) => v === cur);
+  const extra = cur && !known ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : '';
+  return standard.map(([v, label]) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${label}</option>`).join('') + extra;
+}
 function fieldRow(id,label,value,type='text'){
   return `<div class="field"><label>${label}</label><input type="${type}" id="${id}" value="${esc(value||'')}"></div>`;
 }
@@ -1251,6 +1258,7 @@ function openLeadForm(id, forcedType, prefillData){
         ${fieldRow('city','עיר', lead?.city)}
         ${fieldRow('address','כתובת', lead?.address)}
         ${fieldRow('id_number','ת.ז / ח.פ / עוסק מורשה', lead?.id_number)}
+        <div class="field"><label>סוג המספר</label><select id="entity_type">${leadEntityTypeOptions(lead?.entity_type)}</select></div>
         ${fieldRow('company','חברה', lead?.company)}
         ${fieldRow('source','מקור הפנייה', lead?.source)}
         ${fieldRow('status','סטטוס', lead?.status)}
@@ -1628,7 +1636,7 @@ async function saveLead(e){
     first_name: g('first_name'), last_name: g('last_name'),
     full_name: [g('first_name'), g('last_name')].filter(Boolean).join(' '),
     phone: g('phone'), phone2: g('phone2'), email: g('email'),
-    city: g('city'), address: g('address'), id_number: g('id_number'), company: g('company'),
+    city: g('city'), address: g('address'), id_number: g('id_number'), entity_type: g('entity_type') || null, company: g('company'),
     source: g('source'), status: g('status'), notes: g('notes'),
     handled_by: g('handled_by') || null,
     agreement_status: g('agreement_status') || 'אין הסכם'
@@ -1769,6 +1777,8 @@ async function sendAgreementForLead(id){
   const params = new URLSearchParams({
     type: l.type === 'seller' ? 'seller' : 'buyer',
     recordId: id,
+    recordTable: 'leads',
+    leadType: l.type || '',
     name: personName,
     phone: l.phone || '',
     biz: bizField

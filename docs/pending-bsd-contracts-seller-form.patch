@@ -1,0 +1,413 @@
+diff --git a/bsd-admin-prep.html b/bsd-admin-prep.html
+index 6f90e65..f7d4cf0 100644
+--- a/bsd-admin-prep.html
++++ b/bsd-admin-prep.html
+@@ -144,8 +144,8 @@ footer a{color:var(--navy);text-decoration:none;}
+       </div>
+ 
+       <div class="fg" id="wrap_biz">
+-        <label id="lbl_biz">שם העסק <span class="req">*</span></label>
+-        <input type="text" id="businessName" placeholder="שם העסק הרשום">
++        <label id="lbl_biz">שם תצוגה ב-CRM <span style="font-weight:400;color:#6b7280">(לא נשלח — הלקוח מקליד את השם המשפטי)</span></label>
++        <input type="text" id="businessName" placeholder="שם התצוגה בכרטיס, לעיון בלבד">
+         <div class="field-error" id="e_biz">שדה חובה</div>
+       </div>
+ 
+@@ -231,7 +231,7 @@ footer a{color:var(--navy);text-decoration:none;}
+       <div class="preview-row"><span class="pl">סוג הסכם:</span><span class="pv" id="pv_type">מוכר עסק</span></div>
+       <div class="preview-row"><span class="pl">שם הלקוח:</span><span class="pv" id="pv_name">–</span></div>
+       <div class="preview-row"><span class="pl">טלפון:</span><span class="pv" id="pv_phone">–</span></div>
+-      <div class="preview-row" id="pvrow_biz"><span class="pl">שם העסק:</span><span class="pv" id="pv_biz">–</span></div>
++      <div class="preview-row" id="pvrow_biz"><span class="pl">שם תצוגה (לא נשלח):</span><span class="pv" id="pv_biz">–</span></div>
+       <div class="preview-row" id="pvrow_pay"><span class="pl">תשלום חד-פעמי:</span><span class="pv" id="pv_pay">–</span></div>
+       <div class="preview-row"><span class="pl">מינימום שכר הצלחה:</span><span class="pv" id="pv_minfee">–</span></div>
+       <div class="preview-row" id="pvrow_comm_flat"><span class="pl">אחוז עמלה:</span><span class="pv" id="pv_comm">–</span></div>
+@@ -531,7 +531,7 @@ function validate() {
+   document.getElementById('errBanner').textContent = 'יש למלא את כל שדות החובה';
+   function chk(id,eid){ const v=document.getElementById(id).value.trim(); const e=document.getElementById(eid); if(!v){document.getElementById(id).classList.add('error');e.classList.add('show');ok=false;}else{document.getElementById(id).classList.remove('error');e.classList.remove('show');} }
+   chk('clientName','e_name'); chk('clientPhone','e_phone');
+-  if (agreementType === 'seller') { chk('businessName','e_biz'); chk('oneTimePayment','e_pay'); }
++  if (agreementType === 'seller') { chk('oneTimePayment','e_pay'); document.getElementById('businessName').classList.remove('error'); document.getElementById('e_biz').classList.remove('show'); }
+   chk('agreementDate','e_date');
+ 
+   if (agreementType === 'broker') {
+@@ -573,7 +573,7 @@ const bsdSupabase = window.supabase ? window.supabase.createClient(
+ const NOTES_SAVE_ERROR = 'שמירת ההערות המיוחדות נכשלה. הקישור לא נוצר ולא נשלח, כדי שהטקסט לא ייחתך בוואטסאפ. נסו שוב.';
+ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+ const SIGNING_NOTES_IDENTITY_KEYS = new Set([
+-  'type', 'clientName', 'name', 'clientPhone', 'phone', 'businessName', 'biz', 'recordId', 'brokerId'
++  'type', 'clientName', 'name', 'clientPhone', 'phone', 'businessName', 'biz', 'recordId', 'brokerId', 'pf', 'rid', 'rt', 'leadType'
+ ]);
+ 
+ function normalizeUuid(value) {
+@@ -687,8 +687,20 @@ async function generate() {
+   clearTimeout(notesInputTimer);
+   try {
+     const p = new URLSearchParams();
+-    p.set('clientName', document.getElementById('clientName').value.trim());
+-    p.set('clientPhone', document.getElementById('clientPhone').value.trim());
++    const prefillToken = agreementType === 'seller' ? await signerPrefillToken() : null;
++    if (prefillToken) {
++      p.set('pf', prefillToken);
++    } else {
++      p.set('clientName', document.getElementById('clientName').value.trim());
++      p.set('clientPhone', document.getElementById('clientPhone').value.trim());
++    }
++    const linkedId = currentRecordId();
++    if (agreementType === 'seller' && linkedId) {
++      p.set('rid', linkedId);
++      p.set('rt', waApiRecordTable());
++      const leadType = new URLSearchParams(window.location.search).get('leadType');
++      if (leadType === 'seller' || leadType === 'buyer' || leadType === 'partner') p.set('leadType', leadType);
++    }
+ 
+     if (agreementType === 'broker') {
+       const brokerId = document.getElementById('brokerId').value.trim();
+@@ -712,7 +724,6 @@ async function generate() {
+       p.set('agreementDate', document.getElementById('agreementDate').value);
+     } else {
+       if (agreementType === 'seller') {
+-        p.set('businessName', document.getElementById('businessName').value.trim());
+         p.set('oneTimePayment', numFrom('oneTimePayment'));
+       }
+       p.set('minFee', numFrom('minFee'));
+@@ -824,6 +835,21 @@ async function sendWAApi() {
+ // link, and carries one short respectful line plus a short BSD link (/go/<code>) that opens the same signing page.
+ // The signing page and the signing flow are unchanged. If the short link cannot be created, the regular link is used.
+ const WA_SHORT_LINK_BASE = 'https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/go/';
++async function signerPrefillToken() {
++  try {
++    if (!bsdSupabase) return null;
++    const id = currentRecordId();
++    if (!id) return null;
++    const { data, error } = await bsdSupabase.rpc('create_agreement_signer_prefill', {
++      p_table: waApiRecordTable(), p_id: id
++    });
++    if (error || !data || !/^[A-Za-z0-9]{16,24}$/.test(String(data))) return null;
++    return String(data);
++  } catch (e) {
++    return null;
++  }
++}
++
+ async function shortAgreementLink(url) {
+   try {
+     if (!bsdSupabase) return url;
+diff --git a/bsd-contract-signing-seller.html b/bsd-contract-signing-seller.html
+index 88c22a5..d3bf946 100644
+--- a/bsd-contract-signing-seller.html
++++ b/bsd-contract-signing-seller.html
+@@ -56,7 +56,7 @@ body{font-family:'Heebo',Arial,sans-serif;background:var(--bg);color:#1A1A2E;dir
+ .fg label .locked-tag{font-size:11px;font-weight:400;color:var(--gray);margin-right:4px;}
+ .fg input,.fg select{border:1.5px solid var(--border);border-radius:8px;padding:10px 13px;font-family:'Heebo',Arial,sans-serif;font-size:14px;direction:rtl;color:#1A1A2E;background:var(--white);transition:border-color .2s;width:100%;}
+ .fg input:focus,.fg select:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(27,42,74,.08);}
+-.fg input.error{border-color:var(--red);}
++.fg input.error,.fg select.error{border-color:var(--red);}
+ .fg input[readonly]{background:#F0F2F7;color:#4A5568;cursor:default;}
+ .locked-display{background:#F0F2F7;color:#1A1A2E;border:1.5px solid var(--border);border-radius:8px;padding:10px 13px;font-family:'Heebo',Arial,sans-serif;font-size:14px;direction:rtl;width:100%;cursor:default;user-select:text;-webkit-user-select:text;min-height:42px;display:flex;align-items:center;}
+ .err{font-size:12px;color:var(--red);margin-top:3px;display:none;}
+@@ -180,21 +180,25 @@ footer a{color:var(--navy);text-decoration:none;}
+       </div>
+ 
+       <div class="fg seller-only">
+-        <label>ת.ז. / ח.פ. <span class="req">*</span></label>
+-        <input type="text" id="f_id" placeholder="מספר ת.ז. או ח.פ.">
+-        <div class="err" id="err_id">שדה חובה</div>
++        <label>סוג המספר <span class="req">*</span></label>
++        <select id="f_id_kind">
++          <option value="">בחרו</option>
++          <option value="company">ח.פ.</option>
++          <option value="osek">עוסק מורשה</option>
++        </select>
++        <div class="err" id="err_id_kind">יש לבחור ח.פ. או עוסק מורשה</div>
+       </div>
+ 
+-      <div class="fg">
+-        <label id="lbl_bizField">שם העסק <span class="req" id="bizReq">*</span> <span class="locked-tag" id="bizLock"></span></label>
+-        <input type="text" id="f_biz" placeholder="שם העסק הרשום">
+-        <div class="err" id="err_biz">שדה חובה</div>
++      <div class="fg seller-only">
++        <label>ח.פ. / עוסק מורשה <span class="req">*</span></label>
++        <input type="text" id="f_id" inputmode="numeric" maxlength="20" placeholder="9 ספרות" dir="ltr" style="text-align:right">
++        <div class="err" id="err_id">יש להזין 9 ספרות</div>
+       </div>
+ 
+       <div class="fg">
+-        <label id="lbl_entityField">חברה / עוסק <span class="req" id="entityReq">*</span></label>
+-        <input type="text" id="f_entity" placeholder="עוסק מורשה / חברה בע״מ">
+-        <div class="err" id="err_entity">שדה חובה</div>
++        <label id="lbl_bizField">שם משפטי של העסק <span class="req" id="bizReq">*</span></label>
++        <input type="text" id="f_biz" placeholder="השם הרשום, למשל ג'ירפה בע״מ" autocomplete="organization">
++        <div class="err" id="err_biz">יש להקליד את השם המשפטי של העסק</div>
+       </div>
+ 
+       <div class="fg">
+@@ -331,9 +335,9 @@ footer a{color:var(--navy);text-decoration:none;}
+         <td style="padding:8px 12px;" id="pr_id"></td>
+       </tr>
+       <tr>
+-        <td style="padding:8px 12px;font-weight:600;">שם העסק:</td>
++        <td style="padding:8px 12px;font-weight:600;">שם משפטי:</td>
+         <td style="padding:8px 12px;" id="pr_biz"></td>
+-        <td style="padding:8px 12px;font-weight:600;">חברה / עוסק:</td>
++        <td style="padding:8px 12px;font-weight:600;">ח.פ. / עוסק:</td>
+         <td style="padding:8px 12px;" id="pr_entity"></td>
+       </tr>
+       <tr style="background:#F4F5F7;">
+@@ -376,6 +380,7 @@ footer a{color:var(--navy);text-decoration:none;}
+ 
+ <script>window.BSD_SIGNING_PAGE = 'seller';</script>
+ <script src="bsd-signing-delivery.js?v=20261019"></script>
++<script src="bsd-seller-fields.js?v=20261109"></script>
+ <script>
+ /* ─────────── GLOBALS ─────────── */
+ let hasSigned = false, sigDataUrl = null, confirmTime = null;
+@@ -598,13 +603,36 @@ document.addEventListener('DOMContentLoaded', () => {
+     hasParams = true;
+   }
+ 
+-  const allowNameEdit = p.get('allowNameEdit') === '1';
+-  if (p.get('clientName')) {
+-    setField('f_name', p.get('clientName'), !allowNameEdit);
+-    if (!allowNameEdit) document.getElementById('nameLock').textContent='(נעול)';
++  // Name and phone come from the CRM card. A pf token is preferred (no extra PII in the URL).
++  // Older links still pass clientName / clientPhone and keep working. The legal business
++  // name is never prefilled, even when an older link still carries businessName.
++  async function applySignerPrefill(params, allowNameEdit) {
++    let name = params.get('clientName') || '';
++    let phone = params.get('clientPhone') || '';
++    const token = (params.get('pf') || '').trim();
++    if (token && (!name || !phone) && bsdNotesClient) {
++      try {
++        const { data, error } = await bsdNotesClient.rpc('get_agreement_signer_prefill', { p_token: token });
++        if (!error && data && typeof data === 'object') {
++          if (!name && data.name) name = String(data.name);
++          if (!phone && data.phone) phone = String(data.phone);
++        }
++      } catch (err) {
++        console.warn('[signer-prefill]', err);
++      }
++    }
++    if (name) {
++      setField('f_name', name, !allowNameEdit);
++      if (!allowNameEdit) document.getElementById('nameLock').textContent = '(נעול)';
++    }
++    if (phone) {
++      setField('f_phone', phone, true);
++      document.getElementById('phoneLock').textContent = '(נעול)';
++    }
++    return !!(name || phone);
+   }
+-  if (p.get('clientPhone')) { setField('f_phone', p.get('clientPhone'), true); document.getElementById('phoneLock').textContent='(נעול)'; }
+-  if (p.get('businessName')){ setField('f_biz', p.get('businessName'), true); document.getElementById('bizLock').textContent='(נעול)'; }
++  const allowNameEdit = p.get('allowNameEdit') === '1';
++  const prefillReady = applySignerPrefill(p, allowNameEdit);
+ 
+   if (p.get('agreementDate')) {
+     const pts = p.get('agreementDate').split('-');
+@@ -628,7 +656,9 @@ document.addEventListener('DOMContentLoaded', () => {
+   applyCommission(p, 'seller');
+   if (p.get('notesId') || (p.get('notes') && p.get('notes').trim())) hasParams = true;
+   agreementNotesReady = loadAgreementNotes(p);
+-  if (hasParams) document.getElementById('prefillBanner').classList.add('show');
++  prefillReady.then(function (filled) {
++    if (filled || hasParams) document.getElementById('prefillBanner').classList.add('show');
++  });
+ 
+   initSigPad();
+ });
+@@ -711,8 +741,25 @@ function validate() {
+     if (!v) { document.getElementById(id).classList.add('error'); e.classList.add('show'); ok=false; }
+     else { document.getElementById(id).classList.remove('error'); e.classList.remove('show'); }
+   }
+-  req('f_name','err_name'); req('f_id','err_id'); req('f_biz','err_biz');
+-  req('f_entity','err_entity'); req('f_address','err_address'); req('f_city','err_city');
++  req('f_name','err_name'); req('f_city','err_city');
++  const sellerErrors = (window.BsdSellerFields ? BsdSellerFields.sellerFieldErrors({
++    legalName: document.getElementById('f_biz').value,
++    idNumber: document.getElementById('f_id').value,
++    idKind: document.getElementById('f_id_kind').value,
++    address: document.getElementById('f_address').value
++  }) : {});
++  function mark(id, errId, message) {
++    const bad = !!message;
++    document.getElementById(id).classList.toggle('error', bad);
++    const e = document.getElementById(errId);
++    if (message) e.textContent = message;
++    e.classList.toggle('show', bad);
++    if (bad) ok = false;
++  }
++  mark('f_biz', 'err_biz', sellerErrors.legalName);
++  mark('f_id', 'err_id', sellerErrors.idNumber);
++  mark('f_id_kind', 'err_id_kind', sellerErrors.idKind);
++  mark('f_address', 'err_address', sellerErrors.address);
+ 
+   // Phone
+   const ph = document.getElementById('f_phone').value.trim();
+@@ -739,7 +786,7 @@ function validate() {
+ async function submitForm() {
+   try { await agreementNotesReady; } catch (e) {}
+   if (!validate()) {
+-    const firstErr = document.querySelector('.fg input.error, .sig-err');
++    const firstErr = document.querySelector('.fg input.error, .fg select.error, .sig-err');
+     if (firstErr) firstErr.scrollIntoView({behavior:'smooth',block:'center'});
+     return;
+   }
+@@ -758,8 +805,9 @@ async function submitForm() {
+   const comm   = commissionSummaryText || (document.getElementById('ct_commission').textContent + '%');
+   const sigTime= confirmTime ? confirmTime.toLocaleDateString('he-IL')+' '+confirmTime.toLocaleTimeString('he-IL') : dt;
+ 
+-  const id_n   = document.getElementById('f_id').value;
+-  const entity = document.getElementById('f_entity').value;
++  const idKind = document.getElementById('f_id_kind').value;
++  const id_n   = (window.BsdSellerFields ? BsdSellerFields.israeliRegistrationNumber(document.getElementById('f_id').value) : document.getElementById('f_id').value);
++  const entity = (window.BsdSellerFields ? BsdSellerFields.entityKindLabel(idKind) : '');
+   const addr   = document.getElementById('f_address').value+', '+document.getElementById('f_city').value+(document.getElementById('f_zip').value?' '+document.getElementById('f_zip').value:'');
+   const ot     = document.getElementById('ct_oneTime').textContent;
+ 
+@@ -771,8 +819,8 @@ async function submitForm() {
+ `🔔 *הסכם חתום חדש – BSD (מוכר עסק)*
+ 
+ 👤 *שם:* ${name}
+-🏢 *עסק:* ${biz}
+-📋 *ח.פ./ת.ז.:* ${id_n}
++🏢 *שם משפטי:* ${biz}
++📋 *${entity || 'ח.פ. / עוסק'}:* ${id_n}
+ 📱 *טלפון:* ${phone}
+ 📧 *אימייל:* ${email}
+ 🏠 *כתובת:* ${addr}
+@@ -794,7 +842,12 @@ async function submitForm() {
+   // admin-prep), so the signature is saved to the exact CRM card. The server still requires the phone to match it.
+   const bsdLinkParams = new URLSearchParams(window.location.search);
+   const bsdUuid = v => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || '')) ? String(v) : undefined;
+-  const bsdRecordId = bsdLinkParams.get('rt') === 'businesses' ? bsdUuid(bsdLinkParams.get('rid')) : undefined;
++  const bsdRt = bsdLinkParams.get('rt');
++  const bsdTable = bsdRt === 'leads' ? 'leads' : 'businesses';
++  const bsdLeadType = bsdTable === 'leads'
++    ? (['buyer', 'partner', 'seller'].includes(bsdLinkParams.get('leadType') || '') ? bsdLinkParams.get('leadType') : 'seller')
++    : undefined;
++  const bsdRecordId = (!bsdRt || bsdRt === 'businesses' || bsdRt === 'leads') ? bsdUuid(bsdLinkParams.get('rid')) : undefined;
+ 
+   await BsdSigningDelivery.begin({
+     pageKey: 'seller',
+@@ -814,7 +867,8 @@ async function submitForm() {
+         filename: filename,
+         pdfDoc: pdf,
+         body: {
+-          table_name: 'businesses',
++          table_name: bsdTable,
++          lead_type: bsdLeadType,
+           record_id: bsdRecordId,
+           phone: phone,
+           agreement_number: cid,
+@@ -825,9 +879,10 @@ async function submitForm() {
+           details: {
+             business_name: biz,
+             id_number: id_n,
++            id_kind: idKind,
+             entity: entity,
+-            address: document.getElementById('f_address').value,
+-            city: document.getElementById('f_city').value
++            address: document.getElementById('f_address').value.trim(),
++            city: document.getElementById('f_city').value.trim()
+           }
+         }
+       };
+diff --git a/bsd-seller-fields.js b/bsd-seller-fields.js
+new file mode 100644
+index 0000000..de3cb3d
+--- /dev/null
++++ b/bsd-seller-fields.js
+@@ -0,0 +1,40 @@
++/* Seller agreement field rules. Classic script so the signing page and node tests share it. */
++(function (root) {
++  'use strict';
++
++  function israeliRegistrationNumber(value) {
++    var digits = String(value == null ? '' : value).replace(/\D/g, '');
++    return /^\d{9}$/.test(digits) ? digits : '';
++  }
++
++  function entityKindLabel(kind) {
++    if (kind === 'company' || kind === 'ח.פ.' || kind === 'ח.פ') return 'ח.פ.';
++    if (kind === 'osek' || kind === 'עוסק מורשה') return 'עוסק מורשה';
++    return '';
++  }
++
++  function sellerFieldErrors(fields) {
++    var errors = {};
++    if (!String((fields && fields.legalName) || '').trim()) {
++      errors.legalName = 'יש להקליד את השם המשפטי של העסק';
++    }
++    if (!israeliRegistrationNumber(fields && fields.idNumber)) {
++      errors.idNumber = 'יש להזין 9 ספרות';
++    }
++    if (!entityKindLabel(fields && fields.idKind)) {
++      errors.idKind = 'יש לבחור ח.פ. או עוסק מורשה';
++    }
++    if (!String((fields && fields.address) || '').trim()) {
++      errors.address = 'יש להזין כתובת';
++    }
++    return errors;
++  }
++
++  var api = {
++    israeliRegistrationNumber: israeliRegistrationNumber,
++    entityKindLabel: entityKindLabel,
++    sellerFieldErrors: sellerFieldErrors
++  };
++  root.BsdSellerFields = api;
++  if (typeof module !== 'undefined' && module.exports) module.exports = api;
++})(typeof window !== 'undefined' ? window : globalThis);
+diff --git a/tests/seller-fields.test.mjs b/tests/seller-fields.test.mjs
+new file mode 100644
+index 0000000..4fb8a6a
+--- /dev/null
++++ b/tests/seller-fields.test.mjs
+@@ -0,0 +1,46 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { createRequire } from 'node:module';
++import { dirname, join } from 'node:path';
++import { fileURLToPath } from 'node:url';
++
++const require = createRequire(import.meta.url);
++const api = require(join(dirname(fileURLToPath(import.meta.url)), '..', 'bsd-seller-fields.js'));
++
++const GERESH = "מאפיית ג׳וזף";
++const GERSHAYIM = "ג'ירפה בע״מ";
++
++test('a legal name with geresh or gershayim is accepted as typed', () => {
++  for (const name of [GERESH, GERSHAYIM, "בעמ ג'ו"]) {
++    const errors = api.sellerFieldErrors({
++      legalName: name,
++      idNumber: '514172036',
++      idKind: 'company',
++      address: 'הרצל 1',
++    });
++    assert.deepEqual(errors, {});
++    assert.equal(name.includes('׳') || name.includes("'") || name.includes('״'), true);
++  }
++});
++
++test('invalid company numbers are rejected', () => {
++  for (const id of ['', '12345678', '1234567890', '12-345', 'abcdefgh', '1234 5678']) {
++    const errors = api.sellerFieldErrors({
++      legalName: GERESH,
++      idNumber: id,
++      idKind: 'osek',
++      address: 'רחוב 1',
++    });
++    assert.equal(errors.idNumber, 'יש להזין 9 ספרות', id);
++  }
++});
++
++test('separators are fine when nine digits remain, and address and kind are required', () => {
++  assert.equal(api.israeliRegistrationNumber('51-417-2036'), '514172036');
++  assert.equal(api.entityKindLabel('osek'), 'עוסק מורשה');
++  const missing = api.sellerFieldErrors({ legalName: '  ', idNumber: '514172036', idKind: '', address: '' });
++  assert.ok(missing.legalName);
++  assert.ok(missing.idKind);
++  assert.ok(missing.address);
++  assert.equal(missing.idNumber, undefined);
++});

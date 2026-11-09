@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendSignedCopy } from "../_shared/whatsapp-signed-copy.ts";
+import { agreementCrmUpdate, isSellerAgreement } from "./fields.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -134,6 +135,24 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Missing required agreement data", code: "missing_fields" }, 400);
   }
 
+  // Seller card fields are checked before any storage or CRM write, so a bad
+  // company number never lands in id_number and never replaces the listing name.
+  const mapped = agreementCrmUpdate({
+    tableName: tableName as "businesses" | "leads" | "brokers",
+    leadType,
+    details,
+    signerName,
+    signerEmail,
+  });
+  if ("error" in mapped) {
+    const sellerErrors: Record<string, string> = {
+      invalid_id_number: "מספר הח.פ / עוסק מורשה חייב להיות 9 ספרות",
+      missing_legal_name: "חסר שם משפטי של העסק",
+      missing_address: "חסרה כתובת",
+    };
+    return json(req, { error: sellerErrors[mapped.error] || "פרטי ההסכם לא תקינים", code: mapped.error }, 400);
+  }
+
   let recordId = validUuid(recordIdInput) ? recordIdInput : "";
   if (!recordId) {
     if (tableName === "brokers") {
@@ -221,31 +240,13 @@ Deno.serve(async (req: Request) => {
     agreement_pdf_path: storagePath,
     agreement_pdf_uploaded_at: pdfBase64 ? now : undefined,
     agreement_email_last_error: null,
+    ...mapped.update,
   };
 
   if (tableName === "leads") {
     update.agreement_sent = true;
     update.agreement_signed = true;
     update.agreement_signed_date = now.slice(0, 10);
-    update.full_name = signerName || undefined;
-    update.id_number = safeText(details.id_number, 80) || undefined;
-    update.company = safeText(details.entity, 200) || undefined;
-    update.email = signerEmail || undefined;
-    update.address = safeText(details.address, 500) || undefined;
-    update.city = safeText(details.city, 120) || undefined;
-  } else if (tableName === "businesses") {
-    update.owner_name = signerName || undefined;
-    update.internal_name = safeText(details.business_name, 250) || undefined;
-    update.id_number = safeText(details.id_number, 80) || undefined;
-    update.entity_type = safeText(details.entity, 120) || undefined;
-    update.owner_email = signerEmail || undefined;
-    update.address = safeText(details.address, 500) || undefined;
-    update.city = safeText(details.city, 120) || undefined;
-  } else {
-    update.full_name = signerName || undefined;
-    update.email = signerEmail || undefined;
-    update.address = safeText(details.address, 500) || undefined;
-    update.city = safeText(details.city, 120) || undefined;
   }
   for (const key of Object.keys(update)) {
     if (update[key] === undefined) delete update[key];
@@ -271,6 +272,11 @@ Deno.serve(async (req: Request) => {
       signerEmail ? `אימייל: ${signerEmail}` : "",
       `מספר הסכם: ${agreementNumber}`,
       `תאריך חתימה: ${new Date().toLocaleString("he-IL", { timeZone: "Asia/Jerusalem" })}`,
+      isSellerAgreement(tableName, leadType) && (update.legal_name || update.company)
+        ? `שם משפטי: ${update.legal_name || update.company}` : "",
+      isSellerAgreement(tableName, leadType) && update.id_number
+        ? `ח.פ / עוסק מורשה: ${update.id_number}${update.entity_type ? " (" + update.entity_type + ")" : ""}` : "",
+      isSellerAgreement(tableName, leadType) && update.address ? `כתובת: ${update.address}` : "",
       "",
       "קובץ ה PDF החתום מצורף למייל זה ונשמר גם בכרטיס הלקוח במערכת BSD CRM.",
     ].filter(Boolean);
