@@ -2,19 +2,21 @@
 (function () {
   'use strict';
   const printStyles = String.raw`
-    @page { size: A4; margin: 12mm; }
+    @page { size: A4; margin: 8mm; }
     html,body {direction:rtl;font-family:Arial,sans-serif;color:#17243a;background:#fff;font-size:14pt;}
-    h1{font-size:18pt;margin:0 0 8px;border-bottom:3px solid #bea05b;padding-bottom:8px}
-    h2{font-size:15pt;margin:12px 0 6px}
+    h1{font-size:22pt;margin:0 0 8px;border-bottom:3px solid #bea05b;padding-bottom:8px}
+    h2{font-size:17pt;margin:12px 0 6px}
     .meta{font-size:14pt;margin-bottom:8px}.tbl{width:100%;border-collapse:collapse;font-size:14pt}
-    .tbl td,.tbl th{border:1px solid #bbc2cb;padding:5px;vertical-align:top;text-align:right}
-    .tbl th{background:#f0f1f4}.remarks{height:26px;min-width:90px}.tbl td:nth-child(2){width:56%}.tbl td:nth-child(3){width:30%}
-    .value-box{white-space:pre-wrap}
-    .roomy-box{white-space:pre-wrap;min-height:32mm;line-height:1.45}
+    .tbl td,.tbl th{border:1px solid #bbc2cb;padding:6px 8px;vertical-align:top;text-align:right}
+    .tbl th{background:#f0f1f4}.remarks{height:32px;min-width:120px}
+    .tbl td:nth-child(1),.tbl th:nth-child(1){width:22%}
+    .tbl td:nth-child(2){width:43%}.tbl td:nth-child(3){width:35%}
+    .value-box{white-space:pre-wrap;min-height:8mm}
+    .roomy-box{white-space:pre-wrap;min-height:24mm;line-height:1.45}
     .history{font-size:14pt;white-space:pre-wrap;overflow-wrap:anywhere}.source{margin:5px 0;line-height:1.5;break-inside:avoid}
-    .line{border-bottom:1px solid #aeb4bf;height:28px}
+    .line{border-bottom:1px solid #aeb4bf;height:34px}
     .meeting-section{break-inside:avoid}.screenonly{margin:12px 0}
-    @media print{.screenonly{display:none!important}.page-break{break-before:page} body,table,td,th,p,div,span,strong{font-size:14pt!important;line-height:1.35}.roomy-box{font-size:12pt!important;line-height:1.4!important;min-height:28mm}}
+    @media print{.screenonly{display:none!important}.page-break{break-before:page} body,table,td,th,p,div,span,strong{font-size:14pt!important;line-height:1.4} h1{font-size:22pt!important} h2{font-size:17pt!important}}
   `;
   const dateToday = () => new Date().toLocaleDateString('en-CA');
   function contentApi() {
@@ -82,7 +84,7 @@
     overlay.dir = 'rtl';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#f3f5f8;overflow:auto;padding:16px;font-family:Arial,sans-serif';
     overlay.innerHTML = `<style id="bsdPrepStyle">${printStyles}</style>
-      <div style="max-width:850px;margin:auto">
+      <div style="max-width:210mm;margin:auto">
       <div class="screenonly" style="display:flex;flex-wrap:wrap;gap:8px">
         <button type="button" id="bsdPrepClose">סגור</button>
         <button type="button" id="bsdPrepPrint">הדפסה / שמירה כ PDF</button>
@@ -96,7 +98,7 @@
         <label>סיכום הפגישה <textarea id="bsdPrepSummary" rows="5" style="width:100%"></textarea></label>
         <label>החלטות והמשך טיפול <textarea id="bsdPrepNext" rows="3" style="width:100%"></textarea></label>
       </div>
-      <div id="bsdPrepPaper" style="background:white;padding:12mm;margin:10px auto;width:210mm;max-width:100%;box-sizing:border-box">${api.renderPaper(biz, ctx, {})}</div>
+      <div id="bsdPrepPaper" style="background:white;padding:6mm;margin:10px auto;width:210mm;max-width:100%;box-sizing:border-box">${api.renderPaper(biz, ctx, {})}</div>
       </div>`;
     document.body.appendChild(overlay);
     const parentState = history.state && typeof history.state === 'object' ? history.state : {};
