@@ -310,8 +310,12 @@
       ['מלאי וציוד', ['equipment', 'inventory']],
       ['סיבת מכירה', ['sale_reason', 'reason_for_sale']]
     ];
-    const row = (label, value, roomy) => `<tr${roomy ? ' class="prep-research"' : ''}><td>${esc(label)}</td><td><div class="${roomy ? 'roomy-box' : 'value-box'}">${esc(value)}</div></td><td class="remarks">${esc((edits && edits[label]) || '')}</td></tr>`;
-    const head = (label, value, roomy) => `<tr${roomy ? ' class="prep-research"' : ''}><th>${esc(label)}</th><td><div class="${roomy ? 'roomy-box' : 'value-box'}">${esc(value)}</div></td><td class="remarks"></td></tr>`;
+    const row = (label, value) => `<tr><td>${esc(label)}</td><td><div class="value-box">${esc(value)}</div></td><td class="remarks">${esc((edits && edits[label]) || '')}</td></tr>`;
+    const head = (label, value) => `<tr><th>${esc(label)}</th><td><div class="value-box">${esc(value)}</div></td><td class="remarks"></td></tr>`;
+    const wide = (label, value) => {
+      const empty = !String(value == null ? '' : value).trim();
+      return `<tr><th>${esc(label)}</th><td><div class="${empty ? 'write-box' : 'value-box'}">${esc(value)}</div></td></tr>`;
+    };
     const rows = fields.map(([label, keys]) => row(label, pick(biz, keys))).join('');
     const details = [
       ['שם העסק', names.businessName],
@@ -325,10 +329,10 @@
     ];
     const prepCtx = Object.assign({ biz }, ctx || {});
     const sections = [
-      ['מהות שיחת הטלפון', proseCall(prepCtx)],
+      ['מהות השיחה', proseCall(prepCtx)],
       ['מה העסק עושה', whatBusinessDoes(biz)],
-      ['חקר שוק קצר', found.research, true],
-      ['ביקורות וממצאים', found.reviews, true]
+      ['חקר שוק', found.research],
+      ['ממצאים וביקורות', found.reviews]
     ];
     const ops = [
       ['מי הלקוחות', profile.customers],
@@ -336,17 +340,17 @@
       [profile.offeringsLabel, profile.offerings]
     ];
     const detailRows = details.map(([label, value]) => head(label, value)).join('');
-    const sectionRows = sections.map(([label, value, roomy]) => head(label, value, roomy)).join('');
-    const opsRows = ops.map(([label, value]) => head(label, value, true)).join('');
+    const sectionRows = sections.map(([label, value]) => wide(label, value)).join('');
+    const opsRows = ops.map(([label, value]) => wide(label, value)).join('');
     const lines = n => Array.from({ length: n }, () => '<div class="line"></div>').join('');
     return `<h1>${esc(names.heading || 'טופס פגישה')}</h1>
       <div class="meta"><strong>BSD | טופס פגישה עם בעל עסק</strong> &nbsp; <strong>תאריך פגישה:</strong> ${esc((edits && edits.date) || '________________')} &nbsp; <strong>מספר עסק:</strong> ${esc(biz.business_number || '')}</div>
-      <section><h2>פרטי העסק ואיש הקשר</h2><table class="tbl"><thead><tr><th>פרט</th><th>מידע קיים</th><th>תיקון / השלמה</th></tr></thead><tbody>${detailRows}</tbody></table></section>
-      <section><h2>רקע לפגישה</h2><table class="tbl"><thead><tr><th>נושא</th><th>מה ידוע לנו</th><th>תיקון / הערות</th></tr></thead><tbody>${sectionRows}</tbody></table></section>
-      <section><h2>לקוחות, עובדים ומוצרים</h2><table class="tbl"><thead><tr><th>נושא</th><th>מידע קיים</th><th>השלמה בכתב יד</th></tr></thead><tbody>${opsRows}</tbody></table></section>
-      <section><h2>נתונים עסקיים</h2><table class="tbl"><thead><tr><th>נושא</th><th>מידע קיים</th><th>תיקון / השלמה</th></tr></thead><tbody>${rows}</tbody></table></section>
-      <section class="meeting-section"><h2>עיקרי הפגישה והשלמות</h2>${edits && edits.summary ? `<p style="white-space:pre-wrap">${esc(edits.summary)}</p>` : lines(8)}</section>
-      <section class="meeting-section"><h2>החלטות והמשך טיפול</h2>${edits && edits.next ? `<p style="white-space:pre-wrap">${esc(edits.next)}</p>` : lines(4)}</section>`;
+      <section><h2>פרטי העסק ואיש הקשר</h2><table class="tbl facts"><thead><tr><th>פרט</th><th>מידע קיים</th><th>תיקון / השלמה</th></tr></thead><tbody>${detailRows}</tbody></table></section>
+      <section><h2>רקע לפגישה</h2><table class="tbl prose"><tbody>${sectionRows}</tbody></table></section>
+      <section><h2>לקוחות, עובדים ומוצרים</h2><table class="tbl prose"><tbody>${opsRows}</tbody></table></section>
+      <section><h2>נתונים עסקיים</h2><table class="tbl facts"><thead><tr><th>נושא</th><th>מידע קיים</th><th>תיקון / השלמה</th></tr></thead><tbody>${rows}</tbody></table></section>
+      <section class="meeting-section"><h2>עיקרי הפגישה והשלמות</h2>${edits && edits.summary ? `<p style="white-space:pre-wrap">${esc(edits.summary)}</p>` : lines(5)}</section>
+      <section class="meeting-section"><h2>החלטות והמשך טיפול</h2>${edits && edits.next ? `<p style="white-space:pre-wrap">${esc(edits.next)}</p>` : lines(3)}</section>`;
   }
 
   const api = {
