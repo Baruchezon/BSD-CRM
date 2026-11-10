@@ -81,8 +81,15 @@
       .replace(/[—–]/g, ', ')
       .replace(/BSD-[A-Z0-9-]+/gi, '')
       .replace(/\b0\d[\d\-]{7,}\b/g, '')
-      .replace(/\s+/g, ' ')
+      .split('\n')
+      .map(line => line.replace(/^[-]\s*/, '').replace(/[ \t]+/g, ' ').trim())
+      .filter(Boolean)
+      .join('\n')
       .trim();
+  }
+
+  function isHeadingOnly(s) {
+    return /טענות העסק|דיווח |חקר רקע|מידע נוסף/.test(s) && !/שירות|גוגל|\d{2,}/.test(s);
   }
 
   function period(s) {
@@ -171,7 +178,7 @@
     const lines = [];
     pieces(stripNoise(value)).forEach(piece => {
       if (lines.length >= max) return;
-      if (!piece || isStatusPiece(piece) || isContactOnly(piece) || EMPTY_LINE.test(piece)) return;
+      if (!piece || isStatusPiece(piece) || isContactOnly(piece) || isHeadingOnly(piece) || EMPTY_LINE.test(piece)) return;
       const line = clip(piece, 110);
       if (line) lines.push(line);
     });
@@ -187,7 +194,7 @@
   }
 
   function profileBits(blob, testRe) {
-    return pieces(stripNoise(blob)).filter(s => testRe.test(s) && !isStatusPiece(s) && !isContactOnly(s)).map(s => clip(s, 120));
+    return pieces(stripNoise(blob)).filter(s => testRe.test(s) && !isStatusPiece(s) && !isContactOnly(s) && !isHeadingOnly(s)).map(s => clip(s, 120));
   }
 
   function operationsProfile(biz, ctx) {
@@ -237,7 +244,8 @@
     splitSections(value).forEach(section => {
       if (/דיווח|שיחה/.test(section.title)) return;
       pieces(section.body).forEach(piece => {
-        if (isStatusPiece(piece) || isContactOnly(piece) || EMPTY_LINE.test(piece)) return;
+        if (isStatusPiece(piece) || isContactOnly(piece) || isHeadingOnly(piece) || EMPTY_LINE.test(piece)) return;
+        if (/לקוח/.test(piece) && !REVIEW.test(piece) && !/שירות|מוצר|טיפול/.test(piece)) return;
         if (REVIEW.test(piece)) reviews.push(piece);
         else research.push(piece);
       });
