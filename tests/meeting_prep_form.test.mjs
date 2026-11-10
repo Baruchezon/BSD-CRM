@@ -171,7 +171,12 @@ test('אנטל: customers, tenure and treatments use only real lines, with a cli
   const html = api.renderPaper(antal, ctx, {});
   assert.match(html, /לקוחות, עובדים ומוצרים/);
   assert.match(html, /סוגי טיפולים/);
-  assert.match(html, /class="line"/g) && assert.ok((html.match(/class="line"/g) || []).length >= 12);
+  assert.match(html, /<table class="tbl prose">/);
+  assert.match(html, /<th>מהות השיחה<\/th><td>/);
+  assert.match(html, /<th>חקר שוק<\/th><td>/);
+  assert.match(html, /<th>ממצאים וביקורות<\/th><td>/);
+  assert.doesNotMatch(html, /מהות השיחה<\/th><td>[^<]*<\/td><td class="remarks"/);
+  assert.ok((html.match(/class="line"/g) || []).length === 8);
 });
 
 test('form file keeps print, save and back, and the research button is screen-only', () => {
@@ -185,14 +190,15 @@ test('form file keeps print, save and back, and the research button is screen-on
   assert.match(form, /meeting-prep-research/);
   assert.match(form, /market_research_brief/);
   assert.doesNotMatch(form, /לא ידוע|לא תועד/);
-  assert.match(read('businesses.html'), /meetingPrepContent\.js\?v=202611100530/);
-  assert.match(read('businesses-preview.html'), /meetingPrepContent\.js\?v=202611100530/);
+  assert.match(read('businesses.html'), /meetingPrepContent\.js\?v=202611100710/);
+  assert.match(read('businesses-preview.html'), /meetingPrepContent\.js\?v=202611100710/);
   assert.match(form, /font-size:14pt/);
-  assert.match(form, /font-size:22pt/);
-  assert.match(form, /margin: 8mm/);
+  assert.match(form, /font-size:16pt/);
+  assert.match(form, /margin: 7mm/);
+  assert.match(form, /\.tbl\.prose td\{width:80%\}/);
   assert.doesNotMatch(form, /font-size:12pt/);
-  assert.match(read('version.json'), /202611100530/);
-  assert.match(read('businesses.html'), /PAGE_BUILD = '202611100530'/);
+  assert.match(read('version.json'), /202611100710/);
+  assert.match(read('businesses.html'), /PAGE_BUILD = '202611100710'/);
 });
 
 test('migration is additive and the edge function does not email or read CRM notes', () => {

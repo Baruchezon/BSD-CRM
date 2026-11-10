@@ -2,21 +2,22 @@
 (function () {
   'use strict';
   const printStyles = String.raw`
-    @page { size: A4; margin: 8mm; }
-    html,body {direction:rtl;font-family:Arial,sans-serif;color:#17243a;background:#fff;font-size:14pt;}
-    h1{font-size:22pt;margin:0 0 8px;border-bottom:3px solid #bea05b;padding-bottom:8px}
-    h2{font-size:17pt;margin:12px 0 6px}
-    .meta{font-size:14pt;margin-bottom:8px}.tbl{width:100%;border-collapse:collapse;font-size:14pt}
-    .tbl td,.tbl th{border:1px solid #bbc2cb;padding:6px 8px;vertical-align:top;text-align:right}
-    .tbl th{background:#f0f1f4}.remarks{height:32px;min-width:120px}
-    .tbl td:nth-child(1),.tbl th:nth-child(1){width:22%}
-    .tbl td:nth-child(2){width:43%}.tbl td:nth-child(3){width:35%}
-    .value-box{white-space:pre-wrap;min-height:8mm}
-    .roomy-box{white-space:pre-wrap;min-height:24mm;line-height:1.45}
-    .history{font-size:14pt;white-space:pre-wrap;overflow-wrap:anywhere}.source{margin:5px 0;line-height:1.5;break-inside:avoid}
-    .line{border-bottom:1px solid #aeb4bf;height:34px}
-    .meeting-section{break-inside:avoid}.screenonly{margin:12px 0}
-    @media print{.screenonly{display:none!important}.page-break{break-before:page} body,table,td,th,p,div,span,strong{font-size:14pt!important;line-height:1.4} h1{font-size:22pt!important} h2{font-size:17pt!important}}
+    @page { size: A4; margin: 7mm; }
+    html,body {direction:rtl;font-family:Arial,sans-serif;color:#17243a;background:#fff;font-size:14pt;line-height:1.25;}
+    h1{font-size:16pt;margin:0 0 3px;border-bottom:2px solid #bea05b;padding-bottom:3px}
+    h2{font-size:15pt;margin:5px 0 2px}
+    .meta{font-size:14pt;margin-bottom:3px}.tbl{width:100%;border-collapse:collapse;font-size:14pt}
+    .tbl td,.tbl th{border:1px solid #bbc2cb;padding:2px 5px;vertical-align:top;text-align:right}
+    .tbl th{background:#f0f1f4}.remarks{height:18px;min-width:70px}
+    .tbl.facts td:nth-child(1),.tbl.facts th:nth-child(1){width:24%}
+    .tbl.facts td:nth-child(2){width:40%}.tbl.facts td:nth-child(3){width:36%}
+    .tbl.prose th{width:20%;font-weight:700}
+    .tbl.prose td{width:80%}
+    .value-box{white-space:pre-wrap}
+    .write-box{white-space:pre-wrap;min-height:9mm}
+    .line{border-bottom:1px solid #aeb4bf;height:22px}
+    .meeting-section{break-inside:avoid}.screenonly{margin:8px 0}
+    @media print{.screenonly{display:none!important} body,table,td,th,p,div,span,strong{font-size:14pt!important;line-height:1.25!important} h1{font-size:16pt!important} h2{font-size:15pt!important}}
   `;
   const dateToday = () => new Date().toLocaleDateString('en-CA');
   function contentApi() {
