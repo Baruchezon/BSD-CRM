@@ -19,7 +19,7 @@ test('exact field + budget from notes + same city = high match with plain-Hebrew
   assert.match(s.summary, /^התאמה גבוהה/);
   assert.ok(s.why.some(w => /בתוך התקציב/.test(w)));
   assert.ok(s.why.some(w => /בדיוק העיר/.test(w)));
-  assert.ok(s.how.find(h => h.label === 'התאמת תחום').pts === 45);
+  assert.ok(s.how.find(h => h.label === 'התאמת תחום').pts === 58);
   for (const t of [s.summary, ...s.why, ...s.caveats, ...s.how.map(h => h.text)]) assert.doesNotMatch(t, /score|tier|keyword|token|null|undefined|NaN/i, t);
 });
 

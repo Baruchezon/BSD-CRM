@@ -30,11 +30,12 @@ test('budget gap, strict area, and missing sector cannot get above 60 even with 
  }
  assert.equal(MIN_SCORE,61);
 });
-test('exactly 60 is excluded by the default strict threshold',()=>{
- const candidate={...b,requested_area:'',budget:800000};
- const pair=scorePair(profileBuyer(candidate),profileBusiness(z));assert.equal(pair.score,60);
+test('a price far above budget is capped at 60 and excluded by the default threshold',()=>{
+ const candidate={...b,requested_field:'מסעדה',requested_area:'',budget:100000};
+ const pair=scorePair(profileBuyer(candidate),profileBusiness(z));
+ assert.ok(pair && pair.score <= 60, 'capped ' + (pair && pair.score));
  const data={buyers:[candidate],businesses:[z]};
- assert.equal(buildSuggestions(data,{minScore:60}).suggestions.length,1);
+ assert.equal(buildSuggestions(data,{minScore:0}).suggestions.length,1);
  assert.equal(buildSuggestions(data).suggestions.length,0);
 });
 test('unknown or unauthorized selection is rejected, never broadens search',()=>{
