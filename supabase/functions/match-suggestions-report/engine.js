@@ -1,4 +1,6 @@
-// מנוע «התאמות AI חכמות» (v7, 09.11.2026).
+// מנוע «התאמות AI חכמות» (v8, 10.11.2026).
+// עדיפות: תחום מדויק, אחר כך אותה ליגה (מסעדה/בית קפה/מאפייה), אחר כך תקציב, ורק אז מיקום ושאר הבקשות.
+// שולל תחום במפורש (לא מזון / לא מסעדות / בלי הסעדה / מלבד) פוסל את העסק. בלי חקר חיצוני.
 // קובץ JS טהור בלי תלות ב-Deno/דפדפן: הפונקציה index.ts מייבאת אותו, והבדיקות מריצות אותו ב-node.
 // לא נשלחים נתונים לשום שירות חיצוני ולא נדרש מפתח בתשלום - הניתוח כולו מקומי:
 //   * לומד את כל העסקים הפעילים (שדות, מספרים, תיאור, תקציר אנונימי, סיכום פנימי, הערות)
@@ -6,7 +8,7 @@
 //   * מציע רק צירופים שאינם כבר בטבלת ההתאמות, ורק מעל 60%
 //   * לכל הצעה: משפט סיכום, "למה זה מתאים", "מה לא מתאים / לשים לב", ו"איך הגענו לאחוז" - בעברית פשוטה.
 
-export const ENGINE_VERSION = 7;
+export const ENGINE_VERSION = 8;
 export const MIN_SCORE = 61;
 
 // ---------------------------------------------------------------------------
@@ -52,9 +54,11 @@ function findPhrase(toks, phrase) {
 // תחומים. group = משפחה רחבה (התאמה חלקית בין תחומים שונים באותה משפחה).
 export const SECTORS = [
   { id: 'food_general', label: 'מזון', group: 'food', kw: ['מזון', 'אוכל'] },
-  { id: 'restaurant', label: 'מסעדה / מזון מהיר', group: 'food', kw: ['מסעדה', 'מסעדנות', 'שווארמה', 'שוורמה', 'שאורמה', 'פלאפל', 'המבורגר', 'פיצה', 'פיצריה', 'סושי', 'חומוס', 'גריל', 'מזון מהיר', 'טורטיה', 'מקסיקני', 'מקסקני', 'מקסקנית', 'מקסיקנית', 'איטלקית', 'אוכל מוכן', 'קייטרינג', 'זכיינות'] },
+  { id: 'restaurant', label: 'מסעדה / מזון מהיר', group: 'food', kw: ['מסעדה', 'מסעדנות', 'מסעדות', 'שווארמה', 'שוורמה', 'שאורמה', 'פלאפל', 'המבורגר', 'פיצה', 'פיצריה', 'סושי', 'חומוס', 'גריל', 'מזון מהיר', 'טורטיה', 'מקסיקני', 'מקסקני', 'מקסקנית', 'מקסיקנית', 'איטלקית', 'אוכל מוכן', 'הסעדה', 'קייטרינג'] },
   { id: 'cafe', label: 'בית קפה', group: 'food', kw: ['בית קפה', 'בתי קפה', 'קפה', 'קונדיטוריה'] },
-  { id: 'bakery', label: 'מאפייה', group: 'food', kw: ['מאפיה', 'מאפה', 'מאפים', 'לחם', 'חלות', 'עוגות'] },
+  { id: 'bakery', label: 'מאפייה', group: 'food', kw: ['מאפיה', 'מאפה', 'מאפים', 'לחם', 'חלות', 'עוגות', 'בית מאפה'] },
+  { id: 'catering', label: 'הסעדה / קייטרינג', group: 'food', kw: ['הסעדה', 'קייטרינג', 'שירותי הסעדה'] },
+  { id: 'food_prod', label: 'ייצור מזון', group: 'food', kw: ['ייצור מזון', 'יצור מזון', 'מפעל מזון', 'מאפה תעשייתי'] },
   { id: 'pub', label: 'פאב / בר', group: 'food', kw: ['פאב', 'בר', 'ביסטרו', 'מועדון לילה'] },
   { id: 'grocery', label: 'סופרמרקט / מכולת', group: 'retail_food', kw: ['סופרמרקט', 'סופר מרקט', 'סופמרקט', 'סופר', 'מינימרקט', 'מכולת', 'מרכול', 'קמעונאות מזון', 'קמאונאות מזון', 'טוטו', 'לוטו', 'קיוסק', 'פיצוציה', 'מרקט'] },
   { id: 'produce', label: 'פירות וירקות', group: 'retail_food', kw: ['ירקות', 'פירות', 'ירקן', 'ירקניה'] },
@@ -62,25 +66,31 @@ export const SECTORS = [
   { id: 'retail', label: 'חנות / מסחר קמעונאי', group: 'retail', kw: ['חנות', 'חנויות', 'קמעונאות', 'צעצועים', 'מתנות', 'אקססוריז'] },
   { id: 'building_supply', label: 'חומרי בניין / חשמל', group: 'trade', kw: ['חומרי בנין', 'חומרי בניה', 'צורכי חשמל', 'צרכי חשמל', 'אינסטלציה', 'כלי עבודה'] },
   { id: 'import', label: 'ייבוא / סיטונאות / הפצה', group: 'trade', kw: ['יבוא', 'ייבוא', 'יבואן', 'סיטונאות', 'סיטונאי', 'הפצה', 'מפיץ', 'שיווק והפצה'] },
-  { id: 'ecommerce', label: 'מסחר אונליין', group: 'online', kw: ['מסחר אלקטרוני', 'איקומרס', 'ecommerce', 'commerce', 'ebay', 'איביי', 'אמזון', 'amazon', 'shopify', 'שופיפיי', 'חנות אינטרנטית', 'חנויות אינטרנטיות', 'חנות אונליין', 'חנות וירטואלית', 'מכירות אונליין', 'מכירה אונליין'] },
+  { id: 'ecommerce', label: 'מסחר אונליין', group: 'tech', kw: ['מסחר אלקטרוני', 'איקומרס', 'ecommerce', 'commerce', 'ebay', 'איביי', 'אמזון', 'amazon', 'shopify', 'שופיפיי', 'חנות אינטרנטית', 'חנויות אינטרנטיות', 'חנות אונליין', 'חנות וירטואלית', 'מכירות אונליין', 'מכירה אונליין'] },
   { id: 'factory', label: 'מפעל / ייצור', group: 'industry', kw: ['מפעל', 'מפעלים', 'יצור', 'ייצור', 'יצרן', 'תעשיה', 'תעשייתי', 'נגריה', 'מסגריה', 'הרמה', 'אלומיניום', 'עיבוד שבבי', 'cnc'] },
   { id: 'transport', label: 'הסעות / תחבורה', group: 'transport', kw: ['הסעות', 'היסעים', 'אוטובוסים', 'אוטובוס', 'מיניבוסים', 'מיניבוס', 'תחבורה', 'מוניות', 'מונית', 'הובלות', 'שליחויות', 'לוגיסטיקה'] },
   { id: 'maintenance', label: 'אחזקת מבנים / ניהול ועדי בתים', group: 'services', kw: ['אחזקת מבנים', 'אחזקות', 'אחזקה', 'ניהול מבנים', 'ועדי בתים', 'ועד בית', 'ניהול נכסים', 'ניהול בנינים'] },
-  { id: 'construction', label: 'בנייה / קבלנות', group: 'services', kw: ['קבלן', 'קבלנות', 'חברת בניה', 'ג1', 'ג2', 'סיווג קבלני', 'שיפוצים'] },
+  { id: 'construction', label: 'בנייה / קבלנות', group: 'build', kw: ['קבלן', 'קבלנות', 'חברת בניה', 'בניה', 'בנייה', 'ג1', 'ג2', 'סיווג קבלני', 'שיפוצים', 'מתועשת'] },
+  { id: 'engineering', label: 'הנדסה', group: 'build', kw: ['הנדסה', 'הנדסי', 'מהנדס', 'תכנון קונסטרוקציה'] },
   { id: 'kids', label: 'ילדים / פנאי / משחקייה', group: 'leisure', kw: ['משחקיה', 'משחקיות', 'מישחקיות', 'ילדים', 'נוער', 'צהרון', 'חוגים', 'נינגה', 'טיפוס', 'ימי הולדת', 'מרכז אתגרי', 'אתגרים'] },
   { id: 'sport', label: 'ספורט / אופניים', group: 'leisure', kw: ['ספורט', 'אופניים', 'אופנים', 'רכיבה', 'כושר', 'סטודיו'] },
-  { id: 'beauty', label: 'יופי / אסתטיקה', group: 'health', kw: ['אסתטיקה', 'קוסמטיקה', 'מספרה', 'יופי', 'ציפורניים', 'הזעת יתר', 'רפואה אסתטית'] },
+  { id: 'beauty', label: 'יופי / אסתטיקה', group: 'health', kw: ['אסתטיקה', 'קוסמטיקה', 'מספרה', 'יופי', 'ציפורניים', 'הזעת יתר', 'רפואה אסתטית', 'קליניקה'] },
+  { id: 'medical', label: 'רפואה / בריאות', group: 'health', kw: ['רפואה', 'מרפאה', 'אמבולנס', 'חירום', 'הידרותרפיה', 'טיפולים במים'] },
   { id: 'hotel', label: 'מלון / אירוח', group: 'hospitality', kw: ['מלון', 'מלונות', 'צימר', 'צימרים', 'אירוח', 'אכסניה', 'הוסטל'] },
   { id: 'events', label: 'אירועים / הפקות', group: 'hospitality', kw: ['אולם אירועים', 'גן אירועים', 'הפקות אירועים', 'הפקת אירועים'] },
   { id: 'laundry', label: 'מכבסה', group: 'services', kw: ['מכבסה', 'מכבסות', 'ניקוי יבש'] },
   { id: 'judaica', label: 'יודאיקה', group: 'industry', kw: ['יודאיקה', 'שופרות', 'שופר'] },
-  { id: 'tv_tech', label: 'טכנולוגיה / אלקטרוניקה', group: 'trade', kw: ['טלויזיה', 'טלוויזיה', 'מתקני טלויזיה', 'אלקטרוניקה', 'מחשבים', 'סלולר', 'הייטק', 'תוכנה'] },
+  { id: 'tv_tech', label: 'טכנולוגיה / אלקטרוניקה', group: 'tech', kw: ['טלויזיה', 'טלוויזיה', 'מתקני טלויזיה', 'אלקטרוניקה', 'מחשבים', 'סלולר', 'הייטק', 'תוכנה', 'דיגיטל'] },
 ];
 const SECTOR_BY_ID = Object.fromEntries(SECTORS.map(s => [s.id, s]));
 const PHYSICAL = new Set(['restaurant', 'cafe', 'bakery', 'pub', 'grocery', 'produce', 'kids', 'sport', 'beauty', 'hotel', 'events', 'laundry', 'maintenance', 'transport', 'construction', 'retail', 'fashion', 'building_supply']);
-const GROUP_LABEL = { food: 'מזון ומסעדנות', retail_food: 'קמעונאות מזון', retail: 'מסחר קמעונאי', trade: 'מסחר וסיטונאות', online: 'אונליין', industry: 'תעשייה וייצור', transport: 'תחבורה והסעות', services: 'שירותים', leisure: 'פנאי וילדים', health: 'בריאות ויופי', hospitality: 'אירוח ואירועים' };
-// משפחות קרובות זו לזו (התאמה חלקית קטנה)
-const NEAR_GROUPS = [['food', 'retail_food'], ['retail', 'retail_food'], ['retail', 'trade'], ['trade', 'industry'], ['trade', 'online'], ['hospitality', 'food']];
+const GROUP_LABEL = { food: 'מזון ומסעדנות', retail_food: 'קמעונאות מזון', retail: 'מסחר קמעונאי', trade: 'מסחר וסיטונאות', tech: 'טכנולוגיה ואתרים', industry: 'תעשייה וייצור', transport: 'תחבורה והסעות', services: 'שירותים', build: 'בנייה והנדסה', leisure: 'פנאי וילדים', health: 'בריאות ויופי', hospitality: 'אירוח ואירועים' };
+// ליגה = אותו group. כאן רק קרבה חלקית, מתחת לליגה.
+const NEAR_GROUPS = [['food', 'retail_food'], ['retail', 'retail_food'], ['retail', 'trade'], ['trade', 'industry'], ['trade', 'tech'], ['hospitality', 'food'], ['build', 'industry']];
+const SECTOR_EXACT = 58;
+const SECTOR_LEAGUE = 44;
+const SECTOR_NEAR = 16;
+const SECTOR_OPEN = 22;
 // מילים שמזוהות כמפתח רק כשהן לבד (מילים קצרות/כלליות שמופיעות בהרבה הקשרים)
 const WEAK_KW = new Set(['לוגיסטיקה', 'יצור', 'ייצור', 'קמעונאות', 'מאפים', 'עוגות', 'בר', 'סופר', 'קפה', 'חנות', 'חנויות', 'מרקט', 'ילדים', 'נוער', 'אחזקה', 'אחזקות', 'פלטפורמה', 'דיגיטל', 'דיגיטלי', 'אינטרנט', 'הרמה', 'אירועים', 'זכיינות', 'מתנות', 'לחם', 'טיפוס', 'סטודיו', 'כושר', 'אירוח', 'מונית', 'אוטובוס'].map(norm));
 
@@ -277,10 +287,26 @@ export function profileBuyer(l, extraNotes = []) {
   for (const w of INTEREST) for (const p of findPhrase(nt, w)) interestPos.push(p + tokens(w).length);
   for (const w of BACKGROUND) for (const p of findPhrase(nt, w)) backgroundPos.push(p + tokens(w).length);
   const near = (arr, pos, span) => arr.some(a => pos >= a && pos - a <= span);
+  const NEG = new Set(['לא', 'בלי', 'ללא', 'מלבד', 'חוץ', 'למעט', 'פרט']);
+  const INTEREST_TOKS = new Set(INTEREST.flatMap(w => tokens(w)));
+  const NEG_FILLER = new Set(['תחום', 'התחום', 'עסקי', 'עסק', 'של', 'את', 'מאוד', 'כל', 'גם', 'או', 'אבל']);
+  // השלילה חלה על התחום שאחריה באותו משפט, כולל "לא מעוניין ב..." ורשימה עם ו'.
+  // היא נעצרת במילה אחרת, כדי ש"לא מזון. מחפש סופר" לא יפסול את הסופר.
+  const sectorNegated = (pos) => {
+    let i = pos - 1, hops = 0;
+    while (i >= 0 && hops < 6) {
+      const w = nt[i];
+      if (w === 'רק' && i > 0 && NEG.has(nt[i - 1])) return false;
+      if (NEG.has(w)) return true;
+      if (w.length === 1 || NEG_FILLER.has(w) || INTEREST_TOKS.has(w)) { i--; hops++; continue; }
+      if (hops === 0 && String(nt[pos] || '').startsWith('ו')) { i--; hops++; continue; }
+      return false;
+    }
+    return false;
+  };
   for (const [id, h] of sectorHits(nt)) {
     for (const pos of h.pos) {
-      const negated = pos > 0 && ['לא', 'בלי', 'ללא'].includes(nt[pos - 1]) || pos > 1 && ['לא', 'בלי', 'ללא'].includes(nt[pos - 2]) && !['רק'].includes(nt[pos - 1]);
-      if (negated) { excluded.set(id, { kw: h.kw, quote: quoteAround(notesRaw, 'לא ' + nt[pos]) || quoteAround(notesRaw, h.kw) }); continue; }
+      if (sectorNegated(pos)) { excluded.set(id, { kw: h.kw, quote: quoteAround(notesRaw, nt[pos - 1] + ' ' + nt[pos]) || quoteAround(notesRaw, h.kw), label: SECTOR_BY_ID[id].label }); continue; }
       const tail = nt.slice(pos + 1, pos + 13).join(' ') + ' ';
       if (NEG_AFTER_MENTION.test(tail)) {
         const prev = pastRejected.get(id);
@@ -302,6 +328,7 @@ export function profileBuyer(l, extraNotes = []) {
   // מילה כללית (למשל "חנות" ב"חנות חומרי בניין") לא נחשבת כשיש תחום מפורש
   if ([...wanted.values()].some(w => !w.weak)) for (const [id, w] of [...wanted]) if (w.weak) wanted.delete(id);
   const open = OPEN_FIELD.some(k => findPhrase(tokens(structRaw + ' ' + notesRaw), k).length > 0);
+  const openOffers = ['פתוח להצעות', 'פתוחה להצעות', 'גמיש במחיר', 'גמישה במחיר', 'פתוח במחיר', 'אין תקציב קבוע', 'תלוי בעסקה', 'פתוח למשא ומתן', 'פתוחה למשא ומתן'].some(k => findPhrase(tokens(structRaw + ' ' + notesRaw), k).length > 0);
 
   // תקציב: שדה מובנה, הון עצמי, או מהטקסט
   let budget = null;
@@ -332,11 +359,11 @@ export function profileBuyer(l, extraNotes = []) {
 
   const female = /(מחפשת|מעונינת|מעוניינת|מתענינת|מתעניינת|התענינה|התעניינה|התקשרה|נמצאת|פנתה|שמי \S+ ואני|היא\s)/.test(norm(notesRaw)) && !/(מחפש\s|מעונינ\s|מתענינ\s|התקשר\s|הוא\s)/.test(norm(notesRaw).slice(0, 120));
   return {
-    id: l.id, raw: l, wanted, background, excluded, pastRejected, open, budget, female,
+    id: l.id, raw: l, wanted, background, excluded, pastRejected, open, openOffers, budget, female,
     area: areaReg, areas, nationwide, strictArea, cityReg, city: cityRaw, abroad, notAreas,
     notesRaw, structRaw,
     kwSet: new Set(tokens(structRaw + ' ' + notesRaw).filter(w => w.length > 2)),
-    hasInfo: wanted.size > 0 || open || !!structRaw || !!budget || !!areaReg || nationwide,
+    hasInfo: wanted.size > 0 || excluded.size > 0 || open || !!structRaw || !!budget || !!areaReg || nationwide,
     passive: findPhrase(nt, 'פסיבי').length > 0 || findPhrase(nt, 'פסיבית').length > 0,
     noFood: excluded.has('restaurant') || [...excluded.keys()].some(id => SECTOR_BY_ID[id]?.group === 'food'),
   };
@@ -380,31 +407,41 @@ export function scorePair(bp, zp, ctx = {}) {
     }
   }
 
-  // --- 1. תחום (עד 45) ---
+  // --- 1. תחום. מדויק מעל ליגה, ליגה מעל קרבה. שולל תחום = פסול. ---
   let bestSector = null;
   for (const [sid, w] of bp.wanted) {
     if (zp.sectors.has(sid)) {
-      const pts = Math.round(45 * Math.min(w.weight, zp.sectors.get(sid).weight));
-      if (!bestSector || pts > bestSector.pts) bestSector = { pts, sid, w, kind: 'same' };
+      // "מזון" על הקטגוריה לא הופך מאפייה או סופר למדויק, אם לעסק יש תחום מזון ספציפי.
+      const genericFood = sid === 'food_general' && [...zp.sectors.keys()].some(id => id !== 'food_general' && ['food', 'retail_food'].includes(SECTOR_BY_ID[id].group));
+      const kind = genericFood ? 'league' : 'same';
+      const pts = Math.round((kind === 'same' ? SECTOR_EXACT : SECTOR_LEAGUE) * Math.min(w.weight, zp.sectors.get(sid).weight));
+      if (!bestSector || pts > bestSector.pts) bestSector = { pts, sid, zsid: sid, w, kind };
     }
   }
   if (!bestSector && bp.wanted.has('food_general')) {
     const zsid = [...zp.sectors.keys()].find(id => ['food', 'retail_food'].includes(SECTOR_BY_ID[id].group));
-    if (zsid) bestSector = { pts: Math.round(40 * bp.wanted.get('food_general').weight), sid: 'food_general', w: bp.wanted.get('food_general'), kind: 'same' };
+    if (zsid) bestSector = { pts: Math.round(SECTOR_LEAGUE * bp.wanted.get('food_general').weight), sid: 'food_general', zsid, w: bp.wanted.get('food_general'), kind: 'league' };
   }
   if (!bestSector) {
     for (const [sid, w] of bp.wanted) for (const zsid of zp.sectors.keys()) {
       const g1 = SECTOR_BY_ID[sid].group, g2 = SECTOR_BY_ID[zsid].group;
-      const kind = g1 === g2 ? 'group' : NEAR_GROUPS.some(([a, b]) => (a === g1 && b === g2) || (a === g2 && b === g1)) ? 'near' : null;
+      const kind = g1 === g2 ? 'league' : NEAR_GROUPS.some(([a, b]) => (a === g1 && b === g2) || (a === g2 && b === g1)) ? 'near' : null;
       if (!kind) continue;
-      const pts = Math.round((kind === 'group' ? 26 : 12) * w.weight);
+      const pts = Math.round((kind === 'league' ? SECTOR_LEAGUE : SECTOR_NEAR) * w.weight);
       if (!bestSector || pts > bestSector.pts) bestSector = { pts, sid, zsid, w, kind };
     }
   }
-  // תחום שהקונה כתב במפורש שהוא לא רוצה
   for (const zsid of zp.sectors.keys()) {
-    const ex = bp.excluded.get(zsid) || (['food', 'retail_food'].includes(SECTOR_BY_ID[zsid].group) ? bp.excluded.get('food_general') : null) || [...bp.excluded.entries()].find(([eid]) => SECTOR_BY_ID[eid].group === SECTOR_BY_ID[zsid].group && SECTOR_BY_ID[zsid].group === 'food')?.[1];
-    if (ex) return { rejected: true, reason: `${bname} ביקש במפורש לא תחום כזה: «${ex.quote}»` };
+    const zg = SECTOR_BY_ID[zsid].group;
+    for (const [eid, ex] of bp.excluded) {
+      const killsFamily = eid === 'food_general' && (zg === 'food' || zg === 'retail_food');
+      if (eid !== zsid && !killsFamily) continue;
+      // "לא מזון, אבל מחפש סופרמרקט" - בקשה מפורשת בהערות גוברת על פסילה משפחתית.
+      const named = bp.wanted.get(zsid);
+      if (killsFamily && named && named.source === 'notes') continue;
+      const label = killsFamily ? 'מזון' : (ex.label || SECTOR_BY_ID[eid].label);
+      return { rejected: true, score: 0, reason: `פסול: הקונה שולל תחום ${label}` };
+    }
   }
   const srcWord = w => w.source === 'field' ? 'בשדה "תחום מבוקש" בכרטיס שלו' : 'בהערות עליו';
   if (bestSector && bestSector.kind === 'same') {
@@ -412,22 +449,22 @@ export function scorePair(bp, zp, ctx = {}) {
     const sl = SECTOR_BY_ID[bestSector.sid].label;
     sectorWhy = `${bname} מחפש ${sl}, ו"${zname}" זה בדיוק עסק כזה.`;
     why.push(`תחום: ${sectorWhy}`);
-    how.push({ label: 'התאמת תחום', pts: sectorPts, max: 45, text: `${srcWord(bestSector.w)} כתוב «${snippet(bestSector.w.quote, 0, 90)}», והעסק מוגדר כ"${zp.label}".` });
+    how.push({ label: 'התאמת תחום', pts: sectorPts, max: SECTOR_EXACT, text: `${srcWord(bestSector.w)} כתוב «${snippet(bestSector.w.quote, 0, 90)}», והעסק מוגדר כ"${zp.label}".` });
   } else if (bestSector) {
     sectorPts = bestSector.pts;
     const g = GROUP_LABEL[SECTOR_BY_ID[bestSector.sid].group];
     const wantLabel = SECTOR_BY_ID[bestSector.sid].label, isLabel = SECTOR_BY_ID[bestSector.zsid].label;
-    sectorWhy = bestSector.kind === 'group' ? `${bname} מחפש ${wantLabel}; "${zname}" זה ${isLabel} - לא אותו דבר בדיוק, אבל מאותה משפחה (${g}).` : `${bname} מחפש ${wantLabel}; "${zname}" זה ${isLabel} - תחום שכן, לא זהה.`;
+    sectorWhy = bestSector.kind === 'league' ? `${bname} מחפש ${wantLabel}; "${zname}" זה ${isLabel} - לא אותו דבר בדיוק, אבל אותה ליגה (${g}).` : `${bname} מחפש ${wantLabel}; "${zname}" זה ${isLabel} - תחום קרוב, לא אותה ליגה.`;
     why.push(`תחום: ${sectorWhy}`);
     caveats.push(`התחום לא זהה בדיוק למה שביקש (${wantLabel} מול ${isLabel}).`);
-    how.push({ label: 'התאמת תחום', pts: sectorPts, max: 45, text: `${srcWord(bestSector.w)} כתוב «${snippet(bestSector.w.quote, 0, 90)}». תחום קרוב, לכן ניקוד חלקי.` });
+    how.push({ label: 'התאמת תחום', pts: sectorPts, max: SECTOR_EXACT, text: `${srcWord(bestSector.w)} כתוב «${snippet(bestSector.w.quote, 0, 90)}». ${bestSector.kind === 'league' ? 'אותה ליגה, מתחת להתאמה מדויקת.' : 'תחום קרוב בלבד, מתחת לליגה.'}` });
   } else if (bp.open || !bp.wanted.size) {
-    sectorPts = bp.open ? 18 : 0;
+    sectorPts = bp.open ? SECTOR_OPEN : 0;
     if (bp.open) {
       why.push(`תחום: ${bname} כתב שהוא פתוח לתחומים שונים, כך שהתחום לא פוסל.`);
-      how.push({ label: 'התאמת תחום', pts: sectorPts, max: 45, text: 'הקונה פתוח לכל תחום - ניקוד בינוני (לא ודאות שהתחום מעניין אותו).' });
+      how.push({ label: 'התאמת תחום', pts: sectorPts, max: SECTOR_EXACT, text: 'הקונה פתוח לכל תחום - ניקוד בינוני, בלי עדיפות של תחום מדויק.' });
     } else {
-      how.push({ label: 'התאמת תחום', pts: 0, max: 45, text: 'לא כתוב באיזה תחום הקונה מחפש.' });
+      how.push({ label: 'התאמת תחום', pts: 0, max: SECTOR_EXACT, text: 'לא כתוב באיזה תחום הקונה מחפש.' });
     }
   } else {
     // הקונה מחפש תחום אחר לגמרי
@@ -439,46 +476,48 @@ export function scorePair(bp, zp, ctx = {}) {
     sectorPts = Math.max(sectorPts, 30);
     if (mention.context) {
       why.unshift(`בהערות על ${bname} כתוב שהוא מתעניין ב${mention.sector} ב${zp.city} - וזה בדיוק העסק הזה: «${quoteAround(bp.notesRaw, mention.word)}». עדיין לא נפתחה התאמה במערכת.`);
-      how.push({ label: 'אזכור בהערות', pts: 20, max: 20, text: `בהערות מופיעים גם סוג העסק וגם העיר שלו (${zp.city}).` });
+      how.push({ label: 'אזכור בהערות', pts: 12, max: 12, text: `בהערות מופיעים גם סוג העסק וגם העיר שלו (${zp.city}).` });
     } else {
       why.unshift(`${bname} כבר הזכיר את העסק הזה בעצמו: בהערות כתוב «${quoteAround(bp.notesRaw, mention.word)}» - אבל עדיין לא נפתחה התאמה במערכת.`);
-      how.push({ label: 'אזכור ישיר', pts: 20, max: 20, text: `השם/המספר של העסק ("${mention.word}") מופיע בהערות על הקונה.` });
+      how.push({ label: 'אזכור ישיר', pts: 12, max: 12, text: `השם/המספר של העסק ("${mention.word}") מופיע בהערות על הקונה.` });
     }
   }
   const bgSame = [...bp.background.keys()].find(id => zp.sectors.has(id));
   let expPts = 0;
   if (bgSame) { expPts = 5; why.push(`ניסיון: ${bname} כבר עוסק/עסק בתחום הזה (${SECTOR_BY_ID[bgSame].label}) - יתרון בהפעלת העסק.`); how.push({ label: 'ניסיון בתחום', pts: 5, max: 5, text: `בהערות: «${bp.background.get(bgSame).quote}».` }); }
 
-  // --- 2. תקציב מול מחיר (עד 20, או הורדה) ---
+  // --- 2. תקציב. שני בעדיפות. פתוח להצעות או בלי תקציב = לא מענישים. ---
   let budgetPts = 0;
-  if (bp.budget && zp.price) {
+  let budgetFar = false;
+  if (bp.openOffers && !(bp.budget && zp.price && zp.price <= bp.budget.hi)) {
+    budgetPts = 8;
+    why.push(`כסף: ${bname} פתוח להצעות, בלי להעניש על מחיר.`);
+    how.push({ label: 'תקציב מול מחיר', pts: budgetPts, max: 20, text: 'צוין שהוא פתוח להצעות - ניקוד חיובי קטן, בלי קנס.' });
+  } else if (bp.budget && zp.price) {
     const hi = bp.budget.hi, lo = bp.budget.lo;
     const budgetTxt = lo !== hi ? `${fmtMoney(lo)}-${fmtMoney(hi)}` : fmtMoney(hi);
     const src = bp.budget.source === 'notes' ? ` (מהערות: «${bp.budget.quote}»)` : bp.budget.source === 'equity' ? ' (הון עצמי)' : '';
     const r = zp.price / hi;
     if (r <= 1) {
-      budgetPts = zp.price < lo * 0.25 ? 10 : 20;
+      budgetPts = zp.price < lo * 0.25 ? 12 : 20;
       why.push(`כסף: המחיר המבוקש ${fmtMoney(zp.price)} בתוך התקציב של ${bname} (${budgetTxt}).`);
-      if (budgetPts === 10) caveats.push(`העסק קטן בהרבה מהתקציב שלו (${fmtMoney(zp.price)} מול ${budgetTxt}) - ייתכן שהוא מחפש משהו גדול יותר.`);
+      if (budgetPts === 12) caveats.push(`העסק קטן בהרבה מהתקציב שלו (${fmtMoney(zp.price)} מול ${budgetTxt}).`);
       how.push({ label: 'תקציב מול מחיר', pts: budgetPts, max: 20, text: `תקציב ${budgetTxt}${src}, מחיר ${fmtMoney(zp.price)}.` });
-    } else if (r <= 1.3) {
-      budgetPts = 12;
-      why.push(`כסף: המחיר ${fmtMoney(zp.price)} מעט מעל התקציב (${budgetTxt}) - פער של עד 30%, בדרך כלל אפשר לגשר.`);
+    } else if (r <= 1.2) {
+      budgetPts = 10;
+      why.push(`כסף: המחיר ${fmtMoney(zp.price)} מעט מעל התקציב (${budgetTxt}) - עד 20%.`);
       caveats.push(`המחיר גבוה ב-${Math.round((r - 1) * 100)}% מהתקציב שלו.`);
-      how.push({ label: 'תקציב מול מחיר', pts: 12, max: 20, text: `תקציב ${budgetTxt}${src}, מחיר ${fmtMoney(zp.price)} - מעט מעל.` });
-    } else if (r <= 2) {
-      budgetPts = 0;
-      caveats.push(`המחיר ${fmtMoney(zp.price)} גבוה משמעותית מהתקציב (${budgetTxt}) - רק אם יש לו מימון/שותף.`);
-      how.push({ label: 'תקציב מול מחיר', pts: 0, max: 20, text: `תקציב ${budgetTxt}${src}, מחיר ${fmtMoney(zp.price)} - כמעט פי 2.` });
+      how.push({ label: 'תקציב מול מחיר', pts: 10, max: 20, text: `תקציב ${budgetTxt}${src}, מחיר ${fmtMoney(zp.price)} - עד 20% מעל.` });
     } else {
-      budgetPts = -30;
-      caveats.push(`המחיר ${fmtMoney(zp.price)} רחוק מאוד מהתקציב שלו (${budgetTxt}).`);
-      how.push({ label: 'תקציב מול מחיר', pts: -30, max: 20, text: `תקציב ${budgetTxt}${src}, מחיר ${fmtMoney(zp.price)} - יותר מפי 2, הורדנו ניקוד.` });
+      budgetFar = true;
+      budgetPts = r <= 2 ? -12 : -18;
+      caveats.push(`המחיר ${fmtMoney(zp.price)} רחוק מהתקציב (${budgetTxt}).`);
+      how.push({ label: 'תקציב מול מחיר', pts: budgetPts, max: 20, text: `תקציב ${budgetTxt}${src}, מחיר ${fmtMoney(zp.price)} - מעבר ל-20%, הורדנו ניקוד.` });
     }
   } else {
-    if (!bp.budget) caveats.push(`לא ידוע התקציב של ${bname} - כדאי לברר לפני שמציגים.`);
+    budgetPts = 8;
     if (!zp.price) caveats.push('לעסק לא רשום מחיר מבוקש.');
-    how.push({ label: 'תקציב מול מחיר', pts: 0, max: 20, text: !bp.budget && !zp.price ? 'אין תקציב לקונה ואין מחיר לעסק - לא ניתן להשוות.' : !bp.budget ? 'אין תקציב ידוע לקונה.' : 'אין מחיר מבוקש לעסק.' });
+    how.push({ label: 'תקציב מול מחיר', pts: budgetPts, max: 20, text: !bp.budget ? 'לא צוין תקציב - לא הורדנו ניקוד.' : 'אין מחיר מבוקש לעסק - לא הורדנו ניקוד.' });
   }
 
   // --- 3. מיקום (עד 20, או הורדה) ---
@@ -487,17 +526,17 @@ export function scorePair(bp, zp, ctx = {}) {
   const bWantReg = bp.strictArea || bp.areas?.find(a => sameCity(a.city, zp.city)) || bp.areas?.find(a => a.region === zp.region) || bp.area;
   const bHomeReg = bp.cityReg;
   if (bp.nationwide && !bp.strictArea) {
-    geoPts = 20;
+    geoPts = 10;
     why.push('מיקום: הקונה מחפש בכל הארץ.');
-    how.push({ label: 'מיקום', pts: 20, max: 20, text: 'בקשת הקונה היא לכל הארץ, ללא הגבלת אזור.' });
+    how.push({ label: 'מיקום', pts: 10, max: 10, text: 'בקשת הקונה היא לכל הארץ, ללא הגבלת אזור.' });
   } else if (zp.online) {
-    geoPts = 15;
+    geoPts = 8;
     why.push(`מיקום: "${zname}" פועל בעיקר באינטרנט, כך שהמרחק פחות חשוב.`);
-    how.push({ label: 'מיקום', pts: 15, max: 20, text: 'עסק אונליין - לא תלוי במיקום של הקונה.' });
+    how.push({ label: 'מיקום', pts: 8, max: 10, text: 'עסק אונליין - לא תלוי במיקום של הקונה.' });
   } else if (zp.hybridOnline && false) {
   } else if (!zp.region && !zp.city) {
     caveats.push('לא רשומה עיר לעסק - לא בדקנו מרחק.');
-    how.push({ label: 'מיקום', pts: 0, max: 20, text: 'אין עיר לעסק.' });
+    how.push({ label: 'מיקום', pts: 0, max: 10, text: 'אין עיר לעסק.' });
   } else if (bp.notAreas.some(c => sameCity(c, zp.city))) {
     return { rejected: true, reason: `${bname} כתב שלא מתאים לו ${zp.city}.` };
   } else if (bWantReg || bHomeReg) {
@@ -505,22 +544,21 @@ export function scorePair(bp, zp, ctx = {}) {
     const refTxt = bWantReg ? `האזור שהוא מבקש (${REGIONS[ref.region].label})` : `המקום שהוא גר בו (${bp.city})`;
     const refTo = 'ל' + refTxt.slice(1), refFrom = 'מ' + refTxt;
     const cityHit = (bWantReg && sameCity(bWantReg.city, zp.city)) || (!bWantReg && sameCity(bp.city, zp.city));
-    if (cityHit) { geoPts = 20; why.push(`מיקום: העסק ב${zcity} - בדיוק ${bWantReg ? 'העיר שהוא מבקש' : 'העיר שהוא גר בה'}.`); }
-    else if (zp.region && zp.region === ref.region) { geoPts = 14; why.push(`מיקום: העסק ב${zcity}, באותו אזור כמו ${refTxt}.`); }
-    else if (zp.region && regionsNear(zp.region, ref.region)) { geoPts = 6; why.push(`מיקום: ${zcity} באזור סמוך ${refTo}.`); caveats.push(`לא באותו אזור בדיוק (${zcity}, ${REGIONS[zp.region].label}).`); }
+    if (cityHit) { geoPts = 10; why.push(`מיקום: העסק ב${zcity} - בדיוק ${bWantReg ? 'העיר שהוא מבקש' : 'העיר שהוא גר בה'}.`); }
+    else if (zp.region && zp.region === ref.region) { geoPts = 7; why.push(`מיקום: העסק ב${zcity}, באותו אזור כמו ${refTxt}.`); }
+    else if (zp.region && regionsNear(zp.region, ref.region)) { geoPts = 3; why.push(`מיקום: ${zcity} באזור סמוך ${refTo}.`); caveats.push(`לא באותו אזור בדיוק (${zcity}, ${REGIONS[zp.region].label}).`); }
     else if (zp.hybridOnline) { geoPts = 0; caveats.push(`העסק ב${zcity}, רחוק ${refFrom}. לעסק יש גם מכירות באינטרנט, אבל החנות עצמה במקום קבוע.`); }
-    else if (zp.relocatable) { geoPts = 4; caveats.push(`העסק ב${zcity}, רחוק ${refFrom} - אבל זה מפעל/ייצור, וייתכן שאפשר להעביר אותו.`); }
-    else if (zp.semiMobile) { geoPts = 2; caveats.push(`העסק ב${zcity}, רחוק ${refFrom}. בעסק ייבוא/הפצה המיקום פחות קריטי, אבל כדאי לבדוק.`); }
-    else if (bp.strictArea) { geoPts = -40; caveats.push(`${bname} כתב שהוא רוצה רק ב${REGIONS[bp.strictArea.region].label}, והעסק ב${zcity}.`); }
-    else { geoPts = -10; caveats.push(`העסק ב${zcity} - רחוק ${refFrom}.`); }
+    else if (zp.relocatable) { geoPts = 2; caveats.push(`העסק ב${zcity}, רחוק ${refFrom} - אבל זה מפעל/ייצור, וייתכן שאפשר להעביר אותו.`); }
+    else if (zp.semiMobile) { geoPts = 1; caveats.push(`העסק ב${zcity}, רחוק ${refFrom}. בעסק ייבוא/הפצה המיקום פחות קריטי, אבל כדאי לבדוק.`); }
+    else if (bp.strictArea) { geoPts = -12; caveats.push(`${bname} כתב שהוא רוצה רק ב${REGIONS[bp.strictArea.region].label}, והעסק ב${zcity}.`); }
+    else { geoPts = -4; caveats.push(`העסק ב${zcity} - רחוק ${refFrom}.`); }
     if (!zp.region && !cityHit) caveats.push(`לא זיהינו באיזה אזור נמצאת ${zcity}.`);
-    how.push({ label: 'מיקום', pts: geoPts, max: 20, text: `העסק ב${zcity}${zp.region ? ` (${REGIONS[zp.region].label})` : ''}; הקונה: ${bWantReg ? `מבקש ${REGIONS[bWantReg.region].label}` : `גר ב${bp.city}`}.${zp.relocatable ? ' מפעל - ייתכן שאפשר להעביר.' : ''}` });
+    how.push({ label: 'מיקום', pts: geoPts, max: 10, text: `העסק ב${zcity}${zp.region ? ` (${REGIONS[zp.region].label})` : ''}; הקונה: ${bWantReg ? `מבקש ${REGIONS[bWantReg.region].label}` : `גר ב${bp.city}`}.${zp.relocatable ? ' מפעל - ייתכן שאפשר להעביר.' : ''}` });
   } else if (bp.abroad) {
     caveats.push(`${bname} גר כרגע בחו"ל - לבדוק לאן הוא מתכנן לעבור.`);
-    how.push({ label: 'מיקום', pts: 0, max: 20, text: 'הקונה בחו"ל.' });
+    how.push({ label: 'מיקום', pts: 0, max: 10, text: 'הקונה בחו"ל.' });
   } else {
-    caveats.push(`לא ידוע איפה ${bname} גר או מחפש - לא בדקנו מרחק.`);
-    how.push({ label: 'מיקום', pts: 0, max: 20, text: 'אין מיקום לקונה.' });
+    how.push({ label: 'מיקום', pts: 0, max: 10, text: 'אין מיקום לקונה - לא הורדנו ניקוד.' });
   }
   if (zp.relocatable && geoPts >= 6) why.push('מפעל/ייצור: גם אם יידרש, אפשר לשקול העברה.');
 
@@ -546,12 +584,13 @@ export function scorePair(bp, zp, ctx = {}) {
   if (ctx.distributedAt) caveats.push(`כבר נשלח ל${bname} תקציר אנונימי של העסק הזה (${ctx.distributedAt}) - אבל לא נפתחה התאמה.`);
   if (!zp.raw.anon_summary && !zp.raw.short_description) caveats.push('לעסק אין עדיין תיאור/תקציר מסודר להצגה.');
 
-  let score = sectorPts + (mention ? 20 : 0) + expPts + budgetPts + geoPts + textPts + prefPts;
-  // A high score must not hide a major known contradiction or missing sector.
-  let ceiling = 99;
+  let score = sectorPts + (mention ? 12 : 0) + expPts + budgetPts + geoPts + Math.min(textPts, 6) + prefPts;
+  // רק תחום מדויק יכול לעבור 74. תקציב רחוק או תחום חסר נעצרים ב-60.
+  const sectorKind = bestSector ? bestSector.kind : (bp.open ? 'open' : 'none');
+  let ceiling = sectorKind === 'same' ? 99 : 74;
   if (!bp.wanted.size && !bp.open && !mention) ceiling = 60;
-  if (bp.budget && zp.price > bp.budget.hi * 1.3) ceiling = 60;
-  if (bp.strictArea && !zp.online && zp.region !== bp.strictArea.region) ceiling = 60;
+  if (budgetFar) ceiling = Math.min(ceiling, 60);
+  if (bp.strictArea && !zp.online && zp.region !== bp.strictArea.region) ceiling = Math.min(ceiling, 60);
   for (const [key, actual, label] of [['requested_revenue', zp.revenue, 'מחזור'], ['requested_profit', zp.profit, 'רווח']]) {
     const requested = Number(bp.raw[key]);
     if (requested > 0 && (!actual || actual < requested)) {
@@ -559,11 +598,11 @@ export function scorePair(bp, zp, ctx = {}) {
       if (actual && actual < requested * 0.7) ceiling = 60;
     }
   }
-  if (score > ceiling) how.push({ label: 'מגבלת התאמה', pts: ceiling - score, max: 99, text: 'הציון מוגבל בגלל פער מהותי בתקציב או בדרישות, או בגלל תחום מבוקש חסר.' });
+  if (score > ceiling && ceiling <= 60) how.push({ label: 'מגבלת התאמה', pts: ceiling - score, max: 99, text: 'הציון מוגבל בגלל פער מהותי בתקציב או בדרישות, או בגלל תחום מבוקש חסר.' });
   score = Math.max(0, Math.min(ceiling, Math.round(score)));
   if (!why.length) return null;
   const tier = score >= 75 ? 'high' : score >= 60 ? 'good' : 'check';
-  const summary = buildSummary({ bname, zname, zp, bp, score, mention, sectorWhy, geoPts, budgetPts });
+  const summary = buildSummary({ bname, zname, zp, bp, score, mention, sectorKind, geoPts, budgetPts });
   const F = bp.female ? fem : (x => x);
   return { score, tier, why: why.map(F), caveats: caveats.map(F), how: how.map(h => ({ ...h, text: F(h.text) })), summary: F(summary), mentioned: !!mention };
 }
@@ -575,16 +614,20 @@ export function fem(text) {
     : part.replace(/(^|[^\u05d0-\u05ea\/])([\u05d0-\u05ea]+(?:\/[\u05d0-\u05ea]+)?)(?=$|[^\u05d0-\u05ea\/])/g, (m, pre, w) => pre + (FEM[w] || w))).join('');
 }
 
-function buildSummary({ bname, zname, zp, bp, score, mention, geoPts, budgetPts }) {
+function buildSummary({ bname, zname, zp, bp, score, mention, sectorKind, geoPts, budgetPts }) {
   const parts = [];
   if (mention && mention.context) parts.push(`${bname} כתב שהוא מתעניין ב${mention.sector} ב${zp.city} - וזה "${zname}"`);
   else if (mention) parts.push(`${bname} כבר הזכיר את "${zname}" בעצמו`);
-  else parts.push(`"${zname}" (${zp.label}${zp.city ? `, ${zp.city}` : ''}) מתאים למה ש${bname} מחפש`);
+  else if (sectorKind === 'same') parts.push(`"${zname}" באותו תחום ש${bname} מחפש`);
+  else if (sectorKind === 'league') parts.push(`"${zname}" באותה ליגה של מה ש${bname} מחפש, לא בדיוק אותו תחום`);
+  else parts.push(`"${zname}" (${zp.label}${zp.city ? `, ${zp.city}` : ''}) מתאים חלקית למה ש${bname} מחפש`);
   if (zp.online) parts.push('פועל אונליין כך שהמרחק פחות חשוב');
   else if (bp.nationwide) parts.push('בתחום החיפוש הארצי שלו');
-  else if (geoPts >= 14) parts.push('קרוב אליו');
-  if (budgetPts === 20 || budgetPts === 10) parts.push('ובתוך התקציב');
-  else if (budgetPts === 12) parts.push('המחיר מעט מעל התקציב');
+  else if (geoPts >= 7) parts.push('קרוב אליו');
+  if (budgetPts >= 20) parts.push('ובתוך התקציב');
+  else if (budgetPts === 10) parts.push('המחיר מעט מעל התקציב');
+  else if (budgetPts === 8 && bp.openOffers) parts.push('והוא פתוח להצעות');
+  else if (budgetPts === 8 && !bp.budget) parts.push('בלי תקציב שמצריך קנס');
   const lvl = score >= 75 ? 'התאמה גבוהה' : score >= 60 ? 'התאמה טובה' : 'שווה בדיקה';
   return `${lvl}: ${parts.join(', ')}.`;
 }
