@@ -52,7 +52,8 @@
 
   function isContactOnly(s) {
     const bare = s.replace(/^[-•–—*]\s*/, '');
-    if (/^(טלפון|נייד|אתר|מייל|אימייל|כתובת)\b/.test(bare)) return true;
+    if (/^(טלפון|נייד|מייל|אימייל)\b/.test(bare) && bare.length < 48) return true;
+    if (/^(אתר|כתובת)\s*[:\-–]?\s*(https?:|$)/.test(bare) && bare.length < 80) return true;
     const letters = bare.replace(/https?:\/\/\S+/g, '').replace(/[\w.+-]+@[\w.-]+/g, '').replace(/[+\d][\d\s().-]{6,}/g, '').replace(/[^\p{L}]+/gu, '');
     return letters.length < 2;
   }
@@ -70,6 +71,24 @@
     const cut = t.slice(0, max);
     const at = Math.max(cut.lastIndexOf('\n'), cut.lastIndexOf('. '), cut.lastIndexOf(' '));
     return (at > max * 0.55 ? cut.slice(0, at) : cut).trim();
+  }
+
+  function stripNoise(value) {
+    return String(value || '')
+      .replace(/https?:\/\/\S+/gi, '')
+      .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '')
+      .replace(/[★☆✅❌⚠▪•●◆■□═|*_#`~<>\[\]{}]/g, ' ')
+      .replace(/[—–]/g, ', ')
+      .replace(/BSD-[A-Z0-9-]+/gi, '')
+      .replace(/\b0\d[\d\-]{7,}\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function period(s) {
+    const t = text(s).replace(/[,:;\s]+$/, '');
+    if (!t) return '';
+    return /[.!?]$/.test(t) ? t : t + '.';
   }
 
   function usable(value, requireSignal, max) {
@@ -115,6 +134,75 @@
     return clip(dedupe(direct.concat(noted)).join('\n'), 900);
   }
 
+  function nextStep(ctx) {
+    const c = ctx || {};
+    const bag = [];
+    if (c.lead) bag.push(c.lead.meeting_summary, c.lead.notes);
+    if (c.biz) bag.push(c.biz.notes, c.biz.pre_research);
+    (c.meetings || []).forEach(m => bag.push(m.summary_text, m.decisions, m.notes));
+    const hit = bag.map(v => stripNoise(v)).find(v => /נקבעה פגישה|פגישת המשך|לחזור אל|נדבר/.test(v));
+    if (!hit) return '';
+    const part = pieces(hit).find(s => /נקבעה פגישה|פגישת המשך|לחזור|נדבר/.test(s)) || '';
+    const day = (part.match(/יום\s+[א-ת]+/) || [])[0];
+    const date = (part.match(/\d{1,2}[./]\d{1,2}[./]\d{2,4}/) || [])[0];
+    const time = (part.match(/\d{1,2}:\d{2}/) || [])[0];
+    const when = [day, date, time && ('בשעה ' + time)].filter(Boolean).join(' ');
+    return when ? 'השלב הבא: פגישה ' + when + '.' : '';
+  }
+
+  function proseCall(ctx) {
+    const biz = (ctx && ctx.biz) || {};
+    const owner = text(biz.owner_name);
+    const cleaned = stripNoise(callEssence(ctx));
+    const next = nextStep(ctx);
+    if (!cleaned && !next) return '';
+    const bits = pieces(cleaned).filter(s => !isStatusPiece(s) && !isContactOnly(s));
+    const sentences = [];
+    if (owner && /שיחה|לטענתו|לדבריו|לדברי /.test(cleaned)) sentences.push(owner + ' שוחח עם ברוך.');
+    const want = bits.find(s => /מעוניין|רוצה|למכור|סיוע|השקעה|מחפש/.test(s));
+    if (want) sentences.push(period(want));
+    bits.filter(s => s !== want && (SUBSTANCE.test(s) || /לטענתו|לדברי/.test(s))).slice(0, 2).forEach(s => sentences.push(period(s)));
+    if (!sentences.length && bits[0]) sentences.push(period(bits[0]));
+    if (next) sentences.push(next);
+    return clip(dedupe(sentences).join(' '), 520);
+  }
+
+  function shortLines(value, max) {
+    const lines = [];
+    pieces(stripNoise(value)).forEach(piece => {
+      if (lines.length >= max) return;
+      if (!piece || isStatusPiece(piece) || isContactOnly(piece) || EMPTY_LINE.test(piece)) return;
+      const line = clip(piece, 110);
+      if (line) lines.push(line);
+    });
+    return lines.join('\n');
+  }
+
+  function offeringsLabel(biz) {
+    const blob = [biz && biz.field, biz && biz.category, biz && biz.subcategory, biz && biz.internal_name].map(text).join(' ');
+    if (/קליניק|טיפול|אסתט|קוסמט|רפוא|מרפא|רופא/.test(blob)) return 'סוגי טיפולים';
+    if (/מסעד|מזון|בית קפה|מאפי|בר יינ|קייטרינג|תפריט/.test(blob)) return 'תפריט / מנות';
+    if (/חנות|קמעונ|סיטונ|מסחר|מתנות|יבוא/.test(blob)) return 'קטגוריות מוצרים';
+    return 'מוצרים / שירותים עיקריים';
+  }
+
+  function profileBits(blob, testRe) {
+    return pieces(stripNoise(blob)).filter(s => testRe.test(s) && !isStatusPiece(s) && !isContactOnly(s)).map(s => clip(s, 120));
+  }
+
+  function operationsProfile(biz, ctx) {
+    const c = ctx || {};
+    const chunks = [biz && biz.short_description, biz && biz.notes, biz && biz.pre_research, biz && biz.internal_business_summary];
+    if (c.lead) chunks.push(c.lead.notes, c.lead.intake_conversation_summary, c.lead.meeting_summary);
+    (c.calls || []).forEach(call => chunks.push(call.ai_gist, call.ai_body));
+    (c.recordNotes || []).forEach(n => chunks.push(n.note_text));
+    const blob = chunks.filter(Boolean).join('\n');
+    const customers = dedupe(profileBits(blob, /לקוח|חתך לקוח|גילאי |גיל \d|קהל יעד|לקוחות חוזר|לקוחות חדש|פרטיים|עסקיים/)).slice(0, 3).join('\n');
+    const tenure = dedupe(profileBits(blob, /ותק העובד|ותק עובדים|עובדים ותיק|עובד כבר|עובדים כבר|שנות ותק/)).slice(0, 2).join('\n');
+    const offerings = dedupe(profileBits(blob, /שירותים|סוגי טיפול|טיפולי |תפריט|מנות|מוצרים|קטגוריות|ציוד מוצג/)).slice(0, 4).join('\n');
+    return { customers, tenure, offeringsLabel: offeringsLabel(biz), offerings };
+  }
+
   function splitSections(value) {
     const raw = String(value || '');
     const re = /═+\s*([^\n═]+?)\s*═+/g;
@@ -155,8 +243,8 @@
       });
     });
     return {
-      research: clip(dedupe(research).join('\n'), 2200),
-      reviews: clip(dedupe(reviews).join('\n'), 1200)
+      research: dedupe(research).join('\n'),
+      reviews: dedupe(reviews).join('\n')
     };
   }
 
@@ -165,8 +253,8 @@
     const storedReviews = text(biz && (biz.market_reviews || biz.reviews_summary));
     const fromPre = researchFromPre(biz && biz.pre_research);
     return {
-      research: storedResearch || fromPre.research,
-      reviews: storedReviews || fromPre.reviews
+      research: shortLines(storedResearch || fromPre.research, 6),
+      reviews: shortLines(storedReviews || fromPre.reviews, 4)
     };
   }
 
@@ -200,6 +288,7 @@
   function renderPaper(biz, ctx, edits) {
     const names = businessNames(biz, ctx && ctx.lead);
     const found = researchBlocks(biz);
+    const profile = operationsProfile(biz, ctx);
     const fields = [
       ['מחיר מבוקש', ['asking_price', 'price', 'sale_price']],
       ['תחום פעילות', ['field', 'business_type', 'industry']],
@@ -226,27 +315,35 @@
       ['תחום פעילות', biz.field],
       ['קטגוריה', biz.category]
     ];
+    const prepCtx = Object.assign({ biz }, ctx || {});
     const sections = [
-      ['מהות שיחת הטלפון', callEssence(Object.assign({ biz }, ctx || {}))],
+      ['מהות שיחת הטלפון', proseCall(prepCtx)],
       ['מה העסק עושה', whatBusinessDoes(biz)],
       ['חקר שוק קצר', found.research, true],
       ['ביקורות וממצאים', found.reviews, true]
     ];
+    const ops = [
+      ['מי הלקוחות', profile.customers],
+      ['ותק עובדים', profile.tenure],
+      [profile.offeringsLabel, profile.offerings]
+    ];
     const detailRows = details.map(([label, value]) => head(label, value)).join('');
     const sectionRows = sections.map(([label, value, roomy]) => head(label, value, roomy)).join('');
+    const opsRows = ops.map(([label, value]) => head(label, value, true)).join('');
     const lines = n => Array.from({ length: n }, () => '<div class="line"></div>').join('');
     return `<h1>${esc(names.heading || 'טופס פגישה')}</h1>
       <div class="meta"><strong>BSD | טופס פגישה עם בעל עסק</strong> &nbsp; <strong>תאריך פגישה:</strong> ${esc((edits && edits.date) || '________________')} &nbsp; <strong>מספר עסק:</strong> ${esc(biz.business_number || '')}</div>
       <section><h2>פרטי העסק ואיש הקשר</h2><table class="tbl"><thead><tr><th>פרט</th><th>מידע קיים</th><th>תיקון / השלמה</th></tr></thead><tbody>${detailRows}</tbody></table></section>
       <section><h2>רקע לפגישה</h2><table class="tbl"><thead><tr><th>נושא</th><th>מה ידוע לנו</th><th>תיקון / הערות</th></tr></thead><tbody>${sectionRows}</tbody></table></section>
+      <section><h2>לקוחות, עובדים ומוצרים</h2><table class="tbl"><thead><tr><th>נושא</th><th>מידע קיים</th><th>השלמה בכתב יד</th></tr></thead><tbody>${opsRows}</tbody></table></section>
       <section><h2>נתונים עסקיים</h2><table class="tbl"><thead><tr><th>נושא</th><th>מידע קיים</th><th>תיקון / השלמה</th></tr></thead><tbody>${rows}</tbody></table></section>
-      <section class="meeting-section"><h2>עיקרי הפגישה והשלמות</h2>${edits && edits.summary ? `<p style="white-space:pre-wrap">${esc(edits.summary)}</p>` : lines(4)}</section>
-      <section class="meeting-section"><h2>החלטות והמשך טיפול</h2>${edits && edits.next ? `<p style="white-space:pre-wrap">${esc(edits.next)}</p>` : lines(2)}</section>`;
+      <section class="meeting-section"><h2>עיקרי הפגישה והשלמות</h2>${edits && edits.summary ? `<p style="white-space:pre-wrap">${esc(edits.summary)}</p>` : lines(8)}</section>
+      <section class="meeting-section"><h2>החלטות והמשך טיפול</h2>${edits && edits.next ? `<p style="white-space:pre-wrap">${esc(edits.next)}</p>` : lines(4)}</section>`;
   }
 
   const api = {
-    businessNames, whatBusinessDoes, callEssence, researchBlocks, researchFromPre,
-    parseWebResearch, cleanBlock, renderPaper
+    businessNames, whatBusinessDoes, callEssence, proseCall, researchBlocks, researchFromPre,
+    offeringsLabel, operationsProfile, parseWebResearch, cleanBlock, renderPaper
   };
   root.BSDMeetingPrepContent = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

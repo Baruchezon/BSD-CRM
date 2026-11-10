@@ -59,21 +59,27 @@ test('אנטל: what the business does comes from the field shown on the card', 
   assert.equal(api.whatBusinessDoes(antal), 'קליניקה לטיפולים קוסמטיים ואסתטיים');
 });
 
-test('אנטל: phone-call row is what the owner said, not the appointment line', () => {
-  const call = api.callEssence({ biz: antal, lead: antalLead, meetings: [], calls: [], recordNotes: [], activity: [] });
+test('אנטל: phone-call row is clean prose, not the raw note', () => {
+  const ctx = { biz: antal, lead: antalLead, meetings: [], calls: [], recordNotes: [], activity: [] };
+  const call = api.proseCall(ctx);
+  assert.match(call, /בוריס שוחח עם ברוך/);
   assert.match(call, /פועלת 7 שנים/);
   assert.match(call, /ציוד/);
-  assert.doesNotMatch(call, /נקבעה פגישה/);
+  assert.match(call, /השלב הבא: פגישה/);
+  assert.doesNotMatch(call, /נקבעה פגישה|[★═❌✅•]|BSD-/);
+  assert.ok(call.length < 520);
 });
 
-test('אנטל: market research skips the CRM appointment and keeps the public findings', () => {
+test('אנטל: market research and reviews stay short and skip the CRM appointment', () => {
   const found = api.researchBlocks(antal);
   assert.match(found.research, /טיפולי פנים/);
   assert.match(found.research, /Lumenis/);
   assert.doesNotMatch(found.research, /נקבעה פגישה/);
   assert.doesNotMatch(found.research, /דיווח בוריס/);
+  assert.ok(found.research.split('\n').length <= 6);
   assert.match(found.reviews, /גוגל 4\.7/);
   assert.match(found.reviews, /לא מומלץ/);
+  assert.ok(found.reviews.split('\n').length <= 4);
 });
 
 test('stored web research replaces the pre_research extract', () => {
@@ -144,6 +150,30 @@ test('empty fields stay blank, phone is kept, and a web answer of "not found" is
   assert.match(kept.reviews, /גוגל 4\.2/);
 });
 
+test('אנטל: customers, tenure and treatments use only real lines, with a clinic label', () => {
+  const ctx = { biz: antal, lead: antalLead, meetings: [], calls: [], recordNotes: [], activity: [] };
+  const profile = api.operationsProfile(antal, ctx);
+  assert.equal(profile.offeringsLabel, 'סוגי טיפולים');
+  assert.match(profile.offerings, /טיפולי פנים/);
+  assert.equal(profile.tenure, '');
+  assert.equal(profile.customers, '');
+  assert.equal(api.offeringsLabel({ field: 'מסעדות ומזון', category: 'מסעדה מקסיקנית' }), 'תפריט / מנות');
+  assert.equal(api.offeringsLabel({ field: 'מסחר', category: 'חנות ירקות ופירות' }), 'קטגוריות מוצרים');
+  assert.equal(api.offeringsLabel({ field: 'בנייה מתועשת', category: 'בנייה ותעשייה' }), 'מוצרים / שירותים עיקריים');
+  const withPeople = api.operationsProfile({
+    field: 'מסחר', category: 'חנות',
+    notes: 'הלקוחות בעיקר פרטיים, גיל 30 עד 50, וחלקם לקוחות חוזרים. ותק העובדים כשלוש שנים.',
+    pre_research: 'מוצרים: ירקות, פירות וסלטים.'
+  }, {});
+  assert.match(withPeople.customers, /פרטיים/);
+  assert.match(withPeople.tenure, /ותק העובדים/);
+  assert.match(withPeople.offerings, /ירקות/);
+  const html = api.renderPaper(antal, ctx, {});
+  assert.match(html, /לקוחות, עובדים ומוצרים/);
+  assert.match(html, /סוגי טיפולים/);
+  assert.match(html, /class="line"/g) && assert.ok((html.match(/class="line"/g) || []).length >= 12);
+});
+
 test('form file keeps print, save and back, and the research button is screen-only', () => {
   const form = read('js/meetingPrepForm.js');
   assert.match(form, /bsdPrepPrint/);
@@ -155,8 +185,14 @@ test('form file keeps print, save and back, and the research button is screen-on
   assert.match(form, /meeting-prep-research/);
   assert.match(form, /market_research_brief/);
   assert.doesNotMatch(form, /לא ידוע|לא תועד/);
-  assert.match(read('businesses.html'), /meetingPrepContent\.js/);
-  assert.match(read('businesses-preview.html'), /meetingPrepContent\.js/);
+  assert.match(read('businesses.html'), /meetingPrepContent\.js\?v=202611100530/);
+  assert.match(read('businesses-preview.html'), /meetingPrepContent\.js\?v=202611100530/);
+  assert.match(form, /font-size:14pt/);
+  assert.match(form, /font-size:22pt/);
+  assert.match(form, /margin: 8mm/);
+  assert.doesNotMatch(form, /font-size:12pt/);
+  assert.match(read('version.json'), /202611100530/);
+  assert.match(read('businesses.html'), /PAGE_BUILD = '202611100530'/);
 });
 
 test('migration is additive and the edge function does not email or read CRM notes', () => {
