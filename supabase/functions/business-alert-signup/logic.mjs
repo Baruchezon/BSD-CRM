@@ -198,12 +198,15 @@ function addressFormOf(body) {
 
 export const NOTES_MAX = 500;
 
-// Optional free-text notes from the bottom of the form. Returns undefined when the
-// key is missing (older form versions), null when empty, else clean text <= 500.
+// Optional free-text notes from the bottom of the form.
+// undefined = leave stored notes alone (key missing, null, or not text).
+// null      = clear (only an explicit empty string "", or whitespace only).
+// otherwise clean text <= 500. Text that cleans down to nothing is also left alone.
 export function notesOf(body) {
   if (!Object.hasOwn(body || {}, "notes")) return undefined;
   const raw = body.notes;
-  if (raw == null || typeof raw === "object") return null;
+  if (raw == null || typeof raw === "object") return undefined;
+  if (String(raw).trim() === "") return null;
   const text = String(raw)
     .replace(/<[^>]*>/g, " ")
     .replace(/[<>]/g, "")
@@ -214,7 +217,7 @@ export function notesOf(body) {
     .trim()
     .slice(0, NOTES_MAX)
     .trim();
-  return text || null;
+  return text || undefined;
 }
 
 function lookingOf(body, extra) {
@@ -521,11 +524,18 @@ export function signupPrefill(stored, submittedEmail) {
   if (!emailsMatch(stored?.email, submittedEmail)) return null;
   const prefill = {};
   for (const key of PREFILL_KEYS) prefill[key] = stored?.[key] ?? null;
+  // Same gate as the other profile fields (email match only, never on a phone-only match).
+  prefill.notes = stored?.notes ?? null;
   // Show the real consent state: false for a channel the person left.
   prefill.consent_email = !channelClosed(stored, "email");
   prefill.consent_whatsapp = !channelClosed(stored, "whatsapp");
   return prefill;
 }
+
+const RESUBSCRIBE_PROFILE_KEYS = [
+  "categories", "subcategories", "flags", "regions", "region", "interests", "looking_for",
+  "budget_min", "budget_max", "budget_open", "address_form"
+];
 
 // Re-signup with fresh consent by someone who unsubscribed (Roman's E2E, 13.11).
 // Only a closed row, only with the same email, only for channels with fresh consent.
@@ -541,6 +551,14 @@ export function reactivationPlan(stored, row, now) {
   const waUnsub = waFresh ? null : (stored.whatsapp_unsubscribed_at || (["unsubscribed", "unsubscribed_all", "unsubscribed_whatsapp"].includes(stored.status) ? (stored.unsubscribed_at || now) : null));
   const status = !emailUnsub && !waUnsub ? "active" : emailUnsub && waUnsub ? "unsubscribed_all" : emailUnsub ? "unsubscribed_email" : "unsubscribed_whatsapp";
   const active = status === "active";
+  // The person filled the form again: what they submitted now replaces the old profile.
+  // Old values go to the history row (previous.old_values). Notes only when non-empty.
+  const profile = {};
+  for (const key of RESUBSCRIBE_PROFILE_KEYS) {
+    if (Object.hasOwn(row, key)) profile[key] = row[key];
+  }
+  for (const key of ["first_name", "last_name"]) if (row[key]) profile[key] = row[key];
+  if (row.notes) profile.notes = row.notes;
   const changes = {
     status,
     email_unsubscribed_at: emailUnsub,
@@ -564,14 +582,17 @@ export function reactivationPlan(stored, row, now) {
       { status: stored.status, at: now, unsubscribed_at: stored.unsubscribed_at || null }
     ],
     ...(row.source_url ? { source_url: row.source_url } : {}),
-    ...(Object.hasOwn(row, "notes") ? { notes: row.notes } : {})
+    ...profile
   };
   const previous = {};
   for (const key of ["status", "consent_email", "consent_whatsapp", "email_unsubscribed_at", "whatsapp_unsubscribed_at", "unsubscribed_at"]) previous[key] = stored[key] ?? null;
+  const oldValues = {};
+  for (const key of Object.keys(profile)) oldValues[key] = stored[key] ?? null;
+  previous.old_values = oldValues;
   return {
     status: "resubscribed",
     changes,
-    history: { action: "reactivate", previous, next: { status, consent_email: changes.consent_email, consent_whatsapp: changes.consent_whatsapp } }
+    history: { action: "reactivate", previous, next: { status, consent_email: changes.consent_email, consent_whatsapp: changes.consent_whatsapp, new_values: profile } }
   };
 }
 
