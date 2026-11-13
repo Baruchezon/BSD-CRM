@@ -177,8 +177,8 @@ function regionsOf(body) {
 
 function addressFormOf(body) {
   const value = cleanText(body?.address_form, 20).toLowerCase();
-  if (value === "m" || value === "male") return "m";
-  if (value === "f" || value === "female") return "f";
+  if (value === "m" || value === "male") return "male";
+  if (value === "f" || value === "female") return "female";
   return null;
 }
 

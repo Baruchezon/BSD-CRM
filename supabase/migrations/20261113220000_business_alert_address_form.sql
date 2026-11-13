@@ -12,10 +12,10 @@ alter table public.business_alert_subscribers
 
 alter table public.business_alert_subscribers
   add constraint business_alert_subscribers_address_form_check
-  check (address_form in ('m', 'f'));
+  check (address_form in ('male', 'female'));
 
 comment on column public.business_alert_subscribers.address_form is
-  'm = גבר, f = אישה. Null when unknown, and then the message uses the neutral singular.';
+  'male or female, as the website form sends them. Null when unknown, and then the message uses the neutral singular.';
 
 create or replace function public.business_alert_crm_list()
 returns jsonb
@@ -146,9 +146,9 @@ begin
   end if;
   if not v_email_on then v_email_method := null; end if;
   if not v_whatsapp_on then v_whatsapp_method := null; end if;
-  if v_form = 'male' then v_form := 'm'; end if;
-  if v_form = 'female' then v_form := 'f'; end if;
-  if v_form is not null and v_form not in ('m', 'f') then v_form := null; end if;
+  if v_form = 'm' then v_form := 'male'; end if;
+  if v_form = 'f' then v_form := 'female'; end if;
+  if v_form is not null and v_form not in ('male', 'female') then v_form := null; end if;
   v_any := v_email_on or v_whatsapp_on;
   if v_email is not null and exists (select 1 from public.business_alert_subscribers s where lower(s.email) = v_email) then
     raise exception 'email_exists' using errcode = '23505';
@@ -198,9 +198,9 @@ as $$
 declare
   v_form text := nullif(lower(btrim(coalesce(p_address_form, ''))), '');
 begin
-  if v_form = 'male' then v_form := 'm'; end if;
-  if v_form = 'female' then v_form := 'f'; end if;
-  if v_form is not null and v_form not in ('m', 'f') then
+  if v_form = 'm' then v_form := 'male'; end if;
+  if v_form = 'f' then v_form := 'female'; end if;
+  if v_form is not null and v_form not in ('male', 'female') then
     raise exception 'address_form' using errcode = '22023';
   end if;
   update public.business_alert_subscribers

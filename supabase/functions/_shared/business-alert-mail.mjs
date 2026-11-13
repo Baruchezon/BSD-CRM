@@ -29,18 +29,19 @@ export function subscriberFromHeader(name = SUBSCRIBER_FROM_NAME, address = SUBS
 
 export const SUBSCRIBER_FROM = subscriberFromHeader();
 
-// m and f are the stored address_form values. Anything else, including null, is the neutral singular.
+// Stored values are male or female. m and f are accepted and normalized.
+// Anything else, including null, is the neutral singular.
 export function addressKey(value) {
   const raw = String(value ?? "").trim().toLowerCase();
-  if (raw === "m" || raw === "male") return "m";
-  if (raw === "f" || raw === "female") return "f";
-  return "n";
+  if (raw === "m" || raw === "male") return "male";
+  if (raw === "f" || raw === "female") return "female";
+  return "neutral";
 }
 
 export function say(entry, addressForm) {
   if (entry && typeof entry === "object" && !Array.isArray(entry)) {
     const key = addressKey(addressForm);
-    return String(entry[key] ?? entry.n ?? "");
+    return String(entry[key] ?? entry.neutral ?? "");
   }
   return String(entry ?? "");
 }

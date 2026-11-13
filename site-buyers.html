@@ -123,8 +123,8 @@ tr.row:hover{background:#f8fbff}
       <input id="mBudgetMax" type="number" min="0" placeholder="תקציב עד">
       <select id="mAddress">
         <option value="">פנייה: לא צוין</option>
-        <option value="m">פנייה: גבר</option>
-        <option value="f">פנייה: אישה</option>
+        <option value="male">פנייה: גבר</option>
+        <option value="female">פנייה: אישה</option>
       </select>
     </div>
     <div class="searchbar">
@@ -216,8 +216,8 @@ function text(path, fallback){
 function voice(path, form){
   const value = String(path).split('.').reduce((obj, key) => obj && obj[key], COPY);
   if (value && typeof value === 'object'){
-    const key = form === 'm' || form === 'f' ? form : 'n';
-    return value[key] || value.n || '';
+    const key = form === 'm' || form === 'male' ? 'male' : form === 'f' || form === 'female' ? 'female' : 'neutral';
+    return value[key] || value.neutral || '';
   }
   return typeof value === 'string' ? value : '';
 }
@@ -361,8 +361,8 @@ function openRow(id){
     <b>פנייה:</b>
       <select id="addressForm">
         <option value="">לא צוין</option>
-        <option value="m" ${row.address_form === 'm' ? 'selected' : ''}>גבר</option>
-        <option value="f" ${row.address_form === 'f' ? 'selected' : ''}>אישה</option>
+        <option value="male" ${row.address_form === 'male' ? 'selected' : ''}>גבר</option>
+        <option value="female" ${row.address_form === 'female' ? 'selected' : ''}>אישה</option>
       </select>
     </p>
     <p><b>הסכמה:</b> ${row.consent_general ? 'כן' : 'לא'} · ${row.consent_at ? UI.esc(new Date(row.consent_at).toLocaleString('he-IL')) : '—'}<br>
@@ -649,7 +649,7 @@ document.getElementById('addBtn').addEventListener('click', () => {
 });
 async function saveAddress(row){
   const value = document.getElementById('addressForm').value;
-  const form = value === 'm' || value === 'f' ? value : null;
+  const form = value === 'male' || value === 'm' ? 'male' : value === 'female' || value === 'f' ? 'female' : null;
   if (sample){
     row.address_form = form;
     openRow(row.id);

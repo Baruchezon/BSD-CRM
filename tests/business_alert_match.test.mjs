@@ -182,8 +182,9 @@ test('the website form can send taxonomy slugs and the legacy fields together', 
   assert.equal(bothVersions.row.consent_email, false);
   assert.equal(bothVersions.row.consent_whatsapp, true);
   assert.equal(bothVersions.row.utm_term, 'ad-1');
-  assert.equal(validateSignup({ ...signupBody, categories: ['food'], address_form: 'f' }).row.address_form, 'f');
-  assert.equal(validateSignup({ ...signupBody, categories: ['food'], address_form: 'male' }).row.address_form, 'm');
+  assert.equal(validateSignup({ ...signupBody, categories: ['food'], address_form: 'female' }).row.address_form, 'female');
+  assert.equal(validateSignup({ ...signupBody, categories: ['food'], address_form: 'm' }).row.address_form, 'male');
+  assert.equal(validateSignup({ ...signupBody, categories: ['food'], address_form: 'f' }).row.address_form, 'female');
   assert.equal(validateSignup({ ...signupBody, categories: ['food'], address_form: 'office' }).row.address_form, null);
   assert.equal(Object.hasOwn(result.row, 'source'), false);
   assert.equal(result.row.budget_min, 700000);

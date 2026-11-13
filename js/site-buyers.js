@@ -169,14 +169,14 @@
 
   function waHref(phone, text) {
     const digits = waDigits(phone);
-    const note = text || "שלום, כאן BSD - עסקים למכירה.\nיש עדכון קצר שעשוי להתאים לך, רק אם נוח.\nלהסרה השב/י הסר";
+    const note = text || "שלום, כאן BSD - עסקים למכירה.\nיש עדכון קצר שעשוי להתאים לך, רק אם זה זמן טוב.\nלהסרה אפשר להשיב הסר";
     return digits ? "https://wa.me/" + digits + "?text=" + encodeURIComponent(note) : "";
   }
 
   function addressFormOf(value) {
     const raw = String(value || "").trim().toLowerCase();
-    if (raw === "m" || raw === "male") return "m";
-    if (raw === "f" || raw === "female") return "f";
+    if (raw === "m" || raw === "male") return "male";
+    if (raw === "f" || raw === "female") return "female";
     return null;
   }
 
@@ -357,7 +357,7 @@
         consent_version: "v1-2026-11-13", consent_at: today, source_url: "https://www.bsd-bbi.co.il/עסקים-למכירה/",
         signup_channel: "website", utm_campaign: "catalog-nov", utm_source: "site", utm_medium: "organic",
         categories: ["food"], subcategories: ["bakery"], flags: ["franchise"], regions: ["center"],
-        taxonomy_version: "v1-2026-11-13", looking_for: "מאפייה קטנה במרכז", address_form: "f",
+        taxonomy_version: "v1-2026-11-13", looking_for: "מאפייה קטנה במרכז", address_form: "female",
         is_test: true, test_note: "בדיקה של ברוך/אדם 13.11", source: "website-catalog",
         do_not_call: false, manager_notes: "", view_count: 2, handled_at: null, budget_open: true,
         send_count: 1, last_sent_at: today,
@@ -382,7 +382,7 @@
         consent_general: null, consent_email: true, consent_whatsapp: false, legacy_no_consent: true,
         consent_text: null, consent_version: null, source_url: null, do_not_call: false,
         manager_notes: "נרשם בטופס הישן. עדיין בלי הסכמה שיווקית.", view_count: 0, views: [], handled_at: null, budget_open: false, budget_min: 250000, budget_max: 500000,
-        signup_channel: "our_link", manual_source: "link", utm_campaign: "wa-baruch", utm_source: "whatsapp", utm_medium: "link", address_form: "m",
+        signup_channel: "our_link", manual_source: "link", utm_campaign: "wa-baruch", utm_source: "whatsapp", utm_medium: "link", address_form: "male",
         categories: ["construction"], regions: ["north"], looking_for: "נגרייה או ייצור", send_count: 0, sends: []
       },
       {

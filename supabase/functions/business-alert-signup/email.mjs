@@ -163,7 +163,7 @@ export function internalAlertEmailHtml(row) {
     ["נוסח ההסכמה", row.consent_text],
     ["גרסת ההסכמה", row.consent_version],
     ["גרסת נוסח ההסכמה", row.consent_text_version],
-    ["פנייה", row.address_form === "f" ? "אישה" : row.address_form === "m" ? "גבר" : ""],
+    ["פנייה", row.address_form === "female" ? "אישה" : row.address_form === "male" ? "גבר" : ""],
     ["הסכמה ישנה בלי אישור שיווקי", row.legacy_no_consent === true],
     ["מועד ההסכמה", formatConsentTime(row.consent_at)],
     ["ערוץ", row.signup_channel],
