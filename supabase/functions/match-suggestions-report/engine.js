@@ -124,7 +124,7 @@ const REGIONS = {
 const NEAR_REGIONS = [['center', 'sharon'], ['center', 'shfela'], ['shfela', 'jerusalem'], ['shfela', 'south'], ['sharon', 'haifa'], ['haifa', 'north']];
 const ABROAD = ['ארגנטינה', 'צרפת', 'פלורידה', 'מיאמי', 'ארהב', 'ארצות הברית', 'אמריקה', 'לונדון', 'אנגליה', 'קנדה', 'ונצואלה', 'חול', 'usa', 'france'];
 const CITY_WORDS = new Set(Object.values(REGIONS).flatMap(r => r.cities.flatMap(c => tokens(c))));
-function regionOf(text) {
+export function regionOf(text) {
   const t = ' ' + tokens(text).join(' ') + ' ';
   if (!t.trim()) return null;
   // עיר מדויקת קודם (תל אביב לפני "מרכז")

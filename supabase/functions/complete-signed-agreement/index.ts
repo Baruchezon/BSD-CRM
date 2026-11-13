@@ -12,7 +12,7 @@ const RESEND_API_KEY = (Deno.env.get("RESEND_API_KEY") || "").trim();
 const MAIL_FROM = "צוות BSD <info@bsd-bbi.co.il>";
 const MAIL_REPLY_TO = "info@bsd-bbi.co.il";
 // 09.10.2026 (Baruch): every BSD email ends with the approved signature, no logo.
-const SIGNATURE_TEXT = "צוות BSD\nBSD Business Brokers Israel · מחברים עסקים להזדמנויות\ninfo@bsd-bbi.co.il | www.bsd-bbi.co.il";
+const SIGNATURE_TEXT = "צוות BSD\nמשביחים עסקים, מחברים הזדמנויות, מובילים עסקאות\ninfo@bsd-bbi.co.il | www.bsd-bbi.co.il";
 const INTERNAL_EMAIL = "baruch.ezon@gmail.com";
 const BUCKET = "business-files";
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);

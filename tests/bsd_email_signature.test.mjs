@@ -1,6 +1,6 @@
 // 09.10.2026 (Baruch, via Grok Bot): every official BSD place shows only info@bsd-bbi.co.il, and every
 // BSD email ends with the approved signature, no logo:
-//   צוות BSD / BSD Business Brokers Israel · מחברים עסקים להזדמנויות / info@bsd-bbi.co.il | www.bsd-bbi.co.il
+//   צוות BSD / משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות / info@bsd-bbi.co.il | www.bsd-bbi.co.il
 // Kept on purpose: the portal BCC to baruch@bsd-bbi.co.il, login identities (profiles.email lookups),
 // and the technical web-push contact (VAPID_SUBJECT default), which no person ever sees.
 import test from 'node:test';
@@ -11,7 +11,7 @@ import vm from 'node:vm';
 
 const root = new URL('..', import.meta.url).pathname;
 const read = rel => fs.readFileSync(path.join(root, rel), 'utf8');
-const L1 = 'צוות BSD', L2 = 'BSD Business Brokers Israel · מחברים עסקים להזדמנויות', L3 = 'info@bsd-bbi.co.il | www.bsd-bbi.co.il';
+const L1 = 'צוות BSD', L2 = 'משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות', L3 = 'info@bsd-bbi.co.il | www.bsd-bbi.co.il';
 const FN = 'supabase/functions/';
 const mailers = ['send-match-summary', 'send-sale-files-to-buyer', 'send-ad-report-email', 'complete-signed-agreement', 'match-suggestions-report'];
 

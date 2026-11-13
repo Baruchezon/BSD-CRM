@@ -1,7 +1,7 @@
 // Seller-portal login email (08.10.2026, Baruch's wording decision): link to the BSD
 // website, press the «פורטל בעלי עסקים» button, username and the NEW password issued
 // for this send. Ends with the approved BSD signature (Baruch, 09.10.2026: «צוות BSD /
-// BSD Business Brokers Israel · מחברים עסקים להזדמנויות / info@bsd-bbi.co.il | www.bsd-bbi.co.il», no logo).
+// משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות / info@bsd-bbi.co.il | www.bsd-bbi.co.il», no logo).
 // Built only in memory for one send; never stored or logged.
 export const ACCESS_EMAIL_SUBJECT = 'האזור האישי שלך ב-BSD: פרטי כניסה';
 const SITE = 'www.bsd-bbi.co.il';
@@ -27,7 +27,7 @@ export function accessEmailText(d: Data): string {
     '',
     'בברכה,',
     'צוות BSD',
-    'BSD Business Brokers Israel · מחברים עסקים להזדמנויות',
+    'משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות',
     'info@bsd-bbi.co.il | www.bsd-bbi.co.il',
   ].join('\n');
 }
@@ -56,7 +56,7 @@ export function accessEmailHtml(d: Data): string {
 <tr><td align="center" style="padding:18px 26px 6px"><a href="${SITE_URL}" style="display:inline-block;background:#0f2a44;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:12px 28px;border-radius:10px">לאתר BSD</a></td></tr>
 <tr><td style="padding:10px 26px 0"><p style="margin:0;font-size:14px;line-height:1.7;color:#4a5a6a">הפרטים אישיים, נא לא להעביר אותם לאחרים. אפשר להחליף את הסיסמה בכל עת בתוך האזור האישי («החלפת סיסמה»).</p>
 <p style="margin:10px 0 0;font-size:14px;line-height:1.7;color:#4a5a6a">אם הכניסה לא מצליחה, נשמח לעזור${phone ? ` בטלפון <a href="${tel}" dir="ltr" style="color:#0f5ea8;white-space:nowrap">${phone}</a>` : ''}.</p></td></tr>
-<tr><td style="padding:18px 26px 22px"><p style="margin:0;font-size:15px;line-height:1.6;color:#1f2d3d">בברכה,<br><b>צוות BSD</b><br><span style="color:#8a6d1f">BSD Business Brokers Israel · מחברים עסקים להזדמנויות</span><br><span dir="ltr"><a href="mailto:info@bsd-bbi.co.il" style="color:#0f5ea8;text-decoration:none">info@bsd-bbi.co.il</a> | <a href="${SITE_URL}" style="color:#0f5ea8;text-decoration:none">${SITE}</a></span></p></td></tr>
+<tr><td style="padding:18px 26px 22px"><p style="margin:0;font-size:15px;line-height:1.6;color:#1f2d3d">בברכה,<br><b>צוות BSD</b><br><span style="color:#8a6d1f">משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות</span><br><span dir="ltr"><a href="mailto:info@bsd-bbi.co.il" style="color:#0f5ea8;text-decoration:none">info@bsd-bbi.co.il</a> | <a href="${SITE_URL}" style="color:#0f5ea8;text-decoration:none">${SITE}</a></span></p></td></tr>
 </table></td></tr></table></body></html>`;
 }
 // Sender must be an address on the BSD domain (never Resend's shared test sender).

@@ -627,6 +627,30 @@ window.BSDDataCache = (() => {
   else install();
 })();
 
+// קונים שנרשמו לעדכונים באתר. אותו תפריט כלים, ורק למי שכבר רואה אותו.
+(function installSiteBuyersMenuLink(){
+  function install(){
+    try {
+      const toolsWrap = document.getElementById('navToolsWrap');
+      if (!toolsWrap || toolsWrap.querySelector('[data-site-buyers]')) return false;
+      const menu = toolsWrap.querySelector('.bsd-forms-menu');
+      if (!menu) return false;
+      const link = document.createElement('a');
+      link.href = 'site-buyers.html';
+      link.dataset.siteBuyers = '1';
+      link.textContent = '🛒 קונים פוטנציאליים מהאתר';
+      link.style.cssText = 'display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;font-weight:700;border-top:1px solid rgba(255,255,255,.08);';
+      menu.appendChild(link);
+      return true;
+    } catch (e) {
+      console.warn('[BSD site buyers] menu shortcut skipped', e);
+      return false;
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, {once:true});
+  else install();
+})();
+
 // 17.09.2026: תיקוני מלל ותצוגה ממוקדים למודול VIP בלבד.
 (function loadVipUiFixes(){
   try {

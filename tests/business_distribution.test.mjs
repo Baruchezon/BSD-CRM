@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import test from 'node:test';
+
+const sql = fs.readFileSync(new URL('../supabase/migrations/20261113260000_business_distribution_channels.sql', import.meta.url), 'utf8');
+const rollback = fs.readFileSync(new URL('../supabase/migrations/rollback_20261113260000_business_distribution_channels.sql', import.meta.url), 'utf8');
+const card = fs.readFileSync(new URL('../businesses.html', import.meta.url), 'utf8');
+
+test('distribution channels are soft changes and the facebook queue stays anonymous', () => {
+  assert.match(sql, /channel in \('facebook', 'instagram', 'website', 'email_alerts', 'vip', 'whatsapp'\)/);
+  assert.match(sql, /status in \('pending', 'in_progress', 'done', 'stopped'\)/);
+  assert.match(sql, /unique \(business_id, channel\)/);
+  assert.match(sql, /marketing_inactive/);
+  assert.equal(/update public\.businesses[\s\S]*marketing_service_active/.test(sql), false);
+  assert.equal(sql.includes('delete from public.business_distribution_channels'), false);
+  assert.match(sql, /else 'stopped'/);
+  assert.match(sql, /distribution_agent/);
+  assert.match(sql, /anonymous_title/);
+  assert.equal(sql.includes('as internal_name'), false);
+  assert.equal(sql.includes('b.owner_'), false);
+  assert.equal(sql.includes('b.address'), false);
+  assert.match(sql, /media_drive_folder_url/);
+  assert.match(sql, /public_listing_active is distinct from/);
+  assert.match(sql, /website uses public_listing_active/);
+  assert.equal(sql.includes('set public_listing_active'), false);
+  assert.match(sql, /bsd\.skip_distribution_notify/);
+  assert.match(sql, /BSD-B-2610-1109/);
+  assert.match(sql, /BSD-B-2607-1002/);
+  assert.match(sql, /BSD-B-2609-1077/);
+  assert.match(sql, /BSD-B-2610-1104/);
+  assert.equal(sql.includes('BSD-B-2610-1088'), false);
+  const seed = sql.slice(sql.lastIndexOf('insert into public.business_distribution_channels'));
+  assert.equal(/marketing_service_active/.test(seed), false);
+  assert.equal(seed.includes('business_distribution_set'), false);
+  assert.match(sql, /raise exception 'marketing_inactive'/);
+  assert.equal(sql.includes('set public_listing_active'), false);
+  assert.match(sql, /business_distribution_facebook_report/);
+  assert.match(rollback, /drop table if exists public\.business_distribution_channels/);
+  assert.match(rollback, /drop table if exists public\.business_distribution_notify_log/);
+  assert.match(rollback, /drop column if exists media_drive_folder_url/);
+  assert.match(card, /id="public_listing_active"/);
+  assert.match(card, /id="bizChannelChecks"/);
+  assert.match(card, /key: 'facebook', label: 'פייסבוק'/);
+  assert.equal(card.includes('openDistributionPanel'), false);
+});

@@ -23,7 +23,14 @@ const store: WebhookStore = {
   async bumpConversation(id, p) { must(await db.rpc('wa_bump_conversation_inbound', { p_id: id, p_at: p.last_message_at, p_preview: p.last_message_preview }), 'bump'); },
   async messageByProviderId(pid) { return must(await db.from('whatsapp_messages').select('id,status').eq('provider_message_id', pid).maybeSingle(), 'status lookup'); },
   async upload(path, bytes, mime) { must(await db.storage.from(BUCKET).upload(path, bytes, { contentType: mime, upsert: true }), 'upload'); },
-  async optOutByPhone(e164, source, messageId) { return Number(must(await db.rpc('wa_opt_out_by_phone', { p_e164: e164, p_source: source, p_message_id: messageId }), 'opt out') || 0); },
+  async optOutByPhone(e164, source, messageId) {
+    // NOT WIRED. Meta / 077 WhatsApp is frozen, so this webhook does not call
+    // the business-alert list. When inbound replies are connected, the same
+    // branch in handler.ts that already sees isStopMessage («הסר», «הסירו», «stop»)
+    // should also run, and then ignore the result if the phone is not a subscriber:
+    //   await db.rpc('business_alert_apply_whatsapp_stop', { p_phone: e164, p_text: messageText })
+    return Number(must(await db.rpc('wa_opt_out_by_phone', { p_e164: e164, p_source: source, p_message_id: messageId }), 'opt out') || 0);
+  },
 };
 
 Deno.serve(createWebhookHandler({ cfg: readConfig(k => Deno.env.get(k)), store, fetch,
