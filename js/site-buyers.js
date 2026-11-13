@@ -43,6 +43,7 @@
     north: "צפון", haifa: "חיפה והקריות", sharon: "שרון", tel_aviv: "תל אביב",
     center: "מרכז וגוש דן", shfela: "שפלה", jerusalem: "ירושלים והסביבה", south: "דרום", all: "כל הארץ"
   };
+  const FLAGS = { franchise: "זכיינות" };
   const SOURCE_LABEL = {
     website: "נרשם דרך האתר",
     our_link: "יזום שלנו",
@@ -79,6 +80,11 @@
   function subLabels(row) {
     const slugs = Array.isArray(row.subcategories) ? row.subcategories.filter(Boolean) : [];
     return slugs.map(slug => SUBS[slug] || slug);
+  }
+
+  function flagLabels(row) {
+    const slugs = Array.isArray(row.flags) ? row.flags.filter(Boolean) : [];
+    return slugs.map(slug => FLAGS[slug] || slug);
   }
 
   function regionLabels(row) {
@@ -233,7 +239,8 @@
         consent_text: "אני מאשר/ת לקבל מ-BSD עדכונים ופרסומות על עסקים למכירה",
         consent_version: "v1-2026-11-13", consent_at: today, source_url: "https://www.bsd-bbi.co.il/עסקים-למכירה/",
         signup_channel: "website", utm_campaign: "catalog-nov", utm_source: "site", utm_medium: "organic",
-        categories: ["food"], subcategories: ["bakery"], regions: ["center"], looking_for: "מאפייה קטנה במרכז",
+        categories: ["food"], subcategories: ["bakery"], flags: ["franchise"], regions: ["center"],
+        taxonomy_version: "v1-2026-11-13", looking_for: "מאפייה קטנה במרכז",
         do_not_call: false, manager_notes: "", view_count: 2, handled_at: null, budget_open: true,
         send_count: 1, last_sent_at: today,
         sends: [{ business_number: "1042", internal_name: "מאפיית הדגמה הפנימית", sent_at: today, channel: "email", match_pct: 86, opened_at: null, replied_at: null }],
@@ -298,6 +305,6 @@
 
   root.BSDSiteBuyers = {
     esc, statusLabel, summarize, filterRows, inChannel, sampleAllowed, sampleRows, bars, reasonText, startOfWeekJerusalem,
-    sourceKind, sourceBadge, sectorLabels, subLabels, regionLabels, budgetLabel, lookingLine, sendSummary, passesFilters, SOURCE_LABEL
+    sourceKind, sourceBadge, sectorLabels, subLabels, flagLabels, regionLabels, budgetLabel, lookingLine, sendSummary, passesFilters, SOURCE_LABEL
   };
 })(typeof window !== "undefined" ? window : globalThis);

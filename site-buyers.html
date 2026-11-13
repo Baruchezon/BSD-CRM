@@ -48,6 +48,7 @@ tr.row:hover{background:#f8fbff}
 .p-ours{background:#f3e7ff;color:#5a2d82}
 .p-hand{background:#fff1d6;color:#8a4b12}
 .p-phone{background:#e5f6ec;color:#14663a}
+.p-flag{background:#efe4ff;color:#5a2d82}
 .badge{display:inline-block;border-radius:99px;padding:3px 8px;font-size:.75rem;font-weight:800}
 .actions{display:flex;gap:6px;flex-wrap:wrap}
 .actions button,.drawer button,.sheet a.soft{border:0;border-radius:10px;padding:8px 10px;font:inherit;font-weight:800;cursor:pointer;text-decoration:none;display:inline-block}
@@ -187,7 +188,7 @@ tr.row:hover{background:#f8fbff}
 <script src="js/config.js?v=202611131800"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
-<script src="js/site-buyers.js?v=202611131800"></script>
+<script src="js/site-buyers.js?v=202611131830"></script>
 <script>
 const UI = window.BSDSiteBuyers;
 const API = (window.BSD_CONFIG && window.BSD_CONFIG.SUPABASE_URL || '') + '/functions/v1/business-alert-admin';
@@ -293,7 +294,8 @@ function paint(){
       : `<span class="pill ${row.status === 'active' ? 'p-active' : 'p-off'}">${UI.esc(UI.statusLabel(row.status))}</span>`;
     const call = row.do_not_call ? ' <span class="pill p-call">לא להתקשר</span>' : '';
     const signed = row.created_at ? UI.esc(new Date(row.created_at).toLocaleDateString('he-IL')) : '—';
-    return `<tr class="row" data-id="${UI.esc(row.id)}"><td><b>${name}</b></td><td><span class="badge ${badgeClass[kind] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span></td><td>${UI.esc(UI.lookingLine(row))}</td><td>${UI.esc(UI.budgetLabel(row))}</td><td>${signed}</td><td>${UI.esc(UI.sendSummary(row))}</td><td>${pill}${call}</td></tr>`;
+    const flags = UI.flagLabels(row).map(label => `<span class="pill p-flag">${UI.esc(label)}</span>`).join(' ');
+    return `<tr class="row" data-id="${UI.esc(row.id)}"><td><b>${name}</b>${flags ? '<br>' + flags : ''}</td><td><span class="badge ${badgeClass[kind] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span></td><td>${UI.esc(UI.lookingLine(row))}</td><td>${UI.esc(UI.budgetLabel(row))}</td><td>${signed}</td><td>${UI.esc(UI.sendSummary(row))}</td><td>${pill}${call}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -319,6 +321,7 @@ function openRow(id){
     <p><b>ערוצים שאושרו:</b> ${UI.esc(channels)}<br>
     <b>תחומים:</b> ${UI.esc(UI.sectorLabels(row).join(', '))}<br>
     <b>תתי תחומים:</b> ${UI.esc(UI.subLabels(row).join(', ') || '—')}<br>
+    <b>סימונים:</b> ${UI.esc(UI.flagLabels(row).join(', ') || '—')}<br>
     <b>תקציב:</b> ${UI.esc(UI.budgetLabel(row))}<br>
     <b>אזורים:</b> ${UI.esc(UI.regionLabels(row).join(', '))}<br>
     <b>במילים שלהם:</b> ${UI.esc(row.looking_for || '—')}</p>

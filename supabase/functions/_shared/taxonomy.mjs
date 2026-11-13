@@ -37,6 +37,14 @@ export function regionSlugs() {
   return regions.map(item => item.slug);
 }
 
+export function flagSlugs() {
+  return (taxonomy.flags || []).map(item => item.slug);
+}
+
+export function flagLabel(slug) {
+  return (taxonomy.flags || []).find(item => item.slug === slug)?.label || slug || "";
+}
+
 const LEGACY_INTEREST = {
   "מזון": { categories: ["food"] },
   "תעשייה": { categories: ["construction"], subcategories: ["manufacturing"] },
@@ -254,7 +262,7 @@ export function locationRelation(subscriberRegions, businessRegions) {
   const wanted = new Set(subscriberRegions || []);
   const found = new Set(businessRegions || []);
   if (!wanted.size) return { kind: "unknown", ratio: 0.6 };
-  if (wanted.has("all")) return { kind: "all", ratio: 0.8 };
+  if (wanted.has("all")) return { kind: "all", ratio: 1 };
   if ([...wanted].some(slug => found.has(slug))) return { kind: "same", ratio: 1 };
   const near = [...wanted].some(slug => {
     const item = regionBySlug(slug);

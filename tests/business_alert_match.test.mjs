@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { validateSignup } from '../supabase/functions/business-alert-signup/logic.mjs';
-import { businessTaxonomy, regionsFromText } from '../supabase/functions/_shared/taxonomy.mjs';
+import { businessTaxonomy, locationRelation, regionsFromText } from '../supabase/functions/_shared/taxonomy.mjs';
 import { CONSENT_TEXT_VERSION } from '../supabase/functions/business-alert-signup/logic.mjs';
 import {
   DEFAULT_MATCH_CONFIG,
@@ -109,7 +109,7 @@ test('messy business text maps onto taxonomy slugs', () => {
 });
 
 test('the website form can send taxonomy slugs and the legacy fields together', () => {
-  const result = validateSignup({
+  const signupBody = {
     first_name: 'דנה',
     last_name: 'לוי',
     phone: '050-1234567',
@@ -117,9 +117,12 @@ test('the website form can send taxonomy slugs and the legacy fields together', 
     interests: ['מזון'],
     region: 'מרכז',
     budget: 'open',
-    categories: ['food'],
+    categories: ['food', 'not-a-slug'],
     subcategories: ['bakery', 'cafe'],
-    regions: ['center', 'tel_aviv'],
+    flags: ['franchise', 'mystery'],
+    regions: ['south', 'all', 'atlantis'],
+    taxonomy_version: 'v1-2026-11-13',
+    source: 'website-catalog',
     budget_min: 700000,
     budget_max: 1300000,
     budget_open: false,
@@ -135,24 +138,36 @@ test('the website form can send taxonomy slugs and the legacy fields together', 
     consent_text: 'אני מאשר/ת לקבל מ-BSD עדכונים ופרסומות על עסקים למכירה',
     consent_version: 'v1-2026-11-13',
     source_url: 'https://www.bsd-bbi.co.il/עסקים-למכירה/'
-  });
+  };
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(' '));
+  let result;
+  try {
+    result = validateSignup(signupBody);
+  } finally {
+    console.warn = originalWarn;
+  }
   assert.equal(result.ok, true, result.error);
-  assert.deepEqual(result.row.categories, ['food']);
+  assert.deepEqual(result.row.categories, ['food', 'not-a-slug']);
   assert.deepEqual(result.row.subcategories, ['bakery', 'cafe']);
-  assert.deepEqual(result.row.regions, ['center', 'tel_aviv']);
+  assert.deepEqual(result.row.flags, ['franchise', 'mystery']);
+  assert.deepEqual(result.row.regions, ['all']);
+  assert.equal(result.row.taxonomy_version, 'v1-2026-11-13');
+  assert.equal(Object.hasOwn(result.row, 'source'), false);
   assert.equal(result.row.budget_min, 700000);
   assert.equal(result.row.budget_max, 1300000);
   assert.equal(result.row.budget_open, false);
   assert.equal(result.row.signup_channel, 'website');
-  assert.equal(result.row.source, 'website-catalog');
   assert.equal(result.row.utm_campaign, 'catalog-nov');
   assert.equal(result.row.utm_content, 'banner');
   assert.equal(result.row.source_url, 'https://www.bsd-bbi.co.il/עסקים-למכירה/');
   assert.equal(result.row.looking_for, 'מאפייה או בית קפה');
-  assert.equal(validateSignup({
-    first_name: 'דנה', last_name: 'לוי', phone: '050-1234567', email: 'dana@example.com',
-    consent_email: true, consent_text_version: CONSENT_TEXT_VERSION, categories: ['not-a-slug']
-  }).error, 'invalid_category');
+  assert.match(warnings.join('\n'), /not-a-slug/);
+  assert.match(warnings.join('\n'), /mystery/);
+  assert.match(warnings.join('\n'), /atlantis/);
+  assert.equal(locationRelation(['all'], ['south']).ratio, 1);
+  assert.equal(locationRelation(['all'], ['north']).kind, 'all');
 });
 
 test('whatsapp signup source and a bakery phrase stay on the same form', () => {

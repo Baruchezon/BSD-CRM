@@ -7,7 +7,6 @@ export const CONSENT_TEXT_VERSION = "alerts-consent-2026-11-12";
 export const CONSENT_EMAIL_TEXT = "אני מאשר/ת לקבל מ-BSD עדכונים על עסקים למכירה באימייל";
 export const CONSENT_WHATSAPP_TEXT = "אני מאשר/ת לקבל מ-BSD עדכונים על עסקים למכירה גם בוואטסאפ";
 export const CONSENT_GENERAL_TEXT = "אני מאשר/ת לקבל מ-BSD עדכונים ופרסומות על עסקים למכירה";
-export const SOURCE = "website-catalog";
 export const NEW_CONSENT_KEYS = ["consent_general", "consent_text", "consent_version", "source_url"];
 
 export const INTERESTS = [
@@ -51,9 +50,9 @@ export const RATE_LIMITS = {
 };
 
 import { formInterestFromPhrase, formRegionFromText, parseAlertBudget } from "../_shared/alert-match.mjs";
-import { categorySlugs, regionSlugs, subcategorySlugs } from "../_shared/taxonomy.mjs";
+import { categorySlugs, flagSlugs, regionSlugs, subcategorySlugs } from "../_shared/taxonomy.mjs";
 
-const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
+const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content"];
 
 export function cleanText(value, max = 200) {
   return String(value ?? "")
@@ -153,18 +152,27 @@ function numberOrNull(value) {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-function slugList(value, allowed, error) {
+function slugList(value, allowed, field) {
   if (value == null || value === "") return { ok: true, slugs: [] };
-  if (!Array.isArray(value)) return { ok: false, error };
+  if (!Array.isArray(value)) return { ok: false, error: `invalid_${field}` };
   const slugs = [];
   const known = new Set(allowed);
   for (const item of value) {
     const slug = cleanText(item, 60);
     if (!slug) continue;
-    if (!known.has(slug)) return { ok: false, error };
+    if (!known.has(slug)) {
+      console.warn(`business-alert signup: unknown ${field} slug kept: ${slug}`);
+    }
     if (!slugs.includes(slug)) slugs.push(slug);
   }
   return { ok: true, slugs };
+}
+
+function regionsOf(body) {
+  const parsed = slugList(body?.regions, regionSlugs(), "region");
+  if (!parsed.ok) return parsed;
+  if (parsed.slugs.includes("all")) return { ok: true, slugs: ["all"] };
+  return parsed;
 }
 
 function lookingOf(body, extra) {
@@ -192,11 +200,13 @@ function sharedFields(body) {
   const interests = normalizeInterests(body?.interests);
   if (!interests) return { ok: false, error: "invalid_interests" };
   const region = normalizeRegion(body?.region);
-  const categories = slugList(body?.categories, categorySlugs(), "invalid_category");
+  const categories = slugList(body?.categories, categorySlugs(), "category");
   if (!categories.ok) return categories;
-  const subcategories = slugList(body?.subcategories, subcategorySlugs(), "invalid_subcategory");
+  const subcategories = slugList(body?.subcategories, subcategorySlugs(), "subcategory");
   if (!subcategories.ok) return subcategories;
-  const regions = slugList(body?.regions, regionSlugs(), "invalid_region");
+  const flags = slugList(body?.flags, flagSlugs(), "flag");
+  if (!flags.ok) return flags;
+  const regions = regionsOf(body);
   if (!regions.ok) return regions;
   let budget = budgetFromKey(body?.budget);
   if (body?.budget_open === true) budget = { budget_min: null, budget_max: null, budget_open: true };
@@ -219,12 +229,13 @@ function sharedFields(body) {
       interests: interests.interests,
       categories: categories.slugs,
       subcategories: subcategories.slugs,
+      flags: flags.slugs,
       regions: regions.slugs,
       budget_min: budget.budget_min,
       budget_max: budget.budget_max,
       budget_open: budget.budget_open,
       region: region.region,
-      source: SOURCE,
+      taxonomy_version: cleanText(body?.taxonomy_version, 40) || null,
       signup_channel: signupChannelOf(body),
       source_url: normalizeSourceUrl(body?.source_url).ok ? normalizeSourceUrl(body?.source_url).source_url : null,
       looking_for: lookingOf(body, [interests.extra, region.extra].filter(Boolean).join("\n")),

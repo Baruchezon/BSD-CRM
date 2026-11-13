@@ -204,6 +204,7 @@ test('subscriber rows show a source badge and honor the screen filters', () => {
   assert.equal(quiet.length, 1);
   const food = rows.filter(row => ctx.BSDSiteBuyers.passesFilters(row, { source: 'all', sector: 'מזון ומסעדנות' }));
   assert.equal(ctx.BSDSiteBuyers.subLabels(rows[0]).join(', '), 'מאפייה');
+  assert.equal(ctx.BSDSiteBuyers.flagLabels(rows[0]).join(','), 'זכיינות');
   assert.equal(food.length, 1);
   assert.equal(ctx.BSDSiteBuyers.summarize(rows, new Date('2026-11-13T10:00:00+02:00')).sends, 1);
 });

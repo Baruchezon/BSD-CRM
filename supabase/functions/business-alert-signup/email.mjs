@@ -104,13 +104,14 @@ export function internalAlertEmailHtml(row) {
     ["גרסת ההסכמה", row.consent_version || row.consent_text_version],
     ["הסכמה ישנה בלי אישור שיווקי", row.legacy_no_consent === true],
     ["מועד ההסכמה", formatConsentTime(row.consent_at)],
-    ["מקור", row.source],
+    ["ערוץ", row.signup_channel],
+    ["סימונים", row.flags],
+    ["גרסת טקסונומיה", row.taxonomy_version],
     ["עמוד", row.source_url],
     ["utm_source", row.utm_source],
     ["utm_medium", row.utm_medium],
     ["utm_campaign", row.utm_campaign],
-    ["utm_content", row.utm_content],
-    ["utm_term", row.utm_term]
+    ["utm_content", row.utm_content]
   ].map(([label, value]) => fieldRow(label, value)).join("");
   const heading = row.signupKind === "new" ? "נרשם חדש לעדכוני עסקים" : "נרשם מחדש לעדכוני עסקים";
   return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb"><div dir="rtl" lang="he" style="max-width:640px;margin:0 auto;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#102844;padding:28px;text-align:right"><h1 style="margin:0 0 8px;font-size:24px">${escapeHtml(heading)}</h1><p style="margin:0 0 16px">${escapeHtml(kind)}. הפרטים המלאים של הנרשם:</p><table dir="rtl" role="presentation" style="width:100%;border-collapse:collapse;border:1px solid #ead9b0">${rows}</table>${signOffHtml()}</div></body></html>`;
