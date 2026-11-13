@@ -27,8 +27,12 @@ import {
   thankYouEmailHtml,
   thankYouEmailText,
   thankYouSubject,
-  unsubscribeUrl
+  unsubscribeUrl,
+  welcomeBackHtml,
+  welcomeBackSubject,
+  welcomeBackText
 } from "./email.mjs";
+import { buttonLink, shortLinksLive } from "../_shared/short-links.mjs";
 import { listUnsubscribeHeaders, unsubscribeHttpsUrl } from "../_shared/business-alert-mail.mjs";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -40,7 +44,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 
 const TABLE = "business_alert_subscribers";
 const ATTEMPTS = "business_alert_signup_attempts";
-const LOOKUP = "id, first_name, last_name, email, phone, phone9, unsubscribe_token, status, unsubscribed_at, unsubscribed_by, unsubscribe_reason, email_unsubscribed_at, whatsapp_unsubscribed_at, status_history, resubscribed_at, categories, subcategories, flags, budget_min, budget_max, budget_open, regions, looking_for, consent_email, consent_whatsapp, address_form, crm_lead_id, region, interests, notes";
+const LOOKUP = "id, welcome_sent_at, welcome_back_sent_at, first_name, last_name, email, phone, phone9, unsubscribe_token, status, unsubscribed_at, unsubscribed_by, unsubscribe_reason, email_unsubscribed_at, whatsapp_unsubscribed_at, status_history, resubscribed_at, categories, subcategories, flags, budget_min, budget_max, budget_open, regions, looking_for, consent_email, consent_whatsapp, address_form, crm_lead_id, region, interests, notes";
 
 const allowedOrigins = new Set([
   "https://bsd-bbi.co.il",
@@ -319,6 +323,46 @@ async function unsubscribe(token: string, origin: string | null, ip: string) {
   return json({ ok: true }, 200, origin);
 }
 
+// Baruch, 13.11 12:43: one thank-you per subscriber, ever. The flag is claimed before
+// the email is sent, so a double submit or a race cannot send a second one.
+async function claimWelcome(subscriberId: string) {
+  const { data, error } = await supabase.from(TABLE)
+    .update({ welcome_sent_at: new Date().toISOString() })
+    .eq("id", subscriberId)
+    .is("welcome_sent_at", null)
+    .select("id");
+  if (error) throw error;
+  return (data || []).length === 1;
+}
+
+// One welcome-back email per return after an unsubscribe.
+function lastUnsubscribedAt(row: Record<string, unknown>) {
+  const times = [row.unsubscribed_at, row.email_unsubscribed_at, row.whatsapp_unsubscribed_at]
+    .map(value => (value ? Date.parse(String(value)) : NaN))
+    .filter(value => Number.isFinite(value));
+  return times.length ? new Date(Math.max(...times)).toISOString() : null;
+}
+
+async function claimWelcomeBack(existing: Record<string, unknown>) {
+  const cutoff = lastUnsubscribedAt(existing);
+  let query = supabase.from(TABLE)
+    .update({ welcome_back_sent_at: new Date().toISOString() })
+    .eq("id", existing.id);
+  query = cutoff
+    ? query.or(`welcome_back_sent_at.is.null,welcome_back_sent_at.lt.${cutoff}`)
+    : query.is("welcome_back_sent_at", null);
+  const { data, error } = await query.select("id");
+  if (error) throw error;
+  return (data || []).length === 1;
+}
+
+async function removalButton(subscriberId: string, token: string) {
+  const live = await shortLinksLive(supabase);
+  return await buttonLink(supabase, {
+    live, kind: "unsubscribe", subscriberId, channel: "all", fallback: unsubscribeUrl(token, "all")
+  });
+}
+
 async function resubscribe(
   existing: Record<string, unknown>,
   row: Record<string, unknown>,
@@ -340,15 +384,19 @@ async function resubscribe(
     next: plan.history.next
   });
   if (historyError) console.error("reactivation history was not stored", historyError.message);
+  // A repeated or parallel resubscribe after the same unsubscribe sends nothing more.
+  if (!(await claimWelcomeBack(existing))) {
+    return json({ ok: true, status: plan.status, emailSent: false, duplicate: true }, 200, origin);
+  }
   let thankYou = { sent: false, error: null as string | null };
   if (changes.consent_email === true && saved?.email) {
-    const pageLink = unsubscribeUrl(String(saved.unsubscribe_token), "all");
+    const button = await removalButton(String(saved.id), String(saved.unsubscribe_token));
     const oneClick = unsubscribeHttpsUrl(supabaseUrl, saved.unsubscribe_token, "all");
     thankYou = await sendEmail(
       String(saved.email),
-      thankYouSubject(saved.address_form),
-      thankYouEmailHtml({ firstName: saved.first_name, unsubscribeLink: pageLink, addressForm: saved.address_form }),
-      thankYouEmailText({ firstName: saved.first_name, unsubscribeLink: pageLink, addressForm: saved.address_form }),
+      welcomeBackSubject(),
+      welcomeBackHtml({ firstName: saved.first_name, unsubscribeLink: button, addressForm: saved.address_form }),
+      welcomeBackText({ firstName: saved.first_name, addressForm: saved.address_form }),
       listUnsubscribeHeaders(oneClick)
     );
   }
@@ -418,7 +466,11 @@ Deno.serve(async req => {
     }
 
     const saved = await writeSubscriber(signup.row, ip, cleanText(req.headers.get("user-agent"), 300));
-    const pageLink = saved.identityKept ? "" : unsubscribeUrl(saved.unsubscribe_token, "all");
+    // One thank-you and one alert to Baruch per subscriber, ever (double submit, race).
+    if (!(await claimWelcome(String(saved.id)))) {
+      return json({ ok: true, emailSent: false, emailError: null, duplicate: true }, 200, origin);
+    }
+    const pageLink = saved.identityKept ? "" : await removalButton(String(saved.id), String(saved.unsubscribe_token));
     const oneClick = unsubscribeHttpsUrl(supabaseUrl, saved.unsubscribe_token, "all");
     const thankYou = await sendEmail(
       signup.row.email,
@@ -436,6 +488,10 @@ Deno.serve(async req => {
     });
     const internal = await sendEmail(INTERNAL_TO, alert.subject, alert.html, alert.text, undefined, alert.from);
     if (!internal.sent) console.error("Internal alert email was not sent", internal.error || "");
+    if (!thankYou.sent) {
+      // Not delivered: release the claim so a later signup can still send the one thank-you.
+      await supabase.from(TABLE).update({ welcome_sent_at: null }).eq("id", saved.id);
+    }
 
     return json({ ok: true, emailSent: thankYou.sent, emailError: thankYou.error ?? null }, 200, origin);
   } catch (error) {

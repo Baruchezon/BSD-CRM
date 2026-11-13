@@ -116,7 +116,7 @@ export function subscriberSubject(topic) {
   return String(topic || "").replace(/^\s*פרסומת\s*:?\s*/, "").trim();
 }
 
-export function subscriberText({ firstName, body, unsubscribeUrl, addressForm }) {
+export function subscriberText({ firstName, body, unsubscribeUrl, addressForm, textLinks = true }) {
   const name = String(firstName || "").trim();
   const hello = name ? `שלום ${name},` : "שלום,";
   return [
@@ -126,17 +126,17 @@ export function subscriberText({ firstName, body, unsubscribeUrl, addressForm })
     "",
     quietNoteText(addressForm),
     "",
-    unsubscribeUrl ? `להסרה: ${unsubscribeUrl}` : "",
+    textLinks ? (unsubscribeUrl ? `להסרה: ${unsubscribeUrl}` : "") : "להסרה מרשימת העדכונים אפשר להשיב למייל הזה במילה «הסרה».",
     "",
     signOffText()
   ].filter((line, index, all) => line !== "" || (index > 0 && all[index - 1] !== "")).join("\n");
 }
 
-export function subscriberHtml({ firstName, body, unsubscribeUrl, addressForm }) {
+export function subscriberHtml({ firstName, body, unsubscribeUrl, addressForm, button = null }) {
   const name = escapeHtml(String(firstName || "").trim());
   const hello = name ? `שלום ${name},` : "שלום,";
   const link = unsubscribeUrl
     ? `<p style="margin:16px 0 0;font-size:14px"><a href="${escapeHtml(unsubscribeUrl)}" style="color:#1d67c8">${escapeHtml(say(copy.email.unsubscribe, addressForm))}</a></p>`
     : "";
-  return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb"><div dir="rtl" lang="he" style="max-width:640px;margin:0 auto;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#102844;text-align:right"><div style="background:#0e1b34;color:#f0d48a;padding:18px 24px;font-size:18px;font-weight:700">${escapeHtml(SUBSCRIBER_FROM_NAME)}</div><div style="padding:24px;line-height:1.7;font-size:16px"><p style="margin:0 0 12px">${hello}</p><p style="margin:0">${escapeHtml(body || "").replace(/\n/g, "<br>")}</p>${link}${quietNoteHtml(addressForm)}${signOffHtml()}</div></div></body></html>`;
+  return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb"><div dir="rtl" lang="he" style="max-width:640px;margin:0 auto;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#102844;text-align:right"><div style="background:#0e1b34;color:#f0d48a;padding:18px 24px;font-size:18px;font-weight:700">${escapeHtml(SUBSCRIBER_FROM_NAME)}</div><div style="padding:24px;line-height:1.7;font-size:16px"><p style="margin:0 0 12px">${hello}</p><p style="margin:0">${escapeHtml(body || "").replace(/\n/g, "<br>")}</p>${button?.href ? `<p style="margin:16px 0 0"><a href="${escapeHtml(button.href)}" target="_blank" rel="noreferrer" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#102d61;color:#ffffff;font-weight:700;text-decoration:none">${escapeHtml(button.label || "לעסקים למכירה")}</a></p>` : ""}${link}${quietNoteHtml(addressForm)}${signOffHtml()}</div></div></body></html>`;
 }

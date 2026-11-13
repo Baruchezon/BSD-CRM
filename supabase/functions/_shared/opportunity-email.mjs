@@ -13,6 +13,7 @@ import {
   quietNoteText,
   subscriberSubject
 } from "./business-alert-mail.mjs";
+import { TEXT_REMOVAL_LINE } from "./short-links.mjs";
 
 export const OPPORTUNITY_FROM = SUBSCRIBER_FROM;
 export const OPPORTUNITY_LOGO = "https://www.bsd-bbi.co.il/assets/bsd-asset-01-logo.png";
@@ -79,13 +80,10 @@ function businessText(business, index) {
     `מספר עסק ${business.number}`,
     `אזור: ${business.region}`,
     `מחיר מבוקש: ${business.priceText}`,
-    business.summary,
-    "לכל פרטי העסק:",
-    business.url
+    business.summary
   ];
-  if (business.detailsUrl) {
-    lines.push("לקבלת פרטים מורחבים:", business.detailsUrl);
-  }
+  // No URLs in the plain-text part (Baruch, 13.11 12:43): the buttons carry the links.
+  if (business.detailsUrl) lines.push("לפרטים מורחבים אפשר להשיב למייל הזה עם מספר העסק.");
   return lines.join("\n");
 }
 
@@ -98,9 +96,7 @@ export function threeBusinessEmail({ firstName, businesses, unsubscribeUrl, addr
   const intro = count === 1
     ? "בחרנו עבורך עסק מהרשימה הציבורית. אם הוא מדבר אליך, נשמח לשמוע וללוות אותך הלאה."
     : "בחרנו עבורך שלושה עסקים מהרשימה הציבורית, בתחומים ובסדרי גודל שונים, כדי להתחיל מכאן. אם משהו מהם מדבר אליך, נשמח לשמוע וללוות אותך הלאה.";
-  const removal = unsubscribeUrl
-    ? `אם לא רוצים להמשיך לקבל עדכונים, אפשר להסיר את עצמך כאן: ${unsubscribeUrl}`
-    : "אם לא רוצים להמשיך לקבל עדכונים, אפשר לפנות אלינו ונפסיק מיד.";
+  const removal = TEXT_REMOVAL_LINE;
   const text = [
     hello,
     "",

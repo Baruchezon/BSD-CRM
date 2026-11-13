@@ -69,7 +69,8 @@ test("request-details sends the PDF as an attachment, no signed link", () => {
   assert.equal(attachmentName("BSD-B-2607-1015"), "BSD-anonymous-summary-1015.pdf");
   const copy = fileDetailsCopy({ firstName: "דנה", addressForm: "female", unsubscribeUrl: "https://u/x", slogan: "ס" });
   assert.equal(copy.subject.includes("פרסומת"), false);
-  assert.ok(copy.text.includes("מצורף") && copy.text.includes("https://u/x"));
+  assert.ok(copy.text.includes("מצורף") && !copy.text.includes("https://"));
+  assert.ok(copy.html.includes('href="https://u/x"'));
   const src = readFileSync("supabase/functions/business-alert-request-details/index.ts", "utf8");
   assert.equal(/createSignedUrl/.test(src), false);
   assert.match(src, /attachments/);

@@ -16,6 +16,7 @@ import {
   subscriberSubject
 } from "../_shared/business-alert-mail.mjs";
 import { categoryBySlug, flagLabel, regionLabel, subcategoryBySlug } from "../_shared/taxonomy.mjs";
+import { TEXT_REMOVAL_LINE } from "../_shared/short-links.mjs";
 import copy from "../../../copy/he.json" with { type: "json" };
 
 export const MAIL_FROM = SUBSCRIBER_FROM;
@@ -64,7 +65,7 @@ export function thankYouEmailText({ firstName, unsubscribeLink, addressForm }) {
     "",
     say(copy.email.signupKeep, addressForm),
     "",
-    `${say(copy.email.signupRemove, addressForm)} ${unsubscribeLink || ""}`,
+    `${say(copy.email.signupRemove, addressForm)} ${TEXT_REMOVAL_LINE}`,
     "",
     quietNoteText(addressForm),
     "",
@@ -87,12 +88,38 @@ export function thankYouEmailHtml({ firstName, unsubscribeLink, addressForm }) {
       <h1 style="margin:0 0 12px;font-size:26px;line-height:1.35;color:#0a1d42">${thanks}${name ? `, ${name}` : ""}</h1>
       <p style="margin:0 0 12px;font-size:17px">${escapeHtml(say(copy.email.signupBody, addressForm))}</p>
       <p style="margin:0 0 12px;font-size:17px">${escapeHtml(say(copy.email.signupKeep, addressForm))}</p>
-      <p style="margin:0;font-size:15px;color:#3d4c63">${escapeHtml(say(copy.email.signupRemove, addressForm))}<br><a href="${link}" style="color:#1d67c8">${escapeHtml(say(copy.email.unsubscribe, addressForm))}</a></p>
+      <p style="margin:0;font-size:15px;color:#3d4c63">${escapeHtml(say(copy.email.signupRemove, addressForm))}<br>${link ? `<a href="${link}" target="_blank" rel="noreferrer" style="display:inline-block;margin-top:6px;padding:6px 12px;border:1px solid #c9d3e0;border-radius:6px;color:#3d4c63;text-decoration:none">${escapeHtml(say(copy.email.unsubscribe, addressForm))}</a>` : escapeHtml(TEXT_REMOVAL_LINE)}</p>
       ${quietNoteHtml(addressForm)}
       ${baruchSignatureHtml()}
     </div>
   </div>
 </body></html>`;
+}
+
+// Welcome back after an unsubscribe (Baruch, 13.11 12:43): one short email, clearly
+// different from the first thank-you.
+export function welcomeBackSubject() {
+  return "שמחים שחזרת לעדכונים של BSD";
+}
+
+function welcomeBackLines(firstName, addressForm) {
+  const name = String(firstName || "").trim();
+  return {
+    hello: name ? `שמחים שחזרת, ${name}` : "שמחים שחזרת",
+    body: "מעכשיו נמשיך לשלוח לך רק עסקים שמתאימים למה שבחרת.",
+    remove: say(copy.email.signupRemove, addressForm)
+  };
+}
+
+export function welcomeBackText({ firstName, addressForm }) {
+  const lines = welcomeBackLines(firstName, addressForm);
+  return [lines.hello, "", lines.body, "", `${lines.remove} ${TEXT_REMOVAL_LINE}`, "", BSD_SLOGAN, "", BARUCH_SIGNATURE_TEXT].join("\n");
+}
+
+export function welcomeBackHtml({ firstName, unsubscribeLink, addressForm }) {
+  const lines = welcomeBackLines(firstName, addressForm);
+  const link = escapeHtml(unsubscribeLink || "");
+  return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb"><div dir="rtl" lang="he" style="max-width:600px;margin:0 auto;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#102844;text-align:right"><div style="background:#06142f;color:#f0d48a;padding:18px 24px;font-size:18px;font-weight:700">BSD - עסקים למכירה</div><div style="height:4px;background:linear-gradient(90deg,#b98520,#f0d48a,#b98520)"></div><div style="padding:24px;line-height:1.7"><h1 style="margin:0 0 10px;font-size:22px;color:#0a1d42">${escapeHtml(lines.hello)}</h1><p style="margin:0 0 12px;font-size:17px">${escapeHtml(lines.body)}</p><p style="margin:0 0 14px;font-size:14px;color:#8a6d1f">${escapeHtml(BSD_SLOGAN)}</p><p style="margin:0;font-size:14px;color:#3d4c63">${escapeHtml(lines.remove)}<br>${link ? `<a href="${link}" target="_blank" rel="noreferrer" style="display:inline-block;margin-top:6px;padding:6px 12px;border:1px solid #c9d3e0;border-radius:6px;color:#3d4c63;text-decoration:none">${escapeHtml(say(copy.email.unsubscribe, addressForm))}</a>` : escapeHtml(TEXT_REMOVAL_LINE)}</p>${baruchSignatureHtml()}</div></div></body></html>`;
 }
 
 export function budgetLabel(row) {
