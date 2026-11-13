@@ -18,7 +18,7 @@ import {
 import { gateDecision } from "../_shared/business-alert-rules.mjs";
 import { matchAlertEmail, normalizeMatchConfig, publicCard, scoreAlert, sendGate } from "../_shared/alert-match.mjs";
 import { APPROVED_ALERT_BUSINESSES, threeBusinessEmail } from "../_shared/opportunity-email.mjs";
-import copy from "../../copy/he.json" with { type: "json" };
+import copy from "../../../copy/he.json" with { type: "json" };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

@@ -4,6 +4,7 @@
 // Secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY.
 // Every email this function sends uses the subscriber From constant.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { createHmac } from "node:crypto";
 import {
   RATE_LIMITS,
   alreadyRegisteredPlan,
@@ -213,8 +214,16 @@ async function writeSubscriber(row: Record<string, unknown>, consentIp: string, 
   return { ...data, signupKind: "new", previousStatus: null, consentAt: now };
 }
 
+// UPDATE_TOKEN_SECRET wins when set. Otherwise the key is derived from the service
+// role key (always present in the edge runtime). Neither value is ever logged.
+let derivedUpdateTokenKey = "";
 function updateTokenSecret() {
-  return Deno.env.get("UPDATE_TOKEN_SECRET") || "";
+  const explicit = Deno.env.get("UPDATE_TOKEN_SECRET") || "";
+  if (explicit) return explicit;
+  if (!derivedUpdateTokenKey && serviceRoleKey) {
+    derivedUpdateTokenKey = createHmac("sha256", serviceRoleKey).update("bsd-update-token-v1").digest("base64url");
+  }
+  return derivedUpdateTokenKey;
 }
 
 async function applyProfileUpdate(body: Record<string, unknown>, origin: string | null, ip: string) {
