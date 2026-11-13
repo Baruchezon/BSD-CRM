@@ -82,22 +82,22 @@ tr.row:hover{background:#f8fbff}
       <p id="pageIntro">כאן רואים מי ביקש עדכונים, ומה מתאים לו. בלי להעמיס.</p>
     </div>
     <div class="actions">
-      <button class="soft" id="addBtn" type="button" hidden>הוסף נרשם</button>
+      <button class="soft" id="addBtn" type="button">הוסף נרשם</button>
       <button class="back" id="backBtn" type="button">חזרה</button>
     </div>
   </div>
   <div id="banner"></div>
-  <div class="cards" id="cards" hidden></div>
-  <div class="splits" hidden>
+  <div class="cards" id="cards"></div>
+  <div class="splits">
     <section class="panel"><h2>לפי אזור</h2><div id="regions"></div></section>
     <section class="panel"><h2>לפי תחום עניין</h2><div id="sectors"></div></section>
   </div>
-  <div class="splits" hidden>
+  <div class="splits">
     <section class="panel"><h2 id="sourceTitle">לפי מקור</h2><div id="sources"></div></section>
     <section class="panel"><h2 id="timeTitle">הרשמות לפי מקור לאורך זמן</h2><div id="months"></div></section>
   </div>
-  <section class="panel" style="margin-bottom:14px" hidden><h2>לפי קמפיין</h2><div id="campaigns"></div></section>
-  <div class="channel-tabs" id="channelTabs" hidden>
+  <section class="panel" style="margin-bottom:14px"><h2>לפי קמפיין</h2><div id="campaigns"></div></section>
+  <div class="channel-tabs" id="channelTabs">
     <button type="button" data-channel="all" class="on">הכל</button>
     <button type="button" data-channel="website">אתר</button>
     <button type="button" data-channel="our_link">יזום שלנו</button>
@@ -186,7 +186,7 @@ tr.row:hover{background:#f8fbff}
     <div id="leadNote" class="muted" style="margin-bottom:8px"></div>
     <div id="table"></div>
   </div>
-  <section class="panel" style="margin-top:12px" hidden>
+  <section class="panel" style="margin-top:12px">
     <h2>נרשמים לפי עסק</h2>
     <div class="searchbar">
       <input id="bizId" placeholder="מזהה עסק מהמערכת">
@@ -322,8 +322,14 @@ function paint(){
         ? 'הוסר'
         : 'פעיל';
     const pillClass = statusText === 'פעיל' ? 'p-active' : statusText === 'ממתין להסכמה' ? 'p-wait' : 'p-off';
-    return `<tr data-id="${UI.esc(row.id)}"><td><b>${name}</b>${test}${row.test_note ? '<br><span class="muted">' + UI.esc(row.test_note) + '</span>' : ''}</td><td><a dir="ltr" href="${UI.esc(phoneHref)}">${UI.esc(row.phone || '')}</a><br><a class="wa" href="${UI.esc(wa)}" target="_blank" rel="noopener">וואטסאפ</a></td><td dir="ltr">${UI.esc(row.email || '—')}</td><td>${UI.esc(when)}</td><td><span class="badge ${badgeClass[kind] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span></td><td><span class="pill ${pillClass}">${statusText}</span></td><td>${UI.esc(consent)}</td><td>${UI.esc(looking)}</td></tr>`;
+    return `<tr data-id="${UI.esc(row.id)}" style="cursor:pointer"><td><b>${name}</b>${test}${row.test_note ? '<br><span class="muted">' + UI.esc(row.test_note) + '</span>' : ''}</td><td><a dir="ltr" href="${UI.esc(phoneHref)}">${UI.esc(row.phone || '')}</a><br><a class="wa" href="${UI.esc(wa)}" target="_blank" rel="noopener">וואטסאפ</a></td><td dir="ltr">${UI.esc(row.email || '—')}</td><td>${UI.esc(when)}</td><td><span class="badge ${badgeClass[kind] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span></td><td><span class="pill ${pillClass}">${statusText}</span></td><td>${UI.esc(consent)}</td><td>${UI.esc(looking)}</td></tr>`;
   }).join('')}</tbody></table>`;
+  document.querySelectorAll('#table tbody tr').forEach(tr => {
+    tr.addEventListener('click', event => {
+      if (event.target.closest('a')) return;
+      openDetail(tr.getAttribute('data-id'));
+    });
+  });
 }
 
 function openRow(id){
