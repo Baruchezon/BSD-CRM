@@ -225,9 +225,10 @@ function renderSaleFileCards(bizId){
   const box = document.getElementById('saleFileModuleBox');
   if (!box) return;
   box.innerHTML = `
+    ${document.getElementById('bizDistributionFiles') ? '' : `
     <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
       <button type="button" class="btn btn-primary" style="font-size:.78rem;padding:6px 14px;" onclick="sfOpenSendModalForCurrentBiz('${bizId}')">📤 שלח לקונה / מתווך</button>
-    </div>
+    </div>`}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;">
       ${SALE_FILE_CATEGORIES.map(cat => {
         const count = (SF_FILES_BY_CATEGORY[cat.key] || []).length;
@@ -354,9 +355,10 @@ function openSaleFileCategory(bizId, categoryKey){
         ${isPhotoCat ? `<div style="font-size:.75rem;color:#8a93ab;margin-top:4px;">עד ${SALE_FILE_MAX_PHOTOS} תמונות סה"כ (תמונות ידחסו אוטומטית)</div>` : ''}
         <div id="sfUploadStatus" role="status" style="font-size:.78rem;color:#999;margin-top:4px;"></div>
       </div>` : ''}
+    ${document.getElementById('bizDistributionFiles') ? '' : `
       <div style="margin-top:12px;border-top:1px solid #e5e1d5;padding-top:10px;text-align:end;">
         <button type="button" class="btn btn-primary" style="font-size:.78rem;padding:6px 14px;" onclick="sfOpenSendModalForCurrentBiz('${bizId}')">📤 שלח לקונה / מתווך</button>
-      </div>
+      </div>`}
     </div>
   `;
   warmSaleFilePreview(rows.map(r => r.latest && r.latest.storage_path).filter(Boolean).slice(0, 3));
