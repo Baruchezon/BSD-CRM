@@ -917,13 +917,63 @@ function onPortalListPreviewClick(e){
 }
 document.addEventListener('click', onPortalListPreviewClick, true);
 
-function vipSendDisabled(event){
+async function openVipSend(bizId, event){
   if (event){ event.preventDefault(); event.stopPropagation(); }
-  toast('שליחה ללקוחות VIP כבויה. vip_send_enabled נשאר כבוי, ולא נשלח שום מייל.');
+  const existing = document.getElementById('vipSendOverlay');
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'vipSendOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:720px;width:100%;max-height:90vh;overflow:auto;padding:20px;direction:rtl;font-family:Heebo,Rubik,Arial,sans-serif;"><p>טוען תצוגה מקדימה…</p></div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', ev => { if (ev.target === overlay) overlay.remove(); });
+  let data;
+  try {
+    const invoked = await window.supabaseClient.functions.invoke('business-alert-admin', { body: { action: 'preview_vip_send', business_id: bizId } });
+    if (invoked.error) throw invoked.error;
+    data = invoked.data || {};
+  } catch (error) {
+    overlay.querySelector('div').innerHTML = '<p>לא הצלחנו לטעון את רשימת הקונים. לא נשלח שום מייל.</p><button type="button" id="vipSendClose">סגירה</button>';
+    document.getElementById('vipSendClose').onclick = () => overlay.remove();
+    return;
+  }
+  const people = Array.isArray(data.recipients) ? data.recipients : [];
+  const rows = people.map(person => {
+    const name = esc(((person.first_name || '') + ' ' + (person.last_name || '')).trim() || 'קונה');
+    const checked = person.already_sent ? '' : 'checked';
+    return `<label style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid #f0ede4;"><input type="checkbox" data-lead="${esc(person.id)}" ${checked} style="width:auto;"><span><b>${name}</b> <span dir="ltr">${esc(person.email || '')}</span><br><span style="color:#665;font-size:.78rem;">${esc(person.agreement_status || 'אין הסכם')}${person.already_sent ? ' · כבר נשלח' : ''}</span></span></label>`;
+  }).join('') || '<p>אין כרגע קונה עם אימייל שעומד בתנאים.</p>';
+  const banner = data.enabled ? '' : '<p style="background:#fff4c2;border-radius:8px;padding:8px 10px;">המתג vip_send_enabled כבוי. אפשר לראות ולבחור, אבל אישור לא שולח מייל.</p>';
+  overlay.querySelector('div').innerHTML = `
+    <h3 style="margin:0 0 8px;">שלח ללקוחות VIP</h3>
+    ${banner}
+    <p style="color:#665;font-size:.85rem;">נמענים מסומנים. מי שכבר קיבל את העסק הזה לא מסומן.</p>
+    <div id="vipSendPeople" style="max-height:220px;overflow:auto;margin-bottom:12px;">${rows}</div>
+    <p style="font-size:.85rem;"><b>תצוגה מקדימה</b> · ${esc(data.subject || '')}</p>
+    <iframe id="vipSendFrame" title="תצוגת המייל" style="width:100%;height:280px;border:1px solid #e6e1d4;border-radius:8px;"></iframe>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button type="button" id="vipSendClose" style="border:1px solid #d8d3c4;background:#fff;border-radius:8px;padding:8px 14px;font-family:inherit;">ביטול</button>
+      <button type="button" id="vipSendConfirm" style="border:0;background:#0e1b34;color:#fff;border-radius:8px;padding:8px 14px;font-family:inherit;font-weight:700;">אישור שליחה</button>
+    </div>
+    <p id="vipSendResult" style="min-height:1.2em;"></p>`;
+  const frame = document.getElementById('vipSendFrame');
+  if (frame) frame.srcdoc = data.html || '';
+  document.getElementById('vipSendClose').onclick = () => overlay.remove();
+  document.getElementById('vipSendConfirm').onclick = async () => {
+    const ids = [...overlay.querySelectorAll('[data-lead]:checked')].map(box => box.getAttribute('data-lead'));
+    const result = document.getElementById('vipSendResult');
+    if (!ids.length){ result.textContent = 'לא נבחר אף נמען.'; return; }
+    result.textContent = 'בודקים…';
+    const invoked = await window.supabaseClient.functions.invoke('business-alert-admin', { body: { action: 'send_vip', business_id: bizId, confirm: true, lead_ids: ids } });
+    const body = invoked.data || {};
+    if (!body.enabled || body.error === 'vip_send_disabled') result.textContent = 'לא נשלח שום מייל. המתג עדיין כבוי.';
+    else if (body.sent) result.textContent = 'נשלח ל-' + (body.sent_count || 0) + ' נמענים.';
+    else result.textContent = 'לא נשלח מייל.';
+  };
 }
 function vipPublicationBadge(b){
   return VIP_PUBLICATION_BY_BIZ[b.id]
-    ? `<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="לחץ לפרטים" style="cursor:pointer;background:#fff4c2;color:#715300;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">⭐ מופץ ללקוחות VIP</span> <button type="button" onclick="vipSendDisabled(event)" style="border:0;border-radius:6px;background:#f6e2a4;color:#6a4b00;font-weight:700;padding:2px 8px;font-size:.7rem;cursor:pointer;">שלח ללקוחות VIP</button>`
+    ? `<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="לחץ לפרטים" style="cursor:pointer;background:#fff4c2;color:#715300;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">⭐ מופץ ללקוחות VIP</span> <button type="button" onclick="openVipSend('${b.id}', event)" style="border:0;border-radius:6px;background:#f6e2a4;color:#6a4b00;font-weight:700;padding:2px 8px;font-size:.7rem;cursor:pointer;">שלח ללקוחות VIP</button>`
     : `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">⚪ לא מופץ ללקוחות VIP</span>`;
 }
 // ============================================================================

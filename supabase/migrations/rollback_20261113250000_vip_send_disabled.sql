@@ -2,6 +2,7 @@
 
 begin;
 
+drop table if exists public.business_alert_vip_sends;
 drop function if exists public.business_alert_vip_recipients();
 
 alter table public.business_alert_match_settings

@@ -109,6 +109,39 @@ async function matchSettings() {
   return normalizeMatchConfig(data || {});
 }
 
+async function vipSendSettings() {
+  const { data } = await supabase.from("business_alert_match_settings")
+    .select("vip_send_enabled, vip_send_allowlist")
+    .eq("id", true)
+    .maybeSingle();
+  const allowlist = Array.isArray(data?.vip_send_allowlist) ? data.vip_send_allowlist.map(String) : [];
+  return { enabled: data?.vip_send_enabled === true, allowlist };
+}
+
+function vipSendAllowed(settings: { enabled: boolean; allowlist: string[] }, businessId: string) {
+  if (settings.allowlist.includes(businessId)) return true;
+  return settings.enabled;
+}
+
+function anonymousBusinessCard(row: Record<string, unknown>) {
+  const internal = String(row.internal_name || "").trim();
+  let title = String(row.anon_display_name || "").trim();
+  if (!title || title === internal) title = "הזדמנות עסקית";
+  const rawNumber = String(row.business_number || "").trim();
+  const number = /^BSD-B-/i.test(rawNumber) || !rawNumber ? rawNumber : `BSD-B-${rawNumber}`;
+  const price = row.anon_card_show_price === true && row.asking_price != null
+    ? Number(row.asking_price).toLocaleString("he-IL") + " ₪"
+    : "";
+  return {
+    number,
+    title,
+    region: String(row.region || ""),
+    priceText: price,
+    summary: String(row.anon_summary || "").replace(/\s+/g, " ").trim().slice(0, 400),
+    url: `${SUBSCRIBER_SITE}/עסקים-למכירה/${encodeURIComponent(number)}`
+  };
+}
+
 const BIZ_COLS = "id,business_number,internal_name,anon_display_name,field,category,subcategory,city,region,asking_price,short_description,anon_summary,anon_card_show_price,public_listing_active,anon_card_active,listing_status,is_archived,taxonomy";
 
 function listedBusiness(row: Record<string, unknown>) {
@@ -424,7 +457,85 @@ Deno.serve(async req => {
     }
 
     if (action === "preview_vip_send" || action === "send_vip") {
-      return json({ ok: false, error: "vip_send_disabled", enabled: false, sent: false }, 200, origin);
+      const businessId = clean(body.business_id || body.id, 80);
+      const { data: business, error: businessError } = await supabase.from("businesses")
+        .select("id, business_number, anon_display_name, internal_name, category, subcategory, region, asking_price, anon_card_show_price, anon_summary")
+        .eq("id", businessId)
+        .maybeSingle();
+      if (businessError) throw businessError;
+      if (!business) return json({ ok: false, error: "not_found" }, 404, origin);
+      const settings = await vipSendSettings();
+      const allowed = vipSendAllowed(settings, businessId);
+      const { data: people, error: peopleError } = await supabase.rpc("business_alert_vip_recipients");
+      if (peopleError) throw peopleError;
+      const recipients = Array.isArray(people) ? people : [];
+      const { data: sentRows } = await supabase.from("business_alert_vip_sends")
+        .select("lead_id")
+        .eq("business_id", businessId);
+      const already = new Set((sentRows || []).map(row => String(row.lead_id)));
+      const card = anonymousBusinessCard(business);
+      const sample = threeBusinessEmail({
+        firstName: "לקוח",
+        businesses: [{ ...card, detailsUrl: `${supabaseUrl}/functions/v1/business-alert-request-details?business=${encodeURIComponent(card.number)}` }],
+        unsubscribeUrl: `${SUBSCRIBER_SITE}/הסרה/`,
+        addressForm: null
+      });
+      if (action === "preview_vip_send" || body.confirm !== true) {
+        return json({
+          ok: true,
+          preview: true,
+          sent: false,
+          enabled: allowed,
+          from: sample.from,
+          subject: sample.subject,
+          html: sample.html,
+          text: sample.text,
+          recipients: recipients.map(person => ({
+            id: person.id,
+            first_name: person.first_name,
+            last_name: person.last_name,
+            email: person.email,
+            agreement_status: person.agreement_status,
+            already_sent: already.has(String(person.id))
+          }))
+        }, 200, origin);
+      }
+      if (!allowed) return json({ ok: false, error: "vip_send_disabled", enabled: false, sent: false }, 200, origin);
+      const chosen = new Set((Array.isArray(body.lead_ids) ? body.lead_ids : []).map(String));
+      let sentCount = 0;
+      const apiKey = Deno.env.get("RESEND_API_KEY");
+      if (!apiKey) return json({ ok: false, error: "missing_email_configuration", sent: false }, 200, origin);
+      for (const person of recipients) {
+        if (!chosen.has(String(person.id))) continue;
+        if (already.has(String(person.id)) && body.resend !== true) continue;
+        const mail = threeBusinessEmail({
+          firstName: String(person.first_name || ""),
+          businesses: [{ ...card, detailsUrl: `${supabaseUrl}/functions/v1/business-alert-request-details?business=${encodeURIComponent(card.number)}&lead=${encodeURIComponent(person.id)}` }],
+          unsubscribeUrl: `${SUBSCRIBER_SITE}/הסרה/`,
+          addressForm: null
+        });
+        const response = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            from: mail.from,
+            reply_to: SUBSCRIBER_REPLY_TO,
+            to: [person.email],
+            subject: mail.subject,
+            html: mail.html,
+            text: mail.text
+          })
+        });
+        if (!response.ok) continue;
+        await supabase.from("business_alert_vip_sends").upsert({
+          business_id: businessId,
+          lead_id: person.id,
+          sent_at: new Date().toISOString(),
+          sent_by: clean(auth.profile.full_name, 120) || clean(auth.user.email, 180)
+        }, { onConflict: "business_id,lead_id" });
+        sentCount += 1;
+      }
+      return json({ ok: true, sent: sentCount > 0, sent_count: sentCount }, 200, origin);
     }
 
     if (action === "send_one_alert") {

@@ -93,7 +93,10 @@ export function threeBusinessEmail({ firstName, businesses, unsubscribeUrl, addr
   const count = cards.length || 3;
   const name = String(firstName || "").trim();
   const hello = name ? `שלום ${name},` : "שלום,";
-  const heading = `${count} עסקים שבחרנו בשבילך`;
+  const heading = count === 1 ? "עסק שבחרנו בשבילך" : `${count} עסקים שבחרנו בשבילך`;
+  const intro = count === 1
+    ? "בחרנו עבורך עסק מהרשימה הציבורית. אם הוא מדבר אליך, נשמח לשמוע וללוות אותך הלאה."
+    : "בחרנו עבורך שלושה עסקים מהרשימה הציבורית, בתחומים ובסדרי גודל שונים, כדי להתחיל מכאן. אם משהו מהם מדבר אליך, נשמח לשמוע וללוות אותך הלאה.";
   const removal = unsubscribeUrl
     ? `אם לא רוצים להמשיך לקבל עדכונים, אפשר להסיר את עצמך כאן: ${unsubscribeUrl}`
     : "אם לא רוצים להמשיך לקבל עדכונים, אפשר לפנות אלינו ונפסיק מיד.";
@@ -104,7 +107,7 @@ export function threeBusinessEmail({ firstName, businesses, unsubscribeUrl, addr
     "",
     "משביחים עסקים · מחברים הזדמנויות · מובילים עסקאות",
     "",
-    "בחרנו עבורך שלושה עסקים מהרשימה הציבורית, בתחומים ובסדרי גודל שונים, כדי להתחיל מכאן. אם משהו מהם מדבר אליך, נשמח לשמוע וללוות אותך הלאה.",
+    intro,
     "",
     cards.map(businessText).join("\n\n"),
     "",
@@ -150,7 +153,7 @@ export function threeBusinessEmail({ firstName, businesses, unsubscribeUrl, addr
               <h1 style="margin:0 0 16px 0;font-size:22px;line-height:1.4;color:#0a1d42;font-weight:700;">${escapeHtml(heading)}</h1>
               <p style="margin:0 0 12px 0;font-size:16px;line-height:1.7;color:#111c31;">${escapeHtml(hello)}</p>
               <p style="margin:0 0 12px 0;font-size:16px;line-height:1.7;color:#111c31;">תודה שנרשמת לעדכונים של BSD.</p>
-              <p style="margin:0 0 22px 0;font-size:16px;line-height:1.7;color:#111c31;">בחרנו עבורך שלושה עסקים מהרשימה הציבורית, בתחומים ובסדרי גודל שונים, כדי להתחיל מכאן. אם משהו מהם מדבר אליך, נשמח לשמוע וללוות אותך הלאה.</p>
+              <p style="margin:0 0 22px 0;font-size:16px;line-height:1.7;color:#111c31;">${escapeHtml(intro)}</p>
               ${cards.map(businessCard).join("\n")}
               <p style="margin:8px 0 14px 0;font-size:15px;line-height:1.7;color:#111c31;">אנחנו גם מסייעים במימון רכישת העסק, ומלווים אותך לאורך כל הדרך, מהשיחה הראשונה ועד שהעסק בידיים שלך.</p>
               <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#111c31;">אפשר פשוט להשיב למייל הזה, או להתקשר אלינו בטלפון <a href="tel:+972774446707" style="color:#102d61;text-decoration:none">077-4446707</a> או <a href="tel:+972542424999" style="color:#102d61;text-decoration:none">054-2424999</a>.</p>
