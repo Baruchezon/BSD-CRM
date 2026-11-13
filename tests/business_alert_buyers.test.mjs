@@ -275,15 +275,26 @@ test('subscriber rows show a source badge and honor the screen filters', () => {
   assert.equal(dana.calls, 2);
   assert.equal(dana.answered, 1);
   assert.equal(dana.answerRate, 50);
+  assert.equal(dana.unknown, 1);
   assert.equal(dana.sends, 1);
-  const verbal = ctx.BSDSiteBuyers.verbalSignup({ name: 'נועה לוי', phone: '050-1111111', email: '', verbal: true, consent_email: true, consent_whatsapp: false });
-  assert.equal(verbal.ok, true);
-  assert.equal(verbal.row.consent_method, 'verbal');
-  assert.equal(verbal.row.signup_channel, 'our_link');
-  assert.equal(verbal.row.manual_source, 'call');
-  assert.equal(verbal.row.email, null);
-  assert.equal(verbal.row.consent_text, 'התקבלה הסכמה בעל פה');
-  assert.equal(ctx.BSDSiteBuyers.verbalSignup({ name: 'נועה', phone: '050-1111111', verbal: false, consent_email: true }).error, 'consent_required');
+  const pending = ctx.BSDSiteBuyers.manualAdd({ name: 'נועה לוי', phone: '050-1111111', email: '' });
+  assert.equal(pending.ok, true);
+  assert.equal(pending.row.status, 'pending_consent');
+  assert.equal(pending.row.consent_email, false);
+  assert.equal(pending.row.consent_whatsapp, false);
+  assert.equal(pending.row.consent_general, false);
+  assert.equal(pending.row.consent_method, null);
+  assert.equal(pending.row.consent_text, null);
+  const emailed = ctx.BSDSiteBuyers.manualAdd({
+    name: 'נועה לוי', phone: '050-1111111', consent_email: true, consent_email_method: 'verbal_call', consent_email_note: 'אמרה כן בשיחה'
+  });
+  assert.equal(emailed.row.status, 'active');
+  assert.equal(emailed.row.consent_email, true);
+  assert.equal(emailed.row.consent_whatsapp, false);
+  assert.equal(emailed.row.consent_email_method, 'verbal_call');
+  assert.equal(emailed.row.consent_whatsapp_method, null);
+  assert.equal(ctx.BSDSiteBuyers.manualAdd({ name: 'נועה', phone: '050-1111111', consent_email: true }).error, 'consent_method');
+  assert.equal(gateDecision({ status: 'pending_consent', consent_general: false, legacy_no_consent: true, consent_email: false }, 'email').reason, 'pending_consent');
   assert.match(ctx.BSDSiteBuyers.waHref('050-0000001', 'שלום'), /https:\/\/wa\.me\/972500000001\?text=/);
   const sql = fs.readFileSync(new URL('../supabase/migrations/20261113200000_business_alert_interactions.sql', import.meta.url), 'utf8');
   assert.match(sql, /business_alert_interactions/);
@@ -292,11 +303,12 @@ test('subscriber rows show a source badge and honor the screen filters', () => {
   assert.equal(/grant delete on public\.business_alert_interactions/.test(sql), false);
   const summary = ctx.BSDSiteBuyers.summarize(rows, new Date('2026-11-13T10:00:00+02:00'));
   assert.equal(summary.calls, 2);
+  assert.equal(summary.unknown, 1);
   assert.equal(summary.answerRate, 50);
   assert.match(ctx.BSDSiteBuyers.lookingLine(rows[0]), /מזון/);
   assert.match(ctx.BSDSiteBuyers.sendSummary(rows[0]), /1 עסקים/);
   const called = rows.filter(row => ctx.BSDSiteBuyers.passesFilters(row, { source: 'call', status: '' }));
-  assert.equal(called.length, 1);
+  assert.equal(called.length, 2);
   const quiet = rows.filter(row => ctx.BSDSiteBuyers.passesFilters(row, { source: 'all', status: 'do_not_call' }));
   assert.equal(quiet.length, 1);
   const food = rows.filter(row => ctx.BSDSiteBuyers.passesFilters(row, { source: 'all', sector: 'מזון ומסעדנות' }));

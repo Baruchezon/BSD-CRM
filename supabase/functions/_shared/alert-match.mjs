@@ -256,7 +256,8 @@ export function scoreAlert(subscriber, business, config = DEFAULT_MATCH_CONFIG) 
   const score = sectorPoints + budgetPoints + locationPoints;
   const legacy = subscriber.legacy_no_consent === true || subscriber.consent_general !== true;
   let block = null;
-  if (excluded) block = "sector_excluded";
+  if (subscriber.status === "pending_consent") block = "pending_consent";
+  else if (excluded) block = "sector_excluded";
   else if (!budgetOk) block = "budget_out_of_range";
   else if (score < cfg.minScore) block = "below_threshold";
   else if (legacy) block = "legacy_no_consent";

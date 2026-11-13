@@ -39,6 +39,7 @@ export function mergeUnsubscribe(status, channel) {
 export function gateDecision(row, channel) {
   if (!row) return { allowed: false, reason: "not_found" };
   if (channel !== "email" && channel !== "whatsapp") return { allowed: false, reason: "invalid_channel" };
+  if (row.status === "pending_consent") return { allowed: false, reason: "pending_consent" };
   if (row.legacy_no_consent === true) return { allowed: false, reason: "legacy_no_consent" };
   if (row.consent_general !== true) return { allowed: false, reason: "no_general_consent" };
   const status = row.status === "unsubscribed" ? "unsubscribed_all" : row.status;

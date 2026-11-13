@@ -314,26 +314,26 @@ Deno.serve(async req => {
       return json({ ok: true, result: data }, 200, origin);
     }
 
-    if (action === "verbal_add") {
-      if (body.consent_method !== "verbal" && body.verbal !== true && body.consent_text !== "התקבלה הסכמה בעל פה") {
-        return json({ ok: false, error: "consent_required" }, 400, origin);
-      }
-      const { data, error } = await supabase.rpc("business_alert_add_verbal", {
+    if (action === "add_subscriber") {
+      const { data, error } = await supabase.rpc("business_alert_add_manual", {
         p_first_name: clean(body.first_name, 80),
         p_last_name: clean(body.last_name, 80),
         p_phone: clean(body.phone, 40),
         p_email: clean(body.email, 180) || null,
         p_consent_email: body.consent_email === true,
         p_consent_whatsapp: body.consent_whatsapp === true,
+        p_email_method: clean(body.consent_email_method, 40) || null,
+        p_whatsapp_method: clean(body.consent_whatsapp_method, 40) || null,
+        p_email_note: clean(body.consent_email_note, 500) || null,
+        p_whatsapp_note: clean(body.consent_whatsapp_note, 500) || null,
         p_categories: textList(body.categories),
         p_regions: textList(body.regions),
         p_budget_min: numOrNull(body.budget_min),
         p_budget_max: numOrNull(body.budget_max),
         p_budget_open: body.budget_open === true,
-        p_consent_by: clean(auth.profile.full_name, 120) || clean(auth.user.email, 180),
-        p_verbal: body.consent_method === "verbal"
+        p_consent_by: clean(auth.profile.full_name, 120) || clean(auth.user.email, 180)
       });
-      if (error) return json({ ok: false, error: "verbal_add_rejected", message: error.message }, 400, origin);
+      if (error) return json({ ok: false, error: "add_rejected", message: error.message }, 400, origin);
       return json({ ok: true, card: data }, 200, origin);
     }
 

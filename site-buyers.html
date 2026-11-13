@@ -102,7 +102,7 @@ tr.row:hover{background:#f8fbff}
   </div>
   <form id="manualForm" class="panel" hidden style="margin-bottom:14px">
     <h2>הוסף נרשם</h2>
-    <p class="muted">לשיחה שמתנהלת עכשיו. נשמר כ«יזום שלנו». בלי הסימון על ההסכמה בעל פה אי אפשר לשמור.</p>
+    <p class="muted">הוספה לרשימה אינה הסכמה. בלי סימון על ערוץ, הנרשם נשמר כ«ממתין להסכמה» ולא נכנס לדיוור.</p>
     <div class="searchbar">
       <input id="mName" placeholder="שם" required>
       <input id="mPhone" placeholder="טלפון" dir="ltr" required>
@@ -122,9 +122,22 @@ tr.row:hover{background:#f8fbff}
       <input id="mBudgetMax" type="number" min="0" placeholder="תקציב עד">
     </div>
     <div class="searchbar">
-      <label><input id="mEmailOk" type="checkbox" checked> אימייל</label>
+      <label><input id="mEmailOk" type="checkbox"> אימייל</label>
+      <select id="mEmailMethod">
+        <option value="">איך ניתנה ההסכמה לאימייל</option>
+        <option value="verbal_call">בשיחה</option>
+        <option value="whatsapp_reply">בתשובת וואטסאפ</option>
+        <option value="written">בכתב</option>
+      </select>
+      <input id="mEmailNote" placeholder="הערה או אסמכתא לאימייל">
       <label><input id="mWhatsappOk" type="checkbox"> וואטסאפ</label>
-      <label><input id="mVerbal" type="checkbox"> התקבלה הסכמה בעל פה</label>
+      <select id="mWhatsappMethod">
+        <option value="">איך ניתנה ההסכמה לוואטסאפ</option>
+        <option value="verbal_call">בשיחה</option>
+        <option value="whatsapp_reply">בתשובת וואטסאפ</option>
+        <option value="written">בכתב</option>
+      </select>
+      <input id="mWhatsappNote" placeholder="הערה או אסמכתא לוואטסאפ">
       <button class="mail" type="submit">שמירה</button>
     </div>
   </form>
@@ -227,7 +240,7 @@ function cards(summary){
     ['c4', summary.sends || 0, 'שליחות'],
     ['c5', summary.calls || 0, 'שיחות'],
     ['c6', UI.answerRateText(summary.answerRate), 'אחוז מענה'],
-    ['c7', summary.newThisWeek, 'חדשים השבוע'],
+    ['c7', summary.unknown || 0, 'לא ידוע'],
     ['c8', summary.unsubscribed, 'הוסרו']
   ];
   document.getElementById('cards').innerHTML = items.map(([cls, num, label]) =>
@@ -281,7 +294,9 @@ function paint(){
   document.getElementById('table').innerHTML = `<table><thead><tr><th>שם</th><th>טלפון</th><th>מקור</th><th>מה מחפש</th><th>תקציב</th><th>נרשם</th><th>קשר</th><th>מצב</th></tr></thead><tbody>${list.map(row => {
     const name = UI.esc(((row.first_name || '') + ' ' + (row.last_name || '')).trim());
     const kind = UI.sourceKind(row);
-    const pill = row.legacy_no_consent || row.consent_general !== true
+    const pill = row.status === 'pending_consent'
+      ? '<span class="pill p-wait">ממתין להסכמה</span>'
+      : row.legacy_no_consent || row.consent_general !== true
       ? '<span class="pill p-wait">בלי הסכמה שיווקית</span>'
       : `<span class="pill ${row.status === 'active' ? 'p-active' : 'p-off'}">${UI.esc(UI.statusLabel(row.status))}</span>`;
     const call = row.do_not_call ? ' <span class="pill p-call">לא להתקשר</span>' : '';
@@ -290,7 +305,7 @@ function paint(){
     const stats = UI.contactStats(row);
     const last = stats.lastContact ? UI.esc(new Date(stats.lastContact).toLocaleDateString('he-IL')) : 'אין עדיין';
     const wa = UI.waHref(row.phone, text('whatsapp.prefill', ''));
-    return `<tr class="row" data-id="${UI.esc(row.id)}"><td><b>${name}</b>${flags ? '<br>' + flags : ''}</td><td><span dir="ltr">${UI.esc(row.phone || '')}</span><br><a class="wa" data-act="wa" href="${UI.esc(wa)}" target="_blank" rel="noopener">וואטסאפ</a></td><td><span class="badge ${badgeClass[kind] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span></td><td>${UI.esc(UI.lookingLine(row))}</td><td>${UI.esc(UI.budgetLabel(row))}</td><td>${signed}</td><td>${stats.sends} נשלחו · ${stats.calls} שיחות · ${UI.esc(UI.answerRateText(stats.answerRate))}<br><span class="muted">${last}</span></td><td>${pill}${call}</td></tr>`;
+    return `<tr class="row" data-id="${UI.esc(row.id)}"><td><b>${name}</b>${flags ? '<br>' + flags : ''}</td><td><span dir="ltr">${UI.esc(row.phone || '')}</span><br><a class="wa" data-act="wa" href="${UI.esc(wa)}" target="_blank" rel="noopener">וואטסאפ</a></td><td><span class="badge ${badgeClass[kind] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span></td><td>${UI.esc(UI.lookingLine(row))}</td><td>${UI.esc(UI.budgetLabel(row))}</td><td>${signed}</td><td>${stats.sends} נשלחו · ${stats.calls} שיחות · מענה ${UI.esc(UI.answerRateText(stats.answerRate))} · לא ידוע ${stats.unknown}<br><span class="muted">${last}</span></td><td>${pill}${call}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -303,14 +318,18 @@ function openRow(id){
     : '<span class="muted">אין עדיין היסטוריית עמודים. המעקב יתחיל אחרי שהאתר ישלח את אסימון הביקור.</span>';
   const phoneHref = 'tel:' + String(row.phone || '').replace(/[^\d+]/g, '');
   const contact = UI.contactStats(row);
-  const statsLine = `${contact.sends} נשלחו · ${contact.calls} שיחות · מענה ${UI.esc(UI.answerRateText(contact.answerRate))}` + (contact.lastContact ? ` · קשר אחרון ${UI.esc(new Date(contact.lastContact).toLocaleString('he-IL'))}` : '');
+  const statsLine = `${contact.sends} נשלחו · ${contact.calls} שיחות · מענה ${UI.esc(UI.answerRateText(contact.answerRate))} · לא ידוע ${contact.unknown}` + (contact.lastContact ? ` · קשר אחרון ${UI.esc(new Date(contact.lastContact).toLocaleString('he-IL'))}` : '');
   const outcomeLabel = { answered: 'דיברנו', no_answer: 'לא ענה', requested_details: 'ביקש פרטים', other: 'הערה' };
-  const logHtml = (row.interactions || []).filter(item => !item.deleted_at).map(item => `<div>${UI.esc(outcomeLabel[item.outcome] || (item.kind === 'whatsapp' ? 'וואטסאפ' : item.kind === 'call' ? 'חיוג' : 'הערה'))} · ${item.at ? UI.esc(new Date(item.at).toLocaleString('he-IL')) : ''}${item.note ? ' · ' + UI.esc(item.note) : ''}</div>`).join('') || '<span class="muted">עדיין אין שיחות רשומות.</span>';
+  const logHtml = (row.interactions || []).filter(item => !item.deleted_at).map(item => {
+    const kind = item.kind === 'whatsapp' ? 'וואטסאפ' : item.kind === 'call' ? 'חיוג' : item.kind === 'email' ? 'אימייל' : 'הערה';
+    const outcome = item.outcome ? (outcomeLabel[item.outcome] || item.outcome) : 'לא ידוע';
+    return `<div>${UI.esc(kind)} · ${UI.esc(outcome)} · ${item.at ? UI.esc(new Date(item.at).toLocaleString('he-IL')) : ''}${item.note ? ' · ' + UI.esc(item.note) : ''}</div>`;
+  }).join('') || '<span class="muted">עדיין אין שיחות רשומות.</span>';
   const channels = [row.consent_email ? 'אימייל' : '', row.consent_whatsapp ? 'וואטסאפ' : ''].filter(Boolean).join(' · ') || 'אין';
   const utm = [row.utm_source, row.utm_medium, row.utm_campaign, row.utm_content].filter(Boolean).join(' · ');
   const sends = Array.isArray(row.sends) ? row.sends : [];
   const sendHtml = sends.length
-    ? sends.map(send => `<div><b>${UI.esc(send.business_number || '')}</b> · ${UI.esc(send.internal_name || '—')}<br><span class="muted">${UI.esc(send.channel || '')} · ${send.sent_at ? UI.esc(new Date(send.sent_at).toLocaleString('he-IL')) : ''} · התאמה ${UI.esc(send.match_pct ?? '—')} · ${send.opened_at ? 'נפתח' : 'לא נפתח'} · ${send.replied_at ? 'השיב' : 'לא השיב'}</span></div>`).join('')
+    ? sends.map(send => `<div><b>${UI.esc(send.business_number || '')}</b> · ${UI.esc(send.internal_name || '—')}<br><span class="muted">${UI.esc(send.channel || '')} · ${send.sent_at ? UI.esc(new Date(send.sent_at).toLocaleString('he-IL')) : ''} · התאמה ${UI.esc(send.match_pct ?? '—')} · פתיחה ${send.opened_at ? 'נפתח' : 'לא ידוע'} · תשובה ${send.replied_at ? 'השיב' : 'לא ידוע'}</span></div>`).join('')
     : '<span class="muted">עדיין לא נשלח עדכון. כשתישלח, הוא יופיע כאן.</span>';
   document.getElementById('drawer').innerHTML = `<div class="drawer"><aside class="sheet">
     <button class="soft" id="closeDrawer" type="button">סגירה</button>
@@ -618,20 +637,23 @@ async function logTouch(row, kind, outcome, note){
 
 document.getElementById('manualForm').addEventListener('submit', async event => {
   event.preventDefault();
-  const planned = UI.verbalSignup({
+  const planned = UI.manualAdd({
     name: document.getElementById('mName').value,
     phone: document.getElementById('mPhone').value,
     email: document.getElementById('mEmail').value,
-    verbal: document.getElementById('mVerbal').checked,
     consent_email: document.getElementById('mEmailOk').checked,
     consent_whatsapp: document.getElementById('mWhatsappOk').checked,
+    consent_email_method: document.getElementById('mEmailMethod').value,
+    consent_whatsapp_method: document.getElementById('mWhatsappMethod').value,
+    consent_email_note: document.getElementById('mEmailNote').value,
+    consent_whatsapp_note: document.getElementById('mWhatsappNote').value,
     categories: document.getElementById('mSector').value ? [document.getElementById('mSector').value] : [],
     regions: document.getElementById('mRegion').value ? [document.getElementById('mRegion').value] : [],
     budget_min: document.getElementById('mBudgetMin').value,
     budget_max: document.getElementById('mBudgetMax').value
   });
   if (!planned.ok){
-    toast(planned.error === 'consent_required' ? 'צריך לסמן שהתקבלה הסכמה בעל פה.' : planned.error === 'no_channel' ? 'צריך לבחור לפחות ערוץ אחד.' : 'צריך שם וטלפון.');
+    toast(planned.error === 'consent_method' ? 'לערוץ שסומן צריך לבחור איך ניתנה ההסכמה.' : 'צריך שם וטלפון.');
     return;
   }
   if (sample){
@@ -646,7 +668,7 @@ document.getElementById('manualForm').addEventListener('submit', async event => 
     return;
   }
   try {
-    await api('verbal_add', planned.row);
+    await api('add_subscriber', planned.row);
     document.getElementById('manualForm').hidden = true;
     toast('נשמר. ההסכמה בעל פה נרשמה.');
     await load();

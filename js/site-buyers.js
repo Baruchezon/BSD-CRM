@@ -2,6 +2,7 @@
 // Sample rows are used only on localhost, and they are not real people.
 (function (root) {
   const REASONS = {
+    pending_consent: "אין עדיין הסכמה. לא נשלח עדכון עד שתסומן הסכמה לערוץ.",
     legacy_no_consent: "אין עדיין הסכמה שיווקית. צריך הרשמה מחדש בטופס החדש.",
     no_general_consent: "חסרה ההסכמה הכללית לקבל עדכונים ופרסומות.",
     no_email_consent: "אין הסכמה לאימייל.",
@@ -50,7 +51,7 @@
     manual: "יזום שלנו",
     call: "יזום שלנו"
   };
-  const VERBAL_CONSENT = "התקבלה הסכמה בעל פה";
+  const CONSENT_METHODS = ["verbal_call", "whatsapp_reply", "written"];
 
   function statusLabel(status) {
     return {
@@ -58,7 +59,8 @@
       unsubscribed_email: "הוסר מאימייל",
       unsubscribed_whatsapp: "הוסר מוואטסאפ",
       unsubscribed_all: "הוסר מהכל",
-      unsubscribed: "הוסר מהכל"
+      unsubscribed: "הוסר מהכל",
+      pending_consent: "ממתין להסכמה"
     }[status] || status || "—";
   }
 
@@ -135,19 +137,23 @@
       ? calls.filter(item => item.outcome === "no_answer").length
       : Number(row.no_answer_count || 0);
     const decided = answered + noAnswer;
+    const unknown = hasLog
+      ? items.filter(item => item.outcome == null || item.outcome === "").length
+      : Number(row.unknown_count ?? Math.max(0, callCount - answered - noAnswer));
     const times = items.map(item => item.at).filter(Boolean).sort();
     return {
       sends: Number(row.send_count || (Array.isArray(row.sends) ? row.sends.length : 0) || 0),
       calls: callCount,
       answered,
       noAnswer,
+      unknown,
       answerRate: decided ? Math.round(answered / decided * 100) : null,
       lastContact: times.length ? times[times.length - 1] : (row.last_contact_at || null)
     };
   }
 
   function answerRateText(rate) {
-    return rate == null ? "—" : rate + "%";
+    return rate == null ? "לא ידוע" : rate + "%";
   }
 
   function waDigits(phone) {
@@ -168,11 +174,14 @@
     return { first_name: parts[0] || "", last_name: parts.slice(1).join(" ") || "—" };
   }
 
-  function verbalSignup(input) {
+  function manualAdd(input) {
     const name = splitName(input && input.name);
     if (!name.first_name || !String(input && input.phone || "").trim()) return { ok: false, error: "missing_required_fields" };
-    if (!input || input.verbal !== true) return { ok: false, error: "consent_required" };
-    if (input.consent_email !== true && input.consent_whatsapp !== true) return { ok: false, error: "no_channel" };
+    const emailOn = input.consent_email === true;
+    const whatsappOn = input.consent_whatsapp === true;
+    if (emailOn && !CONSENT_METHODS.includes(input.consent_email_method)) return { ok: false, error: "consent_method" };
+    if (whatsappOn && !CONSENT_METHODS.includes(input.consent_whatsapp_method)) return { ok: false, error: "consent_method" };
+    const consented = emailOn || whatsappOn;
     return {
       ok: true,
       row: {
@@ -185,12 +194,17 @@
         budget_min: input.budget_min ?? null,
         budget_max: input.budget_max ?? null,
         budget_open: input.budget_open === true,
-        consent_email: input.consent_email === true,
-        consent_whatsapp: input.consent_whatsapp === true,
-        consent_general: true,
-        consent_method: "verbal",
-        consent_text: VERBAL_CONSENT,
-        consent_version: "verbal-2026-11-13",
+        consent_email: emailOn,
+        consent_whatsapp: whatsappOn,
+        consent_email_method: emailOn ? input.consent_email_method : null,
+        consent_whatsapp_method: whatsappOn ? input.consent_whatsapp_method : null,
+        consent_email_note: emailOn ? (String(input.consent_email_note || "").trim() || null) : null,
+        consent_whatsapp_note: whatsappOn ? (String(input.consent_whatsapp_note || "").trim() || null) : null,
+        consent_general: consented,
+        consent_method: null,
+        consent_text: null,
+        status: consented ? "active" : "pending_consent",
+        legacy_no_consent: !consented,
         signup_channel: "our_link",
         manual_source: "call"
       }
@@ -261,7 +275,7 @@
     const summary = {
       total: rows.length, newThisWeek: 0, active: 0, unsubscribed: 0,
       emailConsent: 0, whatsappConsent: 0, doNotCall: 0, awaitingConsent: 0, sends: 0,
-      calls: 0, answered: 0, noAnswer: 0, answerRate: null,
+      calls: 0, answered: 0, noAnswer: 0, unknown: 0, answerRate: null,
       regions: {}, sectors: {}, campaigns: {}, sources: {}, months: {}, bySourceMonth: {}
     };
     rows.forEach(row => {
@@ -274,6 +288,7 @@
       summary.calls += contact.calls;
       summary.answered += contact.answered;
       summary.noAnswer += contact.noAnswer;
+      summary.unknown += contact.unknown;
       const marketed = row.legacy_no_consent !== true && row.consent_general === true;
       if (!marketed) summary.awaitingConsent += 1;
       const emailClosed = row.status === "unsubscribed_email" || row.status === "unsubscribed_all" || row.status === "unsubscribed" || !!row.email_unsubscribed_at;
@@ -335,7 +350,8 @@
         send_count: 1, last_sent_at: today,
         interactions: [
           { id: "i1", at: today, kind: "call", direction: "out", outcome: "answered", note: "", deleted_at: null },
-          { id: "i2", at: old, kind: "call", direction: "out", outcome: "no_answer", note: "", deleted_at: null }
+          { id: "i2", at: old, kind: "call", direction: "out", outcome: "no_answer", note: "", deleted_at: null },
+          { id: "i3", at: today, kind: "whatsapp", direction: "out", outcome: null, note: "", deleted_at: null }
         ],
         sends: [{ business_number: "1042", internal_name: "מאפיית הדגמה הפנימית", sent_at: today, channel: "email", match_pct: 86, opened_at: null, replied_at: null }],
         views: [
@@ -380,6 +396,13 @@
         categories: ["retail"], regions: ["sharon"], looking_for: "חנות שכונתית",
         budget_open: false, budget_min: 500000, budget_max: 1000000,
         signup_channel: "our_link", manual_source: "manual", send_count: 0, sends: [], views: []
+      },
+      {
+        id: "sample-6", first_name: "גל", last_name: "לדוגמה", phone: "050-0000006", email: null,
+        region: "כל הארץ", interests: ["אחר"], status: "pending_consent", created_at: today,
+        consent_general: false, consent_email: false, consent_whatsapp: false, legacy_no_consent: true,
+        consent_text: null, consent_method: null, do_not_call: false,
+        signup_channel: "our_link", manual_source: "call", send_count: 0, sends: [], interactions: [], views: []
       }
     ];
   }
@@ -400,6 +423,6 @@
   root.BSDSiteBuyers = {
     esc, statusLabel, summarize, filterRows, inChannel, sampleAllowed, sampleRows, bars, reasonText, startOfWeekJerusalem,
     sourceKind, sourceBadge, sectorLabels, subLabels, flagLabels, regionLabels, budgetLabel, lookingLine, sendSummary, passesFilters, SOURCE_LABEL,
-    contactStats, answerRateText, waHref, verbalSignup, VERBAL_CONSENT
+    contactStats, answerRateText, waHref, manualAdd, CONSENT_METHODS
   };
 })(typeof window !== "undefined" ? window : globalThis);

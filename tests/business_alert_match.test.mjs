@@ -46,6 +46,12 @@ const biz = (over = {}) => ({
   anon_card_active: true
 });
 
+test('a subscriber waiting for consent is never sendable', () => {
+  const scored = scoreAlert({ ...baseSub, status: 'pending_consent', consent_general: false, legacy_no_consent: true }, biz());
+  assert.equal(scored.sendable, false);
+  assert.equal(scored.block_reason, 'pending_consent');
+});
+
 test('a million-shekel budget accepts 1.3 million and rejects 3 million', () => {
   const near = scoreAlert(baseSub, biz({ price: 1300000, id: 'near' }));
   const far = scoreAlert(baseSub, biz({ price: 3000000, id: 'far', field: 'מסעדה' }));
