@@ -16,7 +16,10 @@ body{margin:0;background:linear-gradient(180deg,#f7f1e4 0,#eef3f8 220px);color:#
 .back{background:#0e1b34;color:#fff;border:0;border-radius:12px;padding:12px 18px;font:inherit;font-weight:800;cursor:pointer}
 .banner{background:#fff4c2;border:1px solid #e2c15a;color:#6d5313;border-radius:14px;padding:12px 14px;font-weight:800;margin-bottom:14px}
 .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
-.card{border-radius:16px;padding:14px 16px;color:#fff;box-shadow:0 10px 24px rgba(14,27,52,.08);min-height:92px}
+.card{border:0;border-radius:16px;padding:14px 16px;color:#fff;min-height:92px;text-align:right;font:inherit;cursor:pointer;box-shadow:0 7px 0 rgba(8,16,32,.28),0 14px 22px rgba(14,27,52,.16);transition:transform .12s ease,box-shadow .12s ease}
+.card:hover,.person:hover,.person-row:hover,button.bar:hover{transform:translateY(-3px)}
+.card:active,.person:active,.person-row:active,button.bar:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(8,16,32,.28)}
+.card.on,button.bar.on{outline:3px solid #f0d48a;outline-offset:2px}
 .card b{display:block;font-size:1.8rem;line-height:1}
 .card span{display:block;margin-top:6px;font-size:.86rem;opacity:.95}
 .c1{background:linear-gradient(135deg,#0e1b34,#24507a)}
@@ -30,7 +33,7 @@ body{margin:0;background:linear-gradient(180deg,#f7f1e4 0,#eef3f8 220px);color:#
 .splits{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
 .panel{background:#fff;border-radius:16px;padding:14px 16px;box-shadow:0 8px 22px rgba(14,27,52,.06)}
 .panel h2{margin:0 0 10px;font-size:1rem;color:#0e1b34}
-.bar{display:grid;grid-template-columns:168px 1fr 28px;gap:8px;align-items:center;margin:6px 0;font-size:.84rem}
+button.bar{display:grid;grid-template-columns:168px 1fr 28px;gap:8px;align-items:center;margin:6px 0;width:100%;border:0;border-radius:12px;padding:8px 10px;font:inherit;font-size:.84rem;color:inherit;text-align:right;cursor:pointer;background:linear-gradient(180deg,#fff,#f3f6fb);box-shadow:0 4px 0 #d5dbe6,0 8px 16px rgba(14,27,52,.08);transition:transform .12s ease,box-shadow .12s ease}
 .bar i{display:block;height:10px;border-radius:99px;background:linear-gradient(90deg,#c9a24b,#0e1b34)}
 .searchbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .searchbar input,.searchbar select{border:1px solid #d7deea;border-radius:12px;padding:12px 14px;font:inherit;background:#fff}
@@ -71,7 +74,12 @@ tr.row:hover{background:#f8fbff}
 .channel-tabs button{border:0;border-radius:999px;padding:10px 16px;font:inherit;font-weight:800;cursor:pointer;background:#e7edf5;color:#0e1b34}
 .channel-tabs button.on{background:#0e1b34;color:#fff}
 .people{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
-.person{border:0;border-radius:18px;padding:16px 16px 14px;text-align:right;cursor:pointer;color:#fff;font:inherit;box-shadow:0 10px 24px rgba(14,27,52,.12);min-height:108px;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.person{border:0;border-radius:18px;padding:16px 16px 14px;text-align:right;cursor:pointer;color:#fff;font:inherit;box-shadow:0 7px 0 rgba(8,16,32,.28),0 14px 22px rgba(14,27,52,.16);min-height:108px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;transition:transform .12s ease,box-shadow .12s ease}
+.person-row{width:100%;display:grid;grid-template-columns:1.3fr .8fr .9fr auto 1.1fr;gap:8px;align-items:center;border:0;border-radius:16px;padding:12px 14px;margin:8px 0;text-align:right;font:inherit;color:#142033;cursor:pointer;background:linear-gradient(180deg,#fff,#f4f7fb);box-shadow:0 5px 0 #d5dbe6,0 10px 18px rgba(14,27,52,.08);transition:transform .12s ease,box-shadow .12s ease}
+.stat-banner{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff8e6;border:1px solid #e8d18a;border-radius:14px;padding:10px 12px;margin-bottom:10px;font-weight:800}
+.channel-tabs button,.back,.soft,.wa,.mail{box-shadow:0 4px 0 rgba(14,27,52,.18);transition:transform .12s ease,box-shadow .12s ease}
+.channel-tabs button:hover,.back:hover,.soft:hover,.wa:hover,.mail:hover{transform:translateY(-2px)}
+.channel-tabs button:active,.back:active,.soft:active,.wa:active,.mail:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(14,27,52,.2)}
 .person b{font-size:1.15rem;line-height:1.3}
 .person.on{outline:3px solid #f0d48a;outline-offset:2px}
 .person .badge{background:rgba(255,255,255,.2);color:#fff}
@@ -81,8 +89,8 @@ tr.row:hover{background:#f8fbff}
 .tone-3{background:linear-gradient(135deg,#a33b4a,#e07a62)}
 .tone-4{background:linear-gradient(135deg,#5a3d8a,#8b6bc4)}
 .tone-5{background:linear-gradient(135deg,#8a4b12,#e0a15a)}
-@media(max-width:900px){.cards,.splits{grid-template-columns:1fr 1fr}.wrap{padding:12px}}
-@media(max-width:640px){.cards,.splits{grid-template-columns:1fr}}
+@media(max-width:900px){.cards,.splits{grid-template-columns:1fr 1fr}.wrap{padding:12px}.person-row{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.cards,.splits{grid-template-columns:1fr}.person-row{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -99,15 +107,7 @@ tr.row:hover{background:#f8fbff}
   </div>
   <div id="banner"></div>
   <div class="cards" id="cards"></div>
-  <div class="splits">
-    <section class="panel"><h2>לפי אזור</h2><div id="regions"></div></section>
-    <section class="panel"><h2>לפי תחום עניין</h2><div id="sectors"></div></section>
-  </div>
-  <div class="splits">
-    <section class="panel"><h2 id="sourceTitle">לפי מקור</h2><div id="sources"></div></section>
-    <section class="panel"><h2 id="timeTitle">הרשמות לפי מקור לאורך זמן</h2><div id="months"></div></section>
-  </div>
-  <section class="panel" style="margin-bottom:14px"><h2>לפי קמפיין</h2><div id="campaigns"></div></section>
+
   <div class="channel-tabs" id="channelTabs">
     <button type="button" data-channel="all" class="on">הכל</button>
     <button type="button" data-channel="website">אתר</button>
@@ -194,9 +194,22 @@ tr.row:hover{background:#f8fbff}
         <option value="do_not_call">לא להתקשר</option>
       </select>
     </div>
+    <div id="statBanner" class="stat-banner" hidden>
+      <span id="statLabel"></span>
+      <button class="soft" id="statReset" type="button">הצג הכל</button>
+    </div>
     <div id="leadNote" class="muted" style="margin-bottom:8px"></div>
     <div id="table"></div>
   </div>
+  <div class="splits">
+    <section class="panel"><h2>לפי אזור</h2><div id="regions"></div></section>
+    <section class="panel"><h2>לפי תחום עניין</h2><div id="sectors"></div></section>
+  </div>
+  <div class="splits">
+    <section class="panel"><h2 id="sourceTitle">לפי מקור</h2><div id="sources"></div></section>
+    <section class="panel"><h2 id="timeTitle">הרשמות לפי מקור לאורך זמן</h2><div id="months"></div></section>
+  </div>
+  <section class="panel" style="margin-bottom:14px"><h2>לפי קמפיין</h2><div id="campaigns"></div></section>
   <section class="panel" style="margin-top:12px" hidden>
     <h2>נרשמים לפי עסק</h2>
     <div class="searchbar">
@@ -221,6 +234,7 @@ let sample = false;
 let websiteBuyerLeads = 0;
 let channel = 'all';
 let COPY = null;
+let statFilter = null;
 
 function text(path, fallback){
   const value = String(path).split('.').reduce((obj, key) => obj && obj[key], COPY);
@@ -259,27 +273,66 @@ async function api(action, payload){
   return body;
 }
 
+function audience(){
+  return rows.filter(row => row.is_test !== true);
+}
+function statBars(map, kind){
+  const entries = Object.entries(map || {}).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return '<p class="muted">אין נתונים</p>';
+  const max = entries[0][1] || 1;
+  return entries.map(([label, count]) => {
+    const on = statFilter && statFilter.kind === kind && statFilter.value === label;
+    return `<button type="button" class="bar${on ? ' on' : ''}" data-kind="${kind}" data-value="${UI.esc(label)}" aria-pressed="${on ? 'true' : 'false'}"><span>${UI.esc(label)}</span><i style="width:${Math.max(8, Math.round(count / max * 100))}%"></i><b>${count}</b></button>`;
+  }).join('');
+}
+function cardButton(cls, num, label, kind, value){
+  const on = statFilter && statFilter.kind === kind && String(statFilter.value) === String(value);
+  return `<button type="button" class="card ${cls}${on ? ' on' : ''}" data-kind="${kind}" data-value="${UI.esc(value)}" data-label="${UI.esc(label)}" aria-pressed="${on ? 'true' : 'false'}"><b>${num}</b><span>${UI.esc(label)}</span></button>`;
+}
 function cards(summary){
-  const items = [
-    ['c1', summary.total, 'סה״כ נרשמים'],
-    ['c2', summary.sources['נרשם דרך האתר'] || 0, 'נרשם דרך האתר'],
-    ['c3', summary.sources['יזום שלנו'] || 0, 'יזום שלנו'],
-    ['c4', summary.sends || 0, 'שליחות'],
-    ['c5', summary.calls || 0, 'שיחות'],
-    ['c6', UI.answerRateText(summary.answerRate), 'אחוז מענה'],
-    ['c7', summary.unknown || 0, 'לא ידוע'],
-    ['c8', summary.unsubscribed, 'הוסרו']
-  ];
-  document.getElementById('cards').innerHTML = items.map(([cls, num, label]) =>
-    `<article class="card ${cls}"><b>${num}</b><span>${label}</span></article>`).join('');
-  document.getElementById('regions').innerHTML = UI.bars(summary.regions);
-  document.getElementById('sectors').innerHTML = UI.bars(summary.sectors);
+  document.getElementById('cards').innerHTML = [
+    cardButton('c1', summary.total, 'סה״כ נרשמים', 'total', ''),
+    cardButton('c2', summary.sources['נרשם דרך האתר'] || 0, 'נרשם דרך האתר', 'source', 'נרשם דרך האתר'),
+    cardButton('c3', summary.sources['יזום שלנו'] || 0, 'יזום שלנו', 'source', 'יזום שלנו'),
+    cardButton('c4', summary.sends || 0, 'שליחות', 'sends', ''),
+    cardButton('c5', summary.calls || 0, 'שיחות', 'calls', ''),
+    cardButton('c6', UI.answerRateText(summary.answerRate), 'אחוז מענה', 'answer', ''),
+    cardButton('c7', summary.unknown || 0, 'לא ידוע', 'unknown', ''),
+    cardButton('c8', summary.unsubscribed, 'הוסרו', 'unsubscribed', '')
+  ].join('');
+  document.getElementById('regions').innerHTML = statBars(summary.regions, 'region');
+  document.getElementById('sectors').innerHTML = statBars(summary.sectors, 'sector');
   const campaigns = document.getElementById('campaigns');
-  if (campaigns) campaigns.innerHTML = UI.bars(summary.campaigns || {});
+  if (campaigns) campaigns.innerHTML = statBars(summary.campaigns || {}, 'campaign');
   const sources = document.getElementById('sources');
-  if (sources) sources.innerHTML = UI.bars(summary.sources || {});
+  if (sources) sources.innerHTML = statBars(summary.sources || {}, 'source');
   const months = document.getElementById('months');
-  if (months) months.innerHTML = UI.bars(summary.bySourceMonth || summary.months || {});
+  if (months) months.innerHTML = statBars(summary.bySourceMonth || summary.months || {}, 'month');
+}
+function closedStatus(status){
+  return ['unsubscribed', 'unsubscribed_email', 'unsubscribed_whatsapp', 'unsubscribed_all'].includes(status);
+}
+function matchesStat(row, filter){
+  if (!filter) return true;
+  const badge = UI.sourceBadge(row);
+  if (filter.kind === 'total') return true;
+  if (filter.kind === 'source') return badge === filter.value;
+  if (filter.kind === 'sends') return Number(row.send_count || (Array.isArray(row.sends) ? row.sends.length : 0) || 0) > 0;
+  if (filter.kind === 'calls') return UI.contactStats(row).calls > 0;
+  if (filter.kind === 'answer'){
+    const contact = UI.contactStats(row);
+    return contact.answered + contact.noAnswer > 0;
+  }
+  if (filter.kind === 'unknown') return UI.contactStats(row).unknown > 0;
+  if (filter.kind === 'unsubscribed') return closedStatus(row.status);
+  if (filter.kind === 'region') return UI.regionLabels(row).includes(filter.value);
+  if (filter.kind === 'sector') return UI.sectorLabels(row).includes(filter.value);
+  if (filter.kind === 'campaign') return (row.utm_campaign || 'בלי קמפיין') === filter.value;
+  if (filter.kind === 'month'){
+    const month = row.created_at ? String(row.created_at).slice(0, 7) : '—';
+    return (month + ' ' + badge) === filter.value || month === filter.value;
+  }
+  return true;
 }
 
 function currentFilters(){
@@ -295,17 +348,25 @@ function currentFilters(){
 
 function visible(){
   const query = document.getElementById('q').value;
+  const base = audience().filter(row => matchesStat(row, statFilter));
+  if (statFilter) return UI.filterRows(base, query);
   const filters = currentFilters();
   filters.source = channel && channel !== 'all' ? channel : filters.source;
-  return UI.filterRows(rows, query).filter(row => row.is_test !== true && UI.passesFilters(row, filters));
+  return UI.filterRows(base, query).filter(row => UI.passesFilters(row, filters));
 }
 
 function paint(){
-  cards(UI.summarize(rows, new Date()));
+  cards(UI.summarize(audience(), new Date()));
+  const banner = document.getElementById('statBanner');
+  if (banner){
+    banner.hidden = !statFilter;
+    const label = document.getElementById('statLabel');
+    if (label && statFilter) label.textContent = 'מציג: ' + (statFilter.label || statFilter.value || 'הכל');
+  }
   const tabLabel = { all: text('tabs.all', 'הכל'), website: text('tabs.website', 'נרשם דרך האתר'), our_link: text('tabs.ourLink', 'יזום שלנו') };
   document.querySelectorAll('#channelTabs button').forEach(button => {
     button.classList.toggle('on', button.dataset.channel === channel);
-    const count = rows.filter(row => UI.inChannel(row, button.dataset.channel)).length;
+    const count = audience().filter(row => UI.inChannel(row, button.dataset.channel)).length;
     button.textContent = (tabLabel[button.dataset.channel] || button.dataset.channel) + ' (' + count + ')';
   });
   const list = visible().slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
@@ -320,11 +381,23 @@ function paint(){
   document.getElementById('table').innerHTML = '<div class="people">' + list.map((row, index) => {
     const name = UI.esc((((row.first_name || '') + ' ' + (row.last_name || '')).trim()) || 'נרשם');
     const open = document.getElementById('drawer') && document.getElementById('drawer').dataset.open === row.id;
+    const when = row.created_at ? new Date(row.created_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+    const interest = UI.sectorLabels(row)[0] || 'לא צוין';
+    if (statFilter){
+      return `<button type="button" class="person-row${open ? ' on' : ''}" data-id="${UI.esc(row.id)}"><b>${name}</b><span dir="ltr">${UI.esc(row.phone || '—')}</span><span>${UI.esc(when)}</span><span class="badge ${{ website: 'p-web', vip: 'p-vip', our_link: 'p-ours', manual: 'p-hand', call: 'p-phone' }[UI.sourceKind(row)] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span><span>${UI.esc(interest)}</span></button>`;
+    }
     return `<button type="button" class="person tone-${index % 6}${open ? ' on' : ''}" data-id="${UI.esc(row.id)}"><b>${name}</b><span class="badge">${UI.esc(UI.sourceBadge(row))}</span></button>`;
   }).join('') + '</div>';
-  document.querySelectorAll('#table .person').forEach(button => {
+  document.querySelectorAll('#table .person, #table .person-row').forEach(button => {
     button.addEventListener('click', () => openDetail(button.getAttribute('data-id')));
   });
+}
+function applyStat(kind, value, label){
+  if (statFilter && statFilter.kind === kind && String(statFilter.value) === String(value)) statFilter = null;
+  else statFilter = { kind, value, label: label || value || 'הכל' };
+  paint();
+  const banner = document.getElementById('statBanner');
+  if (banner && statFilter) banner.scrollIntoView({ block: 'nearest' });
 }
 
 function openRow(id){
@@ -744,8 +817,14 @@ document.getElementById('manualForm').addEventListener('submit', async event => 
     await load();
   } catch (error) { toast(error.message); }
 });
-document.getElementById('table').addEventListener('click', event => {
-  if (event.target.closest('a')) return;
+document.getElementById('statReset').addEventListener('click', () => {
+  statFilter = null;
+  paint();
+});
+document.addEventListener('click', event => {
+  const button = event.target.closest('#cards [data-kind], #regions [data-kind], #sectors [data-kind], #sources [data-kind], #months [data-kind], #campaigns [data-kind]');
+  if (!button) return;
+  applyStat(button.getAttribute('data-kind'), button.getAttribute('data-value') || '', button.getAttribute('data-label') || button.getAttribute('data-value') || '');
 });
 
 (async function start(){
@@ -760,7 +839,13 @@ document.getElementById('table').addEventListener('click', event => {
     document.getElementById('banner').innerHTML = '<div class="banner">נתוני דוגמה — לא נרשמים אמיתיים. המסך הזה נועד להדגמה בלבד.</div>';
     await load();
     document.getElementById('byBusiness').innerHTML = '<div><b>מאפייה לדוגמה</b> · דנה לדוגמה, ציון 86 (תחום 38, תקציב 30, אזור 18)</div><div><b>מסעדה לדוגמה</b> · דנה לדוגמה, ציון 30, מחוץ לטווח התקציב</div>';
-    const open = new URLSearchParams(location.search).get('open');
+    const params = new URLSearchParams(location.search);
+    const stat = params.get('stat');
+    if (stat){
+      statFilter = { kind: stat, value: params.get('value') || '', label: params.get('label') || params.get('value') || 'הכל' };
+      paint();
+    }
+    const open = params.get('open');
     if (open) openRow(open);
     return;
   }
