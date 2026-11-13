@@ -12,8 +12,10 @@ import {
   quietNoteHtml,
   quietNoteText,
   say,
+  subscriberFromHeader,
   subscriberSubject
 } from "../_shared/business-alert-mail.mjs";
+import { categoryBySlug, flagLabel, regionLabel, subcategoryBySlug } from "../_shared/taxonomy.mjs";
 import copy from "../../../copy/he.json" with { type: "json" };
 
 export const MAIL_FROM = SUBSCRIBER_FROM;
@@ -35,10 +37,6 @@ function escapeHtml(value) {
     "'": "&#39;",
     '"': "&quot;"
   })[character]);
-}
-
-function footerHtml() {
-  return `<div dir="rtl" style="margin-top:28px;padding-top:14px;border-top:1px solid #e3d9bf;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#1f2d3d;text-align:right"><b>BSD - עסקים למכירה</b><br><span style="color:#8a6d1f">${BSD_SLOGAN}</span><br>${phonesHtml()}<br><span dir="ltr"><a href="mailto:info@bsd-bbi.co.il" style="color:#0f5ea8;text-decoration:none">info@bsd-bbi.co.il</a> | <a href="https://www.bsd-bbi.co.il/" style="color:#0f5ea8;text-decoration:none">www.bsd-bbi.co.il</a></span></div>`;
 }
 
 export function baruchSignatureHtml() {
@@ -97,20 +95,6 @@ export function thankYouEmailHtml({ firstName, unsubscribeLink, addressForm }) {
 </body></html>`;
 }
 
-function shown(value) {
-  if (value == null || value === "") return "לא צוין";
-  if (typeof value === "boolean") return value ? "כן" : "לא";
-  if (Array.isArray(value)) return value.length ? value.join(", ") : "לא צוין";
-  return String(value);
-}
-
-function fieldRow(label, value) {
-  return `<tr>
-    <th style="width:34%;padding:10px 12px;border-bottom:1px solid #e6edf5;background:#f7f3e8;color:#7a5612;font-size:14px;font-weight:700;text-align:right;vertical-align:top">${escapeHtml(label)}</th>
-    <td style="padding:10px 12px;border-bottom:1px solid #e6edf5;color:#102844;font-size:16px;text-align:right;vertical-align:top">${escapeHtml(shown(value))}</td>
-  </tr>`;
-}
-
 export function budgetLabel(row) {
   if (row?.budget_open) return "פתוח להצעות";
   const min = row?.budget_min ?? null;
@@ -143,57 +127,65 @@ export function signupKindLabel(kind, previousStatus) {
   return "הרשמה מחדש";
 }
 
-export function internalAlertSubject({ firstName, lastName, signupKind }) {
-  const name = [firstName, lastName].filter(Boolean).join(" ").trim();
-  const title = signupKind === "new" ? "נרשם חדש לעדכוני עסקים" : "נרשם מחדש לעדכוני עסקים";
-  return `${title}: ${name}`;
+// Internal "new subscriber" alert to Baruch (Baruch, 13.11 11:32 + 11:35): only first
+// name, last name, phone, interests, signup date and budget if given. No technical
+// details and no links. Short RTL list with a plain-text part, readable on a phone.
+export const INTERNAL_FROM_NAME = "עדכון מאלדד מנהל המערכת";
+export const INTERNAL_FROM = subscriberFromHeader(INTERNAL_FROM_NAME);
+export const INTERNAL_SUBJECT_PREFIX = "עדכון מאלדד מנהל המערכת:";
+
+function listOf(value) {
+  return Array.isArray(value) ? value.filter(Boolean) : value ? [value] : [];
 }
 
-export function internalAlertEmailHtml(row) {
-  const kind = signupKindLabel(row.signupKind, row.previousStatus);
-  const rows = [
-    ["סוג הרשמה", kind],
-    ["הזהות נשמרה", row.identityKept === true ? "כן — לא דרסנו שם או אימייל קיימים" : ""],
-    ["שם פרטי", row.first_name],
-    ["שם משפחה", row.last_name],
-    ["טלפון", row.phone],
-    ["אימייל", row.email],
-    ["תחומי עניין", row.interests],
-    ["תקציב", budgetLabel(row)],
-    ["אזור", row.region],
-    ["הסכמה כללית", row.consent_general],
-    ["הסכמה לאימייל", row.consent_email],
-    ["הסכמה לוואטסאפ", row.consent_whatsapp],
-    ["נוסח ההסכמה", row.consent_text],
-    ["גרסת ההסכמה", row.consent_version],
-    ["גרסת נוסח ההסכמה", row.consent_text_version],
-    ["פנייה", row.address_form === "female" ? "אישה" : row.address_form === "male" ? "גבר" : ""],
-    ["הסכמה ישנה בלי אישור שיווקי", row.legacy_no_consent === true],
-    ["מועד ההסכמה", formatConsentTime(row.consent_at)],
-    ["ערוץ", row.signup_channel],
-    ["סימונים", row.flags],
-    ["גרסת טקסונומיה", row.taxonomy_version],
-    ["עמוד", row.source_url],
-    ["utm_source", row.utm_source],
-    ["utm_medium", row.utm_medium],
-    ["utm_campaign", row.utm_campaign],
-    ["utm_content", row.utm_content],
-    ["utm_term", row.utm_term]
-  ].map(([label, value]) => fieldRow(label, value)).join("");
-  const heading = row.signupKind === "new" ? "נרשם חדש לעדכוני עסקים" : "נרשם מחדש לעדכוני עסקים";
-  return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb">
-  <div dir="rtl" lang="he" style="max-width:640px;margin:0 auto;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#102844">
-    <div style="background:#06142f;padding:22px 28px;text-align:right">
-      <img src="${LOGO_URL}" alt="BSD Business Brokers Israel" width="72" height="72" style="display:block;width:72px;height:72px;border:0">
-      <div style="margin-top:12px;font-size:13px;letter-spacing:.08em;color:#f0d48a">BSD BUSINESS BROKERS ISRAEL</div>
-    </div>
-    <div style="height:4px;background:linear-gradient(90deg,#b98520,#f0d48a,#b98520)"></div>
-    <div style="padding:28px 28px 8px;text-align:right">
-      <h1 style="margin:0 0 8px;font-size:26px;line-height:1.35;color:#0a1d42">${escapeHtml(heading)}</h1>
-      <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#3d4c63">${escapeHtml(kind)}. הפרטים המלאים של הנרשם:</p>
-      <table dir="rtl" role="presentation" style="width:100%;border-collapse:collapse;border:1px solid #ead9b0">${rows}</table>
-      ${footerHtml()}
-    </div>
-  </div>
-</body></html>`;
+export function signupDateLabel(value) {
+  const date = value ? new Date(value) : new Date();
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Jerusalem", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  }).formatToParts(date).map(part => [part.type, part.value]));
+  return `${parts.day}.${parts.month}.${parts.year} ${parts.hour}:${parts.minute}`;
+}
+
+function budgetText(row) {
+  const money = value => Number(value).toLocaleString("he-IL");
+  const label = budgetLabel(row);
+  if (label) return label;
+  if (row.budget_min != null && row.budget_max != null) return `${money(row.budget_min)}–${money(row.budget_max)} ₪`;
+  if (row.budget_max != null) return `עד ${money(row.budget_max)} ₪`;
+  if (row.budget_min != null) return `מעל ${money(row.budget_min)} ₪`;
+  return "";
+}
+
+export function internalAlertFields(row) {
+  const interests = [
+    ...listOf(row.categories).map(slug => categoryBySlug(slug)?.label || slug),
+    ...listOf(row.subcategories).map(slug => subcategoryBySlug(slug)?.label || slug),
+    ...listOf(row.interests),
+    ...listOf(row.regions).map(regionLabel),
+    ...listOf(row.region)
+  ];
+  const looking = String(row.looking_for || "").trim();
+  const interestText = [interests.join(", "), looking].filter(Boolean).join(" · ");
+  return [
+    ["שם פרטי", row.first_name || ""],
+    ["שם משפחה", row.last_name || ""],
+    ["טלפון", row.phone || ""],
+    ["תחומי עניין", interestText],
+    ["תאריך הרשמה", signupDateLabel(row.consent_at)],
+    ["תקציב", budgetText(row)],
+    ["הערות", String(row.notes || "").trim()]
+  ].filter(([, value]) => String(value).trim() !== "");
+}
+
+export function internalAlertEmail(row) {
+  const name = [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || "ללא שם";
+  const subject = `${INTERNAL_SUBJECT_PREFIX} נרשם חדש – ${name}`;
+  const fields = internalAlertFields(row);
+  const text = fields.map(([label, value]) => `${label}: ${value}`).join("\n");
+  const lines = fields.map(([label, value]) =>
+    `<p style="margin:0 0 10px;font-size:18px;line-height:1.5"><b>${escapeHtml(label)}:</b> ${escapeHtml(value)}</p>`).join("");
+  const html = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:16px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#102844;direction:rtl;text-align:right">
+<div dir="rtl" style="max-width:600px;text-align:right">${lines}</div></body></html>`;
+  return { from: INTERNAL_FROM, subject, text, html };
 }

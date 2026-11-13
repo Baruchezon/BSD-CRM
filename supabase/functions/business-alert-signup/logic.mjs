@@ -188,6 +188,27 @@ function addressFormOf(body) {
   return null;
 }
 
+export const NOTES_MAX = 500;
+
+// Optional free-text notes from the bottom of the form. Returns undefined when the
+// key is missing (older form versions), null when empty, else clean text <= 500.
+export function notesOf(body) {
+  if (!Object.hasOwn(body || {}, "notes")) return undefined;
+  const raw = body.notes;
+  if (raw == null || typeof raw === "object") return null;
+  const text = String(raw)
+    .replace(/<[^>]*>/g, " ")
+    .replace(/[<>]/g, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, NOTES_MAX)
+    .trim();
+  return text || null;
+}
+
 function lookingOf(body, extra) {
   const text = cleanMultiline([body?.looking_for, extra].filter(Boolean).join("\n"), 2000);
   return text || null;
@@ -253,6 +274,7 @@ function sharedFields(body) {
       source_url: normalizeSourceUrl(body?.source_url).ok ? normalizeSourceUrl(body?.source_url).source_url : null,
       looking_for: lookingOf(body, [interests.extra, region.extra].filter(Boolean).join("\n")),
       address_form: addressFormOf(body),
+      ...(notesOf(body) !== undefined ? { notes: notesOf(body) } : {}),
       ...normalizeUtm(body)
     }
   };
@@ -440,7 +462,7 @@ const PREFILL_KEYS = [
   "regions", "looking_for", "consent_email", "consent_whatsapp", "address_form"
 ];
 const PROFILE_KEYS = [
-  ...PREFILL_KEYS, "interests", "region"
+  ...PREFILL_KEYS, "interests", "region", "notes"
 ];
 const IDENTITY_KEYS = ["first_name", "last_name", "email", "phone", "phone9"];
 
@@ -553,9 +575,11 @@ export function planSubscriberUpdate({ stored, incoming, emailMatched, now }) {
     previous[key] = stored?.[key] ?? null;
     next[key] = changes[key];
   }
-  const lead = stored?.crm_lead_id && (Object.hasOwn(changes, "region") || Object.hasOwn(changes, "regions") || Object.hasOwn(changes, "budget_max"))
+  const notesChanged = Object.hasOwn(changes, "notes") && changes.notes && changes.notes !== (stored?.notes ?? null);
+  const lead = stored?.crm_lead_id && (Object.hasOwn(changes, "region") || Object.hasOwn(changes, "regions") || Object.hasOwn(changes, "budget_max") || notesChanged)
     ? {
       id: stored.crm_lead_id,
+      ...(notesChanged ? { append_notes: changes.notes } : {}),
       ...(Object.hasOwn(changes, "region") || Object.hasOwn(changes, "regions")
         ? { requested_area: changes.region || (Array.isArray(changes.regions) ? changes.regions.join(", ") : null) }
         : {}),
@@ -576,4 +600,15 @@ export function planSubscriberWrite({ emailRow, phoneRow }) {
     detachPhoneId,
     keepToken: Boolean(targetId)
   };
+}
+
+// Append (never overwrite) subscriber notes to a CRM lead's notes.
+export function appendLeadNotes(existing, notes, when = new Date()) {
+  const text = String(notes || "").trim();
+  if (!text) return existing ?? null;
+  const date = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", day: "2-digit", month: "2-digit", year: "numeric" }).format(when).replace(/\//g, ".");
+  const line = `הערות מטופס ההרשמה (${date}): ${text}`;
+  const before = String(existing || "").trim();
+  if (before.includes(line)) return before;
+  return before ? `${before}\n${line}` : line;
 }

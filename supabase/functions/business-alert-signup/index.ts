@@ -12,6 +12,7 @@ import {
   isUnsubscribeToken,
   consentWritePayload,
   newUpdateNonce,
+  appendLeadNotes,
   planSubscriberUpdate,
   planSubscriberWrite,
   validateSignup,
@@ -21,8 +22,7 @@ import {
   INTERNAL_TO,
   MAIL_FROM,
   MAIL_REPLY_TO,
-  internalAlertEmailHtml,
-  internalAlertSubject,
+  internalAlertEmail,
   thankYouEmailHtml,
   thankYouEmailText,
   thankYouSubject,
@@ -39,7 +39,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 
 const TABLE = "business_alert_subscribers";
 const ATTEMPTS = "business_alert_signup_attempts";
-const LOOKUP = "id, first_name, last_name, email, phone, phone9, unsubscribe_token, status, unsubscribed_at, unsubscribed_by, unsubscribe_reason, email_unsubscribed_at, whatsapp_unsubscribed_at, status_history, resubscribed_at, categories, subcategories, flags, budget_min, budget_max, budget_open, regions, looking_for, consent_email, consent_whatsapp, address_form, crm_lead_id, region, interests";
+const LOOKUP = "id, first_name, last_name, email, phone, phone9, unsubscribe_token, status, unsubscribed_at, unsubscribed_by, unsubscribe_reason, email_unsubscribed_at, whatsapp_unsubscribed_at, status_history, resubscribed_at, categories, subcategories, flags, budget_min, budget_max, budget_open, regions, looking_for, consent_email, consent_whatsapp, address_form, crm_lead_id, region, interests, notes";
 
 const allowedOrigins = new Set([
   "https://bsd-bbi.co.il",
@@ -69,7 +69,7 @@ function clientIp(req: Request) {
   return cleanText(forwarded.split(",")[0], 64);
 }
 
-async function sendEmail(to: string, subject: string, html: string, text?: string, headers?: Record<string, string>) {
+async function sendEmail(to: string, subject: string, html: string, text?: string, headers?: Record<string, string>, from: string = MAIL_FROM) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) {
     console.error("Alert email failed: missing Resend API key");
@@ -80,7 +80,7 @@ async function sendEmail(to: string, subject: string, html: string, text?: strin
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        from: MAIL_FROM,
+        from,
         reply_to: MAIL_REPLY_TO,
         to: [to],
         subject,
@@ -282,6 +282,10 @@ async function applyProfileUpdate(body: Record<string, unknown>, origin: string 
     const leadPatch: Record<string, unknown> = {};
     if (plan.lead.requested_area !== undefined) leadPatch.requested_area = plan.lead.requested_area;
     if (Object.hasOwn(plan.lead, "budget")) leadPatch.budget = plan.lead.budget;
+    if (plan.lead.append_notes) {
+      const { data: leadRow } = await supabase.from("leads").select("notes").eq("id", plan.lead.id).maybeSingle();
+      leadPatch.notes = appendLeadNotes(leadRow?.notes, plan.lead.append_notes);
+    }
     if (Object.keys(leadPatch).length) {
       const { error } = await supabase.from("leads").update(leadPatch).eq("id", plan.lead.id);
       if (error) console.error("lead update was not stored", error.message);
@@ -380,21 +384,14 @@ Deno.serve(async req => {
       thankYouEmailText({ firstName: signup.row.first_name, unsubscribeLink: pageLink, addressForm: signup.row.address_form }),
       listUnsubscribeHeaders(oneClick)
     );
-    const internal = await sendEmail(
-      INTERNAL_TO,
-      internalAlertSubject({
-        firstName: signup.row.first_name,
-        lastName: signup.row.last_name,
-        signupKind: saved.signupKind
-      }),
-      internalAlertEmailHtml({
-        ...signup.row,
-        signupKind: saved.signupKind,
-        previousStatus: saved.previousStatus,
-        consent_at: saved.consentAt,
-        identityKept: saved.identityKept === true
-      })
-    );
+    const alert = internalAlertEmail({
+      ...signup.row,
+      signupKind: saved.signupKind,
+      previousStatus: saved.previousStatus,
+      consent_at: saved.consentAt,
+      identityKept: saved.identityKept === true
+    });
+    const internal = await sendEmail(INTERNAL_TO, alert.subject, alert.html, alert.text, undefined, alert.from);
     if (!internal.sent) console.error("Internal alert email was not sent", internal.error || "");
 
     return json({ ok: true, emailSent: thankYou.sent, emailError: thankYou.error ?? null }, 200, origin);
