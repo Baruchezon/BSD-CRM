@@ -917,6 +917,53 @@ function onPortalListPreviewClick(e){
 }
 document.addEventListener('click', onPortalListPreviewClick, true);
 
+const DISTRIBUTION_CHANNELS = [
+  { key: 'facebook', label: 'פייסבוק' },
+  { key: 'instagram', label: 'אינסטגרם' },
+  { key: 'email_alerts', label: 'התראות מייל' },
+  { key: 'vip', label: 'לקוחות VIP' },
+  { key: 'whatsapp', label: 'וואטסאפ' }
+];
+function distributionActor(){
+  return (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && (CURRENT_PROFILE.full_name || CURRENT_PROFILE.email)) || '';
+}
+async function loadBizChannelChecks(biz){
+  const box = document.getElementById('bizChannelChecks');
+  if (!box || !biz) return;
+  const note = document.getElementById('bizChannelMsg');
+  if (note && biz.marketing_service_active === false) note.textContent = 'שירות השיווק כבוי. אפשר לכבות ערוץ, אי אפשר להדליק חדש.';
+  let rows = [];
+  const result = await window.supabaseClient.rpc('business_distribution_list', { p_business_id: biz.id });
+  if (!result.error && Array.isArray(result.data)) rows = result.data;
+  const byChannel = {};
+  rows.forEach(row => { byChannel[row.channel] = row; });
+  box.innerHTML = DISTRIBUTION_CHANNELS.map(channel => {
+    const row = byChannel[channel.key] || {};
+    const when = row.enabled_at ? new Date(row.enabled_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' }) : '';
+    const who = row.enabled_by ? row.enabled_by : '';
+    const state = row.status === 'stopped' ? 'הופסק' : row.status === 'done' ? 'בוצע' : row.status === 'in_progress' ? 'בטיפול' : row.enabled ? 'ממתין' : '';
+    const detail = [state, who, when].filter(Boolean).join(' · ');
+    return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:#fff;border:1px solid #e4e0d4;border-radius:8px;padding:6px 10px;"><input type="checkbox" data-channel="${channel.key}" ${row.enabled ? 'checked' : ''} style="width:auto;"><span><b>${channel.label}</b>${detail ? `<span style="display:block;font-size:.7rem;color:#665;font-weight:400;">${detail}</span>` : ''}</span></label>`;
+  }).join('');
+  box.querySelectorAll('[data-channel]').forEach(input => {
+    input.addEventListener('change', async () => {
+      if (input.checked && biz.marketing_service_active === false){
+        input.checked = false;
+        if (note) note.textContent = 'אי אפשר להדליק ערוץ כששירות השיווק כבוי.';
+        return;
+      }
+      const saved = await window.supabaseClient.rpc('business_distribution_set', {
+        p_business_id: biz.id,
+        p_channel: input.getAttribute('data-channel'),
+        p_enabled: input.checked,
+        p_actor: distributionActor()
+      });
+      if (note) note.textContent = saved.error ? 'הערוץ לא נשמר' : 'הערוץ נשמר';
+      if (!saved.error) loadBizChannelChecks(biz);
+    });
+  });
+}
+
 async function openVipSend(bizId, event){
   if (event){ event.preventDefault(); event.stopPropagation(); }
   const existing = document.getElementById('vipSendOverlay');
@@ -1936,6 +1983,8 @@ function openBizForm(id){
         <div style="font-size:.72rem;color:#665;margin-top:4px;">
           זמין רק אם "הכן תוכן אנונימי" מסומן למעלה - אם תבטל את זה, העסק יורד אוטומטית גם מהרשימה הציבורית. הרשימה הציבורית מציגה בדיוק את אותם שדות אנונימיים בלבד. גם עסק שסטטוס המכירה שלו הוא "נמכר" או "עסקה לא פעילה" יורד אוטומטית מהפרסום הציבורי.
         </div>
+        <div id="bizChannelChecks" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
+        <div id="bizChannelMsg" style="font-size:.72rem;color:#8a5a00;min-height:1em;"></div>
 
         <div style="margin-top:12px;padding-top:10px;border-top:1px dashed #d8d3c4;">
           <div style="display:flex;align-items:center;gap:8px;">
@@ -2088,6 +2137,7 @@ function openBizForm(id){
   if (biz) bsdLoadBizSummaryBuyers(biz.id);
   if (biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz)) loadBizAccessGrants(biz.id);
   if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadAnonDistSummary(biz.id);
+  if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadBizChannelChecks(biz);
   if (biz && canGenerateAnonymousCard(CURRENT_PROFILE, biz)) loadSaleFileModule(biz.id);
   if (biz && biz.anon_summary && biz.anon_summary_generated_at) refreshAnonStaleWarning(biz);
   if (biz) initAiEditIndicators(biz);
