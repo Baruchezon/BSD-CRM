@@ -14,7 +14,9 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 
 const ALLOWED = new Set([
   "https://www.bsd-bbi.co.il",
-  "https://bsd-bbi.co.il"
+  "https://bsd-bbi.co.il",
+  "https://lively-wood-e2c6.baruch-ezon.workers.dev",
+  "https://cursor-alerts-consent-unsubscribe-afca-lively-wood-e2c6.baruch-ezon.workers.dev"
 ]);
 const WINDOW_MS = 15 * 60 * 1000;
 const LIMIT = 30;

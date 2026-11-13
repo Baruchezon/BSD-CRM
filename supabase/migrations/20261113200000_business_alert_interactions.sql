@@ -167,47 +167,10 @@ volatile
 security definer
 set search_path = pg_catalog, public
 as $$
-declare
-  v_id uuid;
-  v_phone text := btrim(coalesce(p_phone, ''));
-  v_email text := nullif(lower(btrim(coalesce(p_email, ''))), '');
-  v_first text := btrim(coalesce(p_first_name, ''));
-  v_last text := nullif(btrim(coalesce(p_last_name, '')), '');
 begin
-  if p_verbal is not true then
-    raise exception 'consent_required' using errcode = '22023';
-  end if;
-  if v_first = '' or v_phone = '' or btrim(coalesce(p_consent_by, '')) = '' then
-    raise exception 'missing_required_fields' using errcode = '22023';
-  end if;
-  if coalesce(p_consent_email, false) is not true and coalesce(p_consent_whatsapp, false) is not true then
-    raise exception 'no_channel' using errcode = '22023';
-  end if;
-  if v_email is not null and exists (select 1 from public.business_alert_subscribers s where lower(s.email) = v_email) then
-    raise exception 'email_exists' using errcode = '23505';
-  end if;
-
-  insert into public.business_alert_subscribers (
-    first_name, last_name, phone, phone9, email,
-    interests, categories, regions,
-    budget_min, budget_max, budget_open, region,
-    consent_email, consent_whatsapp, consent_general, consent_text,
-    consent_version, consent_text_version, consent_at, consent_method, consent_by,
-    signup_channel, manual_source, legacy_no_consent, status
-  ) values (
-    v_first, coalesce(v_last, '—'), v_phone,
-    right(regexp_replace(v_phone, '\D', '', 'g'), 9),
-    v_email,
-    array['אחר'], coalesce(p_categories, '{}'), coalesce(p_regions, '{}'),
-    p_budget_min, p_budget_max, coalesce(p_budget_open, false), 'כל הארץ',
-    coalesce(p_consent_email, false), coalesce(p_consent_whatsapp, false), true,
-    'התקבלה הסכמה בעל פה',
-    'verbal-2026-11-13', 'verbal-2026-11-13', now(), 'verbal', btrim(p_consent_by),
-    'our_link', 'call', false, 'active'
-  )
-  returning id into v_id;
-
-  return public.business_alert_screen_card(v_id);
+  -- A phone call is not consent. Callers use business_alert_add_manual,
+  -- which records a channel only when that channel was explicitly checked.
+  raise exception 'use business_alert_add_manual; a call is not consent' using errcode = '22023';
 end;
 $$;
 

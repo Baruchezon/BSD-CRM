@@ -160,6 +160,26 @@ test('the website form can send taxonomy slugs and the legacy fields together', 
   assert.deepEqual(result.row.flags, ['franchise', 'mystery']);
   assert.deepEqual(result.row.regions, ['all']);
   assert.equal(result.row.taxonomy_version, 'v1-2026-11-13');
+  assert.equal(result.row.consent_version, 'v1-2026-11-13');
+  const bothVersions = validateSignup({
+    ...signupBody,
+    categories: ['food'],
+    subcategories: ['bakery'],
+    flags: ['franchise'],
+    regions: ['center'],
+    consent_whatsapp: true,
+    consent_email: false,
+    consent_text_version: 'alerts-consent-2026-11-12',
+    utm_term: 'ad-1'
+  });
+  assert.equal(bothVersions.ok, true, bothVersions.error);
+  assert.equal(bothVersions.row.consent_version, 'v1-2026-11-13');
+  assert.equal(bothVersions.row.consent_text_version, 'alerts-consent-2026-11-12');
+  assert.equal(bothVersions.row.consent_email, false);
+  assert.equal(bothVersions.row.consent_whatsapp, true);
+  assert.equal(bothVersions.row.utm_term, 'ad-1');
+  assert.equal(validateSignup({ ...signupBody, categories: ['food'], address_form: 'female' }).row.address_form, 'female');
+  assert.equal(validateSignup({ ...signupBody, categories: ['food'], address_form: 'office' }).row.address_form, null);
   assert.equal(Object.hasOwn(result.row, 'source'), false);
   assert.equal(result.row.budget_min, 700000);
   assert.equal(result.row.budget_max, 1300000);

@@ -20,7 +20,8 @@ import {
   internalAlertSubject,
   thankYouEmailHtml,
   thankYouEmailText,
-  thankYouSubject
+  thankYouSubject,
+  unsubscribeUrl
 } from "./email.mjs";
 import { listUnsubscribeHeaders, unsubscribeHttpsUrl } from "../_shared/business-alert-mail.mjs";
 
@@ -38,7 +39,8 @@ const LOOKUP = "id, unsubscribe_token, status, unsubscribed_at, unsubscribed_by,
 const allowedOrigins = new Set([
   "https://bsd-bbi.co.il",
   "https://www.bsd-bbi.co.il",
-  "https://lively-wood-e2c6.baruch-ezon.workers.dev"
+  "https://lively-wood-e2c6.baruch-ezon.workers.dev",
+  "https://cursor-alerts-consent-unsubscribe-afca-lively-wood-e2c6.baruch-ezon.workers.dev"
 ]);
 
 function cors(origin: string | null) {
@@ -207,13 +209,14 @@ Deno.serve(async req => {
     if (!signup.ok) return json({ ok: false, error: signup.error }, 400, origin);
 
     const saved = await writeSubscriber(signup.row, ip, cleanText(req.headers.get("user-agent"), 300));
-    const link = unsubscribeHttpsUrl(supabaseUrl, saved.unsubscribe_token, "all");
+    const pageLink = unsubscribeUrl(saved.unsubscribe_token, "all");
+    const oneClick = unsubscribeHttpsUrl(supabaseUrl, saved.unsubscribe_token, "all");
     const thankYou = await sendEmail(
       signup.row.email,
       thankYouSubject(),
-      thankYouEmailHtml({ firstName: signup.row.first_name, unsubscribeLink: link }),
-      thankYouEmailText({ firstName: signup.row.first_name, unsubscribeLink: link }),
-      listUnsubscribeHeaders(link)
+      thankYouEmailHtml({ firstName: signup.row.first_name, unsubscribeLink: pageLink }),
+      thankYouEmailText({ firstName: signup.row.first_name, unsubscribeLink: pageLink }),
+      listUnsubscribeHeaders(oneClick)
     );
     const internal = await sendEmail(
       INTERNAL_TO,

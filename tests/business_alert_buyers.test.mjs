@@ -182,6 +182,7 @@ test('subscriber mail uses one quoted sender and never the team name', () => {
   assert.match(thanks, /href="tel:\+972542424999"/);
   assert.match(thanks, /טלפון BSD/);
   assert.match(thanks, /נייד/);
+  assert.match(thanks, /בלי הצפות ובלי ספאם/);
   assert.equal(signOffText().includes('צוות BSD'), false);
   const headers = listUnsubscribeHeaders('https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/business-alert-unsubscribe?token=abc&channel=all');
   assert.match(headers['List-Unsubscribe'], new RegExp(`<mailto:${SUBSCRIBER_FROM_ADDRESS}\\?subject=unsubscribe>`));
@@ -198,7 +199,9 @@ test('the unsubscribe page is Hebrew and says the removal succeeded', () => {
   const page = unsubscribePage({ ok: true, channel: 'email' });
   assert.match(page, /lang="he"/);
   assert.match(page, /dir="rtl"/);
-  assert.match(page, /הוסרת בהצלחה/);
+  assert.match(page, /הוסרת מעדכוני האימייל/);
+  assert.match(page, /תמיד אפשר לחזור/);
+  assert.match(unsubscribePage({ ok: true, channel: 'all' }), /הוסרת מכל העדכונים/);
   assert.match(page, /אימייל/);
   assert.match(page, /BSD - עסקים למכירה/);
   assert.match(page, /href="tel:\+972774446707"/);

@@ -52,7 +52,7 @@ export const RATE_LIMITS = {
 import { formInterestFromPhrase, formRegionFromText, parseAlertBudget } from "../_shared/alert-match.mjs";
 import { categorySlugs, flagSlugs, regionSlugs, subcategorySlugs } from "../_shared/taxonomy.mjs";
 
-const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content"];
+const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
 
 export function cleanText(value, max = 200) {
   return String(value ?? "")
@@ -175,6 +175,11 @@ function regionsOf(body) {
   return parsed;
 }
 
+function addressFormOf(body) {
+  const value = cleanText(body?.address_form, 20);
+  return value === "male" || value === "female" ? value : null;
+}
+
 function lookingOf(body, extra) {
   const text = cleanMultiline([body?.looking_for, extra].filter(Boolean).join("\n"), 2000);
   return text || null;
@@ -239,6 +244,7 @@ function sharedFields(body) {
       signup_channel: signupChannelOf(body),
       source_url: normalizeSourceUrl(body?.source_url).ok ? normalizeSourceUrl(body?.source_url).source_url : null,
       looking_for: lookingOf(body, [interests.extra, region.extra].filter(Boolean).join("\n")),
+      address_form: addressFormOf(body),
       ...normalizeUtm(body)
     }
   };
@@ -283,7 +289,9 @@ export function validateSignup(body) {
   if (!consentEmail && !consentWhatsapp) return { ok: false, error: "no_channel" };
   const consentText = cleanMultiline(body?.consent_text, 2000);
   if (!consentText) return { ok: false, error: "consent_required" };
-  const consentVersion = cleanText(body?.consent_version, 80);
+  const namedVersion = cleanText(body?.consent_version, 80);
+  const textVersion = cleanText(body?.consent_text_version, 80);
+  const consentVersion = namedVersion || textVersion;
   if (!/^[\w.:-]{1,80}$/.test(consentVersion)) return { ok: false, error: "consent_version" };
   const source = normalizeSourceUrl(body?.source_url);
   if (!source.ok) return { ok: false, error: "invalid_source_url" };
@@ -295,10 +303,10 @@ export function validateSignup(body) {
       ...shared.base,
       consent_email: consentEmail,
       consent_whatsapp: consentWhatsapp,
-      consent_text_version: consentVersion,
+      consent_text_version: textVersion || consentVersion,
       consent_general: true,
       consent_text: consentText,
-      consent_version: consentVersion,
+      consent_version: namedVersion || consentVersion,
       source_url: source.source_url,
       legacy_no_consent: false
     }

@@ -18,9 +18,9 @@ export const INTERNAL_TO = "baruch.ezon@gmail.com";
 export const LOGO_URL = "https://www.bsd-bbi.co.il/assets/bsd-asset-01-logo.png";
 const SITE_ORIGIN = "https://www.bsd-bbi.co.il";
 
-export function unsubscribeUrl(token) {
-  const path = encodeURIComponent("הסרה-מעודכוני-עסקים");
-  return `${SITE_ORIGIN}/${path}/?token=${encodeURIComponent(token)}`;
+export function unsubscribeUrl(token, channel = "all") {
+  const path = encodeURIComponent("הסרה");
+  return `${SITE_ORIGIN}/${path}/?token=${encodeURIComponent(token)}&channel=${encodeURIComponent(channel)}`;
 }
 
 function escapeHtml(value) {
@@ -58,7 +58,7 @@ export function thankYouEmailText({ firstName, unsubscribeLink }) {
     "פרסומת",
     greeting,
     "",
-    "נרשמתם לעדכונים על עסקים חדשים למכירה. כשעסק חדש יעלה ויתאים למה שסימנתם, נשלח אליכם עדכון קצר.",
+    "בלי הצפות ובלי ספאם – נשלח לך רק עסקים שבאמת מתאימים.",
     "",
     `אפשר להסיר את עצמכם בכל עת: ${unsubscribeLink || ""}`,
     "",
@@ -79,7 +79,7 @@ export function thankYouEmailHtml({ firstName, unsubscribeLink }) {
     <div style="padding:28px;text-align:right;line-height:1.7">
       <p style="margin:0 0 8px;font-size:13px;color:#8a6d1f">פרסומת</p>
       <h1 style="margin:0 0 12px;font-size:26px;line-height:1.35;color:#0a1d42">תודה על ההתעניינות${name ? `, ${name}` : ""}</h1>
-      <p style="margin:0 0 12px;font-size:17px">נרשמתם לעדכונים על עסקים חדשים למכירה. כשעסק חדש יעלה ויתאים למה שסימנתם, נשלח אליכם עדכון קצר.</p>
+      <p style="margin:0 0 12px;font-size:17px">בלי הצפות ובלי ספאם – נשלח לך רק עסקים שבאמת מתאימים.</p>
       <p style="margin:0 0 12px;font-size:17px">הפרטים שמורים אצל BSD ומשמשים רק לשליחת העדכונים האלה.</p>
       <p style="margin:0;font-size:15px;color:#3d4c63">אפשר להסיר את עצמכם בכל עת, בלי צורך בסיבה:<br><a href="${link}" style="color:#1d67c8">הסרה מרשימת העדכונים</a></p>
       ${baruchSignatureHtml()}
@@ -155,7 +155,9 @@ export function internalAlertEmailHtml(row) {
     ["הסכמה לאימייל", row.consent_email],
     ["הסכמה לוואטסאפ", row.consent_whatsapp],
     ["נוסח ההסכמה", row.consent_text],
-    ["גרסת ההסכמה", row.consent_version || row.consent_text_version],
+    ["גרסת ההסכמה", row.consent_version],
+    ["גרסת נוסח ההסכמה", row.consent_text_version],
+    ["פנייה", row.address_form === "female" ? "אליך כאישה" : row.address_form === "male" ? "אליך כגבר" : ""],
     ["הסכמה ישנה בלי אישור שיווקי", row.legacy_no_consent === true],
     ["מועד ההסכמה", formatConsentTime(row.consent_at)],
     ["ערוץ", row.signup_channel],
@@ -165,7 +167,8 @@ export function internalAlertEmailHtml(row) {
     ["utm_source", row.utm_source],
     ["utm_medium", row.utm_medium],
     ["utm_campaign", row.utm_campaign],
-    ["utm_content", row.utm_content]
+    ["utm_content", row.utm_content],
+    ["utm_term", row.utm_term]
   ].map(([label, value]) => fieldRow(label, value)).join("");
   const heading = row.signupKind === "new" ? "נרשם חדש לעדכוני עסקים" : "נרשם מחדש לעדכוני עסקים";
   return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb">
