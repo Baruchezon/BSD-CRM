@@ -2,6 +2,8 @@
 // The caller must be an active admin or manager. The function then uses the
 // service role to call the business_alert_* functions. Tables stay closed to anon.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { timingSafeEqual } from "node:crypto";
+import { oneAlertDecision, selectAlertBusinesses } from "./one-alert.mjs";
 import {
   SUBSCRIBER_FROM,
   SUBSCRIBER_REPLY_TO,
@@ -18,7 +20,7 @@ import {
 import { gateDecision } from "../_shared/business-alert-rules.mjs";
 import { matchAlertEmail, normalizeMatchConfig, publicCard, scoreAlert, sendGate } from "../_shared/alert-match.mjs";
 import { APPROVED_ALERT_BUSINESSES, threeBusinessEmail } from "../_shared/opportunity-email.mjs";
-import copy from "../../copy/he.json" with { type: "json" };
+import copy from "../../../copy/he.json" with { type: "json" };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -64,10 +66,18 @@ function textList(value: unknown) {
   return Array.isArray(value) ? value.map(item => clean(item, 60)).filter(Boolean) : [];
 }
 
-async function requireManager(req: Request) {
+function sameSecret(left: string, right: string) {
+  const a = new TextEncoder().encode(left);
+  const b = new TextEncoder().encode(right);
+  if (!a.length || a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+async function requireCaller(req: Request) {
   const header = req.headers.get("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token) return { error: "not_authenticated" as const };
+  if (serviceRoleKey && sameSecret(token, serviceRoleKey)) return { serviceRole: true as const };
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) return { error: "not_authenticated" as const };
   const { data: profile } = await supabase.from("profiles").select("id, full_name, role, status").eq("id", data.user.id).maybeSingle();
@@ -295,7 +305,7 @@ async function matchAction(action: string, body: Record<string, unknown>, origin
 async function loadSecrets(id: string) {
   const { data, error } = await supabase
     .from("business_alert_subscribers")
-    .select("id, unsubscribe_token, visit_token, first_name, email, phone, address_form, legacy_no_consent, consent_general, consent_email, consent_whatsapp, status, email_unsubscribed_at, whatsapp_unsubscribed_at")
+    .select("id, unsubscribe_token, visit_token, first_name, email, phone, address_form, legacy_no_consent, consent_general, consent_email, consent_whatsapp, status, email_unsubscribed_at, whatsapp_unsubscribed_at, is_test")
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
@@ -308,7 +318,7 @@ Deno.serve(async req => {
   if (req.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, 405, origin);
   if (origin && !ALLOWED.has(origin)) return json({ ok: false, error: "origin_not_allowed" }, 403, origin);
 
-  const auth = await requireManager(req);
+  const auth = await requireCaller(req);
   if ("error" in auth && auth.error) {
     const status = auth.error === "forbidden" ? 403 : 401;
     return json({ ok: false, error: auth.error }, status, origin);
@@ -317,6 +327,9 @@ Deno.serve(async req => {
   try {
     const body = await req.json();
     const action = clean(body.action, 40);
+    if (auth.serviceRole && action !== "send_one_alert") {
+      return json({ ok: false, error: "test_only" }, 403, origin);
+    }
 
     if (action === "roster") {
       const { data, error } = await supabase.rpc("business_alert_roster");
@@ -568,9 +581,28 @@ Deno.serve(async req => {
       }
       const row = await loadSecrets(id);
       if (!row?.email) return json({ ok: false, error: "not_found" }, 404, origin);
+      const listed = (value: unknown) => value == null || value === "" ? [] : Array.isArray(value) ? value : [value];
+      const chosen = selectAlertBusinesses(
+        [...listed(body.business_ids), ...listed(body.businesses), ...listed(body.business_numbers)],
+        APPROVED_ALERT_BUSINESSES
+      );
+      if (chosen.error) return json({ ok: false, error: chosen.error }, 400, origin);
+      const delivery = await matchSettings();
+      const { data: settingsRow } = await supabase.from("business_alert_match_settings")
+        .select("alert_send_allowlist")
+        .eq("id", true)
+        .maybeSingle();
+      const decision = oneAlertDecision({
+        subscriber: row,
+        serviceRole: auth.serviceRole === true,
+        allowlist: settingsRow?.alert_send_allowlist || [],
+        sendingEnabled: delivery.sendingEnabled,
+        dryRun: delivery.dryRun
+      });
+      if (!decision.ok) return json({ ok: false, error: decision.error, sent: false }, 200, origin);
       const mail = threeBusinessEmail({
         firstName: String(row.first_name || ""),
-        businesses: APPROVED_ALERT_BUSINESSES.map(business => ({
+        businesses: chosen.businesses.map(business => ({
           ...business,
           detailsUrl: `${supabaseUrl}/functions/v1/business-alert-request-details?business=${encodeURIComponent(business.number)}&token=${encodeURIComponent(row.unsubscribe_token || "")}`
         })),
@@ -578,12 +610,7 @@ Deno.serve(async req => {
         addressForm: row.address_form
       });
       if (body.confirm !== true) {
-        return json({ ok: true, preview: true, sent: false, from: mail.from, subject: mail.subject }, 200, origin);
-      }
-      const delivery = await matchSettings();
-      if (!delivery.sendingEnabled || delivery.dryRun) {
-        await logDryRun("one_alert", { subscriber_id: id, channel: "email" });
-        return json({ ok: true, sent: false, dry_run: delivery.dryRun, sending_enabled: delivery.sendingEnabled }, 200, origin);
+        return json({ ok: true, preview: true, sent: false, from: mail.from, subject: mail.subject, businesses: chosen.businesses.map(item => item.number) }, 200, origin);
       }
       const apiKey = Deno.env.get("RESEND_API_KEY");
       if (!apiKey) return json({ ok: false, error: "missing_email_configuration", sent: false }, 200, origin);
@@ -601,7 +628,27 @@ Deno.serve(async req => {
         })
       });
       if (!response.ok) return json({ ok: false, error: "send_failed", sent: false }, 200, origin);
-      return json({ ok: true, sent: true, preview: false }, 200, origin);
+      const payload = await response.json().catch(() => ({}));
+      const resendId = payload?.id || null;
+      const actor = auth.serviceRole ? "service_role" : clean(auth.profile?.full_name || auth.user?.email, 120);
+      for (const business of chosen.businesses) {
+        const { error } = await supabase.from("business_alert_sends").upsert({
+          subscriber_id: row.id,
+          business_number: business.number,
+          channel: "email",
+          created_by: actor || "admin",
+          resend_id: resendId,
+          sent_at: new Date().toISOString()
+        }, { onConflict: "subscriber_id,business_number" });
+        if (error) console.error("alert send row was not stored", error.message);
+      }
+      return json({
+        ok: true,
+        sent: true,
+        preview: false,
+        resend_id: resendId,
+        businesses: chosen.businesses.map(item => item.number)
+      }, 200, origin);
     }
 
     if (action === "prepare_whatsapp" || action === "prepare_email" || action === "send_email") {

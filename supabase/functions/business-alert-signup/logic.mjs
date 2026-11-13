@@ -52,6 +52,7 @@ export const RATE_LIMITS = {
 };
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { Buffer } from "node:buffer";
 import { formInterestFromPhrase, formRegionFromText, parseAlertBudget } from "../_shared/alert-match.mjs";
 import { categorySlugs, flagSlugs, regionSlugs, subcategorySlugs } from "../_shared/taxonomy.mjs";
 
