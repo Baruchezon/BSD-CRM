@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { APPROVED_ALERT_BUSINESSES } from "../supabase/functions/_shared/opportunity-email.mjs";
-import { oneAlertDecision, selectAlertBusinesses } from "../supabase/functions/business-alert-admin/one-alert.mjs";
+import { alertSendRows, oneAlertDecision, selectAlertBusinesses } from "../supabase/functions/business-alert-admin/one-alert.mjs";
 import { resendPlan } from "../scripts/resend-one-alert.mjs";
 
 const testRow = {
@@ -73,6 +74,33 @@ test("the letter uses the approved businesses, including the short test numbers"
   ]);
   assert.equal(selectAlertBusinesses([], APPROVED_ALERT_BUSINESSES).businesses.length, 3);
   assert.equal(selectAlertBusinesses(["9999"], APPROVED_ALERT_BUSINESSES).error, "unknown_business");
+});
+
+test("a manual send row is one insert and includes the required match score", () => {
+  const sentAt = "2026-11-13T09:20:00.000Z";
+  const rows = alertSendRows({
+    subscriberId: "b6272485-0059-4c42-99f7-97650275bf8b",
+    businesses: [{ number: "BSD-B-2607-1014" }],
+    resendId: "re_123",
+    sender: "service_role",
+    sentAt
+  });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].match_pct, 0);
+  assert.equal(rows[0].resend_id, "re_123");
+  assert.equal(rows[0].created_by, "service_role");
+  assert.equal(rows[0].sent_at, sentAt);
+  assert.equal(rows[0].channel, "email");
+  const admin = readFileSync("supabase/functions/business-alert-admin/index.ts", "utf8");
+  const send = admin.slice(admin.indexOf('action === "send_one_alert"'));
+  assert.match(send, /from\("business_alert_sends"\)\.insert\(/);
+  assert.equal(send.includes('.upsert('), false);
+  assert.equal(send.includes("onConflict"), false);
+  const unsubscribe = readFileSync("supabase/functions/business-alert-unsubscribe/index.ts", "utf8");
+  assert.match(unsubscribe, /business_alert_subscriber_history/);
+  assert.match(unsubscribe, /action: "unsubscribe"/);
+  const migration = readFileSync("supabase/migrations/20261113300000_business_alert_unsubscribe_history.sql", "utf8");
+  assert.match(migration, /'unsubscribe'/);
 });
 
 test("the resend script can authenticate with the service role key", () => {

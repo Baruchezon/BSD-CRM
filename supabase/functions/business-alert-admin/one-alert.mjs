@@ -14,6 +14,21 @@ export function oneAlertDecision({ subscriber, serviceRole, allowlist, sendingEn
   return { ok: true, test };
 }
 
+export const MANUAL_MATCH_PCT = 0;
+
+export function alertSendRows({ subscriberId, businesses, resendId, sender, sentAt, matchPct }) {
+  const score = Number.isFinite(matchPct) ? matchPct : MANUAL_MATCH_PCT;
+  return (businesses || []).map(business => ({
+    subscriber_id: subscriberId,
+    business_number: business.number,
+    match_pct: score,
+    channel: "email",
+    created_by: sender || "admin",
+    resend_id: resendId,
+    sent_at: sentAt
+  }));
+}
+
 export function selectAlertBusinesses(requested, catalog) {
   const list = Array.isArray(requested) ? requested : [];
   if (!list.length) return { businesses: catalog.slice() };

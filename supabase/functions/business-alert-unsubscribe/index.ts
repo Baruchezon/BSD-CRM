@@ -106,6 +106,11 @@ Deno.serve(async req => {
         : json({ ok: false, error: "invalid_token" }, 404, origin);
     }
 
+    const before = await supabase.from("business_alert_subscribers")
+      .select("id, address_form, status")
+      .eq("unsubscribe_token", token)
+      .maybeSingle();
+
     const { data, error } = await supabase.rpc("business_alert_unsubscribe_by_token", {
       p_token: token,
       p_channel: channel
@@ -120,9 +125,17 @@ Deno.serve(async req => {
 
     const status = String(row.status || "unsubscribed_all");
     const shown = status === "unsubscribed_email" ? "email" : status === "unsubscribed_whatsapp" ? "whatsapp" : "all";
-    let addressForm = null;
-    const person = await supabase.from("business_alert_subscribers").select("address_form").eq("unsubscribe_token", token).maybeSingle();
-    if (!person.error) addressForm = person.data?.address_form || null;
+    const addressForm = before.error ? null : before.data?.address_form || null;
+    if (!before.error && before.data?.id) {
+      const { error: historyError } = await supabase.from("business_alert_subscriber_history").insert({
+        subscriber_id: before.data.id,
+        action: "unsubscribe",
+        actor: "self_link",
+        previous: { status: before.data.status || null },
+        next: { status, channel, already: row.already === true }
+      });
+      if (historyError) console.error("unsubscribe history was not stored", historyError.message);
+    }
     if (wantsHtml) return html(unsubscribePage({ ok: true, channel: shown, addressForm }), 200, origin);
     return json({ ok: true, status }, 200, origin);
   } catch (error) {
