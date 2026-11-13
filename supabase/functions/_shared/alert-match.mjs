@@ -5,6 +5,7 @@
 // A price outside the configurable band is not sent. Open budget is not a fail.
 
 import { profileBusiness, profileBuyer, scorePair } from "../match-suggestions-report/engine.js";
+import { businessTaxonomy, locationRelation, sectorRelation, subscriberTaxonomy } from "./taxonomy.mjs";
 import {
   SUBSCRIBER_FROM_NAME,
   SUBSCRIBER_SITE,
@@ -209,13 +210,21 @@ export function scoreAlert(subscriber, business, config = DEFAULT_MATCH_CONFIG) 
   const buyer = profileBuyer(subscriberToLead(subscriber));
   const biz = profileBusiness(business);
   const pair = scorePair(buyer, biz);
-  if (!pair) return null;
-
-  const excluded = pair.rejected === true;
-  const sectorEngine = excluded ? 0 : howPoints(pair, "התאמת תחום");
-  const locationEngine = excluded ? 0 : howPoints(pair, "מיקום");
-  const sectorPoints = Math.max(0, Math.round(sectorEngine / SECTOR_ENGINE_MAX * cfg.sectorWeight));
-  const locationPoints = Math.max(0, Math.round(Math.min(locationEngine, LOCATION_ENGINE_MAX) / LOCATION_ENGINE_MAX * cfg.locationWeight));
+  const subTax = subscriberTaxonomy(subscriber);
+  const bizTax = businessTaxonomy(business);
+  const sectorFit = sectorRelation(subTax, bizTax);
+  const placeFit = locationRelation(subTax.regions, bizTax.regions);
+  const excluded = pair.rejected === true || sectorFit.kind === "excluded";
+  const sectorEngine = !pair || pair.rejected ? 0 : howPoints(pair, "התאמת תחום");
+  const locationEngine = !pair || pair.rejected ? 0 : howPoints(pair, "מיקום");
+  const sectorFromTaxonomy = sectorFit.kind !== "none" && sectorFit.kind !== "excluded";
+  const sectorPoints = excluded ? 0 : sectorFromTaxonomy
+    ? Math.round(cfg.sectorWeight * sectorFit.ratio)
+    : Math.max(0, Math.round(sectorEngine / SECTOR_ENGINE_MAX * cfg.sectorWeight));
+  const locationPoints = subTax.regions.length || bizTax.regions.length
+    ? Math.round(cfg.locationWeight * placeFit.ratio)
+    : (pair ? Math.max(0, Math.round(Math.min(locationEngine, LOCATION_ENGINE_MAX) / LOCATION_ENGINE_MAX * cfg.locationWeight)) : 0);
+  if (!pair && !excluded && !sectorFromTaxonomy) return null;
 
   const window = budgetWindow(subscriber, cfg);
   const price = num(business.asking_price);

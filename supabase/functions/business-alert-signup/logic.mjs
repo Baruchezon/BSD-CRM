@@ -51,6 +51,7 @@ export const RATE_LIMITS = {
 };
 
 import { formInterestFromPhrase, formRegionFromText, parseAlertBudget } from "../_shared/alert-match.mjs";
+import { categorySlugs, regionSlugs, subcategorySlugs } from "../_shared/taxonomy.mjs";
 
 const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
 
@@ -143,8 +144,28 @@ function normalizeRegion(value) {
 
 function sourceOf(body) {
   const raw = cleanText(body?.source, 40).toLowerCase();
-  if (raw === "whatsapp" || raw === "wa") return "whatsapp";
-  return SOURCE;
+  if (raw === "whatsapp" || raw === "wa" || raw === "whatsapp_link") return "whatsapp_link";
+  return "site_catalog";
+}
+
+function numberOrNull(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function slugList(value, allowed, error) {
+  if (value == null || value === "") return { ok: true, slugs: [] };
+  if (!Array.isArray(value)) return { ok: false, error };
+  const slugs = [];
+  const known = new Set(allowed);
+  for (const item of value) {
+    const slug = cleanText(item, 60);
+    if (!slug) continue;
+    if (!known.has(slug)) return { ok: false, error };
+    if (!slugs.includes(slug)) slugs.push(slug);
+  }
+  return { ok: true, slugs };
 }
 
 function lookingOf(body, extra) {
@@ -169,7 +190,21 @@ function sharedFields(body) {
   const interests = normalizeInterests(body?.interests);
   if (!interests) return { ok: false, error: "invalid_interests" };
   const region = normalizeRegion(body?.region);
-  const budget = budgetFromKey(body?.budget);
+  const categories = slugList(body?.categories, categorySlugs(), "invalid_category");
+  if (!categories.ok) return categories;
+  const subcategories = slugList(body?.subcategories, subcategorySlugs(), "invalid_subcategory");
+  if (!subcategories.ok) return subcategories;
+  const regions = slugList(body?.regions, regionSlugs(), "invalid_region");
+  if (!regions.ok) return regions;
+  let budget = budgetFromKey(body?.budget);
+  if (body?.budget_open === true) budget = { budget_min: null, budget_max: null, budget_open: true };
+  else if (body?.budget_min != null || body?.budget_max != null) {
+    const budgetMin = numberOrNull(body.budget_min);
+    const budgetMax = numberOrNull(body.budget_max);
+    if (body.budget_min != null && budgetMin == null) return { ok: false, error: "invalid_budget" };
+    if (body.budget_max != null && budgetMax == null) return { ok: false, error: "invalid_budget" };
+    budget = { budget_min: budgetMin, budget_max: budgetMax, budget_open: false };
+  }
   if (!budget) return { ok: false, error: "invalid_budget" };
   return {
     ok: true,
@@ -180,6 +215,9 @@ function sharedFields(body) {
       phone9: phone9FromRaw(phone),
       email,
       interests: interests.interests,
+      categories: categories.slugs,
+      subcategories: subcategories.slugs,
+      regions: regions.slugs,
       budget_min: budget.budget_min,
       budget_max: budget.budget_max,
       budget_open: budget.budget_open,

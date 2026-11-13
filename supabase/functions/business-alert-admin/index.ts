@@ -96,7 +96,7 @@ async function matchSettings() {
   return normalizeMatchConfig(data || {});
 }
 
-const BIZ_COLS = "id,business_number,internal_name,anon_display_name,field,category,subcategory,city,region,asking_price,short_description,anon_summary,anon_card_show_price,public_listing_active,anon_card_active,listing_status,is_archived";
+const BIZ_COLS = "id,business_number,internal_name,anon_display_name,field,category,subcategory,city,region,asking_price,short_description,anon_summary,anon_card_show_price,public_listing_active,anon_card_active,listing_status,is_archived,taxonomy";
 
 function listedBusiness(row: Record<string, unknown>) {
   return row.is_archived !== true && (row.public_listing_active === true || row.anon_card_active === true);
@@ -104,7 +104,7 @@ function listedBusiness(row: Record<string, unknown>) {
 
 async function recomputeMatches(subscriberId?: string) {
   const settings = await matchSettings();
-  let subQuery = supabase.from("business_alert_subscribers").select("id,first_name,last_name,interests,region,budget_min,budget_max,budget_open,looking_for,manager_notes,legacy_no_consent,consent_general,consent_email,consent_whatsapp");
+  let subQuery = supabase.from("business_alert_subscribers").select("id,first_name,last_name,interests,categories,subcategories,regions,region,budget_min,budget_max,budget_open,looking_for,manager_notes,legacy_no_consent,consent_general,consent_email,consent_whatsapp");
   if (subscriberId) subQuery = subQuery.eq("id", subscriberId);
   const { data: subscribers, error: subError } = await subQuery;
   if (subError) throw subError;

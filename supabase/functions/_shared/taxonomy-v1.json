@@ -1,0 +1,45 @@
+{
+  "version": "v1-2026-11-13",
+  "categories": [
+    {"slug":"food","label":"מזון ומסעדנות","related":["grocery"],"sub":[
+      {"slug":"restaurant","label":"מסעדה"},{"slug":"cafe","label":"בית קפה"},{"slug":"fast_food","label":"מזון מהיר"},
+      {"slug":"bakery","label":"מאפייה"},{"slug":"catering","label":"קייטרינג"},{"slug":"pub_bar","label":"פאב / בר"},
+      {"slug":"juice_bar","label":"בר מיצים ושייקים"},{"slug":"food_production","label":"ייצור מזון"}]},
+    {"slug":"grocery","label":"קמעונאות מזון","related":["food","retail"],"sub":[
+      {"slug":"supermarket","label":"סופרמרקט"},{"slug":"minimarket","label":"מינימרקט"},
+      {"slug":"produce","label":"ירקות ופירות"},{"slug":"deli","label":"מעדנייה"}]},
+    {"slug":"retail","label":"מסחר וקמעונאות","related":["wholesale","grocery"],"sub":[
+      {"slug":"fashion","label":"הלבשה ואופנה"},{"slug":"beauty_products","label":"מוצרי יופי וטיפוח"},
+      {"slug":"general_store","label":"חנות כללית"},{"slug":"ecommerce","label":"מסחר מקוון"}]},
+    {"slug":"wholesale","label":"ייבוא, סיטונאות והפצה","related":["retail"],"sub":[
+      {"slug":"import","label":"ייבוא"},{"slug":"wholesale","label":"סיטונאות"},{"slug":"distribution","label":"הפצה"}]},
+    {"slug":"beauty","label":"יופי וטיפוח","related":["health"],"sub":[
+      {"slug":"hair_salon","label":"מספרה"},{"slug":"cosmetics","label":"קוסמטיקה"},
+      {"slug":"nails","label":"ציפורניים"},{"slug":"medical_aesthetics","label":"אסתטיקה רפואית"}]},
+    {"slug":"health","label":"בריאות וטיפול","related":["beauty"],"sub":[
+      {"slug":"clinic","label":"קליניקה / מרפאה"},{"slug":"complementary","label":"טיפולים משלימים"},
+      {"slug":"fitness","label":"כושר וסטודיו"}]},
+    {"slug":"auto","label":"רכב","related":[],"sub":[
+      {"slug":"garage","label":"מוסך"},{"slug":"car_accessories","label":"אבזור רכב"},{"slug":"car_wash","label":"שטיפת רכב"}]},
+    {"slug":"construction","label":"בנייה, קבלנות ותעשייה","related":["services"],"sub":[
+      {"slug":"contracting","label":"קבלנות"},{"slug":"hvac_electric","label":"מיזוג אוויר וחשמל"},
+      {"slug":"manufacturing","label":"ייצור ותעשייה"}]},
+    {"slug":"services","label":"שירותים לעסקים","related":["construction"],"sub":[
+      {"slug":"marketing_digital","label":"שיווק ודיגיטל"},{"slug":"software_web","label":"תוכנה ואתרים"},
+      {"slug":"cleaning_maintenance","label":"ניקיון ואחזקה"},{"slug":"transport_tourism","label":"הסעות ותיירות"}]},
+    {"slug":"education_leisure","label":"חינוך ופנאי","related":["health"],"sub":[
+      {"slug":"kindergarten","label":"גנים וצהרונים"},{"slug":"classes","label":"חוגים"},{"slug":"leisure","label":"פנאי ונופש"}]}
+  ],
+  "flags": [{"slug":"franchise","label":"זכיינות"}],
+  "regions": [
+    {"slug":"north","label":"צפון","near":["haifa"]},
+    {"slug":"haifa","label":"חיפה והקריות","near":["north","sharon"]},
+    {"slug":"sharon","label":"שרון","near":["haifa","tel_aviv","center"]},
+    {"slug":"tel_aviv","label":"תל אביב","near":["center","sharon"]},
+    {"slug":"center","label":"מרכז וגוש דן","near":["tel_aviv","sharon","shfela"]},
+    {"slug":"shfela","label":"שפלה","near":["center","jerusalem","south"]},
+    {"slug":"jerusalem","label":"ירושלים והסביבה","near":["shfela"]},
+    {"slug":"south","label":"דרום","near":["shfela"]},
+    {"slug":"all","label":"כל הארץ","near":[]}
+  ]
+}

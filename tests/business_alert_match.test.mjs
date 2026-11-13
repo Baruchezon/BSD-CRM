@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { validateSignup } from '../supabase/functions/business-alert-signup/logic.mjs';
+import { businessTaxonomy, regionsFromText } from '../supabase/functions/_shared/taxonomy.mjs';
 import { CONSENT_TEXT_VERSION } from '../supabase/functions/business-alert-signup/logic.mjs';
 import {
   DEFAULT_MATCH_CONFIG,
@@ -98,6 +99,54 @@ test('hebrew budget phrases parse', () => {
   assert.equal(window.high, 1040000);
 });
 
+test('messy business text maps onto taxonomy slugs', () => {
+  const burger = businessTaxonomy({ category: 'מסעדה — המבורגרים', region: 'מרכז גוש דן' });
+  assert.deepEqual(burger.categories, ['food']);
+  assert.ok(burger.subcategories.includes('restaurant'));
+  assert.ok(burger.subcategories.includes('fast_food'));
+  assert.deepEqual(burger.regions, ['center']);
+  assert.deepEqual(regionsFromText('חיפה והקריות'), ['haifa']);
+});
+
+test('the website form can send taxonomy slugs and the legacy fields together', () => {
+  const result = validateSignup({
+    first_name: 'דנה',
+    last_name: 'לוי',
+    phone: '050-1234567',
+    email: 'dana@example.com',
+    interests: ['מזון'],
+    region: 'מרכז',
+    budget: 'open',
+    categories: ['food'],
+    subcategories: ['bakery', 'cafe'],
+    regions: ['center', 'tel_aviv'],
+    budget_min: 700000,
+    budget_max: 1300000,
+    budget_open: false,
+    looking_for: 'מאפייה או בית קפה',
+    source: 'site_catalog',
+    consent_general: true,
+    consent_email: true,
+    consent_whatsapp: false,
+    consent_text: 'אני מאשר/ת לקבל מ-BSD עדכונים ופרסומות על עסקים למכירה',
+    consent_version: 'v1-2026-11-13',
+    source_url: 'https://www.bsd-bbi.co.il/עסקים-למכירה/'
+  });
+  assert.equal(result.ok, true, result.error);
+  assert.deepEqual(result.row.categories, ['food']);
+  assert.deepEqual(result.row.subcategories, ['bakery', 'cafe']);
+  assert.deepEqual(result.row.regions, ['center', 'tel_aviv']);
+  assert.equal(result.row.budget_min, 700000);
+  assert.equal(result.row.budget_max, 1300000);
+  assert.equal(result.row.budget_open, false);
+  assert.equal(result.row.source, 'site_catalog');
+  assert.equal(result.row.looking_for, 'מאפייה או בית קפה');
+  assert.equal(validateSignup({
+    first_name: 'דנה', last_name: 'לוי', phone: '050-1234567', email: 'dana@example.com',
+    consent_email: true, consent_text_version: CONSENT_TEXT_VERSION, categories: ['not-a-slug']
+  }).error, 'invalid_category');
+});
+
 test('whatsapp signup source and a bakery phrase stay on the same form', () => {
   const result = validateSignup({
     first_name: 'יוסי',
@@ -113,7 +162,7 @@ test('whatsapp signup source and a bakery phrase stay on the same form', () => {
     consent_text_version: CONSENT_TEXT_VERSION
   });
   assert.equal(result.ok, true, result.error);
-  assert.equal(result.row.source, 'whatsapp');
+  assert.equal(result.row.source, 'whatsapp_link');
   assert.equal(result.row.interests.includes('מזון'), true);
   assert.equal(result.row.region, 'צפון');
   assert.equal(result.row.budget_min, 1500000);
