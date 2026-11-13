@@ -301,7 +301,9 @@ export function sendGate(settings, match) {
   return null;
 }
 
-export function matchAlertEmail({ firstName, card, unsubscribeUrl, addressForm }) {
+// textLinks=false (email): no URLs in the plain-text part; the HTML buttons carry them.
+// The WhatsApp text keeps its links (textLinks defaults to true).
+export function matchAlertEmail({ firstName, card, unsubscribeUrl, addressForm, textLinks = true }) {
   const subject = subscriberSubject(say(copy.email.subject, addressForm));
   const headline = say(copy.email.headline, addressForm);
   const warm = say(copy.email.warm, addressForm);
@@ -315,11 +317,11 @@ export function matchAlertEmail({ firstName, card, unsubscribeUrl, addressForm }
     card.priceText ? `מחיר: ${card.priceText}` : "",
     card.summary || "",
     "",
-    card.url || "",
+    textLinks ? card.url || "" : "",
     "",
     quietNoteText(addressForm),
     "",
-    unsubscribeUrl ? `להסרה: ${unsubscribeUrl}` : "",
+    textLinks ? (unsubscribeUrl ? `להסרה: ${unsubscribeUrl}` : "") : "להסרה מרשימת העדכונים אפשר להשיב למייל הזה במילה «הסרה».",
     "",
     signOffText()
   ].filter((line, index, all) => line !== "" || (index > 0 && all[index - 1] !== ""));

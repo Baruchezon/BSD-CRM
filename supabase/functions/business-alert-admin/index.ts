@@ -3,7 +3,7 @@
 // service role to call the business_alert_* functions. Tables stay closed to anon.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { timingSafeEqual } from "node:crypto";
-import { alertSendRows, oneAlertDecision, selectAlertBusinesses } from "./one-alert.mjs";
+import { oneAlertDecision, selectAlertBusinesses } from "./one-alert.mjs";
 import {
   SUBSCRIBER_FROM,
   SUBSCRIBER_REPLY_TO,
@@ -20,6 +20,7 @@ import {
 import { gateDecision } from "../_shared/business-alert-rules.mjs";
 import { matchAlertEmail, normalizeMatchConfig, publicCard, scoreAlert, sendGate } from "../_shared/alert-match.mjs";
 import { APPROVED_ALERT_BUSINESSES, threeBusinessEmail } from "../_shared/opportunity-email.mjs";
+import { buttonLink, shortLinksLive } from "../_shared/short-links.mjs";
 import copy from "../../../copy/he.json" with { type: "json" };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -253,7 +254,7 @@ async function matchAction(action: string, body: Record<string, unknown>, origin
   }
   const settings = await matchSettings();
   const { data: stored, error } = await supabase.from("business_alert_matches")
-    .select("subscriber_id,sendable,block_reason,public_card")
+    .select("subscriber_id,score,sendable,block_reason,public_card")
     .eq("subscriber_id", body.subscriber_id)
     .eq("business_id", body.business_id)
     .maybeSingle();
@@ -278,13 +279,23 @@ async function matchAction(action: string, body: Record<string, unknown>, origin
     return json({ ok: true, sent: false, dry_run: true, allowed: false }, 200, origin);
   }
   const link = unsubscribeHttpsUrl(supabaseUrl, row.unsubscribe_token, channel);
-  const mail = matchAlertEmail({ firstName: row.first_name, addressForm: row.address_form, card: stored.public_card, unsubscribeUrl: link });
   if (channel === "whatsapp") {
-    const text = `${mail.text}`;
+    const waMail = matchAlertEmail({ firstName: row.first_name, addressForm: row.address_form, card: stored.public_card, unsubscribeUrl: link });
+    const text = `${waMail.text}`;
     return json({ ok: true, allowed: true, text, url: waLink(row.phone || "", text) }, 200, origin);
   }
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) return json({ ok: false, error: "missing_email_configuration", allowed: true }, 200, origin);
+  const { data: matchBusiness } = await supabase.from("businesses").select("business_number").eq("id", body.business_id).maybeSingle();
+  const matchNumber = String(matchBusiness?.business_number || "").trim();
+  if (!matchNumber) return json({ ok: false, error: "not_found", allowed: true }, 404, origin);
+  const live = await shortLinksLive(supabase);
+  const card = { ...(stored.public_card || {}) } as Record<string, unknown>;
+  card.url = await buttonLink(supabase, { live, kind: "page", subscriberId: row.id, businessNumber: matchNumber, fallback: card.url });
+  const removal = await buttonLink(supabase, { live, kind: "unsubscribe", subscriberId: row.id, channel: "email", fallback: removalPageUrl(row.unsubscribe_token, "email") });
+  const mail = matchAlertEmail({ firstName: row.first_name, addressForm: row.address_form, card, unsubscribeUrl: removal, textLinks: false });
+  const claim = await claimAlertSends(String(row.id), [matchNumber], "send_match", Math.min(100, Math.max(0, Number(stored.score ?? 0) || 0)));
+  if (!claim.claimed.length) return json({ ok: false, error: "already_sent", allowed: true, sent: false }, 200, origin);
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -298,8 +309,77 @@ async function matchAction(action: string, body: Record<string, unknown>, origin
       headers: listUnsubscribeHeaders(link)
     })
   });
+  const sentPayload = response.ok ? await response.json().catch(() => ({})) : {};
+  await finishAlertSends(claim.claimed.map(item => item.id), response.ok, sentPayload?.id || null);
   if (!response.ok) return json({ ok: false, error: "send_failed", allowed: true }, 200, origin);
   return json({ ok: true, allowed: true, sent: true }, 200, origin);
+}
+
+
+const SEND_TABLE = "business_alert_sends";
+
+function removalPageUrl(token: string, channel = "email") {
+  const params = new URLSearchParams({ token: String(token || ""), channel });
+  return `${SUBSCRIBER_SITE}/${encodeURIComponent("הסרה")}/?${params.toString()}`;
+}
+
+// Never the same business to the same subscriber twice (Baruch, 13.11 12:43).
+// UNIQUE (subscriber_id, business_number) already existed; rows are now reserved
+// BEFORE the email is sent, so a double click cannot send twice. A failed send can be
+// claimed again.
+async function claimAlertSends(subscriberId: string, numbers: string[], actor: string, matchPct: number, channel = "email") {
+  const now = new Date().toISOString();
+  const rows = numbers.map(number => ({
+    subscriber_id: subscriberId, business_number: number, match_pct: matchPct, channel, created_by: actor, status: "reserved", sent_at: now
+  }));
+  const { data: inserted, error } = await supabase.from(SEND_TABLE)
+    .upsert(rows, { onConflict: "subscriber_id,business_number", ignoreDuplicates: true })
+    .select("id, business_number");
+  if (error) throw error;
+  const claimed = [...(inserted || [])];
+  const rest = numbers.filter(number => !claimed.some(row => row.business_number === number));
+  if (rest.length) {
+    const { data: retried, error: retryError } = await supabase.from(SEND_TABLE)
+      .update({ status: "reserved", created_by: actor, sent_at: now, match_pct: matchPct })
+      .eq("subscriber_id", subscriberId)
+      .in("business_number", rest)
+      .eq("status", "failed")
+      .select("id, business_number");
+    if (retryError) throw retryError;
+    claimed.push(...(retried || []));
+  }
+  const duplicates = numbers.filter(number => !claimed.some(row => row.business_number === number));
+  return { claimed, duplicates };
+}
+
+async function finishAlertSends(ids: string[], ok: boolean, resendId: string | null) {
+  if (!ids.length) return;
+  const { error } = await supabase.from(SEND_TABLE)
+    .update({ status: ok ? "sent" : "failed", ...(resendId ? { resend_id: resendId } : {}) })
+    .in("id", ids);
+  if (error) console.error("alert send status was not stored", error.message);
+}
+
+async function alreadySent(subscriberId: string, numbers: string[]) {
+  if (!numbers.length) return [];
+  const { data } = await supabase.from(SEND_TABLE).select("business_number")
+    .eq("subscriber_id", subscriberId).in("business_number", numbers).neq("status", "failed");
+  return (data || []).map(row => row.business_number);
+}
+
+async function claimVipSend(businessId: string, leadId: string, actor: string) {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase.from("business_alert_vip_sends")
+    .upsert({ business_id: businessId, lead_id: leadId, sent_at: now, sent_by: actor, status: "reserved" }, { onConflict: "business_id,lead_id", ignoreDuplicates: true })
+    .select("id");
+  if (error) throw error;
+  if (data?.length) return data[0].id as string;
+  const { data: retried, error: retryError } = await supabase.from("business_alert_vip_sends")
+    .update({ status: "reserved", sent_at: now, sent_by: actor })
+    .eq("business_id", businessId).eq("lead_id", leadId).eq("status", "failed")
+    .select("id");
+  if (retryError) throw retryError;
+  return retried?.[0]?.id || null;
 }
 
 async function loadSecrets(id: string) {
@@ -540,7 +620,10 @@ Deno.serve(async req => {
       if (!apiKey) return json({ ok: false, error: "missing_email_configuration", sent: false }, 200, origin);
       for (const person of recipients) {
         if (!chosen.has(String(person.id))) continue;
-        if (already.has(String(person.id)) && body.resend !== true) continue;
+        // No resend override: one VIP email per business per person, ever.
+        if (already.has(String(person.id))) continue;
+        const vipClaim = await claimVipSend(businessId, String(person.id), clean(auth.profile.full_name, 120) || clean(auth.user.email, 180));
+        if (!vipClaim) continue;
         const mail = threeBusinessEmail({
           firstName: String(person.first_name || ""),
           businesses: [{ ...card, detailsUrl: `${supabaseUrl}/functions/v1/business-alert-request-details?business=${encodeURIComponent(card.number)}&lead=${encodeURIComponent(person.id)}` }],
@@ -559,13 +642,8 @@ Deno.serve(async req => {
             text: mail.text
           })
         });
+        await supabase.from("business_alert_vip_sends").update({ status: response.ok ? "sent" : "failed" }).eq("id", vipClaim);
         if (!response.ok) continue;
-        await supabase.from("business_alert_vip_sends").upsert({
-          business_id: businessId,
-          lead_id: person.id,
-          sent_at: new Date().toISOString(),
-          sent_by: clean(auth.profile.full_name, 120) || clean(auth.user.email, 180)
-        }, { onConflict: "business_id,lead_id" });
         sentCount += 1;
       }
       return json({ ok: true, sent: sentCount > 0, sent_count: sentCount }, 200, origin);
@@ -600,20 +678,39 @@ Deno.serve(async req => {
         dryRun: delivery.dryRun
       });
       if (!decision.ok) return json({ ok: false, error: decision.error, sent: false }, 200, origin);
-      const mail = threeBusinessEmail({
-        firstName: String(row.first_name || ""),
-        businesses: chosen.businesses.map(business => ({
-          ...business,
-          detailsUrl: `${supabaseUrl}/functions/v1/business-alert-request-details?business=${encodeURIComponent(business.number)}&token=${encodeURIComponent(row.unsubscribe_token || "")}`
-        })),
-        unsubscribeUrl: unsubscribeHttpsUrl(supabaseUrl, row.unsubscribe_token, "email"),
-        addressForm: row.address_form
-      });
+      const numbers = chosen.businesses.map(item => item.number);
       if (body.confirm !== true) {
-        return json({ ok: true, preview: true, sent: false, from: mail.from, subject: mail.subject, businesses: chosen.businesses.map(item => item.number) }, 200, origin);
+        const subjectMail = threeBusinessEmail({ firstName: String(row.first_name || ""), businesses: chosen.businesses, unsubscribeUrl: "", addressForm: row.address_form });
+        return json({ ok: true, preview: true, sent: false, from: subjectMail.from, subject: subjectMail.subject, businesses: numbers, already_sent: await alreadySent(String(row.id), numbers) }, 200, origin);
       }
       const apiKey = Deno.env.get("RESEND_API_KEY");
       if (!apiKey) return json({ ok: false, error: "missing_email_configuration", sent: false }, 200, origin);
+      const actor = auth.serviceRole ? "service_role" : clean(auth.profile?.full_name || auth.user?.email, 120);
+      const claim = await claimAlertSends(String(row.id), numbers, actor, 0);
+      if (claim.duplicates.length) {
+        // All or nothing: release what was reserved and send nothing.
+        await finishAlertSends(claim.claimed.map(item => item.id), false, null);
+        return json({ ok: false, error: "already_sent", sent: false, already_sent: claim.duplicates }, 200, origin);
+      }
+      const live = await shortLinksLive(supabase);
+      const token = String(row.unsubscribe_token || "");
+      const businesses = [];
+      for (const business of chosen.businesses) {
+        businesses.push({
+          ...business,
+          url: await buttonLink(supabase, { live, kind: "page", subscriberId: row.id, businessNumber: business.number, fallback: business.url }),
+          detailsUrl: await buttonLink(supabase, {
+            live, kind: "details", subscriberId: row.id, businessNumber: business.number,
+            fallback: `${supabaseUrl}/functions/v1/business-alert-request-details?business=${encodeURIComponent(business.number)}&token=${encodeURIComponent(token)}`
+          })
+        });
+      }
+      const mail = threeBusinessEmail({
+        firstName: String(row.first_name || ""),
+        businesses,
+        unsubscribeUrl: await buttonLink(supabase, { live, kind: "unsubscribe", subscriberId: row.id, channel: "email", fallback: removalPageUrl(token, "email") }),
+        addressForm: row.address_form
+      });
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -627,20 +724,10 @@ Deno.serve(async req => {
           headers: listUnsubscribeHeaders(unsubscribeHttpsUrl(supabaseUrl, row.unsubscribe_token, "email"))
         })
       });
-      if (!response.ok) return json({ ok: false, error: "send_failed", sent: false }, 200, origin);
-      const payload = await response.json().catch(() => ({}));
+      const payload = response.ok ? await response.json().catch(() => ({})) : {};
       const resendId = payload?.id || null;
-      const actor = auth.serviceRole ? "service_role" : clean(auth.profile?.full_name || auth.user?.email, 120);
-      const sentAt = new Date().toISOString();
-      const rows = alertSendRows({
-        subscriberId: row.id,
-        businesses: chosen.businesses,
-        resendId,
-        sender: actor,
-        sentAt
-      });
-      const { error } = await supabase.from("business_alert_sends").insert(rows);
-      if (error) console.error("alert send row was not stored", error.message);
+      await finishAlertSends(claim.claimed.map(item => item.id), response.ok, resendId);
+      if (!response.ok) return json({ ok: false, error: "send_failed", sent: false }, 200, origin);
       return json({
         ok: true,
         sent: true,
@@ -676,7 +763,10 @@ Deno.serve(async req => {
       const message = `${say(copy.email.warm, row.address_form)}\n${say(copy.form.thanks, row.address_form)}\n${catalog}`;
       const subject = subscriberSubject("עדכון על עסקים למכירה");
       const text = subscriberText({ firstName: row.first_name, body: message, unsubscribeUrl: link, addressForm: row.address_form });
-      const html = subscriberHtml({ firstName: row.first_name, body: message, unsubscribeUrl: link, addressForm: row.address_form });
+      // The sent email shows buttons only: catalog and removal sit behind text buttons.
+      const plainMessage = `${say(copy.email.warm, row.address_form)}\n${say(copy.form.thanks, row.address_form)}`;
+      const html = subscriberHtml({ firstName: row.first_name, body: plainMessage, unsubscribeUrl: removalPageUrl(row.unsubscribe_token, "email"), addressForm: row.address_form, button: { label: "לעסקים למכירה", href: catalog } });
+      const sentText = subscriberText({ firstName: row.first_name, body: plainMessage, unsubscribeUrl: "", addressForm: row.address_form, textLinks: false });
       if (action === "prepare_email") {
         return json({
           ok: true,
@@ -697,7 +787,7 @@ Deno.serve(async req => {
           to: [row.email],
           subject,
           html,
-          text,
+          text: sentText,
           headers: listUnsubscribeHeaders(link)
         })
       });

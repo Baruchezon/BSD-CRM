@@ -18,7 +18,8 @@ test("signup thank-you has no «פרסומת» and keeps the removal link", () =
   for (const f of forms) {
     const parts = [thankYouSubject(f), thankYouEmailText({ firstName: "דנה", unsubscribeLink: unsub, addressForm: f }), thankYouEmailHtml({ firstName: "דנה", unsubscribeLink: unsub, addressForm: f })];
     for (const part of parts) assert.equal(part.includes(WORD), false);
-    assert.ok(parts[1].includes(unsub));
+    assert.equal(parts[1].includes(unsub), false);
+    assert.ok(parts[1].includes("במילה «הסרה»"));
     assert.ok(parts[2].includes(unsub.replace(/&/g, "&amp;")) || parts[2].includes(unsub));
   }
 });
@@ -29,7 +30,10 @@ test("generic subscriber mail, 3-business letter (also VIP) and single alert hav
     const three = threeBusinessEmail({ firstName: "דנה", businesses: APPROVED_ALERT_BUSINESSES.map(b => ({ ...b, detailsUrl: "https://x/d" })), unsubscribeUrl: unsub, addressForm: f });
     const one = matchAlertEmail({ firstName: "דנה", card: { title: "עסק", url: "https://www.bsd-bbi.co.il/x/" }, unsubscribeUrl: unsub, addressForm: f });
     for (const part of [...generic, three.subject, three.text, three.html, one.subject, one.text, one.html]) assert.equal(part.includes(WORD), false);
-    assert.ok(three.text.includes(unsub) && one.text.includes(unsub));
+    assert.ok(three.html.includes(unsub.replace(/&/g, "&amp;")) && one.text.includes(unsub));
+    assert.equal(three.text.includes(unsub), false);
+    const oneMail = matchAlertEmail({ firstName: "דנה", card: { title: "עסק", url: "https://www.bsd-bbi.co.il/x/" }, unsubscribeUrl: unsub, addressForm: f, textLinks: false });
+    assert.equal(/https?:\/\//.test(oneMail.text), false);
   }
 });
 

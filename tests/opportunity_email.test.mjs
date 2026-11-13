@@ -33,9 +33,10 @@ test('the approved three-business letter keeps the company sender and both butto
   assert.equal(mail.html.includes('השיב למייל הזה במילה'), false);
   assert.match(mail.text, /שלום יבגני,/);
   assert.match(mail.text, /1\) עסק בתחום התחבורה והשכרת רכבים/);
-  assert.match(mail.text, /לקבלת פרטים מורחבים:/);
-  assert.match(mail.text, /https:\/\/www\.bsd-bbi\.co\.il\/הסרה\//);
-  assert.equal(mail.text.includes('במילה «הסרה»'), false);
+  // 12:45: no URLs in the plain-text part; removal by reply.
+  assert.equal(/https?:\/\//.test(mail.text), false);
+  assert.match(mail.text, /במילה «הסרה»/);
+  assert.ok(mail.html.includes('href="https://www.bsd-bbi.co.il/הסרה/?token=abc&amp;channel=email"'));
   assert.match(mail.html, /חדשה בעולם העסקים/);
   assert.match(mail.text, /מימון רכישת העסק/);
   assert.equal(APPROVED_ALERT_BUSINESSES.length, 3);

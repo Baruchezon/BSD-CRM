@@ -93,9 +93,10 @@ test("a manual send row is one insert and includes the required match score", ()
   assert.equal(rows[0].channel, "email");
   const admin = readFileSync("supabase/functions/business-alert-admin/index.ts", "utf8");
   const send = admin.slice(admin.indexOf('action === "send_one_alert"'));
-  assert.match(send, /from\("business_alert_sends"\)\.insert\(/);
-  assert.equal(send.includes('.upsert('), false);
-  assert.equal(send.includes("onConflict"), false);
+  // 12:45 release: rows are reserved before the email goes out, then marked sent/failed.
+  assert.match(send, /claimAlertSends\(/);
+  assert.ok(send.indexOf("claimAlertSends(") < send.indexOf("https://api.resend.com/emails"));
+  assert.match(send, /finishAlertSends\(/);
   const unsubscribe = readFileSync("supabase/functions/business-alert-unsubscribe/index.ts", "utf8");
   assert.match(unsubscribe, /business_alert_subscriber_history/);
   assert.match(unsubscribe, /action: "unsubscribe"/);
