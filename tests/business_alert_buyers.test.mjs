@@ -279,6 +279,10 @@ test('the tools menu points at the new screen and mail files use the sender cons
   assert.match(app, /navToolsWrap/);
   const leads = fs.readFileSync(new URL('../leads-hub.html', import.meta.url), 'utf8');
   assert.match(leads, /נרשמים לעדכונים/);
+  const buyers = fs.readFileSync(new URL('../site-buyers.html', import.meta.url), 'utf8');
+  assert.match(buyers, /class="person/);
+  assert.equal(buyers.includes('<table>'), false);
+  assert.match(buyers, /is_test !== true/);
   const copy = JSON.parse(fs.readFileSync(new URL('../copy/he.json', import.meta.url), 'utf8'));
   assert.equal(copy.email.headline.neutral, 'על פי הסינון שעשינו לפי הפרופיל שביקשת, העסק הזה מתאים לך');
   assert.equal(copy.email.subject.neutral, 'מצאנו עסק שמתאים לפרופיל שביקשת');
