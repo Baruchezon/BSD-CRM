@@ -109,6 +109,17 @@ async function matchSettings() {
   return normalizeMatchConfig(data || {});
 }
 
+async function logDryRun(kind: string, detail: Record<string, unknown>) {
+  const { error } = await supabase.from("business_alert_dry_run_log").insert({
+    kind,
+    subscriber_id: detail.subscriber_id || null,
+    business_id: detail.business_id || null,
+    channel: detail.channel || null,
+    detail
+  });
+  if (error) console.log("dry_run", kind, detail);
+}
+
 async function vipSendSettings() {
   const { data } = await supabase.from("business_alert_match_settings")
     .select("vip_send_enabled, vip_send_allowlist")
@@ -252,6 +263,10 @@ async function matchAction(action: string, body: Record<string, unknown>, origin
     p_match_pct: null
   });
   if (!decision.allowed) return json({ ok: false, error: decision.reason, allowed: false }, 200, origin);
+  if (settings.dryRun) {
+    await logDryRun("match", { subscriber_id: row.id, business_id: body.business_id, channel });
+    return json({ ok: true, sent: false, dry_run: true, allowed: false }, 200, origin);
+  }
   const link = unsubscribeHttpsUrl(supabaseUrl, row.unsubscribe_token, channel);
   const mail = matchAlertEmail({ firstName: row.first_name, addressForm: row.address_form, card: stored.public_card, unsubscribeUrl: link });
   if (channel === "whatsapp") {
@@ -501,6 +516,11 @@ Deno.serve(async req => {
         }, 200, origin);
       }
       if (!allowed) return json({ ok: false, error: "vip_send_disabled", enabled: false, sent: false }, 200, origin);
+      const delivery = await matchSettings();
+      if (delivery.dryRun) {
+        await logDryRun("vip", { business_id: businessId, channel: "email", lead_ids: body.lead_ids || [] });
+        return json({ ok: true, sent: false, dry_run: true, enabled: true }, 200, origin);
+      }
       const chosen = new Set((Array.isArray(body.lead_ids) ? body.lead_ids : []).map(String));
       let sentCount = 0;
       const apiKey = Deno.env.get("RESEND_API_KEY");
@@ -559,6 +579,11 @@ Deno.serve(async req => {
       });
       if (body.confirm !== true) {
         return json({ ok: true, preview: true, sent: false, from: mail.from, subject: mail.subject }, 200, origin);
+      }
+      const delivery = await matchSettings();
+      if (!delivery.sendingEnabled || delivery.dryRun) {
+        await logDryRun("one_alert", { subscriber_id: id, channel: "email" });
+        return json({ ok: true, sent: false, dry_run: delivery.dryRun, sending_enabled: delivery.sendingEnabled }, 200, origin);
       }
       const apiKey = Deno.env.get("RESEND_API_KEY");
       if (!apiKey) return json({ ok: false, error: "missing_email_configuration", sent: false }, 200, origin);

@@ -68,7 +68,8 @@ export function normalizeMatchConfig(raw = {}) {
     sectorWeight: clampInt(raw.sectorWeight ?? raw.sector_weight, 1, 80, DEFAULT_MATCH_CONFIG.sectorWeight),
     budgetWeight: clampInt(raw.budgetWeight ?? raw.budget_weight, 1, 80, DEFAULT_MATCH_CONFIG.budgetWeight),
     locationWeight: clampInt(raw.locationWeight ?? raw.location_weight, 1, 80, DEFAULT_MATCH_CONFIG.locationWeight),
-    sendingEnabled: raw.sendingEnabled === true || raw.sending_enabled === true
+    sendingEnabled: raw.sendingEnabled === true || raw.sending_enabled === true,
+    dryRun: raw.dryRun !== false && raw.dry_run !== false
   };
 }
 
@@ -296,6 +297,7 @@ export function sendGate(settings, match) {
   if (!cfg.sendingEnabled) return "sending_disabled";
   if (!match?.sendable) return match?.block_reason || "not_sendable";
   if (!match?.public_card?.url) return "no_public_card";
+  if (cfg.dryRun) return "dry_run";
   return null;
 }
 

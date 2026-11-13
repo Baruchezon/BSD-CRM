@@ -259,4 +259,6 @@ test('sending stays off in the migration until the flag is turned on', () => {
   assert.equal(DEFAULT_MATCH_CONFIG.sendingEnabled, false);
   assert.equal(sendGate({ sending_enabled: false }, { sendable: true, public_card: { url: 'https://www.bsd-bbi.co.il/x' } }), 'sending_disabled');
   assert.equal(sendGate({ sending_enabled: true }, { sendable: false, block_reason: 'budget_out_of_range', public_card: { url: 'https://www.bsd-bbi.co.il/x' } }), 'budget_out_of_range');
+  assert.equal(sendGate({ sending_enabled: true }, { sendable: true, public_card: { url: 'https://www.bsd-bbi.co.il/x' } }), 'dry_run');
+  assert.equal(sendGate({ sending_enabled: true, dry_run: false }, { sendable: true, public_card: { url: 'https://www.bsd-bbi.co.il/x' } }), null);
 });
