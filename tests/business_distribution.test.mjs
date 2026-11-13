@@ -29,6 +29,10 @@ test('distribution channels are soft changes and the facebook queue stays anonym
   assert.match(sql, /BSD-B-2609-1077/);
   assert.match(sql, /BSD-B-2610-1104/);
   assert.equal(sql.includes('BSD-B-2610-1088'), false);
+  const seed = sql.slice(sql.lastIndexOf('insert into public.business_distribution_channels'));
+  assert.equal(/marketing_service_active/.test(seed), false);
+  assert.equal(seed.includes('business_distribution_set'), false);
+  assert.match(sql, /raise exception 'marketing_inactive'/);
   assert.equal(sql.includes('set public_listing_active'), false);
   assert.match(sql, /business_distribution_facebook_report/);
   assert.match(rollback, /drop table if exists public\.business_distribution_channels/);

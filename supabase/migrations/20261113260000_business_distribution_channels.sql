@@ -508,6 +508,8 @@ revoke all on function public.business_distribution_notify_facebook() from publi
 revoke all on function public.business_distribution_notify_website() from public, anon, authenticated;
 
 -- Seed four facebook rows only. Do not write public_listing_active.
+-- This insert does not call business_distribution_set, so marketing_service_active
+-- does not block it. That guard stays on the card toggle only.
 -- The session flag keeps the trigger from notifying.
 select set_config('bsd.skip_distribution_notify', 'on', true);
 
