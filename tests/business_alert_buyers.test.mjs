@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { validateSignup, usesNewConsentContract, CONSENT_TEXT_VERSION } from '../supabase/functions/business-alert-signup/logic.mjs';
+import { consentWritePayload, validateSignup, usesNewConsentContract, CONSENT_TEXT_VERSION } from '../supabase/functions/business-alert-signup/logic.mjs';
 import { thankYouEmailHtml } from '../supabase/functions/business-alert-signup/email.mjs';
 import {
   SUBSCRIBER_FROM,
@@ -68,6 +68,68 @@ test('the new form requires general consent and at least one channel', () => {
   assert.equal(ok.row.consent_whatsapp, true);
   assert.equal(ok.row.consent_email, false);
   assert.equal(ok.row.source_url, base.source_url);
+});
+
+test('a repeat signup stays unsubscribed until the form brings fresh consent', () => {
+  const now = '2026-11-13T10:00:00.000Z';
+  const previous = {
+    status: 'unsubscribed',
+    unsubscribed_at: '2026-11-01T08:00:00.000Z',
+    unsubscribed_by: 'self_link',
+    unsubscribe_reason: null,
+    email_unsubscribed_at: '2026-11-01T08:00:00.000Z',
+    whatsapp_unsubscribed_at: '2026-11-01T08:00:00.000Z',
+    resubscribed_at: null,
+    status_history: [{ status: 'active', at: '2026-10-01T08:00:00.000Z' }],
+    consent_text: 'נוסח ישן',
+    consent_version: 'v0'
+  };
+  const legacy = validateSignup(legacyBody);
+  const kept = consentWritePayload(legacy.row, previous, now);
+  assert.equal(kept.status, 'unsubscribed');
+  assert.equal(kept.unsubscribed_at, previous.unsubscribed_at);
+  assert.equal(kept.consent_text, undefined);
+  assert.equal(kept.consent_at, undefined);
+  assert.equal(kept.resubscribed_at, undefined);
+  assert.equal(kept.status_history.length, 1);
+  assert.equal(kept.status_history[0].status, 'active');
+
+  const fresh = validateSignup({
+    ...legacyBody,
+    consent_general: true,
+    consent_email: true,
+    consent_whatsapp: true,
+    consent_text: 'אני מאשר/ת לקבל מ-BSD עדכונים ופרסומות על עסקים למכירה',
+    consent_version: 'v1-2026-11-13',
+    source_url: 'https://www.bsd-bbi.co.il/עסקים-למכירה/'
+  });
+  const back = consentWritePayload(fresh.row, previous, now);
+  assert.equal(back.status, 'active');
+  assert.equal(back.unsubscribed_at, null);
+  assert.equal(back.email_unsubscribed_at, null);
+  assert.equal(back.whatsapp_unsubscribed_at, null);
+  assert.equal(back.consent_at, now);
+  assert.equal(back.consent_text, fresh.row.consent_text);
+  assert.equal(back.consent_version, 'v1-2026-11-13');
+  assert.equal(back.resubscribed_at, now);
+  assert.equal(back.status_history.length, 2);
+  assert.equal(back.status_history[0].status, 'active');
+  assert.equal(back.status_history[1].status, 'unsubscribed');
+
+  const emailOnly = validateSignup({
+    ...legacyBody,
+    consent_general: true,
+    consent_email: true,
+    consent_whatsapp: false,
+    consent_text: 'אני מאשר/ת לקבל מ-BSD עדכונים ופרסומות על עסקים למכירה',
+    consent_version: 'v1-2026-11-13'
+  });
+  const partial = consentWritePayload(emailOnly.row, previous, now);
+  assert.equal(partial.status, 'unsubscribed_whatsapp');
+  assert.equal(partial.email_unsubscribed_at, null);
+  assert.equal(partial.whatsapp_unsubscribed_at, previous.whatsapp_unsubscribed_at);
+  assert.equal(partial.resubscribed_at, now);
+  assert.equal(partial.status_history.length, 2);
 });
 
 test('legacy rows are blocked and a fresh consent can pass the gate', () => {

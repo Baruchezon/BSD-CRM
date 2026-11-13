@@ -8,6 +8,7 @@ import {
   RATE_LIMITS,
   cleanText,
   isUnsubscribeToken,
+  consentWritePayload,
   planSubscriberWrite,
   validateSignup
 } from "./logic.mjs";
@@ -32,7 +33,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 
 const TABLE = "business_alert_subscribers";
 const ATTEMPTS = "business_alert_signup_attempts";
-const LOOKUP = "id, unsubscribe_token, status, unsubscribed_at, unsubscribed_by, unsubscribe_reason, email_unsubscribed_at, whatsapp_unsubscribed_at";
+const LOOKUP = "id, unsubscribe_token, status, unsubscribed_at, unsubscribed_by, unsubscribe_reason, email_unsubscribed_at, whatsapp_unsubscribed_at, status_history, resubscribed_at";
 
 const allowedOrigins = new Set([
   "https://bsd-bbi.co.il",
@@ -120,47 +121,13 @@ async function findByPhone9(phone9: string) {
   return data?.[0] || null;
 }
 
-function statusForWrite(row: Record<string, unknown>, previous: Record<string, unknown> | null) {
-  if (row.legacy_no_consent === true) {
-    return {
-      status: "active",
-      unsubscribed_at: null,
-      unsubscribed_by: null,
-      unsubscribe_reason: null,
-      email_unsubscribed_at: null,
-      whatsapp_unsubscribed_at: null
-    };
+function writePayload(row: Record<string, unknown>, previous: Record<string, unknown> | null, now: string, consentIp: string, consentUserAgent: string) {
+  const payload = consentWritePayload(row, previous, now);
+  if (payload.consent_at) {
+    payload.consent_ip = consentIp || null;
+    payload.consent_user_agent = consentUserAgent || null;
   }
-  const emailAt = row.consent_email === true ? null : (previous?.email_unsubscribed_at ?? null);
-  const whatsappAt = row.consent_whatsapp === true ? null : (previous?.whatsapp_unsubscribed_at ?? null);
-  if (emailAt && whatsappAt) {
-    return {
-      status: "unsubscribed_all",
-      unsubscribed_at: previous?.unsubscribed_at || new Date().toISOString(),
-      unsubscribed_by: previous?.unsubscribed_by || "self_link",
-      unsubscribe_reason: previous?.unsubscribe_reason || null,
-      email_unsubscribed_at: emailAt,
-      whatsapp_unsubscribed_at: whatsappAt
-    };
-  }
-  if (emailAt || whatsappAt) {
-    return {
-      status: emailAt ? "unsubscribed_email" : "unsubscribed_whatsapp",
-      unsubscribed_at: emailAt || whatsappAt,
-      unsubscribed_by: previous?.unsubscribed_by || "self_link",
-      unsubscribe_reason: previous?.unsubscribe_reason || null,
-      email_unsubscribed_at: emailAt,
-      whatsapp_unsubscribed_at: whatsappAt
-    };
-  }
-  return {
-    status: "active",
-    unsubscribed_at: null,
-    unsubscribed_by: null,
-    unsubscribe_reason: null,
-    email_unsubscribed_at: null,
-    whatsapp_unsubscribed_at: null
-  };
+  return payload;
 }
 
 async function writeSubscriber(row: Record<string, unknown>, consentIp: string, consentUserAgent: string) {
@@ -173,25 +140,20 @@ async function writeSubscriber(row: Record<string, unknown>, consentIp: string, 
     const { error } = await supabase.from(TABLE).update({ phone: null, phone9: null }).eq("id", plan.detachPhoneId);
     if (error) throw error;
   }
-  const payload = {
-    ...row,
-    ...statusForWrite(row, target),
-    consent_at: now,
-    consent_ip: consentIp || null,
-    consent_user_agent: consentUserAgent || null
-  };
+  const payload = writePayload(row, target, now, consentIp, consentUserAgent);
   if (plan.action === "update" && plan.targetId) {
     const { data, error } = await supabase.from(TABLE).update(payload).eq("id", plan.targetId).select("id, unsubscribe_token").single();
     if (error) throw error;
-    return { ...data, signupKind: "returning", previousStatus: target?.status || null, consentAt: now };
+    return { ...data, signupKind: "returning", previousStatus: target?.status || null, consentAt: payload.consent_at || target?.consent_at || null };
   }
   const { data, error } = await supabase.from(TABLE).insert(payload).select("id, unsubscribe_token").single();
   if (error?.code === "23505") {
     const again = (await findByEmail(String(row.email))) || (row.phone9 ? await findByPhone9(String(row.phone9)) : null);
     if (!again?.id) throw error;
-    const { data: updated, error: updateError } = await supabase.from(TABLE).update(payload).eq("id", again.id).select("id, unsubscribe_token").single();
+    const retry = writePayload(row, again, now, consentIp, consentUserAgent);
+    const { data: updated, error: updateError } = await supabase.from(TABLE).update(retry).eq("id", again.id).select("id, unsubscribe_token").single();
     if (updateError) throw updateError;
-    return { ...updated, signupKind: "returning", previousStatus: again.status || null, consentAt: now };
+    return { ...updated, signupKind: "returning", previousStatus: again.status || null, consentAt: retry.consent_at || null };
   }
   if (error || !data?.id) throw error ?? new Error("subscriber_not_created");
   return { ...data, signupKind: "new", previousStatus: null, consentAt: now };

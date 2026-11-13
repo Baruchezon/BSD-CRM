@@ -305,6 +305,83 @@ export function validateSignup(body) {
   };
 }
 
+const CLOSED_STATUSES = ["unsubscribed", "unsubscribed_all", "unsubscribed_email", "unsubscribed_whatsapp"];
+const CONSENT_KEYS = [
+  "consent_general", "consent_text", "consent_version", "consent_text_version",
+  "legacy_no_consent", "consent_email", "consent_whatsapp", "consent_at"
+];
+
+export function hasFreshConsent(row) {
+  return row?.consent_general === true && (row?.consent_email === true || row?.consent_whatsapp === true);
+}
+
+// A repeat signup must not clear an unsubscribe by itself. The row becomes
+// reachable again only when this request has consent_general and a channel.
+// The previous status is appended. Nothing is removed from status_history.
+export function consentWritePayload(row, previous, now) {
+  const prevStatus = previous?.status || null;
+  const closed = CLOSED_STATUSES.includes(prevStatus);
+  const fresh = hasFreshConsent(row);
+  const history = Array.isArray(previous?.status_history) ? previous.status_history.slice() : [];
+  const payload = { ...row };
+
+  if (!previous) {
+    return {
+      ...payload,
+      status: "active",
+      unsubscribed_at: null,
+      unsubscribed_by: null,
+      unsubscribe_reason: null,
+      email_unsubscribed_at: null,
+      whatsapp_unsubscribed_at: null,
+      consent_at: now,
+      status_history: history
+    };
+  }
+
+  if (closed && !fresh) {
+    for (const key of CONSENT_KEYS) delete payload[key];
+    delete payload.resubscribed_at;
+    return {
+      ...payload,
+      status: prevStatus,
+      unsubscribed_at: previous.unsubscribed_at,
+      unsubscribed_by: previous.unsubscribed_by,
+      unsubscribe_reason: previous.unsubscribe_reason ?? null,
+      email_unsubscribed_at: previous.email_unsubscribed_at,
+      whatsapp_unsubscribed_at: previous.whatsapp_unsubscribed_at,
+      status_history: history
+    };
+  }
+
+  const emailOff = row.consent_email !== true && !!previous.email_unsubscribed_at;
+  const whatsappOff = row.consent_whatsapp !== true && !!previous.whatsapp_unsubscribed_at;
+  let status = "active";
+  if (emailOff && whatsappOff) status = "unsubscribed_all";
+  else if (emailOff) status = "unsubscribed_email";
+  else if (whatsappOff) status = "unsubscribed_whatsapp";
+  const reopened = closed && status !== prevStatus;
+  if (reopened) {
+    history.push({
+      status: prevStatus,
+      at: now,
+      unsubscribed_at: previous.unsubscribed_at || null
+    });
+  }
+  return {
+    ...payload,
+    status,
+    unsubscribed_at: status === "active" ? null : (previous.unsubscribed_at || now),
+    unsubscribed_by: status === "active" ? null : (previous.unsubscribed_by || "self_link"),
+    unsubscribe_reason: status === "active" ? null : (previous.unsubscribe_reason ?? null),
+    email_unsubscribed_at: emailOff ? previous.email_unsubscribed_at : null,
+    whatsapp_unsubscribed_at: whatsappOff ? previous.whatsapp_unsubscribed_at : null,
+    consent_at: now,
+    ...(reopened ? { resubscribed_at: now } : {}),
+    status_history: history
+  };
+}
+
 export function planSubscriberWrite({ emailRow, phoneRow }) {
   const emailId = emailRow?.id || null;
   const phoneId = phoneRow?.id || null;

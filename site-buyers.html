@@ -329,6 +329,7 @@ function openRow(id){
     <b>גרסה:</b> ${UI.esc(row.consent_version || row.consent_text_version || '—')}<br>
     <b>נוסח:</b> ${UI.esc(row.consent_text || 'לא נשמר (הרשמה ישנה)')}<br>
     <b>הסרה:</b> ${UI.esc(UI.statusLabel(row.status))}${row.unsubscribed_at ? ' · ' + UI.esc(new Date(row.unsubscribed_at).toLocaleString('he-IL')) : ''}<br>
+    ${row.resubscribed_at ? `<b>חזר להרשמה:</b> ${UI.esc(new Date(row.resubscribed_at).toLocaleString('he-IL'))}<br>` : ''}
     <b>מקור הגעה:</b> ${UI.esc(utm || '—')}<br>
     <b>עמוד:</b> ${UI.esc(row.source_url || '—')}</p>
     <div class="views"><b>מה נשלח</b><p class="muted">השם הפנימי גלוי רק כאן, לא בפנייה לנרשם.</p><div>${sendHtml}</div></div>
