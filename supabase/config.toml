@@ -7,3 +7,6 @@ verify_jwt = false
 
 [functions.business-alert-visit]
 verify_jwt = false
+
+[functions.distribution-channel-notify]
+verify_jwt = false
