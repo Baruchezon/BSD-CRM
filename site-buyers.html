@@ -80,7 +80,7 @@ tr.row:hover{background:#f8fbff}
       <p id="pageIntro">כאן רואים מי ביקש עדכונים, ומה מתאים לו. בלי להעמיס.</p>
     </div>
     <div class="actions">
-      <button class="soft" id="addBtn" type="button">הוספת נרשם שיזמנו</button>
+      <button class="soft" id="addBtn" type="button">הוסף נרשם</button>
       <button class="back" id="backBtn" type="button">חזרה</button>
     </div>
   </div>
@@ -92,27 +92,21 @@ tr.row:hover{background:#f8fbff}
   </div>
   <div class="splits">
     <section class="panel"><h2 id="sourceTitle">לפי מקור</h2><div id="sources"></div></section>
-    <section class="panel"><h2 id="timeTitle">הרשמות לאורך זמן</h2><div id="months"></div></section>
+    <section class="panel"><h2 id="timeTitle">הרשמות לפי מקור לאורך זמן</h2><div id="months"></div></section>
   </div>
   <section class="panel" style="margin-bottom:14px"><h2>לפי קמפיין</h2><div id="campaigns"></div></section>
   <div class="channel-tabs" id="channelTabs">
     <button type="button" data-channel="all" class="on">הכל</button>
-    <button type="button" data-channel="website">נרשם דרך האתר</button>
+    <button type="button" data-channel="website">אתר</button>
     <button type="button" data-channel="our_link">יזום שלנו</button>
   </div>
   <form id="manualForm" class="panel" hidden style="margin-bottom:14px">
-    <h2>נרשם שיזמנו</h2>
-    <p class="muted">נשמר כ«יזום שלנו». חובה לרשום את נוסח ההסכמה שקיבלנו. הרשומה לא נמחקת.</p>
+    <h2>הוסף נרשם</h2>
+    <p class="muted">לשיחה שמתנהלת עכשיו. נשמר כ«יזום שלנו». בלי הסימון על ההסכמה בעל פה אי אפשר לשמור.</p>
     <div class="searchbar">
-      <input id="mFirst" placeholder="שם פרטי" required>
-      <input id="mLast" placeholder="שם משפחה" required>
+      <input id="mName" placeholder="שם" required>
       <input id="mPhone" placeholder="טלפון" dir="ltr" required>
-      <input id="mEmail" placeholder="אימייל" dir="ltr" required>
-      <select id="mSource">
-        <option value="link">קישור ששלחנו</option>
-        <option value="manual">הוספה ידנית</option>
-        <option value="call">שיחת טלפון</option>
-      </select>
+      <input id="mEmail" placeholder="אימייל, אם יש" dir="ltr">
       <select id="mSector">
         <option value="">תחום</option>
         <option value="food">מזון ומסעדנות</option><option value="grocery">קמעונאות מזון</option><option value="retail">מסחר וקמעונאות</option>
@@ -127,12 +121,10 @@ tr.row:hover{background:#f8fbff}
       <input id="mBudgetMin" type="number" min="0" placeholder="תקציב מ-">
       <input id="mBudgetMax" type="number" min="0" placeholder="תקציב עד">
     </div>
-    <div class="field"><textarea id="mLooking" placeholder="מה מחפש, במילים קצרות"></textarea></div>
-    <div class="field"><textarea id="mConsent" required placeholder="נוסח ההסכמה שנאמר או נשלח"></textarea></div>
     <div class="searchbar">
-      <input id="mVersion" value="v1-2026-11-13" placeholder="גרסת נוסח">
       <label><input id="mEmailOk" type="checkbox" checked> אימייל</label>
       <label><input id="mWhatsappOk" type="checkbox"> וואטסאפ</label>
+      <label><input id="mVerbal" type="checkbox"> התקבלה הסכמה בעל פה</label>
       <button class="mail" type="submit">שמירה</button>
     </div>
   </form>
@@ -141,7 +133,7 @@ tr.row:hover{background:#f8fbff}
       <input id="q" type="search" placeholder="חיפוש לפי שם, טלפון או אימייל" autocomplete="off">
       <select id="sourceFilter">
         <option value="all">כל המקורות</option>
-        <option value="website">נרשם דרך האתר</option>
+        <option value="website">אתר</option>
         <option value="our_link">יזום שלנו</option>
         <option value="manual">נוסף ידנית</option>
         <option value="call">נוסף משיחה</option>
@@ -188,7 +180,7 @@ tr.row:hover{background:#f8fbff}
 <script src="js/config.js?v=202611131800"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
-<script src="js/site-buyers.js?v=202611131830"></script>
+<script src="js/site-buyers.js?v=202611132100"></script>
 <script>
 const UI = window.BSDSiteBuyers;
 const API = (window.BSD_CONFIG && window.BSD_CONFIG.SUPABASE_URL || '') + '/functions/v1/business-alert-admin';
@@ -230,13 +222,13 @@ async function api(action, payload){
 function cards(summary){
   const items = [
     ['c1', summary.total, 'סה״כ נרשמים'],
-    ['c2', summary.newThisWeek, 'חדשים השבוע'],
-    ['c3', summary.active, 'פעילים'],
-    ['c4', summary.unsubscribed, 'הוסרו'],
-    ['c5', summary.sends || 0, text('stats.sends', 'שליחות')],
-    ['c6', summary.emailConsent, 'הסכמה לאימייל'],
-    ['c7', summary.whatsappConsent, 'הסכמה לוואטסאפ'],
-    ['c8', summary.doNotCall, 'לא להתקשר']
+    ['c2', summary.sources['אתר'] || 0, 'אתר'],
+    ['c3', summary.sources['יזום שלנו'] || 0, 'יזום שלנו'],
+    ['c4', summary.sends || 0, 'שליחות'],
+    ['c5', summary.calls || 0, 'שיחות'],
+    ['c6', UI.answerRateText(summary.answerRate), 'אחוז מענה'],
+    ['c7', summary.newThisWeek, 'חדשים השבוע'],
+    ['c8', summary.unsubscribed, 'הוסרו']
   ];
   document.getElementById('cards').innerHTML = items.map(([cls, num, label]) =>
     `<article class="card ${cls}"><b>${num}</b><span>${label}</span></article>`).join('');
@@ -247,7 +239,7 @@ function cards(summary){
   const sources = document.getElementById('sources');
   if (sources) sources.innerHTML = UI.bars(summary.sources || {});
   const months = document.getElementById('months');
-  if (months) months.innerHTML = UI.bars(summary.months || {});
+  if (months) months.innerHTML = UI.bars(summary.bySourceMonth || summary.months || {});
 }
 
 function currentFilters(){
@@ -286,7 +278,7 @@ function paint(){
     return;
   }
   const badgeClass = { website: 'p-web', our_link: 'p-ours', manual: 'p-hand', call: 'p-phone' };
-  document.getElementById('table').innerHTML = `<table><thead><tr><th>שם</th><th>מקור</th><th>מה מחפש</th><th>תקציב</th><th>נרשם</th><th>שליחות</th><th>מצב</th></tr></thead><tbody>${list.map(row => {
+  document.getElementById('table').innerHTML = `<table><thead><tr><th>שם</th><th>טלפון</th><th>מקור</th><th>מה מחפש</th><th>תקציב</th><th>נרשם</th><th>קשר</th><th>מצב</th></tr></thead><tbody>${list.map(row => {
     const name = UI.esc(((row.first_name || '') + ' ' + (row.last_name || '')).trim());
     const kind = UI.sourceKind(row);
     const pill = row.legacy_no_consent || row.consent_general !== true
@@ -295,7 +287,10 @@ function paint(){
     const call = row.do_not_call ? ' <span class="pill p-call">לא להתקשר</span>' : '';
     const signed = row.created_at ? UI.esc(new Date(row.created_at).toLocaleDateString('he-IL')) : '—';
     const flags = UI.flagLabels(row).map(label => `<span class="pill p-flag">${UI.esc(label)}</span>`).join(' ');
-    return `<tr class="row" data-id="${UI.esc(row.id)}"><td><b>${name}</b>${flags ? '<br>' + flags : ''}</td><td><span class="badge ${badgeClass[kind] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span></td><td>${UI.esc(UI.lookingLine(row))}</td><td>${UI.esc(UI.budgetLabel(row))}</td><td>${signed}</td><td>${UI.esc(UI.sendSummary(row))}</td><td>${pill}${call}</td></tr>`;
+    const stats = UI.contactStats(row);
+    const last = stats.lastContact ? UI.esc(new Date(stats.lastContact).toLocaleDateString('he-IL')) : 'אין עדיין';
+    const wa = UI.waHref(row.phone, text('whatsapp.prefill', ''));
+    return `<tr class="row" data-id="${UI.esc(row.id)}"><td><b>${name}</b>${flags ? '<br>' + flags : ''}</td><td><span dir="ltr">${UI.esc(row.phone || '')}</span><br><a class="wa" data-act="wa" href="${UI.esc(wa)}" target="_blank" rel="noopener">וואטסאפ</a></td><td><span class="badge ${badgeClass[kind] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span></td><td>${UI.esc(UI.lookingLine(row))}</td><td>${UI.esc(UI.budgetLabel(row))}</td><td>${signed}</td><td>${stats.sends} נשלחו · ${stats.calls} שיחות · ${UI.esc(UI.answerRateText(stats.answerRate))}<br><span class="muted">${last}</span></td><td>${pill}${call}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -307,6 +302,10 @@ function openRow(id){
     ? views.map(view => `<div>${UI.esc(view.page_path)} <span class="muted">${view.via === 'cookie' ? 'עוגייה' : 'קישור מהמייל'} · ${UI.esc(new Date(view.viewed_at).toLocaleString('he-IL'))}</span></div>`).join('')
     : '<span class="muted">אין עדיין היסטוריית עמודים. המעקב יתחיל אחרי שהאתר ישלח את אסימון הביקור.</span>';
   const phoneHref = 'tel:' + String(row.phone || '').replace(/[^\d+]/g, '');
+  const contact = UI.contactStats(row);
+  const statsLine = `${contact.sends} נשלחו · ${contact.calls} שיחות · מענה ${UI.esc(UI.answerRateText(contact.answerRate))}` + (contact.lastContact ? ` · קשר אחרון ${UI.esc(new Date(contact.lastContact).toLocaleString('he-IL'))}` : '');
+  const outcomeLabel = { answered: 'דיברנו', no_answer: 'לא ענה', requested_details: 'ביקש פרטים', other: 'הערה' };
+  const logHtml = (row.interactions || []).filter(item => !item.deleted_at).map(item => `<div>${UI.esc(outcomeLabel[item.outcome] || (item.kind === 'whatsapp' ? 'וואטסאפ' : item.kind === 'call' ? 'חיוג' : 'הערה'))} · ${item.at ? UI.esc(new Date(item.at).toLocaleString('he-IL')) : ''}${item.note ? ' · ' + UI.esc(item.note) : ''}</div>`).join('') || '<span class="muted">עדיין אין שיחות רשומות.</span>';
   const channels = [row.consent_email ? 'אימייל' : '', row.consent_whatsapp ? 'וואטסאפ' : ''].filter(Boolean).join(' · ') || 'אין';
   const utm = [row.utm_source, row.utm_medium, row.utm_campaign, row.utm_content].filter(Boolean).join(' · ');
   const sends = Array.isArray(row.sends) ? row.sends : [];
@@ -335,11 +334,22 @@ function openRow(id){
     <div class="views"><b>מה נשלח</b><p class="muted">השם הפנימי גלוי רק כאן, לא בפנייה לנרשם.</p><div>${sendHtml}</div></div>
     <div class="views"><b>עמודים שנצפו</b><div>${viewHtml}</div></div>
     <div class="views" id="matchBox"><b>עסקים שמתאימים</b><div class="muted">טוען התאמות…</div></div>
+    <div class="views"><b>יומן שיחות</b>
+      <p>${statsLine}</p>
+      <div class="actions">
+        <button class="soft" type="button" data-outcome="answered">דיברנו</button>
+        <button class="soft" type="button" data-outcome="no_answer">לא ענה</button>
+        <button class="soft" type="button" data-outcome="requested_details">ביקש פרטים</button>
+      </div>
+      <div class="field"><textarea id="logNote" placeholder="הערה חופשית"></textarea></div>
+      <button class="soft" id="saveLog" type="button">שמירת הערה</button>
+      <div>${logHtml}</div>
+    </div>
     <div class="field"><label>הערות</label><textarea id="notes">${UI.esc(row.manager_notes || '')}</textarea></div>
     <label class="field"><input id="dnc" type="checkbox" ${row.do_not_call ? 'checked' : ''}> לא להתקשר</label>
     <div class="actions">
       <a class="soft" id="doDial" href="${UI.esc(phoneHref)}">חיוג</a>
-      <button class="wa" id="doWa" type="button">וואטסאפ</button>
+      <a class="wa" id="doWa" href="${UI.esc(UI.waHref(row.phone, text('whatsapp.prefill', '')))}" target="_blank" rel="noopener">וואטסאפ</a>
       <button class="mail" id="doMail" type="button">אימייל ידני</button>
       <button class="soft" id="doSend" type="button">שליחה מהמערכת</button>
       <button class="soft" id="saveNotes" type="button">שמירת הערות</button>
@@ -358,7 +368,12 @@ function openRow(id){
   document.querySelector('.drawer').addEventListener('click', event => {
     if (event.target.classList.contains('drawer')) document.getElementById('drawer').innerHTML = '';
   });
-  document.getElementById('doWa').onclick = () => act(row, 'wa');
+  document.getElementById('doDial').addEventListener('click', () => logTouch(row, 'call', null, ''));
+  document.getElementById('doWa').addEventListener('click', () => logTouch(row, 'whatsapp', null, ''));
+  document.querySelectorAll('[data-outcome]').forEach(button => {
+    button.onclick = () => logTouch(row, 'call', button.getAttribute('data-outcome'), '');
+  });
+  document.getElementById('saveLog').onclick = () => logTouch(row, 'note', 'other', document.getElementById('logNote').value.trim());
   document.getElementById('doMail').onclick = () => act(row, 'mail');
   document.getElementById('doSend').onclick = () => act(row, 'send');
   document.getElementById('saveNotes').onclick = () => saveHandling(row, null);
@@ -540,7 +555,7 @@ async function openDetail(id){
   if (!sample){
     try {
       const detail = await api('card', { id });
-      Object.assign(row, detail.subscriber || {}, { views: detail.views || [], sends: detail.sends || [], attempts: detail.attempts || [] });
+      Object.assign(row, detail.subscriber || {}, { views: detail.views || [], sends: detail.sends || [], attempts: detail.attempts || [], interactions: detail.interactions || row.interactions || [] });
     } catch (error) {
       try {
         const detail = await api('detail', { id });
@@ -585,54 +600,67 @@ document.getElementById('addBtn').addEventListener('click', () => {
   const form = document.getElementById('manualForm');
   form.hidden = !form.hidden;
 });
+async function logTouch(row, kind, outcome, note){
+  const item = { id: 'local-' + Date.now(), at: new Date().toISOString(), kind, direction: 'out', outcome: outcome || null, note: note || '', deleted_at: null };
+  if (sample){
+    row.interactions = row.interactions || [];
+    row.interactions.unshift(item);
+    paint();
+    if (document.getElementById('drawer').innerHTML) openRow(row.id);
+    return;
+  }
+  try {
+    await api('log_interaction', { id: row.id, kind, direction: 'out', outcome, note });
+    await load();
+    openDetail(row.id);
+  } catch (error) { toast(error.message); }
+}
+
 document.getElementById('manualForm').addEventListener('submit', async event => {
   event.preventDefault();
-  const consent = document.getElementById('mConsent').value.trim();
-  const emailOk = document.getElementById('mEmailOk').checked;
-  const whatsappOk = document.getElementById('mWhatsappOk').checked;
-  if (!consent){ toast('צריך לרשום את נוסח ההסכמה שקיבלנו, לפני השמירה.'); return; }
-  if (!emailOk && !whatsappOk){ toast('צריך לבחור לפחות ערוץ אחד.'); return; }
-  const payload = {
-    first_name: document.getElementById('mFirst').value.trim(),
-    last_name: document.getElementById('mLast').value.trim(),
-    phone: document.getElementById('mPhone').value.trim(),
-    email: document.getElementById('mEmail').value.trim(),
-    manual_source: document.getElementById('mSource').value,
-    consent_text: consent,
-    consent_version: document.getElementById('mVersion').value.trim() || 'v1-2026-11-13',
-    consent_email: emailOk,
-    consent_whatsapp: whatsappOk,
+  const planned = UI.verbalSignup({
+    name: document.getElementById('mName').value,
+    phone: document.getElementById('mPhone').value,
+    email: document.getElementById('mEmail').value,
+    verbal: document.getElementById('mVerbal').checked,
+    consent_email: document.getElementById('mEmailOk').checked,
+    consent_whatsapp: document.getElementById('mWhatsappOk').checked,
     categories: document.getElementById('mSector').value ? [document.getElementById('mSector').value] : [],
     regions: document.getElementById('mRegion').value ? [document.getElementById('mRegion').value] : [],
     budget_min: document.getElementById('mBudgetMin').value,
-    budget_max: document.getElementById('mBudgetMax').value,
-    looking_for: document.getElementById('mLooking').value.trim()
-  };
+    budget_max: document.getElementById('mBudgetMax').value
+  });
+  if (!planned.ok){
+    toast(planned.error === 'consent_required' ? 'צריך לסמן שהתקבלה הסכמה בעל פה.' : planned.error === 'no_channel' ? 'צריך לבחור לפחות ערוץ אחד.' : 'צריך שם וטלפון.');
+    return;
+  }
   if (sample){
     rows.unshift(Object.assign({
-      id: 'sample-new-' + Date.now(), status: 'active', signup_channel: 'our_link', consent_general: true,
-      legacy_no_consent: false, created_at: new Date().toISOString(), consent_at: new Date().toISOString(),
-      do_not_call: false, send_count: 0, sends: [], views: []
-    }, payload));
+      id: 'sample-new-' + Date.now(), status: 'active', legacy_no_consent: false,
+      created_at: new Date().toISOString(), consent_at: new Date().toISOString(), consent_by: 'ברוך',
+      do_not_call: false, send_count: 0, sends: [], views: [], interactions: []
+    }, planned.row));
     document.getElementById('manualForm').hidden = true;
     toast('נשמר בנתוני הדוגמה');
     paint();
     return;
   }
   try {
-    await api('manual_add', payload);
+    await api('verbal_add', planned.row);
     document.getElementById('manualForm').hidden = true;
-    toast('נשמר. תודה שרשמת את ההסכמה.');
+    toast('נשמר. ההסכמה בעל פה נרשמה.');
     await load();
   } catch (error) { toast(error.message); }
 });
 document.getElementById('table').addEventListener('click', event => {
-  const button = event.target.closest('button');
+  const button = event.target.closest('button, a');
   const tr = event.target.closest('tr[data-id]');
   if (!tr) return;
   if (button){
     event.stopPropagation();
-    act(rows.find(item => item.id === tr.dataset.id), button.dataset.act);
+    const row = rows.find(item => item.id === tr.dataset.id);
+    if (button.dataset.act === 'wa') logTouch(row, 'whatsapp', null, '');
+    else act(row, button.dataset.act);
     return;
   }
   openDetail(tr.dataset.id);

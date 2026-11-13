@@ -45,11 +45,12 @@
   };
   const FLAGS = { franchise: "זכיינות" };
   const SOURCE_LABEL = {
-    website: "נרשם דרך האתר",
+    website: "אתר",
     our_link: "יזום שלנו",
-    manual: "נוסף ידנית",
-    call: "נוסף משיחה"
+    manual: "יזום שלנו",
+    call: "יזום שלנו"
   };
+  const VERBAL_CONSENT = "התקבלה הסכמה בעל פה";
 
   function statusLabel(status) {
     return {
@@ -116,6 +117,86 @@
     return bits.join(" · ") || "לא צוין";
   }
 
+  function liveInteractions(row) {
+    return (Array.isArray(row.interactions) ? row.interactions : []).filter(item => !item.deleted_at);
+  }
+
+  function contactStats(row) {
+    const items = liveInteractions(row);
+    const hasLog = Array.isArray(row.interactions);
+    const calls = hasLog
+      ? items.filter(item => item.kind === "call")
+      : [];
+    const callCount = hasLog ? calls.length : Number(row.call_count || 0);
+    const answered = hasLog
+      ? calls.filter(item => item.outcome === "answered").length
+      : Number(row.answered_count || 0);
+    const noAnswer = hasLog
+      ? calls.filter(item => item.outcome === "no_answer").length
+      : Number(row.no_answer_count || 0);
+    const decided = answered + noAnswer;
+    const times = items.map(item => item.at).filter(Boolean).sort();
+    return {
+      sends: Number(row.send_count || (Array.isArray(row.sends) ? row.sends.length : 0) || 0),
+      calls: callCount,
+      answered,
+      noAnswer,
+      answerRate: decided ? Math.round(answered / decided * 100) : null,
+      lastContact: times.length ? times[times.length - 1] : (row.last_contact_at || null)
+    };
+  }
+
+  function answerRateText(rate) {
+    return rate == null ? "—" : rate + "%";
+  }
+
+  function waDigits(phone) {
+    let digits = String(phone || "").replace(/\D/g, "");
+    if (digits.startsWith("00")) digits = digits.slice(2);
+    if (digits.startsWith("0")) digits = "972" + digits.slice(1);
+    return digits;
+  }
+
+  function waHref(phone, text) {
+    const digits = waDigits(phone);
+    const note = text || "שלום, כאן BSD - עסקים למכירה.\nיש עדכון קצר שעשוי להתאים לך, רק אם נוח.\nלהסרה השב/י הסר";
+    return digits ? "https://wa.me/" + digits + "?text=" + encodeURIComponent(note) : "";
+  }
+
+  function splitName(name) {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    return { first_name: parts[0] || "", last_name: parts.slice(1).join(" ") || "—" };
+  }
+
+  function verbalSignup(input) {
+    const name = splitName(input && input.name);
+    if (!name.first_name || !String(input && input.phone || "").trim()) return { ok: false, error: "missing_required_fields" };
+    if (!input || input.verbal !== true) return { ok: false, error: "consent_required" };
+    if (input.consent_email !== true && input.consent_whatsapp !== true) return { ok: false, error: "no_channel" };
+    return {
+      ok: true,
+      row: {
+        first_name: name.first_name,
+        last_name: name.last_name,
+        phone: String(input.phone).trim(),
+        email: String(input.email || "").trim() || null,
+        categories: input.categories || [],
+        regions: input.regions || [],
+        budget_min: input.budget_min ?? null,
+        budget_max: input.budget_max ?? null,
+        budget_open: input.budget_open === true,
+        consent_email: input.consent_email === true,
+        consent_whatsapp: input.consent_whatsapp === true,
+        consent_general: true,
+        consent_method: "verbal",
+        consent_text: VERBAL_CONSENT,
+        consent_version: "verbal-2026-11-13",
+        signup_channel: "our_link",
+        manual_source: "call"
+      }
+    };
+  }
+
   function sendSummary(row) {
     const count = Number(row.send_count || (Array.isArray(row.sends) ? row.sends.length : 0) || 0);
     if (!count) return "עדיין לא נשלח";
@@ -180,14 +261,19 @@
     const summary = {
       total: rows.length, newThisWeek: 0, active: 0, unsubscribed: 0,
       emailConsent: 0, whatsappConsent: 0, doNotCall: 0, awaitingConsent: 0, sends: 0,
-      regions: {}, sectors: {}, campaigns: {}, sources: {}, months: {}
+      calls: 0, answered: 0, noAnswer: 0, answerRate: null,
+      regions: {}, sectors: {}, campaigns: {}, sources: {}, months: {}, bySourceMonth: {}
     };
     rows.forEach(row => {
       if (row.created_at && new Date(row.created_at).getTime() >= week) summary.newThisWeek += 1;
       if (row.status === "active") summary.active += 1;
       if (isClosed(row.status)) summary.unsubscribed += 1;
       if (row.do_not_call === true) summary.doNotCall += 1;
-      summary.sends += Number(row.send_count || (Array.isArray(row.sends) ? row.sends.length : 0) || 0);
+      const contact = contactStats(row);
+      summary.sends += contact.sends;
+      summary.calls += contact.calls;
+      summary.answered += contact.answered;
+      summary.noAnswer += contact.noAnswer;
       const marketed = row.legacy_no_consent !== true && row.consent_general === true;
       if (!marketed) summary.awaitingConsent += 1;
       const emailClosed = row.status === "unsubscribed_email" || row.status === "unsubscribed_all" || row.status === "unsubscribed" || !!row.email_unsubscribed_at;
@@ -202,7 +288,11 @@
       summary.sources[source] = (summary.sources[source] || 0) + 1;
       const month = row.created_at ? String(row.created_at).slice(0, 7) : "—";
       summary.months[month] = (summary.months[month] || 0) + 1;
+      const sourceMonth = month + " " + source;
+      summary.bySourceMonth[sourceMonth] = (summary.bySourceMonth[sourceMonth] || 0) + 1;
     });
+    const decided = summary.answered + summary.noAnswer;
+    summary.answerRate = decided ? Math.round(summary.answered / decided * 100) : null;
     return summary;
   }
 
@@ -243,6 +333,10 @@
         taxonomy_version: "v1-2026-11-13", looking_for: "מאפייה קטנה במרכז",
         do_not_call: false, manager_notes: "", view_count: 2, handled_at: null, budget_open: true,
         send_count: 1, last_sent_at: today,
+        interactions: [
+          { id: "i1", at: today, kind: "call", direction: "out", outcome: "answered", note: "", deleted_at: null },
+          { id: "i2", at: old, kind: "call", direction: "out", outcome: "no_answer", note: "", deleted_at: null }
+        ],
         sends: [{ business_number: "1042", internal_name: "מאפיית הדגמה הפנימית", sent_at: today, channel: "email", match_pct: 86, opened_at: null, replied_at: null }],
         views: [
           { page_path: "/עסקים-למכירה/", via: "email_link", viewed_at: today },
@@ -305,6 +399,7 @@
 
   root.BSDSiteBuyers = {
     esc, statusLabel, summarize, filterRows, inChannel, sampleAllowed, sampleRows, bars, reasonText, startOfWeekJerusalem,
-    sourceKind, sourceBadge, sectorLabels, subLabels, flagLabels, regionLabels, budgetLabel, lookingLine, sendSummary, passesFilters, SOURCE_LABEL
+    sourceKind, sourceBadge, sectorLabels, subLabels, flagLabels, regionLabels, budgetLabel, lookingLine, sendSummary, passesFilters, SOURCE_LABEL,
+    contactStats, answerRateText, waHref, verbalSignup, VERBAL_CONSENT
   };
 })(typeof window !== "undefined" ? window : globalThis);
