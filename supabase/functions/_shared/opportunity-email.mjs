@@ -5,6 +5,7 @@
 // The manual copy said «השב הסרה»; this letter uses the person's unsubscribe link.
 
 import {
+  BSD_SLOGAN,
   SUBSCRIBER_FROM,
   SUBSCRIBER_SITE,
   escapeHtml,
@@ -105,7 +106,7 @@ export function threeBusinessEmail({ firstName, businesses, unsubscribeUrl, addr
     "",
     "תודה שנרשמת לעדכונים של BSD.",
     "",
-    "משביחים עסקים · מחברים הזדמנויות · מובילים עסקאות",
+    BSD_SLOGAN,
     "",
     intro,
     "",
@@ -145,7 +146,7 @@ export function threeBusinessEmail({ firstName, businesses, unsubscribeUrl, addr
           <tr>
             <td style="background:#0a1d42;padding:28px 28px 24px 28px;text-align:right;">
               <p style="margin:0 0 6px 0;font-size:13px;letter-spacing:0.08em;color:#f0d48a;font-weight:700;">BSD - עסקים למכירה</p>
-              <p style="margin:0;font-size:16px;line-height:1.6;color:#ffffff;font-weight:700;">משביחים עסקים · מחברים הזדמנויות · מובילים עסקאות</p>
+              <p style="margin:0;font-size:16px;line-height:1.6;color:#ffffff;font-weight:700;">${escapeHtml(BSD_SLOGAN)}</p>
             </td>
           </tr>
           <tr>

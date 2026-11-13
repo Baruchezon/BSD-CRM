@@ -20,7 +20,7 @@ test('the approved three-business letter keeps the company sender and both butto
   assert.match(mail.subject, /3 עסקים שבחרנו בשבילך/);
   assert.match(mail.html, /שלום יבגני,/);
   assert.match(mail.html, /תודה שנרשמת לעדכונים של BSD/);
-  assert.match(mail.html, /משביחים עסקים · מחברים הזדמנויות · מובילים עסקאות/);
+  assert.match(mail.html, /משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות/);
   assert.match(mail.html, /BSD-B-2607-1014/);
   assert.match(mail.html, /BSD-B-2607-1015/);
   assert.match(mail.html, /BSD-B-2608-1021/);

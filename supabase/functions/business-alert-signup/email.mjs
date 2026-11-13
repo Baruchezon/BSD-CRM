@@ -4,6 +4,7 @@
 // The two phone links come from copy/he.json.
 
 import {
+  BSD_SLOGAN,
   SUBSCRIBER_FROM,
   SUBSCRIBER_REPLY_TO,
   phonesHtml,
@@ -37,7 +38,7 @@ function escapeHtml(value) {
 }
 
 function footerHtml() {
-  return `<div dir="rtl" style="margin-top:28px;padding-top:14px;border-top:1px solid #e3d9bf;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#1f2d3d;text-align:right"><b>BSD - עסקים למכירה</b><br><span style="color:#8a6d1f">BSD Business Brokers Israel · מחברים עסקים להזדמנויות</span><br>${phonesHtml()}<br><span dir="ltr"><a href="mailto:info@bsd-bbi.co.il" style="color:#0f5ea8;text-decoration:none">info@bsd-bbi.co.il</a> | <a href="https://www.bsd-bbi.co.il/" style="color:#0f5ea8;text-decoration:none">www.bsd-bbi.co.il</a></span></div>`;
+  return `<div dir="rtl" style="margin-top:28px;padding-top:14px;border-top:1px solid #e3d9bf;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#1f2d3d;text-align:right"><b>BSD - עסקים למכירה</b><br><span style="color:#8a6d1f">${BSD_SLOGAN}</span><br>${phonesHtml()}<br><span dir="ltr"><a href="mailto:info@bsd-bbi.co.il" style="color:#0f5ea8;text-decoration:none">info@bsd-bbi.co.il</a> | <a href="https://www.bsd-bbi.co.il/" style="color:#0f5ea8;text-decoration:none">www.bsd-bbi.co.il</a></span></div>`;
 }
 
 export function baruchSignatureHtml() {

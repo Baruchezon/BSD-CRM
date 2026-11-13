@@ -46,10 +46,10 @@ const RESEND_API_KEY = cleanEnv(Deno.env.get('RESEND_API_KEY'));
 const MAIL_FROM = 'צוות BSD <info@bsd-bbi.co.il>';
 const MAIL_REPLY_TO = 'info@bsd-bbi.co.il';
 // 09.10.2026 (Baruch): every BSD email ends with the approved signature, no logo.
-const SIGNATURE_TEXT = 'בברכה,\nצוות BSD\nBSD Business Brokers Israel · מחברים עסקים להזדמנויות\ninfo@bsd-bbi.co.il | www.bsd-bbi.co.il';
+const SIGNATURE_TEXT = 'בברכה,\nצוות BSD\nמשביחים עסקים, מחברים הזדמנויות, מובילים עסקאות\ninfo@bsd-bbi.co.il | www.bsd-bbi.co.il';
 const SIGNATURE_MARK = 'info@bsd-bbi.co.il | www.bsd-bbi.co.il';
 const SIGNATURE_HTML = '<div dir="rtl" style="margin-top:22px;padding-top:12px;border-top:1px solid #e3d9bf;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1f2d3d;text-align:right">'
-  + 'בברכה,<br><b>צוות BSD</b><br><span style="color:#8a6d1f">BSD Business Brokers Israel · מחברים עסקים להזדמנויות</span><br>'
+  + 'בברכה,<br><b>צוות BSD</b><br><span style="color:#8a6d1f">משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות</span><br>'
   + '<span dir="ltr"><a href="mailto:info@bsd-bbi.co.il" style="color:#0f5ea8;text-decoration:none">info@bsd-bbi.co.il</a> | <a href="https://www.bsd-bbi.co.il/" style="color:#0f5ea8;text-decoration:none">www.bsd-bbi.co.il</a></span></div>';
 const SIGNED_URL_SECONDS = 60 * 60 * 24 * 7; // שבוע - זהה לקבוע הקיים (SF_SIGNED_URL_SECONDS) בצד הלקוח
 const SALE_FILE_BUCKET = 'business-files';

@@ -572,7 +572,7 @@ Deno.serve(async req => {
         firstName: String(row.first_name || ""),
         businesses: APPROVED_ALERT_BUSINESSES.map(business => ({
           ...business,
-          detailsUrl: `${supabaseUrl}/functions/v1/business-alert-request-details?business=${encodeURIComponent(business.number)}&subscriber=${encodeURIComponent(id)}`
+          detailsUrl: `${supabaseUrl}/functions/v1/business-alert-request-details?business=${encodeURIComponent(business.number)}&token=${encodeURIComponent(row.unsubscribe_token || "")}`
         })),
         unsubscribeUrl: unsubscribeHttpsUrl(supabaseUrl, row.unsubscribe_token, "email"),
         addressForm: row.address_form

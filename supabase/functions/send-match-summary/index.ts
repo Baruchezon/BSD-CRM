@@ -46,9 +46,9 @@ const MAIL_REPLY_TO = 'info@bsd-bbi.co.il';
 // Appended here once, at the very end (after any summary/links the CRM adds); skipped when the
 // body already carries it (e.g. a template that already ends with it).
 const SIGNATURE_MARK = 'info@bsd-bbi.co.il | www.bsd-bbi.co.il';
-const SIGNATURE_TEXT = 'בברכה,\nצוות BSD\nBSD Business Brokers Israel · מחברים עסקים להזדמנויות\n' + SIGNATURE_MARK;
+const SIGNATURE_TEXT = 'בברכה,\nצוות BSD\nמשביחים עסקים, מחברים הזדמנויות, מובילים עסקאות\n' + SIGNATURE_MARK;
 const SIGNATURE_HTML = '<div dir="rtl" style="margin-top:22px;padding-top:12px;border-top:1px solid #e3d9bf;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1f2d3d;text-align:right">'
-  + 'בברכה,<br><b>צוות BSD</b><br><span style="color:#8a6d1f">BSD Business Brokers Israel · מחברים עסקים להזדמנויות</span><br>'
+  + 'בברכה,<br><b>צוות BSD</b><br><span style="color:#8a6d1f">משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות</span><br>'
   + '<span dir="ltr"><a href="mailto:info@bsd-bbi.co.il" style="color:#0f5ea8;text-decoration:none">info@bsd-bbi.co.il</a> | <a href="https://www.bsd-bbi.co.il/" style="color:#0f5ea8;text-decoration:none">www.bsd-bbi.co.il</a></span></div>';
 const escHtml = (v: string) => v.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 export function signedText(bodyText: string): string {

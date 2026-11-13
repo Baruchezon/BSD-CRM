@@ -10,3 +10,6 @@ verify_jwt = false
 
 [functions.distribution-channel-notify]
 verify_jwt = false
+
+[functions.business-alert-request-details]
+verify_jwt = false

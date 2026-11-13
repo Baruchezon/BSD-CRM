@@ -4,6 +4,7 @@ import copy from "../../../copy/he.json" with { type: "json" };
 // signup confirmation, future alert mailings, and any unsubscribe mail.
 // The display name is quoted because it contains a hyphen and non-ASCII text.
 
+export const BSD_SLOGAN = "משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות";
 export const SUBSCRIBER_FROM_NAME = "BSD - עסקים למכירה";
 export const SUBSCRIBER_FROM_ADDRESS = "info@bsd-bbi.co.il";
 export const SUBSCRIBER_REPLY_TO = "info@bsd-bbi.co.il";
@@ -49,6 +50,7 @@ export function say(entry, addressForm) {
 export function signOffLines() {
   return [
     SUBSCRIBER_FROM_NAME,
+    BSD_SLOGAN,
     SUBSCRIBER_ADDRESS,
     `${SUBSCRIBER_FROM_ADDRESS} | ${SUBSCRIBER_SITE.replace("https://", "")}`,
     ...SUBSCRIBER_PHONES.map(phone => `${phone.label}: ${phone.display}`)
@@ -70,8 +72,8 @@ export function escapeHtml(value) {
 }
 
 export function signOffHtml() {
-  const [name, address, contacts] = signOffLines();
-  return `<div dir="rtl" style="margin-top:28px;padding-top:14px;border-top:1px solid #e3d9bf;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#1f2d3d;text-align:right"><b>${escapeHtml(name)}</b><br>${escapeHtml(address)}<br><span dir="ltr">${escapeHtml(contacts)}</span><br>${phonesHtml()}</div>`;
+  const [name, slogan, address, contacts] = signOffLines();
+  return `<div dir="rtl" style="margin-top:28px;padding-top:14px;border-top:1px solid #e3d9bf;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#1f2d3d;text-align:right"><b>${escapeHtml(name)}</b><br>${escapeHtml(slogan)}<br>${escapeHtml(address)}<br><span dir="ltr">${escapeHtml(contacts)}</span><br>${phonesHtml()}</div>`;
 }
 
 export function unsubscribeHttpsUrl(supabaseUrl, token, channel = "all") {
