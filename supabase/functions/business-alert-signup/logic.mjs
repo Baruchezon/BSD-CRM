@@ -84,6 +84,14 @@ export function phone9FromRaw(value) {
   return digits.slice(-9);
 }
 
+// National digits, e.g. "+972-50-000-0740" -> "0500000740". Used for new rows only.
+export function nationalPhone(value) {
+  let national = digitsOnly(value);
+  if (national.startsWith("00972")) national = `0${national.slice(5)}`;
+  else if (national.startsWith("972")) national = `0${national.slice(3)}`;
+  return national;
+}
+
 export function isIsraeliPhone(value) {
   const trimmed = cleanText(value, 40);
   if (!trimmed || !/^[0-9+\-\s()]+$/.test(trimmed)) return false;
@@ -257,7 +265,7 @@ function sharedFields(body) {
     base: {
       first_name: firstName,
       last_name: lastName,
-      phone,
+      phone: nationalPhone(phone),
       phone9: phone9FromRaw(phone),
       email,
       interests: interests.interests,
@@ -502,11 +510,69 @@ export function verifyUpdateToken(token, secret, nowMs) {
   return { ok: true, subscriberId: body.sub, nonce: body.nonce, emailMatched: body.email_match === true, expiresAt: body.exp };
 }
 
+export function channelClosed(stored, channel) {
+  const status = stored?.status || "";
+  if (status === "unsubscribed" || status === "unsubscribed_all") return true;
+  if (channel === "email") return status === "unsubscribed_email" || !!stored?.email_unsubscribed_at || stored?.consent_email !== true;
+  return status === "unsubscribed_whatsapp" || !!stored?.whatsapp_unsubscribed_at || stored?.consent_whatsapp !== true;
+}
+
 export function signupPrefill(stored, submittedEmail) {
   if (!emailsMatch(stored?.email, submittedEmail)) return null;
   const prefill = {};
   for (const key of PREFILL_KEYS) prefill[key] = stored?.[key] ?? null;
+  // Show the real consent state: false for a channel the person left.
+  prefill.consent_email = !channelClosed(stored, "email");
+  prefill.consent_whatsapp = !channelClosed(stored, "whatsapp");
   return prefill;
+}
+
+// Re-signup with fresh consent by someone who unsubscribed (Roman's E2E, 13.11).
+// Only a closed row, only with the same email, only for channels with fresh consent.
+export function reactivationPlan(stored, row, now) {
+  if (!stored?.id || !CLOSED_STATUSES.includes(stored.status)) return null;
+  if (!hasFreshConsent(row) || !emailsMatch(stored.email, row.email)) return null;
+  const emailFresh = row.consent_email === true;
+  const waFresh = row.consent_whatsapp === true;
+  const emailWasClosed = channelClosed(stored, "email");
+  const waWasClosed = channelClosed(stored, "whatsapp");
+  if (!(emailFresh && emailWasClosed) && !(waFresh && waWasClosed)) return null;
+  const emailUnsub = emailFresh ? null : (stored.email_unsubscribed_at || (["unsubscribed", "unsubscribed_all", "unsubscribed_email"].includes(stored.status) ? (stored.unsubscribed_at || now) : null));
+  const waUnsub = waFresh ? null : (stored.whatsapp_unsubscribed_at || (["unsubscribed", "unsubscribed_all", "unsubscribed_whatsapp"].includes(stored.status) ? (stored.unsubscribed_at || now) : null));
+  const status = !emailUnsub && !waUnsub ? "active" : emailUnsub && waUnsub ? "unsubscribed_all" : emailUnsub ? "unsubscribed_email" : "unsubscribed_whatsapp";
+  const active = status === "active";
+  const changes = {
+    status,
+    email_unsubscribed_at: emailUnsub,
+    whatsapp_unsubscribed_at: waUnsub,
+    unsubscribed_at: active ? null : (stored.unsubscribed_at || now),
+    unsubscribed_by: active ? null : (stored.unsubscribed_by || "self_link"),
+    unsubscribe_reason: active ? null : (stored.unsubscribe_reason ?? null),
+    consent_email: emailFresh || (stored.consent_email === true && !emailUnsub),
+    consent_whatsapp: waFresh || (stored.consent_whatsapp === true && !waUnsub),
+    consent_general: true,
+    consent_text: row.consent_text ?? null,
+    consent_version: row.consent_version ?? null,
+    consent_at: now,
+    consent_method: "form",
+    ...(emailFresh ? { consent_email_method: "form" } : {}),
+    ...(waFresh ? { consent_whatsapp_method: "form" } : {}),
+    legacy_no_consent: false,
+    resubscribed_at: now,
+    status_history: [
+      ...(Array.isArray(stored.status_history) ? stored.status_history : []),
+      { status: stored.status, at: now, unsubscribed_at: stored.unsubscribed_at || null }
+    ],
+    ...(row.source_url ? { source_url: row.source_url } : {}),
+    ...(Object.hasOwn(row, "notes") ? { notes: row.notes } : {})
+  };
+  const previous = {};
+  for (const key of ["status", "consent_email", "consent_whatsapp", "email_unsubscribed_at", "whatsapp_unsubscribed_at", "unsubscribed_at"]) previous[key] = stored[key] ?? null;
+  return {
+    status: "resubscribed",
+    changes,
+    history: { action: "reactivate", previous, next: { status, consent_email: changes.consent_email, consent_whatsapp: changes.consent_whatsapp } }
+  };
 }
 
 export function alreadyRegisteredPlan(stored, submittedEmail, { nonce, nowMs, secret }) {

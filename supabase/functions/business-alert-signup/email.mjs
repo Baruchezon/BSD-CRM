@@ -179,7 +179,8 @@ export function internalAlertFields(row) {
 
 export function internalAlertEmail(row) {
   const name = [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || "ללא שם";
-  const subject = `${INTERNAL_SUBJECT_PREFIX} נרשם חדש – ${name}`;
+  const title = !row.signupKind || row.signupKind === "new" ? "נרשם חדש" : "נרשם מחדש";
+  const subject = `${INTERNAL_SUBJECT_PREFIX} ${title} – ${name}`;
   const fields = internalAlertFields(row);
   const text = fields.map(([label, value]) => `${label}: ${value}`).join("\n");
   const lines = fields.map(([label, value]) =>

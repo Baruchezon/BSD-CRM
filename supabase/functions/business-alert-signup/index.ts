@@ -13,6 +13,7 @@ import {
   consentWritePayload,
   newUpdateNonce,
   appendLeadNotes,
+  reactivationPlan,
   planSubscriberUpdate,
   planSubscriberWrite,
   validateSignup,
@@ -318,6 +319,45 @@ async function unsubscribe(token: string, origin: string | null, ip: string) {
   return json({ ok: true }, 200, origin);
 }
 
+async function resubscribe(
+  existing: Record<string, unknown>,
+  row: Record<string, unknown>,
+  plan: { status: string; changes: Record<string, unknown>; history: { action: string; previous: unknown; next: unknown } },
+  ip: string,
+  userAgent: string,
+  origin: string | null
+) {
+  const changes = { ...plan.changes, consent_ip: ip || null, consent_user_agent: userAgent || null };
+  const { data: saved, error } = await supabase.from(TABLE).update(changes).eq("id", existing.id)
+    .select("id, unsubscribe_token, first_name, last_name, phone, email, address_form, categories, subcategories, regions, region, interests, looking_for, budget_min, budget_max, budget_open, notes, consent_at")
+    .single();
+  if (error) throw error;
+  const { error: historyError } = await supabase.from("business_alert_subscriber_history").insert({
+    subscriber_id: existing.id,
+    action: plan.history.action,
+    actor: "self_signup",
+    previous: plan.history.previous,
+    next: plan.history.next
+  });
+  if (historyError) console.error("reactivation history was not stored", historyError.message);
+  let thankYou = { sent: false, error: null as string | null };
+  if (changes.consent_email === true && saved?.email) {
+    const pageLink = unsubscribeUrl(String(saved.unsubscribe_token), "all");
+    const oneClick = unsubscribeHttpsUrl(supabaseUrl, saved.unsubscribe_token, "all");
+    thankYou = await sendEmail(
+      String(saved.email),
+      thankYouSubject(saved.address_form),
+      thankYouEmailHtml({ firstName: saved.first_name, unsubscribeLink: pageLink, addressForm: saved.address_form }),
+      thankYouEmailText({ firstName: saved.first_name, unsubscribeLink: pageLink, addressForm: saved.address_form }),
+      listUnsubscribeHeaders(oneClick)
+    );
+  }
+  const alert = internalAlertEmail({ ...saved, notes: saved?.notes ?? row.notes ?? null, signupKind: "resubscribe" });
+  const internal = await sendEmail(INTERNAL_TO, alert.subject, alert.html, alert.text, undefined, alert.from);
+  if (!internal.sent) console.error("Internal alert email was not sent", internal.error || "");
+  return json({ ok: true, status: plan.status, emailSent: thankYou.sent }, 200, origin);
+}
+
 Deno.serve(async req => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origin) });
@@ -356,6 +396,9 @@ Deno.serve(async req => {
     const emailRow = await findByEmail(String(signup.row.email));
     const existing = phoneRow || emailRow;
     if (existing?.id) {
+      const now = new Date().toISOString();
+      const reactivate = reactivationPlan(existing, signup.row, now);
+      if (reactivate) return await resubscribe(existing, signup.row, reactivate, ip, cleanText(req.headers.get("user-agent"), 300), origin);
       if (!secret) return json({ ok: false, error: "token_unavailable" }, 500, origin);
       const nonce = newUpdateNonce();
       const plan = alreadyRegisteredPlan(existing, signup.row.email, { nonce, nowMs: Date.now(), secret });
