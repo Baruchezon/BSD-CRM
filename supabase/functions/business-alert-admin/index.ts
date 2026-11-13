@@ -3,7 +3,7 @@
 // service role to call the business_alert_* functions. Tables stay closed to anon.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { timingSafeEqual } from "node:crypto";
-import { oneAlertDecision, selectAlertBusinesses } from "./one-alert.mjs";
+import { alertSendRows, oneAlertDecision, selectAlertBusinesses } from "./one-alert.mjs";
 import {
   SUBSCRIBER_FROM,
   SUBSCRIBER_REPLY_TO,
@@ -631,17 +631,16 @@ Deno.serve(async req => {
       const payload = await response.json().catch(() => ({}));
       const resendId = payload?.id || null;
       const actor = auth.serviceRole ? "service_role" : clean(auth.profile?.full_name || auth.user?.email, 120);
-      for (const business of chosen.businesses) {
-        const { error } = await supabase.from("business_alert_sends").upsert({
-          subscriber_id: row.id,
-          business_number: business.number,
-          channel: "email",
-          created_by: actor || "admin",
-          resend_id: resendId,
-          sent_at: new Date().toISOString()
-        }, { onConflict: "subscriber_id,business_number" });
-        if (error) console.error("alert send row was not stored", error.message);
-      }
+      const sentAt = new Date().toISOString();
+      const rows = alertSendRows({
+        subscriberId: row.id,
+        businesses: chosen.businesses,
+        resendId,
+        sender: actor,
+        sentAt
+      });
+      const { error } = await supabase.from("business_alert_sends").insert(rows);
+      if (error) console.error("alert send row was not stored", error.message);
       return json({
         ok: true,
         sent: true,
