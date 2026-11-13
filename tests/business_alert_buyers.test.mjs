@@ -130,6 +130,19 @@ test('a repeat signup stays unsubscribed until the form brings fresh consent', (
   assert.equal(partial.whatsapp_unsubscribed_at, previous.whatsapp_unsubscribed_at);
   assert.equal(partial.resubscribed_at, now);
   assert.equal(partial.status_history.length, 2);
+
+  const clash = consentWritePayload(
+    { ...fresh.row, first_name: 'ברוך', last_name: 'איזון', email: 'baruch@example.com' },
+    { ...previous, first_name: 'אדם', last_name: 'בדיקה', email: 'adam@example.com', phone: '050-0000000', phone9: '500000000' },
+    now
+  );
+  assert.equal(clash.identity_kept, true);
+  assert.equal(clash.status, 'unsubscribed');
+  assert.equal(clash.identity_audit.previous.first_name, 'אדם');
+  assert.equal(clash.identity_audit.previous.email, 'adam@example.com');
+  assert.equal(clash.identity_audit.incoming.first_name, 'ברוך');
+  assert.equal(clash.identity_audit.incoming.email, 'baruch@example.com');
+  assert.equal(clash.first_name, undefined);
 });
 
 test('legacy rows are blocked and a fresh consent can pass the gate', () => {
@@ -183,13 +196,19 @@ test('subscriber mail uses one quoted sender and never the team name', () => {
   assert.match(thanks, /טלפון BSD/);
   assert.match(thanks, /נייד/);
   assert.match(thanks, /בלי הצפות ובלי ספאם/);
+  assert.match(thanks, /תודה שנרשמת/);
+  assert.match(thanks, /אפשר להסיר את עצמך/);
+  const feminine = thankYouEmailHtml({ firstName: 'דנה', unsubscribeLink: 'https://example.com/unsub', addressForm: 'f' });
+  assert.match(feminine, /תוכלי להסיר/);
   assert.equal(signOffText().includes('צוות BSD'), false);
   const headers = listUnsubscribeHeaders('https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/business-alert-unsubscribe?token=abc&channel=all');
   assert.match(headers['List-Unsubscribe'], new RegExp(`<mailto:${SUBSCRIBER_FROM_ADDRESS}\\?subject=unsubscribe>`));
   assert.equal(headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
   const wa = whatsappMessage('דנה');
   assert.equal(wa.startsWith('פרסומת\n'), true);
-  assert.equal(wa.endsWith('להסרה השב/י הסר'), true);
+  assert.equal(wa.endsWith('להסרה אפשר להשיב הסר'), true);
+  assert.equal(whatsappMessage('דנה', 'm').endsWith('להסרה השב הסר'), true);
+  assert.equal(whatsappMessage('דנה', 'f').endsWith('להסרה השיבי הסר'), true);
   assert.equal(wa.includes('צוות BSD'), false);
   assert.equal(wa.includes('שם העסק'), false);
   assert.equal(subscriberSubject('עדכון').startsWith('פרסומת:'), true);
@@ -202,6 +221,8 @@ test('the unsubscribe page is Hebrew and says the removal succeeded', () => {
   assert.match(page, /הוסרת מעדכוני האימייל/);
   assert.match(page, /תמיד אפשר לחזור/);
   assert.match(unsubscribePage({ ok: true, channel: 'all' }), /הוסרת מכל העדכונים/);
+  assert.match(unsubscribePage({ ok: true, channel: 'all', addressForm: 'f' }), /תוכלי לחזור/);
+  assert.match(unsubscribePage({ ok: true, channel: 'all', addressForm: 'm' }), /תוכל לחזור/);
   assert.match(page, /אימייל/);
   assert.match(page, /BSD - עסקים למכירה/);
   assert.match(page, /href="tel:\+972774446707"/);
@@ -253,10 +274,13 @@ test('the tools menu points at the new screen and mail files use the sender cons
   const leads = fs.readFileSync(new URL('../leads-hub.html', import.meta.url), 'utf8');
   assert.match(leads, /נרשמים לעדכונים/);
   const copy = JSON.parse(fs.readFileSync(new URL('../copy/he.json', import.meta.url), 'utf8'));
-  assert.equal(copy.email.headline, 'על פי הסינון שעשינו לפי הפרופיל שביקשת, העסק הזה מתאים לך');
-  assert.match(copy.whatsapp.prefill, /להסרה השב\/י הסר/);
-  assert.equal(copy.unsubscribe.successTitle, 'הוסרת בהצלחה');
-  assert.match(copy.email.warm, /לא רוצים להעמיס/);
+  assert.equal(copy.email.headline.n, 'על פי הסינון שעשינו לפי הפרופיל שביקשת, העסק הזה מתאים לך');
+  assert.equal(copy.email.subject.n, 'מצאנו עסק שמתאים לפרופיל שביקשת');
+  assert.equal(copy.email.signupThanks.n, 'תודה שנרשמת');
+  assert.match(copy.whatsapp.prefill.n, /להסרה אפשר להשיב הסר/);
+  assert.equal(copy.whatsapp.prefill.n.includes('השב/י'), false);
+  assert.equal(copy.unsubscribe.successTitle.n, 'הוסרת בהצלחה');
+  assert.match(copy.email.warm.n, /לא רוצים להעמיס/);
   const screenSql = fs.readFileSync(new URL('../supabase/migrations/20261113170000_business_alert_screen.sql', import.meta.url), 'utf8');
   assert.match(screenSql, /business_alert_screen_list/);
   assert.match(screenSql, /business_alert_manual_add/);
@@ -271,7 +295,8 @@ test('subscriber rows show a source badge and honor the screen filters', () => {
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(new URL('../js/site-buyers.js', import.meta.url), 'utf8'), ctx);
   const rows = ctx.BSDSiteBuyers.sampleRows(new Date('2026-11-13T10:00:00+02:00'));
-  assert.equal(ctx.BSDSiteBuyers.sourceBadge(rows[0]), 'אתר');
+  assert.equal(ctx.BSDSiteBuyers.sourceBadge(rows[0]), 'נרשם דרך האתר');
+  assert.equal(ctx.BSDSiteBuyers.sourceBadge({ source: 'website-catalog' }), 'נרשם דרך האתר');
   assert.equal(ctx.BSDSiteBuyers.sourceBadge(rows.find(row => row.manual_source === 'call')), 'יזום שלנו');
   assert.equal(ctx.BSDSiteBuyers.sourceBadge(rows.find(row => row.manual_source === 'manual')), 'יזום שלנו');
   const dana = ctx.BSDSiteBuyers.contactStats(rows[0]);
@@ -298,6 +323,7 @@ test('subscriber rows show a source badge and honor the screen filters', () => {
   assert.equal(emailed.row.consent_whatsapp_method, null);
   assert.equal(ctx.BSDSiteBuyers.manualAdd({ name: 'נועה', phone: '050-1111111', consent_email: true }).error, 'consent_method');
   assert.equal(gateDecision({ status: 'pending_consent', consent_general: false, legacy_no_consent: true, consent_email: false }, 'email').reason, 'pending_consent');
+  assert.equal(gateDecision({ is_test: true, status: 'active', consent_general: true, legacy_no_consent: false, consent_email: true }, 'email').reason, 'is_test');
   assert.match(ctx.BSDSiteBuyers.waHref('050-0000001', 'שלום'), /https:\/\/wa\.me\/972500000001\?text=/);
   const sql = fs.readFileSync(new URL('../supabase/migrations/20261113200000_business_alert_interactions.sql', import.meta.url), 'utf8');
   assert.match(sql, /business_alert_interactions/);

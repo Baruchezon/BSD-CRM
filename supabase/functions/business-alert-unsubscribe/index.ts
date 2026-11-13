@@ -120,7 +120,10 @@ Deno.serve(async req => {
 
     const status = String(row.status || "unsubscribed_all");
     const shown = status === "unsubscribed_email" ? "email" : status === "unsubscribed_whatsapp" ? "whatsapp" : "all";
-    if (wantsHtml) return html(unsubscribePage({ ok: true, channel: shown }), 200, origin);
+    let addressForm = null;
+    const person = await supabase.from("business_alert_subscribers").select("address_form").eq("unsubscribe_token", token).maybeSingle();
+    if (!person.error) addressForm = person.data?.address_form || null;
+    if (wantsHtml) return html(unsubscribePage({ ok: true, channel: shown, addressForm }), 200, origin);
     return json({ ok: true, status }, 200, origin);
   } catch (error) {
     console.error("business-alert-unsubscribe failed", error instanceof Error ? error.message : String(error));

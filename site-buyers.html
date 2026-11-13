@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="css/style.css?v=202611130900">
 <style>
 body{margin:0;background:linear-gradient(180deg,#f7f1e4 0,#eef3f8 220px);color:#142033;font-family:Heebo,Rubik,Arial,sans-serif}
+[hidden]{display:none !important}
 .wrap{max-width:1280px;margin:0 auto;padding:22px}
 .top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:16px}
 .top h1{margin:0;font-size:1.7rem;color:#0e1b34}
@@ -80,22 +81,22 @@ tr.row:hover{background:#f8fbff}
       <p id="pageIntro">כאן רואים מי ביקש עדכונים, ומה מתאים לו. בלי להעמיס.</p>
     </div>
     <div class="actions">
-      <button class="soft" id="addBtn" type="button">הוסף נרשם</button>
+      <button class="soft" id="addBtn" type="button" hidden>הוסף נרשם</button>
       <button class="back" id="backBtn" type="button">חזרה</button>
     </div>
   </div>
   <div id="banner"></div>
-  <div class="cards" id="cards"></div>
-  <div class="splits">
+  <div class="cards" id="cards" hidden></div>
+  <div class="splits" hidden>
     <section class="panel"><h2>לפי אזור</h2><div id="regions"></div></section>
     <section class="panel"><h2>לפי תחום עניין</h2><div id="sectors"></div></section>
   </div>
-  <div class="splits">
+  <div class="splits" hidden>
     <section class="panel"><h2 id="sourceTitle">לפי מקור</h2><div id="sources"></div></section>
     <section class="panel"><h2 id="timeTitle">הרשמות לפי מקור לאורך זמן</h2><div id="months"></div></section>
   </div>
-  <section class="panel" style="margin-bottom:14px"><h2>לפי קמפיין</h2><div id="campaigns"></div></section>
-  <div class="channel-tabs" id="channelTabs">
+  <section class="panel" style="margin-bottom:14px" hidden><h2>לפי קמפיין</h2><div id="campaigns"></div></section>
+  <div class="channel-tabs" id="channelTabs" hidden>
     <button type="button" data-channel="all" class="on">הכל</button>
     <button type="button" data-channel="website">אתר</button>
     <button type="button" data-channel="our_link">יזום שלנו</button>
@@ -120,6 +121,11 @@ tr.row:hover{background:#f8fbff}
       </select>
       <input id="mBudgetMin" type="number" min="0" placeholder="תקציב מ-">
       <input id="mBudgetMax" type="number" min="0" placeholder="תקציב עד">
+      <select id="mAddress">
+        <option value="">פנייה: לא צוין</option>
+        <option value="m">פנייה: גבר</option>
+        <option value="f">פנייה: אישה</option>
+      </select>
     </div>
     <div class="searchbar">
       <label><input id="mEmailOk" type="checkbox"> אימייל</label>
@@ -178,7 +184,7 @@ tr.row:hover{background:#f8fbff}
     <div id="leadNote" class="muted" style="margin-bottom:8px"></div>
     <div id="table"></div>
   </div>
-  <section class="panel" style="margin-top:12px">
+  <section class="panel" style="margin-top:12px" hidden>
     <h2>נרשמים לפי עסק</h2>
     <div class="searchbar">
       <input id="bizId" placeholder="מזהה עסק מהמערכת">
@@ -193,7 +199,7 @@ tr.row:hover{background:#f8fbff}
 <script src="js/config.js?v=202611131800"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
-<script src="js/site-buyers.js?v=202611132100"></script>
+<script src="js/site-buyers.js?v=202611132200"></script>
 <script>
 const UI = window.BSDSiteBuyers;
 const API = (window.BSD_CONFIG && window.BSD_CONFIG.SUPABASE_URL || '') + '/functions/v1/business-alert-admin';
@@ -205,7 +211,15 @@ let COPY = null;
 
 function text(path, fallback){
   const value = String(path).split('.').reduce((obj, key) => obj && obj[key], COPY);
-  return value || fallback;
+  return (typeof value === 'string' ? value : '') || fallback || '';
+}
+function voice(path, form){
+  const value = String(path).split('.').reduce((obj, key) => obj && obj[key], COPY);
+  if (value && typeof value === 'object'){
+    const key = form === 'm' || form === 'f' ? form : 'n';
+    return value[key] || value.n || '';
+  }
+  return typeof value === 'string' ? value : '';
 }
 
 function toast(text){
@@ -235,7 +249,7 @@ async function api(action, payload){
 function cards(summary){
   const items = [
     ['c1', summary.total, 'סה״כ נרשמים'],
-    ['c2', summary.sources['אתר'] || 0, 'אתר'],
+    ['c2', summary.sources['נרשם דרך האתר'] || 0, 'נרשם דרך האתר'],
     ['c3', summary.sources['יזום שלנו'] || 0, 'יזום שלנו'],
     ['c4', summary.sends || 0, 'שליחות'],
     ['c5', summary.calls || 0, 'שיחות'],
@@ -281,7 +295,7 @@ function paint(){
     const count = rows.filter(row => UI.inChannel(row, button.dataset.channel)).length;
     button.textContent = (tabLabel[button.dataset.channel] || button.dataset.channel) + ' (' + count + ')';
   });
-  const list = visible();
+  const list = visible().slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
   const note = document.getElementById('leadNote');
   note.innerHTML = (websiteBuyerLeads
     ? `פניות קונים מטופס יצירת הקשר באתר (${Number(websiteBuyerLeads) || 0}) נשארות ב<a href="leads-hub.html">מסך הלידים</a>, לא ברשימה הזו.`
@@ -291,21 +305,22 @@ function paint(){
     return;
   }
   const badgeClass = { website: 'p-web', our_link: 'p-ours', manual: 'p-hand', call: 'p-phone' };
-  document.getElementById('table').innerHTML = `<table><thead><tr><th>שם</th><th>טלפון</th><th>מקור</th><th>מה מחפש</th><th>תקציב</th><th>נרשם</th><th>קשר</th><th>מצב</th></tr></thead><tbody>${list.map(row => {
+  document.getElementById('table').innerHTML = `<table><thead><tr><th>שם</th><th>טלפון</th><th>אימייל</th><th>נרשם</th><th>מקור</th><th>מצב</th><th>הסכמה</th><th>מה מחפש</th></tr></thead><tbody>${list.map(row => {
     const name = UI.esc(((row.first_name || '') + ' ' + (row.last_name || '')).trim());
     const kind = UI.sourceKind(row);
-    const pill = row.status === 'pending_consent'
-      ? '<span class="pill p-wait">ממתין להסכמה</span>'
-      : row.legacy_no_consent || row.consent_general !== true
-      ? '<span class="pill p-wait">בלי הסכמה שיווקית</span>'
-      : `<span class="pill ${row.status === 'active' ? 'p-active' : 'p-off'}">${UI.esc(UI.statusLabel(row.status))}</span>`;
-    const call = row.do_not_call ? ' <span class="pill p-call">לא להתקשר</span>' : '';
-    const signed = row.created_at ? UI.esc(new Date(row.created_at).toLocaleDateString('he-IL')) : '—';
-    const flags = UI.flagLabels(row).map(label => `<span class="pill p-flag">${UI.esc(label)}</span>`).join(' ');
-    const stats = UI.contactStats(row);
-    const last = stats.lastContact ? UI.esc(new Date(stats.lastContact).toLocaleDateString('he-IL')) : 'אין עדיין';
-    const wa = UI.waHref(row.phone, text('whatsapp.prefill', ''));
-    return `<tr class="row" data-id="${UI.esc(row.id)}"><td><b>${name}</b>${flags ? '<br>' + flags : ''}</td><td><span dir="ltr">${UI.esc(row.phone || '')}</span><br><a class="wa" data-act="wa" href="${UI.esc(wa)}" target="_blank" rel="noopener">וואטסאפ</a></td><td><span class="badge ${badgeClass[kind] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span></td><td>${UI.esc(UI.lookingLine(row))}</td><td>${UI.esc(UI.budgetLabel(row))}</td><td>${signed}</td><td>${stats.sends} נשלחו · ${stats.calls} שיחות · מענה ${UI.esc(UI.answerRateText(stats.answerRate))} · לא ידוע ${stats.unknown}<br><span class="muted">${last}</span></td><td>${pill}${call}</td></tr>`;
+    const when = row.created_at ? new Date(row.created_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    const phoneHref = 'tel:' + String(row.phone || '').replace(/[^\d+]/g, '');
+    const wa = UI.waHref(row.phone, '');
+    const consent = [row.consent_email ? 'אימייל' : '', row.consent_whatsapp ? 'וואטסאפ' : ''].filter(Boolean).join(' · ') || 'אין';
+    const looking = [UI.lookingLine(row), UI.budgetLabel(row) === 'לא צוין' ? '' : UI.budgetLabel(row)].filter(Boolean).join(' · ');
+    const test = row.is_test ? ' <span class="pill p-wait">בדיקה</span>' : '';
+    const statusText = row.status === 'pending_consent'
+      ? 'ממתין להסכמה'
+      : String(row.status || '').indexOf('unsubscribed') === 0
+        ? 'הוסר'
+        : 'פעיל';
+    const pillClass = statusText === 'פעיל' ? 'p-active' : statusText === 'ממתין להסכמה' ? 'p-wait' : 'p-off';
+    return `<tr data-id="${UI.esc(row.id)}"><td><b>${name}</b>${test}${row.test_note ? '<br><span class="muted">' + UI.esc(row.test_note) + '</span>' : ''}</td><td><a dir="ltr" href="${UI.esc(phoneHref)}">${UI.esc(row.phone || '')}</a><br><a class="wa" href="${UI.esc(wa)}" target="_blank" rel="noopener">וואטסאפ</a></td><td dir="ltr">${UI.esc(row.email || '—')}</td><td>${UI.esc(when)}</td><td><span class="badge ${badgeClass[kind] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span></td><td><span class="pill ${pillClass}">${statusText}</span></td><td>${UI.esc(consent)}</td><td>${UI.esc(looking)}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -342,7 +357,14 @@ function openRow(id){
     <b>סימונים:</b> ${UI.esc(UI.flagLabels(row).join(', ') || '—')}<br>
     <b>תקציב:</b> ${UI.esc(UI.budgetLabel(row))}<br>
     <b>אזורים:</b> ${UI.esc(UI.regionLabels(row).join(', '))}<br>
-    <b>במילים שלהם:</b> ${UI.esc(row.looking_for || '—')}</p>
+    <b>במילים שלהם:</b> ${UI.esc(row.looking_for || '—')}<br>
+    <b>פנייה:</b>
+      <select id="addressForm">
+        <option value="">לא צוין</option>
+        <option value="m" ${row.address_form === 'm' ? 'selected' : ''}>גבר</option>
+        <option value="f" ${row.address_form === 'f' ? 'selected' : ''}>אישה</option>
+      </select>
+    </p>
     <p><b>הסכמה:</b> ${row.consent_general ? 'כן' : 'לא'} · ${row.consent_at ? UI.esc(new Date(row.consent_at).toLocaleString('he-IL')) : '—'}<br>
     <b>גרסה:</b> ${UI.esc(row.consent_version || row.consent_text_version || '—')}<br>
     <b>נוסח:</b> ${UI.esc(row.consent_text || 'לא נשמר (הרשמה ישנה)')}<br>
@@ -368,7 +390,7 @@ function openRow(id){
     <label class="field"><input id="dnc" type="checkbox" ${row.do_not_call ? 'checked' : ''}> לא להתקשר</label>
     <div class="actions">
       <a class="soft" id="doDial" href="${UI.esc(phoneHref)}">חיוג</a>
-      <a class="wa" id="doWa" href="${UI.esc(UI.waHref(row.phone, text('whatsapp.prefill', '')))}" target="_blank" rel="noopener">וואטסאפ</a>
+      <a class="wa" id="doWa" href="${UI.esc(UI.waHref(row.phone, voice('whatsapp.prefill', row.address_form)))}" target="_blank" rel="noopener">וואטסאפ</a>
       <button class="mail" id="doMail" type="button">אימייל ידני</button>
       <button class="soft" id="doSend" type="button">שליחה מהמערכת</button>
       <button class="soft" id="saveNotes" type="button">שמירת הערות</button>
@@ -387,6 +409,7 @@ function openRow(id){
   document.querySelector('.drawer').addEventListener('click', event => {
     if (event.target.classList.contains('drawer')) document.getElementById('drawer').innerHTML = '';
   });
+  document.getElementById('addressForm').onchange = () => saveAddress(row);
   document.getElementById('doDial').addEventListener('click', () => logTouch(row, 'call', null, ''));
   document.getElementById('doWa').addEventListener('click', () => logTouch(row, 'whatsapp', null, ''));
   document.querySelectorAll('[data-outcome]').forEach(button => {
@@ -552,10 +575,15 @@ async function load(){
   const filters = currentFilters();
   const source = channel && channel !== 'all' ? channel : filters.source;
   try {
-    const result = await api('screen', {
-      source, sector: filters.sector, region: filters.region,
-      budget_min: filters.budgetMin, budget_max: filters.budgetMax, status: filters.status
-    });
+    let result;
+    try {
+      result = await api('roster');
+    } catch (error) {
+      result = await api('screen', {
+        source, sector: filters.sector, region: filters.region,
+        budget_min: filters.budgetMin, budget_max: filters.budgetMax, status: filters.status
+      });
+    }
     rows = result.subscribers || [];
     websiteBuyerLeads = result.websiteBuyerLeads || 0;
     paint();
@@ -619,6 +647,21 @@ document.getElementById('addBtn').addEventListener('click', () => {
   const form = document.getElementById('manualForm');
   form.hidden = !form.hidden;
 });
+async function saveAddress(row){
+  const value = document.getElementById('addressForm').value;
+  const form = value === 'm' || value === 'f' ? value : null;
+  if (sample){
+    row.address_form = form;
+    openRow(row.id);
+    return;
+  }
+  try {
+    await api('set_address_form', { id: row.id, address_form: form || '' });
+    row.address_form = form;
+    toast('הפנייה נשמרה');
+  } catch (error) { toast(error.message); }
+}
+
 async function logTouch(row, kind, outcome, note){
   const item = { id: 'local-' + Date.now(), at: new Date().toISOString(), kind, direction: 'out', outcome: outcome || null, note: note || '', deleted_at: null };
   if (sample){
@@ -650,7 +693,8 @@ document.getElementById('manualForm').addEventListener('submit', async event => 
     categories: document.getElementById('mSector').value ? [document.getElementById('mSector').value] : [],
     regions: document.getElementById('mRegion').value ? [document.getElementById('mRegion').value] : [],
     budget_min: document.getElementById('mBudgetMin').value,
-    budget_max: document.getElementById('mBudgetMax').value
+    budget_max: document.getElementById('mBudgetMax').value,
+    address_form: document.getElementById('mAddress').value
   });
   if (!planned.ok){
     toast(planned.error === 'consent_method' ? 'לערוץ שסומן צריך לבחור איך ניתנה ההסכמה.' : 'צריך שם וטלפון.');
@@ -675,17 +719,7 @@ document.getElementById('manualForm').addEventListener('submit', async event => 
   } catch (error) { toast(error.message); }
 });
 document.getElementById('table').addEventListener('click', event => {
-  const button = event.target.closest('button, a');
-  const tr = event.target.closest('tr[data-id]');
-  if (!tr) return;
-  if (button){
-    event.stopPropagation();
-    const row = rows.find(item => item.id === tr.dataset.id);
-    if (button.dataset.act === 'wa') logTouch(row, 'whatsapp', null, '');
-    else act(row, button.dataset.act);
-    return;
-  }
-  openDetail(tr.dataset.id);
+  if (event.target.closest('a')) return;
 });
 
 (async function start(){

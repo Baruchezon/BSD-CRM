@@ -10,7 +10,8 @@
     unsubscribed_email: "הוסר מרשימת האימייל.",
     unsubscribed_whatsapp: "הוסר מרשימת הוואטסאפ.",
     not_found: "הרשומה לא נמצאה.",
-    blocked: "אי אפשר לשלוח."
+    blocked: "אי אפשר לשלוח.",
+    is_test: "רשומת בדיקה. לא נכנסת לשליחה או להתאמה."
   };
 
   function esc(value) {
@@ -46,7 +47,7 @@
   };
   const FLAGS = { franchise: "זכיינות" };
   const SOURCE_LABEL = {
-    website: "אתר",
+    website: "נרשם דרך האתר",
     our_link: "יזום שלנו",
     manual: "יזום שלנו",
     call: "יזום שלנו"
@@ -67,7 +68,10 @@
   function sourceKind(row) {
     if (row.manual_source === "call") return "call";
     if (row.manual_source === "manual") return "manual";
-    return row.signup_channel === "our_link" ? "our_link" : "website";
+    if (row.signup_channel === "our_link") return "our_link";
+    const legacy = String(row.source || "");
+    if (legacy === "website-catalog" || legacy === "website" || row.signup_channel === "website" || !row.signup_channel) return "website";
+    return "website";
   }
 
   function sourceBadge(row) {
@@ -169,6 +173,13 @@
     return digits ? "https://wa.me/" + digits + "?text=" + encodeURIComponent(note) : "";
   }
 
+  function addressFormOf(value) {
+    const raw = String(value || "").trim().toLowerCase();
+    if (raw === "m" || raw === "male") return "m";
+    if (raw === "f" || raw === "female") return "f";
+    return null;
+  }
+
   function splitName(name) {
     const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
     return { first_name: parts[0] || "", last_name: parts.slice(1).join(" ") || "—" };
@@ -200,6 +211,7 @@
         consent_whatsapp_method: whatsappOn ? input.consent_whatsapp_method : null,
         consent_email_note: emailOn ? (String(input.consent_email_note || "").trim() || null) : null,
         consent_whatsapp_note: whatsappOn ? (String(input.consent_whatsapp_note || "").trim() || null) : null,
+        address_form: addressFormOf(input.address_form),
         consent_general: consented,
         consent_method: null,
         consent_text: null,
@@ -345,7 +357,8 @@
         consent_version: "v1-2026-11-13", consent_at: today, source_url: "https://www.bsd-bbi.co.il/עסקים-למכירה/",
         signup_channel: "website", utm_campaign: "catalog-nov", utm_source: "site", utm_medium: "organic",
         categories: ["food"], subcategories: ["bakery"], flags: ["franchise"], regions: ["center"],
-        taxonomy_version: "v1-2026-11-13", looking_for: "מאפייה קטנה במרכז",
+        taxonomy_version: "v1-2026-11-13", looking_for: "מאפייה קטנה במרכז", address_form: "f",
+        is_test: true, test_note: "בדיקה של ברוך/אדם 13.11", source: "website-catalog",
         do_not_call: false, manager_notes: "", view_count: 2, handled_at: null, budget_open: true,
         send_count: 1, last_sent_at: today,
         interactions: [
@@ -369,7 +382,7 @@
         consent_general: null, consent_email: true, consent_whatsapp: false, legacy_no_consent: true,
         consent_text: null, consent_version: null, source_url: null, do_not_call: false,
         manager_notes: "נרשם בטופס הישן. עדיין בלי הסכמה שיווקית.", view_count: 0, views: [], handled_at: null, budget_open: false, budget_min: 250000, budget_max: 500000,
-        signup_channel: "our_link", manual_source: "link", utm_campaign: "wa-baruch", utm_source: "whatsapp", utm_medium: "link",
+        signup_channel: "our_link", manual_source: "link", utm_campaign: "wa-baruch", utm_source: "whatsapp", utm_medium: "link", address_form: "m",
         categories: ["construction"], regions: ["north"], looking_for: "נגרייה או ייצור", send_count: 0, sends: []
       },
       {
@@ -423,6 +436,6 @@
   root.BSDSiteBuyers = {
     esc, statusLabel, summarize, filterRows, inChannel, sampleAllowed, sampleRows, bars, reasonText, startOfWeekJerusalem,
     sourceKind, sourceBadge, sectorLabels, subLabels, flagLabels, regionLabels, budgetLabel, lookingLine, sendSummary, passesFilters, SOURCE_LABEL,
-    contactStats, answerRateText, waHref, manualAdd, CONSENT_METHODS
+    contactStats, answerRateText, waHref, manualAdd, addressFormOf, CONSENT_METHODS
   };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -8,6 +8,7 @@ import {
   SUBSCRIBER_REPLY_TO,
   phonesHtml,
   phonesText,
+  say,
   subscriberSubject
 } from "../_shared/business-alert-mail.mjs";
 import copy from "../../../copy/he.json" with { type: "json" };
@@ -48,27 +49,31 @@ export const BARUCH_SIGNATURE_TEXT = [
   phonesText()
 ].join("\n");
 
-export function thankYouSubject() {
-  return subscriberSubject(copy.email.signupSubject);
+export function thankYouSubject(addressForm) {
+  return subscriberSubject(say(copy.email.signupSubject, addressForm));
 }
 
-export function thankYouEmailText({ firstName, unsubscribeLink }) {
-  const greeting = firstName ? `תודה על ההתעניינות, ${firstName}` : "תודה על ההתעניינות";
+export function thankYouEmailText({ firstName, unsubscribeLink, addressForm }) {
+  const thanks = say(copy.email.signupThanks, addressForm);
+  const greeting = firstName ? `${thanks}, ${firstName}` : thanks;
   return [
     "פרסומת",
     greeting,
     "",
-    "בלי הצפות ובלי ספאם – נשלח לך רק עסקים שבאמת מתאימים.",
+    say(copy.email.signupBody, addressForm),
     "",
-    `אפשר להסיר את עצמכם בכל עת: ${unsubscribeLink || ""}`,
+    say(copy.email.signupKeep, addressForm),
+    "",
+    `${say(copy.email.signupRemove, addressForm)} ${unsubscribeLink || ""}`,
     "",
     BARUCH_SIGNATURE_TEXT
   ].join("\n");
 }
 
-export function thankYouEmailHtml({ firstName, unsubscribeLink }) {
+export function thankYouEmailHtml({ firstName, unsubscribeLink, addressForm }) {
   const name = escapeHtml(firstName || "");
   const link = escapeHtml(unsubscribeLink || "");
+  const thanks = escapeHtml(say(copy.email.signupThanks, addressForm));
   return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb">
   <div dir="rtl" lang="he" style="max-width:640px;margin:0 auto;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#102844">
     <div style="background:#06142f;padding:22px 28px;text-align:right">
@@ -78,10 +83,10 @@ export function thankYouEmailHtml({ firstName, unsubscribeLink }) {
     <div style="height:4px;background:linear-gradient(90deg,#b98520,#f0d48a,#b98520)"></div>
     <div style="padding:28px;text-align:right;line-height:1.7">
       <p style="margin:0 0 8px;font-size:13px;color:#8a6d1f">פרסומת</p>
-      <h1 style="margin:0 0 12px;font-size:26px;line-height:1.35;color:#0a1d42">תודה על ההתעניינות${name ? `, ${name}` : ""}</h1>
-      <p style="margin:0 0 12px;font-size:17px">בלי הצפות ובלי ספאם – נשלח לך רק עסקים שבאמת מתאימים.</p>
-      <p style="margin:0 0 12px;font-size:17px">הפרטים שמורים אצל BSD ומשמשים רק לשליחת העדכונים האלה.</p>
-      <p style="margin:0;font-size:15px;color:#3d4c63">אפשר להסיר את עצמכם בכל עת, בלי צורך בסיבה:<br><a href="${link}" style="color:#1d67c8">הסרה מרשימת העדכונים</a></p>
+      <h1 style="margin:0 0 12px;font-size:26px;line-height:1.35;color:#0a1d42">${thanks}${name ? `, ${name}` : ""}</h1>
+      <p style="margin:0 0 12px;font-size:17px">${escapeHtml(say(copy.email.signupBody, addressForm))}</p>
+      <p style="margin:0 0 12px;font-size:17px">${escapeHtml(say(copy.email.signupKeep, addressForm))}</p>
+      <p style="margin:0;font-size:15px;color:#3d4c63">${escapeHtml(say(copy.email.signupRemove, addressForm))}<br><a href="${link}" style="color:#1d67c8">${escapeHtml(say(copy.email.unsubscribe, addressForm))}</a></p>
       ${baruchSignatureHtml()}
     </div>
   </div>
@@ -144,6 +149,7 @@ export function internalAlertEmailHtml(row) {
   const kind = signupKindLabel(row.signupKind, row.previousStatus);
   const rows = [
     ["סוג הרשמה", kind],
+    ["הזהות נשמרה", row.identityKept === true ? "כן — לא דרסנו שם או אימייל קיימים" : ""],
     ["שם פרטי", row.first_name],
     ["שם משפחה", row.last_name],
     ["טלפון", row.phone],
@@ -157,7 +163,7 @@ export function internalAlertEmailHtml(row) {
     ["נוסח ההסכמה", row.consent_text],
     ["גרסת ההסכמה", row.consent_version],
     ["גרסת נוסח ההסכמה", row.consent_text_version],
-    ["פנייה", row.address_form === "female" ? "אליך כאישה" : row.address_form === "male" ? "אליך כגבר" : ""],
+    ["פנייה", row.address_form === "f" ? "אישה" : row.address_form === "m" ? "גבר" : ""],
     ["הסכמה ישנה בלי אישור שיווקי", row.legacy_no_consent === true],
     ["מועד ההסכמה", formatConsentTime(row.consent_at)],
     ["ערוץ", row.signup_channel],

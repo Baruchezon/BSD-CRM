@@ -29,6 +29,22 @@ export function subscriberFromHeader(name = SUBSCRIBER_FROM_NAME, address = SUBS
 
 export const SUBSCRIBER_FROM = subscriberFromHeader();
 
+// m and f are the stored address_form values. Anything else, including null, is the neutral singular.
+export function addressKey(value) {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (raw === "m" || raw === "male") return "m";
+  if (raw === "f" || raw === "female") return "f";
+  return "n";
+}
+
+export function say(entry, addressForm) {
+  if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+    const key = addressKey(addressForm);
+    return String(entry[key] ?? entry.n ?? "");
+  }
+  return String(entry ?? "");
+}
+
 export function signOffLines() {
   return [
     SUBSCRIBER_FROM_NAME,
@@ -72,10 +88,11 @@ export function listUnsubscribeHeaders(httpsUrl, address = SUBSCRIBER_FROM_ADDRE
   };
 }
 
-export function whatsappMessage(firstName) {
+export function whatsappMessage(firstName, addressForm) {
   const name = String(firstName || "").trim();
-  const body = name ? copy.whatsapp.prefill.replace("שלום,", `שלום ${name},`) : copy.whatsapp.prefill;
-  return ["פרסומת", body].join("\n");
+  const body = say(copy.whatsapp.prefill, addressForm);
+  const greeting = name ? body.replace("שלום,", `שלום ${name},`) : body;
+  return ["פרסומת", greeting].join("\n");
 }
 
 export function subscriberSubject(topic) {
@@ -98,11 +115,11 @@ export function subscriberText({ firstName, body, unsubscribeUrl }) {
   ].filter((line, index, all) => line !== "" || (index > 0 && all[index - 1] !== "")).join("\n");
 }
 
-export function subscriberHtml({ firstName, body, unsubscribeUrl }) {
+export function subscriberHtml({ firstName, body, unsubscribeUrl, addressForm }) {
   const name = escapeHtml(String(firstName || "").trim());
   const hello = name ? `שלום ${name},` : "שלום,";
   const link = unsubscribeUrl
-    ? `<p style="margin:16px 0 0;font-size:14px"><a href="${escapeHtml(unsubscribeUrl)}" style="color:#1d67c8">הסרה מרשימת העדכונים</a></p>`
+    ? `<p style="margin:16px 0 0;font-size:14px"><a href="${escapeHtml(unsubscribeUrl)}" style="color:#1d67c8">${escapeHtml(say(copy.email.unsubscribe, addressForm))}</a></p>`
     : "";
   return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb"><div dir="rtl" lang="he" style="max-width:640px;margin:0 auto;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#102844;text-align:right"><div style="background:#0e1b34;color:#f0d48a;padding:18px 24px;font-size:18px;font-weight:700">${escapeHtml(SUBSCRIBER_FROM_NAME)}</div><div style="padding:24px;line-height:1.7;font-size:16px"><p style="margin:0 0 8px;font-size:13px;color:#8a6d1f">פרסומת</p><p style="margin:0 0 12px">${hello}</p><p style="margin:0">${escapeHtml(body || "").replace(/\n/g, "<br>")}</p>${link}${signOffHtml()}</div></div></body></html>`;
 }

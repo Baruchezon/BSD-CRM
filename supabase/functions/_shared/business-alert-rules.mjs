@@ -1,5 +1,5 @@
 import copy from "../../../copy/he.json" with { type: "json" };
-import { signOffHtml } from "./business-alert-mail.mjs";
+import { say, signOffHtml } from "./business-alert-mail.mjs";
 
 // Shared decisions for the alert signup, the public unsubscribe function,
 // and the CRM screen. The SQL functions in
@@ -39,6 +39,7 @@ export function mergeUnsubscribe(status, channel) {
 export function gateDecision(row, channel) {
   if (!row) return { allowed: false, reason: "not_found" };
   if (channel !== "email" && channel !== "whatsapp") return { allowed: false, reason: "invalid_channel" };
+  if (row.is_test === true) return { allowed: false, reason: "is_test" };
   if (row.status === "pending_consent") return { allowed: false, reason: "pending_consent" };
   if (row.legacy_no_consent === true) return { allowed: false, reason: "legacy_no_consent" };
   if (row.consent_general !== true) return { allowed: false, reason: "no_general_consent" };
@@ -168,13 +169,13 @@ export function channelLabel(channel) {
   return "כל הערוצים";
 }
 
-export function unsubscribePage({ ok, channel }) {
-  const title = ok ? copy.unsubscribe.successTitle : copy.unsubscribe.invalidTitle;
+export function unsubscribePage({ ok, channel, addressForm }) {
+  const title = say(ok ? copy.unsubscribe.successTitle : copy.unsubscribe.invalidTitle, addressForm);
   const success = channel === "email"
     ? copy.unsubscribe.successEmail
     : channel === "whatsapp"
       ? copy.unsubscribe.successWhatsapp
       : copy.unsubscribe.successAll;
-  const detail = ok ? success : copy.unsubscribe.invalidDetail;
+  const detail = say(ok ? success : copy.unsubscribe.invalidDetail, addressForm);
   return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body style="margin:0;background:#f4f7fb;font-family:Arial,Heebo,sans-serif;color:#102844"><main style="max-width:520px;margin:12vh auto;background:#fff;border-radius:18px;padding:32px;text-align:right;border-top:8px solid #c9a24b;box-shadow:0 16px 40px rgba(14,27,52,.12)"><p style="margin:0 0 8px;color:#8a6d1f;font-weight:700">BSD - עסקים למכירה</p><h1 style="margin:0 0 12px;font-size:32px">${title}</h1><p style="margin:0;font-size:18px;line-height:1.6">${detail}</p>${signOffHtml()}</main></body></html>`;
 }

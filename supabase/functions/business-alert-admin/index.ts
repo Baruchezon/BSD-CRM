@@ -10,12 +10,14 @@ import {
   subscriberFromHeader,
   subscriberHtml,
   subscriberSubject,
+  say,
   subscriberText,
   unsubscribeHttpsUrl,
   whatsappMessage
 } from "../_shared/business-alert-mail.mjs";
 import { gateDecision } from "../_shared/business-alert-rules.mjs";
 import { matchAlertEmail, normalizeMatchConfig, publicCard, scoreAlert, sendGate } from "../_shared/alert-match.mjs";
+import { APPROVED_ALERT_BUSINESSES, threeBusinessEmail } from "../_shared/opportunity-email.mjs";
 import copy from "../../copy/he.json" with { type: "json" };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -115,7 +117,7 @@ function listedBusiness(row: Record<string, unknown>) {
 
 async function recomputeMatches(subscriberId?: string) {
   const settings = await matchSettings();
-  let subQuery = supabase.from("business_alert_subscribers").select("id,first_name,last_name,interests,categories,subcategories,regions,region,budget_min,budget_max,budget_open,looking_for,manager_notes,legacy_no_consent,consent_general,consent_email,consent_whatsapp");
+  let subQuery = supabase.from("business_alert_subscribers").select("id,first_name,last_name,interests,categories,subcategories,regions,region,budget_min,budget_max,budget_open,looking_for,manager_notes,legacy_no_consent,consent_general,consent_email,consent_whatsapp,is_test,status");
   if (subscriberId) subQuery = subQuery.eq("id", subscriberId);
   const { data: subscribers, error: subError } = await subQuery;
   if (subError) throw subError;
@@ -124,6 +126,7 @@ async function recomputeMatches(subscriberId?: string) {
   const listed = (businesses || []).filter(listedBusiness);
   let stored = 0;
   for (const subscriber of subscribers || []) {
+    if (subscriber.is_test === true) continue;
     const scored = [];
     for (const business of listed) {
       const match = scoreAlert(subscriber, business, settings);
@@ -217,7 +220,7 @@ async function matchAction(action: string, body: Record<string, unknown>, origin
   });
   if (!decision.allowed) return json({ ok: false, error: decision.reason, allowed: false }, 200, origin);
   const link = unsubscribeHttpsUrl(supabaseUrl, row.unsubscribe_token, channel);
-  const mail = matchAlertEmail({ firstName: row.first_name, card: stored.public_card, unsubscribeUrl: link });
+  const mail = matchAlertEmail({ firstName: row.first_name, addressForm: row.address_form, card: stored.public_card, unsubscribeUrl: link });
   if (channel === "whatsapp") {
     const text = `${mail.text}`;
     return json({ ok: true, allowed: true, text, url: waLink(row.phone || "", text) }, 200, origin);
@@ -244,7 +247,7 @@ async function matchAction(action: string, body: Record<string, unknown>, origin
 async function loadSecrets(id: string) {
   const { data, error } = await supabase
     .from("business_alert_subscribers")
-    .select("id, unsubscribe_token, visit_token, first_name, email, phone, legacy_no_consent, consent_general, consent_email, consent_whatsapp, status, email_unsubscribed_at, whatsapp_unsubscribed_at")
+    .select("id, unsubscribe_token, visit_token, first_name, email, phone, address_form, legacy_no_consent, consent_general, consent_email, consent_whatsapp, status, email_unsubscribed_at, whatsapp_unsubscribed_at")
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
@@ -266,6 +269,12 @@ Deno.serve(async req => {
   try {
     const body = await req.json();
     const action = clean(body.action, 40);
+
+    if (action === "roster") {
+      const { data, error } = await supabase.rpc("business_alert_roster");
+      if (error) throw error;
+      return json({ ok: true, subscribers: data || [] }, 200, origin);
+    }
 
     if (action === "list") {
       const { data, error } = await supabase.rpc("business_alert_crm_list");
@@ -331,10 +340,20 @@ Deno.serve(async req => {
         p_budget_min: numOrNull(body.budget_min),
         p_budget_max: numOrNull(body.budget_max),
         p_budget_open: body.budget_open === true,
-        p_consent_by: clean(auth.profile.full_name, 120) || clean(auth.user.email, 180)
+        p_consent_by: clean(auth.profile.full_name, 120) || clean(auth.user.email, 180),
+        p_address_form: clean(body.address_form, 20) || null
       });
       if (error) return json({ ok: false, error: "add_rejected", message: error.message }, 400, origin);
       return json({ ok: true, card: data }, 200, origin);
+    }
+
+    if (action === "set_address_form") {
+      const { data, error } = await supabase.rpc("business_alert_set_address_form", {
+        p_subscriber_id: body.id,
+        p_address_form: clean(body.address_form, 20) || null
+      });
+      if (error) return json({ ok: false, error: "address_rejected", message: error.message }, 400, origin);
+      return json({ ok: true, result: data }, 200, origin);
     }
 
     if (action === "log_interaction") {
@@ -404,6 +423,46 @@ Deno.serve(async req => {
       return json({ ok: true, result: data }, 200, origin);
     }
 
+    if (action === "send_one_alert") {
+      if (Array.isArray(body.ids) || Array.isArray(body.subscribers)) {
+        return json({ ok: false, error: "one_subscriber_only" }, 400, origin);
+      }
+      const id = clean(body.id, 80);
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        return json({ ok: false, error: "one_subscriber_only" }, 400, origin);
+      }
+      const row = await loadSecrets(id);
+      if (!row?.email) return json({ ok: false, error: "not_found" }, 404, origin);
+      const mail = threeBusinessEmail({
+        firstName: String(row.first_name || ""),
+        businesses: APPROVED_ALERT_BUSINESSES.map(business => ({
+          ...business,
+          detailsUrl: `${supabaseUrl}/functions/v1/business-alert-request-details?business=${encodeURIComponent(business.number)}&subscriber=${encodeURIComponent(id)}`
+        })),
+        unsubscribeUrl: unsubscribeHttpsUrl(supabaseUrl, row.unsubscribe_token, "email")
+      });
+      if (body.confirm !== true) {
+        return json({ ok: true, preview: true, sent: false, from: mail.from, subject: mail.subject }, 200, origin);
+      }
+      const apiKey = Deno.env.get("RESEND_API_KEY");
+      if (!apiKey) return json({ ok: false, error: "missing_email_configuration", sent: false }, 200, origin);
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          from: mail.from,
+          reply_to: SUBSCRIBER_REPLY_TO,
+          to: [row.email],
+          subject: mail.subject,
+          html: mail.html,
+          text: mail.text,
+          headers: listUnsubscribeHeaders(unsubscribeHttpsUrl(supabaseUrl, row.unsubscribe_token, "email"))
+        })
+      });
+      if (!response.ok) return json({ ok: false, error: "send_failed", sent: false }, 200, origin);
+      return json({ ok: true, sent: true, preview: false }, 200, origin);
+    }
+
     if (action === "prepare_whatsapp" || action === "prepare_email" || action === "send_email") {
       const row = await loadSecrets(body.id);
       if (!row) return json({ ok: false, error: "not_found" }, 404, origin);
@@ -422,15 +481,15 @@ Deno.serve(async req => {
         return json({ ok: false, error: gate?.reason || decision.reason || "blocked", allowed: false }, 200, origin);
       }
       if (channel === "whatsapp") {
-        const text = whatsappMessage(row.first_name);
+        const text = whatsappMessage(row.first_name, row.address_form);
         return json({ ok: true, allowed: true, text, url: waLink(row.phone || "", text) }, 200, origin);
       }
       const link = unsubscribeHttpsUrl(supabaseUrl, row.unsubscribe_token, "email");
       const catalog = `${SUBSCRIBER_SITE}/עסקים-למכירה/?bat=${encodeURIComponent(row.visit_token)}`;
-      const message = `${copy.email.warm}\n${copy.form.thanks}\n${catalog}`;
+      const message = `${say(copy.email.warm, row.address_form)}\n${say(copy.form.thanks, row.address_form)}\n${catalog}`;
       const subject = subscriberSubject("עדכון על עסקים למכירה");
-      const text = subscriberText({ firstName: row.first_name, body: message, unsubscribeUrl: link });
-      const html = subscriberHtml({ firstName: row.first_name, body: message, unsubscribeUrl: link });
+      const text = subscriberText({ firstName: row.first_name, body: message, unsubscribeUrl: link, addressForm: row.address_form });
+      const html = subscriberHtml({ firstName: row.first_name, body: message, unsubscribeUrl: link, addressForm: row.address_form });
       if (action === "prepare_email") {
         return json({
           ok: true,

@@ -50,6 +50,10 @@ test('a subscriber waiting for consent is never sendable', () => {
   const scored = scoreAlert({ ...baseSub, status: 'pending_consent', consent_general: false, legacy_no_consent: true }, biz());
   assert.equal(scored.sendable, false);
   assert.equal(scored.block_reason, 'pending_consent');
+  assert.equal(scored.sendable, false);
+  const trial = scoreAlert({ ...baseSub, is_test: true }, biz());
+  assert.equal(trial.block_reason, 'is_test');
+  assert.equal(trial.sendable, false);
 });
 
 test('a million-shekel budget accepts 1.3 million and rejects 3 million', () => {
@@ -178,7 +182,8 @@ test('the website form can send taxonomy slugs and the legacy fields together', 
   assert.equal(bothVersions.row.consent_email, false);
   assert.equal(bothVersions.row.consent_whatsapp, true);
   assert.equal(bothVersions.row.utm_term, 'ad-1');
-  assert.equal(validateSignup({ ...signupBody, categories: ['food'], address_form: 'female' }).row.address_form, 'female');
+  assert.equal(validateSignup({ ...signupBody, categories: ['food'], address_form: 'f' }).row.address_form, 'f');
+  assert.equal(validateSignup({ ...signupBody, categories: ['food'], address_form: 'male' }).row.address_form, 'm');
   assert.equal(validateSignup({ ...signupBody, categories: ['food'], address_form: 'office' }).row.address_form, null);
   assert.equal(Object.hasOwn(result.row, 'source'), false);
   assert.equal(result.row.budget_min, 700000);

@@ -176,8 +176,10 @@ function regionsOf(body) {
 }
 
 function addressFormOf(body) {
-  const value = cleanText(body?.address_form, 20);
-  return value === "male" || value === "female" ? value : null;
+  const value = cleanText(body?.address_form, 20).toLowerCase();
+  if (value === "m" || value === "male") return "m";
+  if (value === "f" || value === "female") return "f";
+  return null;
 }
 
 function lookingOf(body, extra) {
@@ -323,6 +325,34 @@ export function hasFreshConsent(row) {
   return row?.consent_general === true && (row?.consent_email === true || row?.consent_whatsapp === true);
 }
 
+const IDENTITY_FIELDS = ["first_name", "last_name", "email", "phone", "phone9"];
+
+function sameIdentityValue(key, before, incoming) {
+  const left = before == null ? "" : String(before).trim();
+  const right = incoming == null ? "" : String(incoming).trim();
+  if (!right) return true;
+  if (key === "email") return left.toLowerCase() === right.toLowerCase();
+  return left === right;
+}
+
+// A later signup on the same phone or email must not replace the stored person.
+// The caller writes the incoming values to the audit table and leaves the row.
+export function identityAudit(previous, row) {
+  if (!previous) return null;
+  const previousValues = {};
+  const incomingValues = {};
+  for (const key of IDENTITY_FIELDS) {
+    if (!Object.hasOwn(previous, key)) continue;
+    const before = previous[key] == null ? "" : String(previous[key]).trim();
+    if (!before) continue;
+    if (sameIdentityValue(key, previous[key], row?.[key])) continue;
+    previousValues[key] = previous[key] ?? null;
+    incomingValues[key] = row?.[key] ?? null;
+  }
+  if (!Object.keys(incomingValues).length) return null;
+  return { previous: previousValues, incoming: incomingValues };
+}
+
 // A repeat signup must not clear an unsubscribe by itself. The row becomes
 // reachable again only when this request has consent_general and a channel.
 // The previous status is appended. Nothing is removed from status_history.
@@ -331,6 +361,14 @@ export function consentWritePayload(row, previous, now) {
   const closed = CLOSED_STATUSES.includes(prevStatus);
   const fresh = hasFreshConsent(row);
   const history = Array.isArray(previous?.status_history) ? previous.status_history.slice() : [];
+  const audit = identityAudit(previous, row);
+  if (audit) {
+    return {
+      identity_kept: true,
+      identity_audit: audit,
+      status: prevStatus
+    };
+  }
   const payload = { ...row };
 
   if (!previous) {

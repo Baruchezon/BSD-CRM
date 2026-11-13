@@ -34,7 +34,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 
 const TABLE = "business_alert_subscribers";
 const ATTEMPTS = "business_alert_signup_attempts";
-const LOOKUP = "id, unsubscribe_token, status, unsubscribed_at, unsubscribed_by, unsubscribe_reason, email_unsubscribed_at, whatsapp_unsubscribed_at, status_history, resubscribed_at";
+const LOOKUP = "id, first_name, last_name, email, phone, phone9, unsubscribe_token, status, unsubscribed_at, unsubscribed_by, unsubscribe_reason, email_unsubscribed_at, whatsapp_unsubscribed_at, status_history, resubscribed_at";
 
 const allowedOrigins = new Set([
   "https://bsd-bbi.co.il",
@@ -125,11 +125,22 @@ async function findByPhone9(phone9: string) {
 
 function writePayload(row: Record<string, unknown>, previous: Record<string, unknown> | null, now: string, consentIp: string, consentUserAgent: string) {
   const payload = consentWritePayload(row, previous, now);
+  if (payload.identity_kept) return payload;
   if (payload.consent_at) {
     payload.consent_ip = consentIp || null;
     payload.consent_user_agent = consentUserAgent || null;
   }
   return payload;
+}
+
+async function recordIdentityAudit(subscriberId: string, audit: { previous: unknown; incoming: unknown }) {
+  const { error } = await supabase.from("business_alert_identity_audit").insert({
+    subscriber_id: subscriberId,
+    previous: audit.previous,
+    incoming: audit.incoming
+  });
+  if (error) console.error("identity audit was not stored", error.message);
+  else console.log("business-alert signup kept the existing name and email", subscriberId);
 }
 
 async function writeSubscriber(row: Record<string, unknown>, consentIp: string, consentUserAgent: string) {
@@ -138,11 +149,23 @@ async function writeSubscriber(row: Record<string, unknown>, consentIp: string, 
   const phoneRow = row.phone9 ? await findByPhone9(String(row.phone9)) : null;
   const plan = planSubscriberWrite({ emailRow, phoneRow });
   const target = [emailRow, phoneRow].find(item => item?.id && item.id === plan.targetId) || null;
+  const payload = writePayload(row, target, now, consentIp, consentUserAgent);
+  if (payload.identity_kept && plan.targetId) {
+    await recordIdentityAudit(String(plan.targetId), payload.identity_audit);
+    return {
+      id: plan.targetId,
+      unsubscribe_token: target?.unsubscribe_token,
+      signupKind: "identity_kept",
+      previousStatus: target?.status || null,
+      consentAt: target?.consent_at || null,
+      identityKept: true,
+      identityAudit: payload.identity_audit
+    };
+  }
   if (plan.detachPhoneId) {
     const { error } = await supabase.from(TABLE).update({ phone: null, phone9: null }).eq("id", plan.detachPhoneId);
     if (error) throw error;
   }
-  const payload = writePayload(row, target, now, consentIp, consentUserAgent);
   if (plan.action === "update" && plan.targetId) {
     const { data, error } = await supabase.from(TABLE).update(payload).eq("id", plan.targetId).select("id, unsubscribe_token").single();
     if (error) throw error;
@@ -153,6 +176,18 @@ async function writeSubscriber(row: Record<string, unknown>, consentIp: string, 
     const again = (await findByEmail(String(row.email))) || (row.phone9 ? await findByPhone9(String(row.phone9)) : null);
     if (!again?.id) throw error;
     const retry = writePayload(row, again, now, consentIp, consentUserAgent);
+    if (retry.identity_kept) {
+      await recordIdentityAudit(String(again.id), retry.identity_audit);
+      return {
+        id: again.id,
+        unsubscribe_token: again.unsubscribe_token,
+        signupKind: "identity_kept",
+        previousStatus: again.status || null,
+        consentAt: null,
+        identityKept: true,
+        identityAudit: retry.identity_audit
+      };
+    }
     const { data: updated, error: updateError } = await supabase.from(TABLE).update(retry).eq("id", again.id).select("id, unsubscribe_token").single();
     if (updateError) throw updateError;
     return { ...updated, signupKind: "returning", previousStatus: again.status || null, consentAt: retry.consent_at || null };
@@ -209,13 +244,13 @@ Deno.serve(async req => {
     if (!signup.ok) return json({ ok: false, error: signup.error }, 400, origin);
 
     const saved = await writeSubscriber(signup.row, ip, cleanText(req.headers.get("user-agent"), 300));
-    const pageLink = unsubscribeUrl(saved.unsubscribe_token, "all");
+    const pageLink = saved.identityKept ? "" : unsubscribeUrl(saved.unsubscribe_token, "all");
     const oneClick = unsubscribeHttpsUrl(supabaseUrl, saved.unsubscribe_token, "all");
     const thankYou = await sendEmail(
       signup.row.email,
-      thankYouSubject(),
-      thankYouEmailHtml({ firstName: signup.row.first_name, unsubscribeLink: pageLink }),
-      thankYouEmailText({ firstName: signup.row.first_name, unsubscribeLink: pageLink }),
+      thankYouSubject(signup.row.address_form),
+      thankYouEmailHtml({ firstName: signup.row.first_name, unsubscribeLink: pageLink, addressForm: signup.row.address_form }),
+      thankYouEmailText({ firstName: signup.row.first_name, unsubscribeLink: pageLink, addressForm: signup.row.address_form }),
       listUnsubscribeHeaders(oneClick)
     );
     const internal = await sendEmail(
@@ -229,7 +264,8 @@ Deno.serve(async req => {
         ...signup.row,
         signupKind: saved.signupKind,
         previousStatus: saved.previousStatus,
-        consent_at: saved.consentAt
+        consent_at: saved.consentAt,
+        identityKept: saved.identityKept === true
       })
     );
     if (!internal.sent) console.error("Internal alert email was not sent", internal.error || "");
