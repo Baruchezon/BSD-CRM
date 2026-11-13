@@ -142,10 +142,9 @@ function normalizeRegion(value) {
   return { ok: true, region: null, extra: region };
 }
 
-function sourceOf(body) {
-  const raw = cleanText(body?.source, 40).toLowerCase();
-  if (raw === "whatsapp" || raw === "wa" || raw === "whatsapp_link") return "whatsapp_link";
-  return "site_catalog";
+function signupChannelOf(body) {
+  const raw = cleanText(body?.signup_channel, 40).toLowerCase();
+  return raw === "our_link" ? "our_link" : "website";
 }
 
 function numberOrNull(value) {
@@ -175,7 +174,10 @@ function lookingOf(body, extra) {
 
 function normalizeUtm(body) {
   const utm = {};
-  for (const key of UTM_KEYS) utm[key] = cleanText(body?.[key], 120);
+  for (const key of UTM_KEYS) {
+    const value = cleanText(body?.[key], 120);
+    utm[key] = value || null;
+  }
   return utm;
 }
 
@@ -222,7 +224,9 @@ function sharedFields(body) {
       budget_max: budget.budget_max,
       budget_open: budget.budget_open,
       region: region.region,
-      source: sourceOf(body),
+      source: SOURCE,
+      signup_channel: signupChannelOf(body),
+      source_url: normalizeSourceUrl(body?.source_url).ok ? normalizeSourceUrl(body?.source_url).source_url : null,
       looking_for: lookingOf(body, [interests.extra, region.extra].filter(Boolean).join("\n")),
       ...normalizeUtm(body)
     }
@@ -257,7 +261,6 @@ export function validateSignup(body) {
         consent_general: null,
         consent_text: null,
         consent_version: null,
-        source_url: null,
         legacy_no_consent: true
       }
     };

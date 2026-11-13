@@ -59,7 +59,7 @@
     const summary = {
       total: rows.length, newThisWeek: 0, active: 0, unsubscribed: 0,
       emailConsent: 0, whatsappConsent: 0, doNotCall: 0, awaitingConsent: 0,
-      regions: {}, sectors: {}
+      regions: {}, sectors: {}, campaigns: {}
     };
     rows.forEach(row => {
       if (row.created_at && new Date(row.created_at).getTime() >= week) summary.newThisWeek += 1;
@@ -76,8 +76,15 @@
       summary.regions[region] = (summary.regions[region] || 0) + 1;
       const interests = Array.isArray(row.interests) && row.interests.length ? row.interests : ["לא צוין"];
       interests.forEach(interest => { summary.sectors[interest] = (summary.sectors[interest] || 0) + 1; });
+      const campaign = row.utm_campaign || "בלי קמפיין";
+      summary.campaigns[campaign] = (summary.campaigns[campaign] || 0) + 1;
     });
     return summary;
+  }
+
+  function inChannel(row, channel) {
+    const value = row.signup_channel === "our_link" ? "our_link" : "website";
+    return value === channel;
   }
 
   function filterRows(rows, query) {
@@ -105,6 +112,7 @@
         consent_general: true, consent_email: true, consent_whatsapp: true, legacy_no_consent: false,
         consent_text: "אני מאשר/ת לקבל מ-BSD עדכונים ופרסומות על עסקים למכירה",
         consent_version: "v1-2026-11-13", consent_at: today, source_url: "https://www.bsd-bbi.co.il/עסקים-למכירה/",
+        signup_channel: "website", utm_campaign: "catalog-nov", utm_source: "site", utm_medium: "organic",
         do_not_call: false, manager_notes: "", view_count: 2, handled_at: null, budget_open: true,
         views: [
           { page_path: "/עסקים-למכירה/", via: "email_link", viewed_at: today },
@@ -120,7 +128,8 @@
         region: "צפון", interests: ["תעשייה"], status: "active", created_at: old,
         consent_general: null, consent_email: true, consent_whatsapp: false, legacy_no_consent: true,
         consent_text: null, consent_version: null, source_url: null, do_not_call: false,
-        manager_notes: "נרשם בטופס הישן. עדיין בלי הסכמה שיווקית.", view_count: 0, views: [], handled_at: null, budget_open: false, budget_min: 250000, budget_max: 500000
+        manager_notes: "נרשם בטופס הישן. עדיין בלי הסכמה שיווקית.", view_count: 0, views: [], handled_at: null, budget_open: false, budget_min: 250000, budget_max: 500000,
+        signup_channel: "our_link", utm_campaign: "wa-baruch", utm_source: "whatsapp", utm_medium: "link"
       },
       {
         id: "sample-3", first_name: "מיכל", last_name: "לדוגמה", phone: "050-0000003", email: "sample.michal@example.com",
@@ -134,7 +143,8 @@
         region: "תל אביב וגוש דן", interests: ["כל התחומים"], status: "unsubscribed_all", created_at: old,
         consent_general: true, consent_email: true, consent_whatsapp: false, legacy_no_consent: false,
         do_not_call: false, manager_notes: "", view_count: 0, views: [], handled_at: today, budget_open: true,
-        consent_text: "אני מאשר/ת לקבל מ-BSD עדכונים ופרסומות על עסקים למכירה", source_url: "https://www.bsd-bbi.co.il/"
+        consent_text: "אני מאשר/ת לקבל מ-BSD עדכונים ופרסומות על עסקים למכירה", source_url: "https://www.bsd-bbi.co.il/",
+        signup_channel: "our_link", utm_campaign: "wa-baruch"
       }
     ];
   }
@@ -153,6 +163,6 @@
   }
 
   root.BSDSiteBuyers = {
-    esc, statusLabel, summarize, filterRows, sampleAllowed, sampleRows, bars, reasonText, startOfWeekJerusalem
+    esc, statusLabel, summarize, filterRows, inChannel, sampleAllowed, sampleRows, bars, reasonText, startOfWeekJerusalem
   };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -124,7 +124,11 @@ test('the website form can send taxonomy slugs and the legacy fields together', 
     budget_max: 1300000,
     budget_open: false,
     looking_for: 'מאפייה או בית קפה',
-    source: 'site_catalog',
+    signup_channel: 'website',
+    utm_source: 'google',
+    utm_medium: 'cpc',
+    utm_campaign: 'catalog-nov',
+    utm_content: 'banner',
     consent_general: true,
     consent_email: true,
     consent_whatsapp: false,
@@ -139,7 +143,11 @@ test('the website form can send taxonomy slugs and the legacy fields together', 
   assert.equal(result.row.budget_min, 700000);
   assert.equal(result.row.budget_max, 1300000);
   assert.equal(result.row.budget_open, false);
-  assert.equal(result.row.source, 'site_catalog');
+  assert.equal(result.row.signup_channel, 'website');
+  assert.equal(result.row.source, 'website-catalog');
+  assert.equal(result.row.utm_campaign, 'catalog-nov');
+  assert.equal(result.row.utm_content, 'banner');
+  assert.equal(result.row.source_url, 'https://www.bsd-bbi.co.il/עסקים-למכירה/');
   assert.equal(result.row.looking_for, 'מאפייה או בית קפה');
   assert.equal(validateSignup({
     first_name: 'דנה', last_name: 'לוי', phone: '050-1234567', email: 'dana@example.com',
@@ -156,13 +164,17 @@ test('whatsapp signup source and a bakery phrase stay on the same form', () => {
     interests: ['מאפייה'],
     region: 'נהריה',
     budget: '1.5 מ׳',
-    source: 'whatsapp',
+    signup_channel: 'our_link',
     looking_for: 'מחפש מאפייה או בית קפה, לא מפעל',
     consent_email: true,
     consent_text_version: CONSENT_TEXT_VERSION
   });
   assert.equal(result.ok, true, result.error);
-  assert.equal(result.row.source, 'whatsapp_link');
+  assert.equal(result.row.signup_channel, 'our_link');
+  assert.equal(validateSignup({
+    first_name: 'יוסי', last_name: 'לוי', phone: '052-1234567', email: 'yossi@example.com',
+    consent_email: true, consent_text_version: CONSENT_TEXT_VERSION, signup_channel: 'facebook'
+  }).row.signup_channel, 'website');
   assert.equal(result.row.interests.includes('מזון'), true);
   assert.equal(result.row.region, 'צפון');
   assert.equal(result.row.budget_min, 1500000);

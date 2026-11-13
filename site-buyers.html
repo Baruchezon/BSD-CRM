@@ -58,6 +58,9 @@ tr.row:hover{background:#f8fbff}
 .views{background:#f7f8fb;border-radius:12px;padding:10px}
 .empty{padding:28px;text-align:center;color:#6c7890}
 .toast{position:fixed;bottom:16px;left:16px;background:#0e1b34;color:#fff;border-radius:12px;padding:12px 14px;z-index:50}
+.channel-tabs{display:flex;gap:8px;margin:0 0 12px}
+.channel-tabs button{border:0;border-radius:999px;padding:10px 16px;font:inherit;font-weight:800;cursor:pointer;background:#e7edf5;color:#0e1b34}
+.channel-tabs button.on{background:#0e1b34;color:#fff}
 @media(max-width:900px){.cards,.splits{grid-template-columns:1fr 1fr}.wrap{padding:12px}}
 @media(max-width:640px){.cards,.splits{grid-template-columns:1fr}}
 </style>
@@ -76,6 +79,11 @@ tr.row:hover{background:#f8fbff}
   <div class="splits">
     <section class="panel"><h2>לפי אזור</h2><div id="regions"></div></section>
     <section class="panel"><h2>לפי תחום עניין</h2><div id="sectors"></div></section>
+  </div>
+  <section class="panel" style="margin-bottom:14px"><h2>לפי קמפיין</h2><div id="campaigns"></div></section>
+  <div class="channel-tabs" id="channelTabs">
+    <button type="button" data-channel="website" class="on">נרשם דרך האתר</button>
+    <button type="button" data-channel="our_link">יזום שלנו</button>
   </div>
   <div class="panel">
     <div class="searchbar">
@@ -115,6 +123,7 @@ const API = (window.BSD_CONFIG && window.BSD_CONFIG.SUPABASE_URL || '') + '/func
 let rows = [];
 let sample = false;
 let websiteBuyerLeads = 0;
+let channel = 'website';
 
 function toast(text){
   const el = document.getElementById('toast');
@@ -155,12 +164,14 @@ function cards(summary){
     `<article class="card ${cls}"><b>${num}</b><span>${label}</span></article>`).join('');
   document.getElementById('regions').innerHTML = UI.bars(summary.regions);
   document.getElementById('sectors').innerHTML = UI.bars(summary.sectors);
+  const campaigns = document.getElementById('campaigns');
+  if (campaigns) campaigns.innerHTML = UI.bars(summary.campaigns || {});
 }
 
 function visible(){
   const query = document.getElementById('q').value;
   const filter = document.getElementById('statusFilter').value;
-  return UI.filterRows(rows, query).filter(row => {
+  return UI.filterRows(rows, query).filter(row => UI.inChannel(row, channel)).filter(row => {
     if (!filter) return true;
     if (filter === 'legacy') return row.legacy_no_consent === true || row.consent_general !== true;
     if (filter === 'do_not_call') return row.do_not_call === true;
@@ -170,7 +181,13 @@ function visible(){
 }
 
 function paint(){
-  cards(UI.summarize(rows, new Date()));
+  const scoped = rows.filter(row => UI.inChannel(row, channel));
+  cards(UI.summarize(scoped, new Date()));
+  document.querySelectorAll('#channelTabs button').forEach(button => {
+    button.classList.toggle('on', button.dataset.channel === channel);
+    const count = rows.filter(row => UI.inChannel(row, button.dataset.channel)).length;
+    button.textContent = (button.dataset.channel === 'website' ? 'נרשם דרך האתר' : 'יזום שלנו') + ' (' + count + ')';
+  });
   const list = visible();
   const note = document.getElementById('leadNote');
   note.innerHTML = (websiteBuyerLeads
@@ -200,7 +217,7 @@ function openRow(id){
   document.getElementById('drawer').innerHTML = `<div class="drawer"><aside class="sheet">
     <button class="soft" id="closeDrawer" type="button">סגירה</button>
     <h2>${UI.esc(row.first_name || '')} ${UI.esc(row.last_name || '')}</h2>
-    <p class="muted">${UI.esc(UI.statusLabel(row.status))}${row.handled_at ? ' · טופל' : ''}</p>
+    <p class="muted">${UI.esc(UI.statusLabel(row.status))}${row.handled_at ? ' · טופל' : ''} · ${row.signup_channel === 'our_link' ? 'יזום שלנו' : 'נרשם דרך האתר'}${row.utm_campaign ? ' · ' + UI.esc(row.utm_campaign) : ''}</p>
     <p><b>טלפון:</b> <span dir="ltr">${UI.esc(row.phone || '')}</span><br><b>אימייל:</b> <span dir="ltr">${UI.esc(row.email || '')}</span></p>
     <p><b>הסכמה כללית:</b> ${row.consent_general ? 'כן' : 'לא'}<br>
     <b>אימייל:</b> ${row.consent_email ? 'כן' : 'לא'} · <b>וואטסאפ:</b> ${row.consent_whatsapp ? 'כן' : 'לא'}<br>
@@ -404,6 +421,12 @@ document.getElementById('bizLookup').addEventListener('click', async () => {
     }).join('') || '<span class="muted">אין נרשמים שמתאימים לעסק הזה.</span>';
     document.getElementById('byBusiness').innerHTML = rowsHtml;
   } catch (error) { toast(error.message); }
+});
+document.getElementById('channelTabs').addEventListener('click', event => {
+  const button = event.target.closest('button[data-channel]');
+  if (!button) return;
+  channel = button.dataset.channel;
+  paint();
 });
 document.getElementById('q').addEventListener('input', paint);
 document.getElementById('statusFilter').addEventListener('change', paint);
