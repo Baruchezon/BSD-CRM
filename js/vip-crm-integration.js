@@ -64,20 +64,6 @@
       </div>${body}</section>`;
   }
 
-  // בכרטיס עסק אין פאנל VIP נפרד. גם פאנל קצר גוזל גובה מאזור העבודה
-  // ומופיע באיחור אחרי תשובת השרת. תיבת הסימון משובצת בתוך שורת סטטוס
-  // ההסכם שכבר קיימת בכותרת ולכן אינה מוסיפה אפילו שורה אחת למסך.
-  function businessVipTarget(modal){
-    const notes=[...modal.querySelectorAll('.biz-sticky-top .agr-note:not(.agr-upload-row)')];
-    return notes.find(note=>note.textContent.includes('סטטוס הסכם נוכחי'))
-      || modal.querySelector('.biz-sticky-top')
-      || modal.querySelector('.biz-tabpane[data-tab="summaries"]')
-      || modal.querySelector('.biz-tabpanes .biz-tabpane')
-      || modal.querySelector('#bizForm .form-grid')
-      || modal.querySelector('#bizForm')
-      || modal;
-  }
-
   function businessVipBox(body){
     return `<span data-vip-crm-box class="biz-vip-inline">${body}</span>`;
   }
@@ -416,9 +402,10 @@
     if(!modal || !biz) return;
     const profile=await getProfile();
     if(!profile || !['admin','manager'].includes(profile.role)) return;
-    modal.querySelectorAll('[data-vip-crm-box]').forEach(x=>x.remove());
+    const target=modal.querySelector('#bizVipDistribution');
+    if(!target || modal.querySelector('#bizForm')?.dataset.bizId!==biz.id) return;
+    target.replaceChildren();
     businessVipState=null;
-    const target=businessVipTarget(modal);
     target.dataset.vipReturn=`businesses.html?open=${encodeURIComponent(biz.id)}`;
 
     // מוכנס מיד כאלמנט קטן וקבוע כדי שלא תהיה קפיצת פריסה כשהשרת חוזר.
