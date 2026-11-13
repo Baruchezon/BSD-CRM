@@ -4,8 +4,9 @@
 // request_details_enabled stays false. A test subscriber can still use the link.
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { SUBSCRIBER_FROM, BSD_SLOGAN } from "../_shared/business-alert-mail.mjs";
-import { chooseAnonymousFile, detailAccess, gentleDetailsCopy, recentDetailRequest } from "./logic.mjs";
+import { Buffer } from "node:buffer";
+import { SUBSCRIBER_FROM, BSD_SLOGAN, unsubscribeHttpsUrl } from "../_shared/business-alert-mail.mjs";
+import { attachmentName, chooseAnonymousFile, detailAccess, fileDetailsCopy, gentleDetailsCopy, isPdfBytes, recentDetailRequest } from "./logic.mjs";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -18,15 +19,26 @@ function page(text: string, status = 200) {
   return new Response(body, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
-async function sendMail(to: string, subject: string, text: string) {
+type Attachment = { filename: string; content: string; content_type?: string };
+
+async function sendMail(to: string, subject: string, text: string, html?: string, attachments?: Attachment[]) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) return { sent: false, error: "missing_email_configuration" };
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ from: SUBSCRIBER_FROM, to: [to], subject, text })
+    body: JSON.stringify({ from: SUBSCRIBER_FROM, to: [to], subject, text, ...(html ? { html } : {}), ...(attachments?.length ? { attachments } : {}) })
   });
   return { sent: response.ok, error: response.ok ? null : `resend_${response.status}` };
+}
+
+// Baruch, 13.11 11:32: attach the anonymous summary as a PDF, no long signed link.
+async function anonymousPdf(storagePath: string) {
+  const { data, error } = await supabase.storage.from("business-files").download(storagePath);
+  if (error || !data) return null;
+  const bytes = new Uint8Array(await data.arrayBuffer());
+  if (!isPdfBytes(bytes)) return null;
+  return Buffer.from(bytes).toString("base64");
 }
 
 Deno.serve(async req => {
@@ -84,20 +96,26 @@ Deno.serve(async req => {
   const file = chooseAnonymousFile(files || []);
 
   if (file?.storage_path && subscriber.email) {
-    const signed = await supabase.storage.from("business-files").createSignedUrl(file.storage_path, 60 * 30);
-    const link = signed.data?.signedUrl || "";
-    const mail = await sendMail(
-      subscriber.email,
-      "פרסומת: הפרטים המורחבים שביקשת",
-      link ? `הקובץ האנונימי מוכן:\n${link}` : "הקובץ האנונימי סומן, אבל הקישור לא נוצר."
-    );
-    await supabase.from("business_alert_detail_requests").insert({
-      subscriber_id: subscriber.id,
-      business_number: businessNumber,
-      file_id: file.id,
-      outcome: mail.sent ? "sent_file" : "file_failed"
-    });
-    return page(mail.sent ? "שלחנו אליך את הקובץ האנונימי." : "הבקשה נרשמה. המייל לא יצא.");
+    const pdf = await anonymousPdf(file.storage_path);
+    if (pdf) {
+      const copy = fileDetailsCopy({
+        firstName: subscriber.first_name,
+        addressForm: subscriber.address_form,
+        unsubscribeUrl: unsubscribeHttpsUrl(supabaseUrl, token, "email"),
+        slogan: BSD_SLOGAN
+      });
+      const mail = await sendMail(subscriber.email, copy.subject, copy.text, copy.html, [
+        { filename: attachmentName(businessNumber), content: pdf, content_type: "application/pdf" }
+      ]);
+      await supabase.from("business_alert_detail_requests").insert({
+        subscriber_id: subscriber.id,
+        business_number: businessNumber,
+        file_id: file.id,
+        outcome: mail.sent ? "sent_file" : "file_failed"
+      });
+      return page(mail.sent ? "שלחנו אליך את התקציר האנונימי כקובץ PDF מצורף." : "הבקשה נרשמה. המייל לא יצא.");
+    }
+    console.error("anonymous summary is not a downloadable PDF", file.id);
   }
 
   const gentle = gentleDetailsCopy(subscriber.address_form);

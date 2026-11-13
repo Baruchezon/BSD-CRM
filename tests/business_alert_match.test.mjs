@@ -239,7 +239,8 @@ test('the alert email is anonymous and uses the approved sender', () => {
     card: scored.public_card,
     unsubscribeUrl: 'https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/business-alert-unsubscribe?token=abc&channel=email'
   });
-  assert.equal(mail.subject.startsWith('פרסומת:'), true);
+  assert.equal(mail.subject.includes('פרסומת'), false);
+  assert.equal(mail.html.includes('פרסומת'), false);
   assert.equal(mail.text.startsWith('על פי הסינון שעשינו לפי הפרופיל שביקשת, העסק הזה מתאים לך'), true);
   assert.equal(mail.from, '"BSD - עסקים למכירה" <info@bsd-bbi.co.il>');
   assert.match(mail.text, /להסרה:/);
