@@ -917,9 +917,13 @@ function onPortalListPreviewClick(e){
 }
 document.addEventListener('click', onPortalListPreviewClick, true);
 
+function vipSendDisabled(event){
+  if (event){ event.preventDefault(); event.stopPropagation(); }
+  toast('שליחה ללקוחות VIP כבויה. vip_send_enabled נשאר כבוי, ולא נשלח שום מייל.');
+}
 function vipPublicationBadge(b){
   return VIP_PUBLICATION_BY_BIZ[b.id]
-    ? `<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="לחץ לפרטים" style="cursor:pointer;background:#fff4c2;color:#715300;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">⭐ מופץ ללקוחות VIP</span>`
+    ? `<span onclick="event.stopPropagation();openBizForm('${b.id}')" title="לחץ לפרטים" style="cursor:pointer;background:#fff4c2;color:#715300;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;white-space:nowrap;">⭐ מופץ ללקוחות VIP</span> <button type="button" onclick="vipSendDisabled(event)" style="border:0;border-radius:6px;background:#f6e2a4;color:#6a4b00;font-weight:700;padding:2px 8px;font-size:.7rem;cursor:pointer;">שלח ללקוחות VIP</button>`
     : `<span style="background:#f1f0ec;color:#888;border-radius:6px;padding:2px 8px;font-size:.7rem;white-space:nowrap;">⚪ לא מופץ ללקוחות VIP</span>`;
 }
 // ============================================================================

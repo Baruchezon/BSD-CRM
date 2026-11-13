@@ -298,6 +298,7 @@ test('subscriber rows show a source badge and honor the screen filters', () => {
   const rows = ctx.BSDSiteBuyers.sampleRows(new Date('2026-11-13T10:00:00+02:00'));
   assert.equal(ctx.BSDSiteBuyers.sourceBadge(rows[0]), 'נרשם דרך האתר');
   assert.equal(ctx.BSDSiteBuyers.sourceBadge({ source: 'website-catalog' }), 'נרשם דרך האתר');
+  assert.equal(ctx.BSDSiteBuyers.sourceBadge({ signup_channel: 'vip' }), 'VIP');
   assert.equal(ctx.BSDSiteBuyers.sourceBadge(rows.find(row => row.manual_source === 'call')), 'יזום שלנו');
   assert.equal(ctx.BSDSiteBuyers.sourceBadge(rows.find(row => row.manual_source === 'manual')), 'יזום שלנו');
   const dana = ctx.BSDSiteBuyers.contactStats(rows[0]);

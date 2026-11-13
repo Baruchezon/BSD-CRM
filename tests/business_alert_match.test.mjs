@@ -220,6 +220,10 @@ test('whatsapp signup source and a bakery phrase stay on the same form', () => {
   assert.equal(result.row.signup_channel, 'our_link');
   assert.equal(validateSignup({
     first_name: 'יוסי', last_name: 'לוי', phone: '052-1234567', email: 'yossi@example.com',
+    consent_email: true, consent_text_version: CONSENT_TEXT_VERSION, src: 'vip', utm_source: 'site', utm_medium: 'header-vip'
+  }).row.signup_channel, 'vip');
+  assert.equal(validateSignup({
+    first_name: 'יוסי', last_name: 'לוי', phone: '052-1234567', email: 'yossi@example.com',
     consent_email: true, consent_text_version: CONSENT_TEXT_VERSION, signup_channel: 'facebook'
   }).row.signup_channel, 'website');
   assert.equal(result.row.interests.includes('מזון'), true);

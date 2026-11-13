@@ -48,6 +48,7 @@
   const FLAGS = { franchise: "זכיינות" };
   const SOURCE_LABEL = {
     website: "נרשם דרך האתר",
+    vip: "VIP",
     our_link: "יזום שלנו",
     manual: "יזום שלנו",
     call: "יזום שלנו"
@@ -66,6 +67,7 @@
   }
 
   function sourceKind(row) {
+    if (row.signup_channel === "vip" || String(row.source || "") === "vip") return "vip";
     if (row.manual_source === "call") return "call";
     if (row.manual_source === "manual") return "manual";
     if (row.signup_channel === "our_link") return "our_link";
@@ -326,7 +328,7 @@
   function inChannel(row, channel) {
     if (!channel || channel === "all") return true;
     const kind = sourceKind(row);
-    if (channel === "our_link") return kind !== "website";
+    if (channel === "our_link") return kind === "our_link" || kind === "call" || kind === "manual";
     return kind === channel;
   }
 

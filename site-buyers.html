@@ -46,6 +46,7 @@ tr.row:hover{background:#f8fbff}
 .p-wait{background:#fff4c2;color:#6d5313}
 .p-call{background:#fde8e4;color:#8d2d2d}
 .p-web{background:#e7f0ff;color:#1d4e89}
+.p-vip{background:#f6e2a4;color:#6a4b00}
 .p-ours{background:#f3e7ff;color:#5a2d82}
 .p-hand{background:#fff1d6;color:#8a4b12}
 .p-phone{background:#e5f6ec;color:#14663a}
@@ -154,6 +155,7 @@ tr.row:hover{background:#f8fbff}
         <option value="all">כל המקורות</option>
         <option value="website">אתר</option>
         <option value="our_link">יזום שלנו</option>
+        <option value="vip">VIP</option>
         <option value="manual">נוסף ידנית</option>
         <option value="call">נוסף משיחה</option>
       </select>
@@ -304,7 +306,7 @@ function paint(){
     document.getElementById('table').innerHTML = '<div class="empty">' + UI.esc(text('list.empty', 'אין נרשמים להצגה במסנן הזה.')) + '</div>';
     return;
   }
-  const badgeClass = { website: 'p-web', our_link: 'p-ours', manual: 'p-hand', call: 'p-phone' };
+  const badgeClass = { website: 'p-web', vip: 'p-vip', our_link: 'p-ours', manual: 'p-hand', call: 'p-phone' };
   document.getElementById('table').innerHTML = `<table><thead><tr><th>שם</th><th>טלפון</th><th>אימייל</th><th>נרשם</th><th>מקור</th><th>מצב</th><th>הסכמה</th><th>מה מחפש</th></tr></thead><tbody>${list.map(row => {
     const name = UI.esc(((row.first_name || '') + ' ' + (row.last_name || '')).trim());
     const kind = UI.sourceKind(row);

@@ -423,6 +423,10 @@ Deno.serve(async req => {
       return json({ ok: true, result: data }, 200, origin);
     }
 
+    if (action === "preview_vip_send" || action === "send_vip") {
+      return json({ ok: false, error: "vip_send_disabled", enabled: false, sent: false }, 200, origin);
+    }
+
     if (action === "send_one_alert") {
       if (Array.isArray(body.ids) || Array.isArray(body.subscribers)) {
         return json({ ok: false, error: "one_subscriber_only" }, 400, origin);

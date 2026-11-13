@@ -143,6 +143,8 @@ function normalizeRegion(value) {
 
 function signupChannelOf(body) {
   const raw = cleanText(body?.signup_channel, 40).toLowerCase();
+  const src = cleanText(body?.src, 40).toLowerCase();
+  if (raw === "vip" || src === "vip") return "vip";
   return raw === "our_link" ? "our_link" : "website";
 }
 
