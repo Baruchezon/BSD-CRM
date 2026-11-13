@@ -1,5 +1,5 @@
 import copy from "../../../copy/he.json" with { type: "json" };
-import { say, signOffHtml } from "./business-alert-mail.mjs";
+import { quietNoteHtml, say, signOffHtml } from "./business-alert-mail.mjs";
 
 // Shared decisions for the alert signup, the public unsubscribe function,
 // and the CRM screen. The SQL functions in
@@ -177,5 +177,5 @@ export function unsubscribePage({ ok, channel, addressForm }) {
       ? copy.unsubscribe.successWhatsapp
       : copy.unsubscribe.successAll;
   const detail = say(ok ? success : copy.unsubscribe.invalidDetail, addressForm);
-  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body style="margin:0;background:#f4f7fb;font-family:Arial,Heebo,sans-serif;color:#102844"><main style="max-width:520px;margin:12vh auto;background:#fff;border-radius:18px;padding:32px;text-align:right;border-top:8px solid #c9a24b;box-shadow:0 16px 40px rgba(14,27,52,.12)"><p style="margin:0 0 8px;color:#8a6d1f;font-weight:700">BSD - עסקים למכירה</p><h1 style="margin:0 0 12px;font-size:32px">${title}</h1><p style="margin:0;font-size:18px;line-height:1.6">${detail}</p>${signOffHtml()}</main></body></html>`;
+  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body style="margin:0;background:#f4f7fb;font-family:Arial,Heebo,sans-serif;color:#102844"><main style="max-width:520px;margin:12vh auto;background:#fff;border-radius:18px;padding:32px;text-align:right;border-top:8px solid #c9a24b;box-shadow:0 16px 40px rgba(14,27,52,.12)"><p style="margin:0 0 8px;color:#8a6d1f;font-weight:700">BSD - עסקים למכירה</p><h1 style="margin:0 0 12px;font-size:32px">${title}</h1><p style="margin:0;font-size:18px;line-height:1.6">${detail}</p>${quietNoteHtml(addressForm)}${signOffHtml()}</main></body></html>`;
 }

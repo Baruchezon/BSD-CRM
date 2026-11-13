@@ -89,11 +89,24 @@ export function listUnsubscribeHeaders(httpsUrl, address = SUBSCRIBER_FROM_ADDRE
   };
 }
 
+export function quietNoteText(addressForm) {
+  return [
+    say(copy.pendingApproval.financing, addressForm),
+    say(copy.pendingApproval.newcomer, addressForm)
+  ].join("\n");
+}
+
+export function quietNoteHtml(addressForm) {
+  return `<p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:#647087;">${escapeHtml(quietNoteText(addressForm)).replace(/\n/g, "<br>")}</p>`;
+}
+
 export function whatsappMessage(firstName, addressForm) {
   const name = String(firstName || "").trim();
   const body = say(copy.whatsapp.prefill, addressForm);
   const greeting = name ? body.replace("שלום,", `שלום ${name},`) : body;
-  return ["פרסומת", greeting].join("\n");
+  const lines = greeting.split("\n");
+  const removal = lines.pop();
+  return ["פרסומת", ...lines, "", quietNoteText(addressForm), removal].join("\n");
 }
 
 export function subscriberSubject(topic) {
@@ -101,7 +114,7 @@ export function subscriberSubject(topic) {
   return `פרסומת: ${rest}`;
 }
 
-export function subscriberText({ firstName, body, unsubscribeUrl }) {
+export function subscriberText({ firstName, body, unsubscribeUrl, addressForm }) {
   const name = String(firstName || "").trim();
   const hello = name ? `שלום ${name},` : "שלום,";
   return [
@@ -109,6 +122,8 @@ export function subscriberText({ firstName, body, unsubscribeUrl }) {
     hello,
     "",
     String(body || "").trim(),
+    "",
+    quietNoteText(addressForm),
     "",
     unsubscribeUrl ? `להסרה: ${unsubscribeUrl}` : "",
     "",
@@ -122,5 +137,5 @@ export function subscriberHtml({ firstName, body, unsubscribeUrl, addressForm })
   const link = unsubscribeUrl
     ? `<p style="margin:16px 0 0;font-size:14px"><a href="${escapeHtml(unsubscribeUrl)}" style="color:#1d67c8">${escapeHtml(say(copy.email.unsubscribe, addressForm))}</a></p>`
     : "";
-  return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb"><div dir="rtl" lang="he" style="max-width:640px;margin:0 auto;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#102844;text-align:right"><div style="background:#0e1b34;color:#f0d48a;padding:18px 24px;font-size:18px;font-weight:700">${escapeHtml(SUBSCRIBER_FROM_NAME)}</div><div style="padding:24px;line-height:1.7;font-size:16px"><p style="margin:0 0 8px;font-size:13px;color:#8a6d1f">פרסומת</p><p style="margin:0 0 12px">${hello}</p><p style="margin:0">${escapeHtml(body || "").replace(/\n/g, "<br>")}</p>${link}${signOffHtml()}</div></div></body></html>`;
+  return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb"><div dir="rtl" lang="he" style="max-width:640px;margin:0 auto;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#102844;text-align:right"><div style="background:#0e1b34;color:#f0d48a;padding:18px 24px;font-size:18px;font-weight:700">${escapeHtml(SUBSCRIBER_FROM_NAME)}</div><div style="padding:24px;line-height:1.7;font-size:16px"><p style="margin:0 0 8px;font-size:13px;color:#8a6d1f">פרסומת</p><p style="margin:0 0 12px">${hello}</p><p style="margin:0">${escapeHtml(body || "").replace(/\n/g, "<br>")}</p>${link}${quietNoteHtml(addressForm)}${signOffHtml()}</div></div></body></html>`;
 }

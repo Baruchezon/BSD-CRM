@@ -10,7 +10,8 @@ test('the approved three-business letter keeps the company sender and both butto
       ...business,
       detailsUrl: `https://example.test/details/${business.number}`
     })),
-    unsubscribeUrl: 'https://www.bsd-bbi.co.il/הסרה/?token=abc&channel=email'
+    unsubscribeUrl: 'https://www.bsd-bbi.co.il/הסרה/?token=abc&channel=email',
+    addressForm: 'female'
   });
   assert.equal(mail.from, '"BSD - עסקים למכירה" <info@bsd-bbi.co.il>');
   assert.equal(mail.from, SUBSCRIBER_FROM);
@@ -33,5 +34,7 @@ test('the approved three-business letter keeps the company sender and both butto
   assert.match(mail.text, /לקבלת פרטים מורחבים:/);
   assert.match(mail.text, /https:\/\/www\.bsd-bbi\.co\.il\/הסרה\//);
   assert.equal(mail.text.includes('במילה «הסרה»'), false);
+  assert.match(mail.html, /חדשה בעולם העסקים/);
+  assert.match(mail.text, /מימון רכישת העסק/);
   assert.equal(APPROVED_ALERT_BUSINESSES.length, 3);
 });

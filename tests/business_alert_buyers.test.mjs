@@ -200,6 +200,9 @@ test('subscriber mail uses one quoted sender and never the team name', () => {
   assert.match(thanks, /אפשר להסיר את עצמך/);
   const feminine = thankYouEmailHtml({ firstName: 'דנה', unsubscribeLink: 'https://example.com/unsub', addressForm: 'female' });
   assert.match(feminine, /תוכלי להסיר/);
+  assert.match(feminine, /מימון רכישת העסק/);
+  assert.match(feminine, /חדשה בעולם העסקים/);
+  assert.match(thankYouEmailHtml({ firstName: 'דנה', unsubscribeLink: 'https://example.com/unsub' }), /צעד ראשון בעולם העסקים/);
   assert.equal(signOffText().includes('צוות BSD'), false);
   const headers = listUnsubscribeHeaders('https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/business-alert-unsubscribe?token=abc&channel=all');
   assert.match(headers['List-Unsubscribe'], new RegExp(`<mailto:${SUBSCRIBER_FROM_ADDRESS}\\?subject=unsubscribe>`));
@@ -223,6 +226,7 @@ test('the unsubscribe page is Hebrew and says the removal succeeded', () => {
   assert.match(page, /תמיד אפשר לחזור/);
   assert.match(unsubscribePage({ ok: true, channel: 'all' }), /הוסרת מכל העדכונים/);
   assert.match(unsubscribePage({ ok: true, channel: 'all', addressForm: 'female' }), /תוכלי לחזור/);
+  assert.match(unsubscribePage({ ok: true, channel: 'all', addressForm: 'female' }), /חדשה בעולם העסקים/);
   assert.match(unsubscribePage({ ok: true, channel: 'all', addressForm: 'male' }), /תוכל לחזור/);
   assert.match(page, /אימייל/);
   assert.match(page, /BSD - עסקים למכירה/);
@@ -278,6 +282,9 @@ test('the tools menu points at the new screen and mail files use the sender cons
   assert.equal(copy.email.headline.neutral, 'על פי הסינון שעשינו לפי הפרופיל שביקשת, העסק הזה מתאים לך');
   assert.equal(copy.email.subject.neutral, 'מצאנו עסק שמתאים לפרופיל שביקשת');
   assert.equal(copy.email.signupThanks.neutral, 'תודה שנרשמת');
+  assert.equal(copy.pendingApproval.approval, 'pending approval');
+  assert.equal(copy.pendingApproval.newcomer.female, 'חדשה בעולם העסקים? אנחנו כאן כדי ללוות ולעזור בכל שלב.');
+  assert.equal(copy.pendingApproval.newcomer.neutral, 'צעד ראשון בעולם העסקים? אנחנו כאן כדי ללוות ולעזור בכל שלב.');
   assert.match(copy.whatsapp.prefill.neutral, /להסרה אפשר להשיב הסר/);
   assert.equal(JSON.stringify(copy).includes('/'), false);
   assert.equal(copy.unsubscribe.successTitle.neutral, 'הוסרת בהצלחה');

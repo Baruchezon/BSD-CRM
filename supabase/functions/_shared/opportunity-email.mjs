@@ -8,6 +8,8 @@ import {
   SUBSCRIBER_FROM,
   SUBSCRIBER_SITE,
   escapeHtml,
+  quietNoteHtml,
+  quietNoteText,
   subscriberSubject
 } from "./business-alert-mail.mjs";
 
@@ -86,7 +88,7 @@ function businessText(business, index) {
   return lines.join("\n");
 }
 
-export function threeBusinessEmail({ firstName, businesses, unsubscribeUrl }) {
+export function threeBusinessEmail({ firstName, businesses, unsubscribeUrl, addressForm }) {
   const cards = (businesses || []).slice(0, 3);
   const count = cards.length || 3;
   const name = String(firstName || "").trim();
@@ -109,6 +111,8 @@ export function threeBusinessEmail({ firstName, businesses, unsubscribeUrl }) {
     "אנחנו גם מסייעים במימון רכישת העסק, ומלווים אותך לאורך כל הדרך, מהשיחה הראשונה ועד שהעסק בידיים שלך.",
     "",
     "אפשר פשוט להשיב למייל הזה, או להתקשר אלינו בטלפון 077-4446707 או 054-2424999.",
+    "",
+    quietNoteText(addressForm),
     "",
     "ברוך איזון",
     "מנכ״ל | BSD מתווכי עסקים ישראל",
@@ -150,6 +154,7 @@ export function threeBusinessEmail({ firstName, businesses, unsubscribeUrl }) {
               ${cards.map(businessCard).join("\n")}
               <p style="margin:8px 0 14px 0;font-size:15px;line-height:1.7;color:#111c31;">אנחנו גם מסייעים במימון רכישת העסק, ומלווים אותך לאורך כל הדרך, מהשיחה הראשונה ועד שהעסק בידיים שלך.</p>
               <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#111c31;">אפשר פשוט להשיב למייל הזה, או להתקשר אלינו בטלפון <a href="tel:+972774446707" style="color:#102d61;text-decoration:none">077-4446707</a> או <a href="tel:+972542424999" style="color:#102d61;text-decoration:none">054-2424999</a>.</p>
+              ${quietNoteHtml(addressForm)}
               <table role="presentation" cellpadding="0" cellspacing="0" dir="rtl" style="border-top:1px solid #d9e2ed;margin-top:18px;border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;text-align:right">
                 <tbody>
                   <tr>

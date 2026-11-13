@@ -443,7 +443,8 @@ Deno.serve(async req => {
           ...business,
           detailsUrl: `${supabaseUrl}/functions/v1/business-alert-request-details?business=${encodeURIComponent(business.number)}&subscriber=${encodeURIComponent(id)}`
         })),
-        unsubscribeUrl: unsubscribeHttpsUrl(supabaseUrl, row.unsubscribe_token, "email")
+        unsubscribeUrl: unsubscribeHttpsUrl(supabaseUrl, row.unsubscribe_token, "email"),
+        addressForm: row.address_form
       });
       if (body.confirm !== true) {
         return json({ ok: true, preview: true, sent: false, from: mail.from, subject: mail.subject }, 200, origin);

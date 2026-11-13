@@ -8,6 +8,8 @@ import {
   SUBSCRIBER_REPLY_TO,
   phonesHtml,
   phonesText,
+  quietNoteHtml,
+  quietNoteText,
   say,
   subscriberSubject
 } from "../_shared/business-alert-mail.mjs";
@@ -66,6 +68,8 @@ export function thankYouEmailText({ firstName, unsubscribeLink, addressForm }) {
     "",
     `${say(copy.email.signupRemove, addressForm)} ${unsubscribeLink || ""}`,
     "",
+    quietNoteText(addressForm),
+    "",
     BARUCH_SIGNATURE_TEXT
   ].join("\n");
 }
@@ -87,6 +91,7 @@ export function thankYouEmailHtml({ firstName, unsubscribeLink, addressForm }) {
       <p style="margin:0 0 12px;font-size:17px">${escapeHtml(say(copy.email.signupBody, addressForm))}</p>
       <p style="margin:0 0 12px;font-size:17px">${escapeHtml(say(copy.email.signupKeep, addressForm))}</p>
       <p style="margin:0;font-size:15px;color:#3d4c63">${escapeHtml(say(copy.email.signupRemove, addressForm))}<br><a href="${link}" style="color:#1d67c8">${escapeHtml(say(copy.email.unsubscribe, addressForm))}</a></p>
+      ${quietNoteHtml(addressForm)}
       ${baruchSignatureHtml()}
     </div>
   </div>
