@@ -172,4 +172,38 @@ test('the tools menu points at the new screen and mail files use the sender cons
   assert.match(sql, /revoke all on function public\.business_alert_crm_list\(\) from public, anon, authenticated/);
   assert.equal(sql.includes('grant select on public.business_alert_subscribers to anon'), false);
   assert.match(app, /navToolsWrap/);
+  const leads = fs.readFileSync(new URL('../leads-hub.html', import.meta.url), 'utf8');
+  assert.match(leads, /נרשמים לעדכונים/);
+  const copy = JSON.parse(fs.readFileSync(new URL('../copy/he.json', import.meta.url), 'utf8'));
+  assert.equal(copy.email.headline, 'על פי הסינון שעשינו לפי הפרופיל שביקשת, העסק הזה מתאים לך');
+  assert.match(copy.whatsapp.prefill, /להסרה השב\/י הסר/);
+  assert.equal(copy.unsubscribe.successTitle, 'הוסרת בהצלחה');
+  assert.match(copy.email.warm, /לא רוצים להעמיס/);
+  const screenSql = fs.readFileSync(new URL('../supabase/migrations/20261113170000_business_alert_screen.sql', import.meta.url), 'utf8');
+  assert.match(screenSql, /business_alert_screen_list/);
+  assert.match(screenSql, /business_alert_manual_add/);
+  assert.match(screenSql, /business_alert_set_do_not_call/);
+  assert.match(screenSql, /opened_at/);
+  assert.match(screenSql, /revoke all on function public\.business_alert_screen_list/);
+  assert.equal(/grant execute on function public\.business_alert_screen_list[\s\S]*to anon/.test(screenSql), false);
+});
+
+test('subscriber rows show a source badge and honor the screen filters', () => {
+  const ctx = {};
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(new URL('../js/site-buyers.js', import.meta.url), 'utf8'), ctx);
+  const rows = ctx.BSDSiteBuyers.sampleRows(new Date('2026-11-13T10:00:00+02:00'));
+  assert.equal(ctx.BSDSiteBuyers.sourceBadge(rows[0]), 'נרשם דרך האתר');
+  assert.equal(ctx.BSDSiteBuyers.sourceBadge(rows.find(row => row.manual_source === 'call')), 'נוסף משיחה');
+  assert.equal(ctx.BSDSiteBuyers.sourceBadge(rows.find(row => row.manual_source === 'manual')), 'נוסף ידנית');
+  assert.match(ctx.BSDSiteBuyers.lookingLine(rows[0]), /מזון/);
+  assert.match(ctx.BSDSiteBuyers.sendSummary(rows[0]), /1 עסקים/);
+  const called = rows.filter(row => ctx.BSDSiteBuyers.passesFilters(row, { source: 'call', status: '' }));
+  assert.equal(called.length, 1);
+  const quiet = rows.filter(row => ctx.BSDSiteBuyers.passesFilters(row, { source: 'all', status: 'do_not_call' }));
+  assert.equal(quiet.length, 1);
+  const food = rows.filter(row => ctx.BSDSiteBuyers.passesFilters(row, { source: 'all', sector: 'מזון ומסעדנות' }));
+  assert.equal(ctx.BSDSiteBuyers.subLabels(rows[0]).join(', '), 'מאפייה');
+  assert.equal(food.length, 1);
+  assert.equal(ctx.BSDSiteBuyers.summarize(rows, new Date('2026-11-13T10:00:00+02:00')).sends, 1);
 });

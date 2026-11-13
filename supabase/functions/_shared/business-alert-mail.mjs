@@ -1,3 +1,5 @@
+import copy from "../../../copy/he.json" with { type: "json" };
+
 // One sender for every subscriber email these functions send:
 // signup confirmation, future alert mailings, and any unsubscribe mail.
 // The display name is quoted because it contains a hyphen and non-ASCII text.
@@ -60,18 +62,8 @@ export function listUnsubscribeHeaders(httpsUrl, address = SUBSCRIBER_FROM_ADDRE
 
 export function whatsappMessage(firstName) {
   const name = String(firstName || "").trim();
-  const hello = name ? `שלום ${name},` : "שלום,";
-  return [
-    "פרסומת",
-    hello,
-    "כאן BSD - עסקים למכירה.",
-    "נרשמתם לעדכונים על עסקים למכירה. אם יש עדכון שמתאים למה שסימנתם, נשמח לעדכן אתכם.",
-    "אין בהודעה הזו שם של עסק.",
-    "",
-    signOffText(),
-    "",
-    "להסרה השב/י הסר"
-  ].join("\n");
+  const body = name ? copy.whatsapp.prefill.replace("שלום,", `שלום ${name},`) : copy.whatsapp.prefill;
+  return ["פרסומת", body].join("\n");
 }
 
 export function subscriberSubject(topic) {

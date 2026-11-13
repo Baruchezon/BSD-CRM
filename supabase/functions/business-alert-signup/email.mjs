@@ -11,20 +11,21 @@ import {
   subscriberText,
   escapeHtml
 } from "../_shared/business-alert-mail.mjs";
+import copy from "../../../copy/he.json" with { type: "json" };
 
 export const MAIL_FROM = SUBSCRIBER_FROM;
 export const MAIL_REPLY_TO = SUBSCRIBER_REPLY_TO;
 export const INTERNAL_TO = "baruch.ezon@gmail.com";
 
 export function thankYouSubject() {
-  return subscriberSubject("נרשמתם לעדכונים על עסקים למכירה | BSD");
+  return subscriberSubject(copy.email.signupSubject);
 }
 
 export function thankYouEmailText({ firstName, unsubscribeLink }) {
   return subscriberText({
     firstName,
     unsubscribeUrl: unsubscribeLink,
-    body: "נרשמתם לעדכונים על עסקים חדשים למכירה. כשעסק חדש יעלה ויתאים למה שסימנתם, נשלח אליכם עדכון קצר.\nהפרטים שמורים אצל BSD ומשמשים רק לשליחת העדכונים האלה."
+    body: copy.email.signupBody
   });
 }
 
@@ -32,7 +33,7 @@ export function thankYouEmailHtml({ firstName, unsubscribeLink }) {
   return subscriberHtml({
     firstName,
     unsubscribeUrl: unsubscribeLink,
-    body: "נרשמתם לעדכונים על עסקים חדשים למכירה. כשעסק חדש יעלה ויתאים למה שסימנתם, נשלח אליכם עדכון קצר.\nהפרטים שמורים אצל BSD ומשמשים רק לשליחת העדכונים האלה."
+    body: copy.email.signupBody
   });
 }
 

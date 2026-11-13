@@ -6,6 +6,7 @@
 
 import { profileBusiness, profileBuyer, scorePair } from "../match-suggestions-report/engine.js";
 import { businessTaxonomy, locationRelation, sectorRelation, subscriberTaxonomy } from "./taxonomy.mjs";
+import copy from "../../../copy/he.json" with { type: "json" };
 import {
   SUBSCRIBER_FROM_NAME,
   SUBSCRIBER_SITE,
@@ -294,10 +295,11 @@ export function sendGate(settings, match) {
 }
 
 export function matchAlertEmail({ firstName, card, unsubscribeUrl }) {
-  const subject = subscriberSubject("עסק שמתאים לפרופיל שביקשת");
-  const headline = "על פי הסינון שעשינו לפי הפרופיל שביקשת, העסק הזה מתאים לך";
+  const subject = subscriberSubject(copy.email.subject);
+  const headline = copy.email.headline;
   const lines = [
     headline,
+    copy.email.warm,
     "",
     card.title || "הזדמנות עסקית",
     card.field || "",
@@ -312,6 +314,6 @@ export function matchAlertEmail({ firstName, card, unsubscribeUrl }) {
     signOffText()
   ].filter((line, index, all) => line !== "" || (index > 0 && all[index - 1] !== ""));
   const text = lines.join("\n");
-  const html = `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb"><div dir="rtl" style="max-width:640px;margin:0 auto;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#102844;text-align:right"><div style="background:#0e1b34;color:#f0d48a;padding:18px 24px;font-weight:700">${escapeHtml(SUBSCRIBER_FROM_NAME)}</div><div style="padding:24px;line-height:1.7"><p style="margin:0 0 8px;color:#8a6d1f;font-size:13px">פרסומת</p><p style="margin:0 0 16px;font-size:18px">${escapeHtml(headline)}</p><h2 style="margin:0 0 8px;font-size:22px">${escapeHtml(card.title || "הזדמנות עסקית")}</h2><p style="margin:0">${escapeHtml([card.field, card.region ? `אזור: ${card.region}` : "", card.priceText ? `מחיר: ${card.priceText}` : "", card.summary || ""].filter(Boolean).join("\n")).replace(/\n/g, "<br>")}</p>${card.url ? `<p><a href="${escapeHtml(card.url)}">לעמוד האנונימי</a></p>` : ""}${unsubscribeUrl ? `<p><a href="${escapeHtml(unsubscribeUrl)}">הסרה מרשימת העדכונים</a></p>` : ""}${signOffHtml()}</div></div></body></html>`;
+  const html = `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb"><div dir="rtl" style="max-width:640px;margin:0 auto;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#102844;text-align:right"><div style="background:#0e1b34;color:#f0d48a;padding:18px 24px;font-weight:700">${escapeHtml(SUBSCRIBER_FROM_NAME)}</div><div style="padding:24px;line-height:1.7"><p style="margin:0 0 8px;color:#8a6d1f;font-size:13px">פרסומת</p><p style="margin:0 0 16px;font-size:18px">${escapeHtml(headline)}</p><p style="margin:0 0 16px">${escapeHtml(copy.email.warm)}</p><h2 style="margin:0 0 8px;font-size:22px">${escapeHtml(card.title || "הזדמנות עסקית")}</h2><p style="margin:0">${escapeHtml([card.field, card.region ? `אזור: ${card.region}` : "", card.priceText ? `מחיר: ${card.priceText}` : "", card.summary || ""].filter(Boolean).join("\n")).replace(/\n/g, "<br>")}</p>${card.url ? `<p><a href="${escapeHtml(card.url)}">לעמוד האנונימי</a></p>` : ""}${unsubscribeUrl ? `<p><a href="${escapeHtml(unsubscribeUrl)}">הסרה מרשימת העדכונים</a></p>` : ""}${signOffHtml()}</div></div></body></html>`;
   return { from: subscriberFromHeader(), subject, text, html };
 }

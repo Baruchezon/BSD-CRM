@@ -16,6 +16,7 @@ import {
 } from "../_shared/business-alert-mail.mjs";
 import { gateDecision } from "../_shared/business-alert-rules.mjs";
 import { matchAlertEmail, normalizeMatchConfig, publicCard, scoreAlert, sendGate } from "../_shared/alert-match.mjs";
+import copy from "../../copy/he.json" with { type: "json" };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -49,6 +50,16 @@ function json(body: unknown, status: number, origin: string | null) {
 
 function clean(value: unknown, max = 2000) {
   return String(value ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim().slice(0, max);
+}
+
+function numOrNull(value: unknown) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function textList(value: unknown) {
+  return Array.isArray(value) ? value.map(item => clean(item, 60)).filter(Boolean) : [];
 }
 
 async function requireManager(req: Request) {
@@ -265,6 +276,69 @@ Deno.serve(async req => {
       return json({ ok: true, subscribers: data || [], websiteBuyerLeads: count || 0, from: subscriberFromHeader(), sendingEnabled: settings.sendingEnabled }, 200, origin);
     }
 
+    if (action === "screen") {
+      const { data, error } = await supabase.rpc("business_alert_screen_list", {
+        p_source: clean(body.source, 20) || null,
+        p_sector: clean(body.sector, 80) || null,
+        p_region: clean(body.region, 80) || null,
+        p_budget_min: numOrNull(body.budget_min),
+        p_budget_max: numOrNull(body.budget_max),
+        p_status: clean(body.status, 40) || null
+      });
+      if (error) throw error;
+      const { count } = await supabase.from("leads").select("id", { count: "exact", head: true })
+        .eq("source", "אתר BSD החדש").eq("type", "buyer").eq("is_archived", false);
+      const settings = await matchSettings();
+      return json({ ok: true, subscribers: data || [], websiteBuyerLeads: count || 0, from: subscriberFromHeader(), sendingEnabled: settings.sendingEnabled }, 200, origin);
+    }
+
+    if (action === "card") {
+      const { data, error } = await supabase.rpc("business_alert_screen_card", { p_subscriber_id: body.id });
+      if (error) throw error;
+      if (!data?.subscriber) return json({ ok: false, error: "not_found" }, 404, origin);
+      return json({ ok: true, ...data }, 200, origin);
+    }
+
+    if (action === "sends") {
+      const { data, error } = await supabase.rpc("business_alert_sends_history", { p_subscriber_id: body.id });
+      if (error) throw error;
+      return json({ ok: true, sends: data || [] }, 200, origin);
+    }
+
+    if (action === "do_not_call") {
+      const { data, error } = await supabase.rpc("business_alert_set_do_not_call", {
+        p_subscriber_id: body.id,
+        p_flag: body.do_not_call === true
+      });
+      if (error) return json({ ok: false, error: "not_found" }, 404, origin);
+      return json({ ok: true, result: data }, 200, origin);
+    }
+
+    if (action === "manual_add") {
+      const { data, error } = await supabase.rpc("business_alert_manual_add", {
+        p_first_name: clean(body.first_name, 80),
+        p_last_name: clean(body.last_name, 80),
+        p_phone: clean(body.phone, 40),
+        p_email: clean(body.email, 180),
+        p_manual_source: clean(body.manual_source, 20),
+        p_consent_text: clean(body.consent_text, 2000),
+        p_consent_version: clean(body.consent_version, 80),
+        p_consent_email: body.consent_email === true,
+        p_consent_whatsapp: body.consent_whatsapp === true,
+        p_categories: textList(body.categories),
+        p_subcategories: textList(body.subcategories),
+        p_regions: textList(body.regions),
+        p_budget_min: numOrNull(body.budget_min),
+        p_budget_max: numOrNull(body.budget_max),
+        p_budget_open: body.budget_open === true,
+        p_looking_for: clean(body.looking_for, 2000) || null,
+        p_region: clean(body.region, 80) || null,
+        p_interests: textList(body.interests)
+      });
+      if (error) return json({ ok: false, error: "manual_add_rejected", message: error.message }, 400, origin);
+      return json({ ok: true, card: data }, 200, origin);
+    }
+
     if (action === "detail") {
       const { data, error } = await supabase.rpc("business_alert_crm_detail", { p_subscriber_id: body.id });
       if (error) throw error;
@@ -317,7 +391,7 @@ Deno.serve(async req => {
       }
       const link = unsubscribeHttpsUrl(supabaseUrl, row.unsubscribe_token, "email");
       const catalog = `${SUBSCRIBER_SITE}/עסקים-למכירה/?bat=${encodeURIComponent(row.visit_token)}`;
-      const message = `נרשמתם לעדכונים על עסקים למכירה. אפשר לראות את הרשימה האנונימית כאן:\n${catalog}\nאין בהודעה שם של עסק.`;
+      const message = `${copy.email.warm}\n${copy.form.thanks}\n${catalog}`;
       const subject = subscriberSubject("עדכון על עסקים למכירה");
       const text = subscriberText({ firstName: row.first_name, body: message, unsubscribeUrl: link });
       const html = subscriberHtml({ firstName: row.first_name, body: message, unsubscribeUrl: link });

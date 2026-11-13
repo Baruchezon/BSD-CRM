@@ -18,6 +18,38 @@
     }[character]));
   }
 
+  const SECTORS = {
+    food: "מזון ומסעדנות", grocery: "קמעונאות מזון", retail: "מסחר וקמעונאות",
+    wholesale: "ייבוא, סיטונאות והפצה", beauty: "יופי וטיפוח", health: "בריאות וטיפול",
+    auto: "רכב", construction: "בנייה, קבלנות ותעשייה", services: "שירותים לעסקים",
+    education_leisure: "חינוך ופנאי"
+  };
+  const SUBS = {
+    restaurant: "מסעדה", cafe: "בית קפה", fast_food: "מזון מהיר", bakery: "מאפייה",
+    catering: "קייטרינג", pub_bar: "פאב / בר", juice_bar: "בר מיצים ושייקים",
+    food_production: "ייצור מזון", supermarket: "סופרמרקט", minimarket: "מינימרקט",
+    produce: "ירקות ופירות", deli: "מעדנייה", fashion: "הלבשה ואופנה",
+    beauty_products: "מוצרי יופי וטיפוח", general_store: "חנות כללית", ecommerce: "מסחר מקוון",
+    import: "ייבוא", wholesale: "סיטונאות", distribution: "הפצה", hair_salon: "מספרה",
+    cosmetics: "קוסמטיקה", nails: "ציפורניים", medical_aesthetics: "אסתטיקה רפואית",
+    clinic: "קליניקה / מרפאה", complementary: "טיפולים משלימים", fitness: "כושר וסטודיו",
+    garage: "מוסך", car_accessories: "אבזור רכב", car_wash: "שטיפת רכב",
+    contracting: "קבלנות", hvac_electric: "מיזוג אוויר וחשמל", manufacturing: "ייצור ותעשייה",
+    marketing_digital: "שיווק ודיגיטל", software_web: "תוכנה ואתרים",
+    cleaning_maintenance: "ניקיון ואחזקה", transport_tourism: "הסעות ותיירות",
+    kindergarten: "גנים וצהרונים", classes: "חוגים", leisure: "פנאי ונופש"
+  };
+  const REGIONS = {
+    north: "צפון", haifa: "חיפה והקריות", sharon: "שרון", tel_aviv: "תל אביב",
+    center: "מרכז וגוש דן", shfela: "שפלה", jerusalem: "ירושלים והסביבה", south: "דרום", all: "כל הארץ"
+  };
+  const SOURCE_LABEL = {
+    website: "נרשם דרך האתר",
+    our_link: "יזום שלנו",
+    manual: "נוסף ידנית",
+    call: "נוסף משיחה"
+  };
+
   function statusLabel(status) {
     return {
       active: "פעיל",
@@ -26,6 +58,89 @@
       unsubscribed_all: "הוסר מהכל",
       unsubscribed: "הוסר מהכל"
     }[status] || status || "—";
+  }
+
+  function sourceKind(row) {
+    if (row.manual_source === "call") return "call";
+    if (row.manual_source === "manual") return "manual";
+    return row.signup_channel === "our_link" ? "our_link" : "website";
+  }
+
+  function sourceBadge(row) {
+    return SOURCE_LABEL[sourceKind(row)] || SOURCE_LABEL.website;
+  }
+
+  function sectorLabels(row) {
+    const slugs = Array.isArray(row.categories) ? row.categories.filter(Boolean) : [];
+    if (slugs.length) return slugs.map(slug => SECTORS[slug] || slug);
+    return Array.isArray(row.interests) && row.interests.length ? row.interests : ["לא צוין"];
+  }
+
+  function subLabels(row) {
+    const slugs = Array.isArray(row.subcategories) ? row.subcategories.filter(Boolean) : [];
+    return slugs.map(slug => SUBS[slug] || slug);
+  }
+
+  function regionLabels(row) {
+    const slugs = Array.isArray(row.regions) ? row.regions.filter(Boolean) : [];
+    if (slugs.length) return slugs.map(slug => REGIONS[slug] || slug);
+    return [row.region || "לא צוין"];
+  }
+
+  function budgetLabel(row) {
+    if (row.budget_open) return "פתוח להצעות";
+    const min = row.budget_min == null ? null : Number(row.budget_min);
+    const max = row.budget_max == null ? null : Number(row.budget_max);
+    if (min == null && max == null) return "לא צוין";
+    const text = value => {
+      if (value == null || Number.isNaN(value)) return "";
+      if (value >= 1000000) return (value / 1000000).toLocaleString("he-IL") + " מ׳";
+      if (value >= 1000) return (value / 1000).toLocaleString("he-IL") + " אלף";
+      return value.toLocaleString("he-IL");
+    };
+    if (min != null && max != null) return text(min) + "–" + text(max);
+    if (max != null) return "עד " + text(max);
+    return "מ-" + text(min);
+  }
+
+  function lookingLine(row) {
+    const free = String(row.looking_for || "").trim();
+    const bits = [sectorLabels(row).slice(0, 2).join(", "), regionLabels(row).slice(0, 2).join(", ")].filter(part => part && part !== "לא צוין");
+    if (free) bits.push(free.length > 42 ? free.slice(0, 42) + "…" : free);
+    return bits.join(" · ") || "לא צוין";
+  }
+
+  function sendSummary(row) {
+    const count = Number(row.send_count || (Array.isArray(row.sends) ? row.sends.length : 0) || 0);
+    if (!count) return "עדיין לא נשלח";
+    const when = row.last_sent_at ? new Date(row.last_sent_at).toLocaleDateString("he-IL") : "";
+    return count + " עסקים" + (when ? " · " + when : "");
+  }
+
+  function passesFilters(row, filters) {
+    const source = (filters && (filters.source || filters.channel)) || "all";
+    if (!inChannel(row, source)) return false;
+    if (filters && filters.sector) {
+      const labels = sectorLabels(row);
+      const slugs = Array.isArray(row.categories) ? row.categories : [];
+      const interests = Array.isArray(row.interests) ? row.interests : [];
+      if (!labels.includes(filters.sector) && !slugs.includes(filters.sector) && !interests.includes(filters.sector)) return false;
+    }
+    if (filters && filters.region) {
+      const labels = regionLabels(row);
+      const slugs = Array.isArray(row.regions) ? row.regions : [];
+      if (!labels.includes(filters.region) && !slugs.includes(filters.region) && row.region !== filters.region) return false;
+    }
+    const min = !filters || filters.budgetMin === "" || filters.budgetMin == null ? null : Number(filters.budgetMin);
+    const max = !filters || filters.budgetMax === "" || filters.budgetMax == null ? null : Number(filters.budgetMax);
+    if (min != null && !Number.isNaN(min) && row.budget_open !== true && row.budget_max != null && Number(row.budget_max) < min) return false;
+    if (max != null && !Number.isNaN(max) && row.budget_open !== true && row.budget_min != null && Number(row.budget_min) > max) return false;
+    const status = (filters && filters.status) || "";
+    if (!status) return true;
+    if (status === "legacy") return row.legacy_no_consent === true || row.consent_general !== true;
+    if (status === "do_not_call") return row.do_not_call === true;
+    if (status === "unsubscribed_all") return row.status === "unsubscribed_all" || row.status === "unsubscribed";
+    return row.status === status;
   }
 
   function isClosed(status) {
@@ -58,33 +173,38 @@
     const week = startOfWeekJerusalem(now || new Date()).getTime();
     const summary = {
       total: rows.length, newThisWeek: 0, active: 0, unsubscribed: 0,
-      emailConsent: 0, whatsappConsent: 0, doNotCall: 0, awaitingConsent: 0,
-      regions: {}, sectors: {}, campaigns: {}
+      emailConsent: 0, whatsappConsent: 0, doNotCall: 0, awaitingConsent: 0, sends: 0,
+      regions: {}, sectors: {}, campaigns: {}, sources: {}, months: {}
     };
     rows.forEach(row => {
       if (row.created_at && new Date(row.created_at).getTime() >= week) summary.newThisWeek += 1;
       if (row.status === "active") summary.active += 1;
       if (isClosed(row.status)) summary.unsubscribed += 1;
       if (row.do_not_call === true) summary.doNotCall += 1;
+      summary.sends += Number(row.send_count || (Array.isArray(row.sends) ? row.sends.length : 0) || 0);
       const marketed = row.legacy_no_consent !== true && row.consent_general === true;
       if (!marketed) summary.awaitingConsent += 1;
       const emailClosed = row.status === "unsubscribed_email" || row.status === "unsubscribed_all" || row.status === "unsubscribed" || !!row.email_unsubscribed_at;
       const whatsappClosed = row.status === "unsubscribed_whatsapp" || row.status === "unsubscribed_all" || row.status === "unsubscribed" || !!row.whatsapp_unsubscribed_at;
       if (marketed && row.consent_email === true && !emailClosed) summary.emailConsent += 1;
       if (marketed && row.consent_whatsapp === true && !whatsappClosed) summary.whatsappConsent += 1;
-      const region = row.region || "לא צוין";
-      summary.regions[region] = (summary.regions[region] || 0) + 1;
-      const interests = Array.isArray(row.interests) && row.interests.length ? row.interests : ["לא צוין"];
-      interests.forEach(interest => { summary.sectors[interest] = (summary.sectors[interest] || 0) + 1; });
+      regionLabels(row).forEach(region => { summary.regions[region] = (summary.regions[region] || 0) + 1; });
+      sectorLabels(row).forEach(interest => { summary.sectors[interest] = (summary.sectors[interest] || 0) + 1; });
       const campaign = row.utm_campaign || "בלי קמפיין";
       summary.campaigns[campaign] = (summary.campaigns[campaign] || 0) + 1;
+      const source = sourceBadge(row);
+      summary.sources[source] = (summary.sources[source] || 0) + 1;
+      const month = row.created_at ? String(row.created_at).slice(0, 7) : "—";
+      summary.months[month] = (summary.months[month] || 0) + 1;
     });
     return summary;
   }
 
   function inChannel(row, channel) {
-    const value = row.signup_channel === "our_link" ? "our_link" : "website";
-    return value === channel;
+    if (!channel || channel === "all") return true;
+    const kind = sourceKind(row);
+    if (channel === "our_link") return kind !== "website";
+    return kind === channel;
   }
 
   function filterRows(rows, query) {
@@ -113,7 +233,10 @@
         consent_text: "אני מאשר/ת לקבל מ-BSD עדכונים ופרסומות על עסקים למכירה",
         consent_version: "v1-2026-11-13", consent_at: today, source_url: "https://www.bsd-bbi.co.il/עסקים-למכירה/",
         signup_channel: "website", utm_campaign: "catalog-nov", utm_source: "site", utm_medium: "organic",
+        categories: ["food"], subcategories: ["bakery"], regions: ["center"], looking_for: "מאפייה קטנה במרכז",
         do_not_call: false, manager_notes: "", view_count: 2, handled_at: null, budget_open: true,
+        send_count: 1, last_sent_at: today,
+        sends: [{ business_number: "1042", internal_name: "מאפיית הדגמה הפנימית", sent_at: today, channel: "email", match_pct: 86, opened_at: null, replied_at: null }],
         views: [
           { page_path: "/עסקים-למכירה/", via: "email_link", viewed_at: today },
           { page_path: "/עסקים-למכירה/listing-sample", via: "cookie", viewed_at: today }
@@ -129,7 +252,8 @@
         consent_general: null, consent_email: true, consent_whatsapp: false, legacy_no_consent: true,
         consent_text: null, consent_version: null, source_url: null, do_not_call: false,
         manager_notes: "נרשם בטופס הישן. עדיין בלי הסכמה שיווקית.", view_count: 0, views: [], handled_at: null, budget_open: false, budget_min: 250000, budget_max: 500000,
-        signup_channel: "our_link", utm_campaign: "wa-baruch", utm_source: "whatsapp", utm_medium: "link"
+        signup_channel: "our_link", manual_source: "link", utm_campaign: "wa-baruch", utm_source: "whatsapp", utm_medium: "link",
+        categories: ["construction"], regions: ["north"], looking_for: "נגרייה או ייצור", send_count: 0, sends: []
       },
       {
         id: "sample-3", first_name: "מיכל", last_name: "לדוגמה", phone: "050-0000003", email: "sample.michal@example.com",
@@ -144,7 +268,17 @@
         consent_general: true, consent_email: true, consent_whatsapp: false, legacy_no_consent: false,
         do_not_call: false, manager_notes: "", view_count: 0, views: [], handled_at: today, budget_open: true,
         consent_text: "אני מאשר/ת לקבל מ-BSD עדכונים ופרסומות על עסקים למכירה", source_url: "https://www.bsd-bbi.co.il/",
-        signup_channel: "our_link", utm_campaign: "wa-baruch"
+        signup_channel: "our_link", manual_source: "call", utm_campaign: "wa-baruch", send_count: 0, sends: []
+      },
+      {
+        id: "sample-5", first_name: "אורי", last_name: "לדוגמה", phone: "050-0000005", email: "sample.uri@example.com",
+        region: "שרון", interests: ["קמעונאות"], status: "active", created_at: today,
+        consent_general: true, consent_email: true, consent_whatsapp: true, legacy_no_consent: false,
+        consent_text: "אני מאשר/ת לקבל מ-BSD עדכונים ופרסומות על עסקים למכירה",
+        consent_version: "v1-2026-11-13", consent_at: today, do_not_call: false,
+        categories: ["retail"], regions: ["sharon"], looking_for: "חנות שכונתית",
+        budget_open: false, budget_min: 500000, budget_max: 1000000,
+        signup_channel: "our_link", manual_source: "manual", send_count: 0, sends: [], views: []
       }
     ];
   }
@@ -163,6 +297,7 @@
   }
 
   root.BSDSiteBuyers = {
-    esc, statusLabel, summarize, filterRows, inChannel, sampleAllowed, sampleRows, bars, reasonText, startOfWeekJerusalem
+    esc, statusLabel, summarize, filterRows, inChannel, sampleAllowed, sampleRows, bars, reasonText, startOfWeekJerusalem,
+    sourceKind, sourceBadge, sectorLabels, subLabels, regionLabels, budgetLabel, lookingLine, sendSummary, passesFilters, SOURCE_LABEL
   };
 })(typeof window !== "undefined" ? window : globalThis);
