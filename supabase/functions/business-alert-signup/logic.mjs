@@ -50,6 +50,8 @@ export const RATE_LIMITS = {
   unsubscribePerIp: { limit: 30, windowMs: 15 * 60 * 1000 }
 };
 
+import { formInterestFromPhrase, formRegionFromText, parseAlertBudget } from "../_shared/alert-match.mjs";
+
 const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
 
 export function cleanText(value, max = 200) {
@@ -101,30 +103,53 @@ export function isUnsubscribeToken(value) {
 }
 
 function budgetFromKey(value) {
-  const key = cleanText(value, 40);
+  const key = cleanText(value, 80);
   if (!key) return { budget_min: null, budget_max: null, budget_open: false };
   const option = BUDGET_OPTIONS.find(item => item.value === key);
-  if (!option) return null;
-  return { budget_min: option.min, budget_max: option.max, budget_open: option.open };
+  if (option) return { budget_min: option.min, budget_max: option.max, budget_open: option.open };
+  const parsed = parseAlertBudget(key);
+  if (!parsed) return null;
+  return { budget_min: parsed.lo, budget_max: parsed.hi, budget_open: false };
 }
 
 function normalizeInterests(value) {
-  if (value == null || value === "") return [];
+  if (value == null || value === "") return { interests: [], extra: "" };
   if (!Array.isArray(value)) return null;
   const seen = [];
+  const extra = [];
   for (const item of value) {
     const label = cleanText(item, 40);
-    if (!INTERESTS.includes(label)) return null;
-    if (!seen.includes(label)) seen.push(label);
+    if (!label) continue;
+    if (INTERESTS.includes(label)) {
+      if (!seen.includes(label)) seen.push(label);
+      continue;
+    }
+    const mapped = formInterestFromPhrase(label);
+    if (!mapped) return null;
+    if (!seen.includes(mapped)) seen.push(mapped);
+    extra.push(label);
   }
-  return seen;
+  return { interests: seen, extra: extra.join(", ") };
 }
 
 function normalizeRegion(value) {
-  const region = cleanText(value, 40);
-  if (!region) return { ok: true, region: null };
-  if (!REGIONS.includes(region)) return { ok: false };
-  return { ok: true, region };
+  const region = cleanText(value, 80);
+  if (!region) return { ok: true, region: null, extra: "" };
+  if (REGIONS.includes(region)) return { ok: true, region, extra: "" };
+  const mapped = formRegionFromText(region);
+  if (mapped) return { ok: true, region: mapped, extra: region === mapped ? "" : region };
+  return { ok: true, region: null, extra: region };
+}
+
+function sourceOf(body) {
+  const raw = cleanText(body?.source, 40).toLowerCase();
+  if (raw === "whatsapp" || raw === "wa") return "whatsapp";
+  return SOURCE;
+}
+
+function lookingOf(body, extra) {
+  const text = cleanMultiline([body?.looking_for, extra].filter(Boolean).join("\n"), 2000);
+  return text || null;
 }
 
 function normalizeUtm(body) {
@@ -144,7 +169,6 @@ function sharedFields(body) {
   const interests = normalizeInterests(body?.interests);
   if (!interests) return { ok: false, error: "invalid_interests" };
   const region = normalizeRegion(body?.region);
-  if (!region.ok) return { ok: false, error: "invalid_region" };
   const budget = budgetFromKey(body?.budget);
   if (!budget) return { ok: false, error: "invalid_budget" };
   return {
@@ -155,12 +179,13 @@ function sharedFields(body) {
       phone,
       phone9: phone9FromRaw(phone),
       email,
-      interests,
+      interests: interests.interests,
       budget_min: budget.budget_min,
       budget_max: budget.budget_max,
       budget_open: budget.budget_open,
       region: region.region,
-      source: SOURCE,
+      source: sourceOf(body),
+      looking_for: lookingOf(body, [interests.extra, region.extra].filter(Boolean).join("\n")),
       ...normalizeUtm(body)
     }
   };

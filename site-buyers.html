@@ -93,6 +93,14 @@ tr.row:hover{background:#f8fbff}
     <div id="leadNote" class="muted" style="margin-bottom:8px"></div>
     <div id="table"></div>
   </div>
+  <section class="panel" style="margin-top:12px">
+    <h2>נרשמים לפי עסק</h2>
+    <div class="searchbar">
+      <input id="bizId" placeholder="מזהה עסק מהמערכת">
+      <button class="soft" id="bizLookup" type="button">הצג נרשמים שמתאימים</button>
+    </div>
+    <div id="byBusiness" class="muted">אחרי חישוב ההתאמות אפשר לראות, לכל עסק, מי מהנרשמים מתאים לו.</div>
+  </section>
 </div>
 <div id="drawer"></div>
 <div id="toast"></div>
@@ -201,6 +209,7 @@ function openRow(id){
     <b>עמוד מקור:</b> ${UI.esc(row.source_url || '—')}</p>
     <p><b>נוסח ההסכמה:</b><br>${UI.esc(row.consent_text || 'לא נשמר (הרשמה ישנה)')}</p>
     <div class="views"><b>עמודים שנצפו</b><div>${viewHtml}</div></div>
+    <div class="views" id="matchBox"><b>עסקים שמתאימים</b><div class="muted">טוען התאמות…</div></div>
     <div class="field"><label>הערות</label><textarea id="notes">${UI.esc(row.manager_notes || '')}</textarea></div>
     <label class="field"><input id="dnc" type="checkbox" ${row.do_not_call ? 'checked' : ''}> לא להתקשר</label>
     <div class="actions">
@@ -230,6 +239,7 @@ function openRow(id){
   document.getElementById('dnc').onchange = () => saveHandling(row, null);
   document.getElementById('handled').onclick = () => saveHandling(row, !row.handled_at);
   document.getElementById('convert').onclick = () => convert(row);
+  loadMatches(row);
   document.getElementById('reactivate').onclick = () => setStatus(row, 'active', true);
   document.querySelectorAll('[data-status]').forEach(button => {
     button.onclick = () => setStatus(row, button.getAttribute('data-status'), false);
@@ -300,6 +310,52 @@ async function setStatus(row, status, fresh){
   } catch (error) { toast(error.message); }
 }
 
+function matchBlock(code){
+  return {
+    budget_out_of_range: 'מחוץ לטווח התקציב',
+    sector_excluded: 'התחום נשלל',
+    below_threshold: 'מתחת לסף',
+    legacy_no_consent: 'אין הסכמה שיווקית',
+    sending_disabled: 'השליחה כבויה',
+    no_longer_a_match: 'כבר לא מתאים'
+  }[code] || '';
+}
+
+function matchHtml(list, sendingEnabled){
+  if (!list.length) return '<span class="muted">אין עדיין התאמה מעל הסף. אפשר לחשב מחדש.</span>';
+  return list.map(match => {
+    const card = match.public_card || {};
+    const parts = match.breakdown || {};
+    const flag = match.sendable ? 'מתאים לשליחה' : UI.esc(matchBlock(match.block_reason) || 'לא לשליחה');
+    return `<div style="margin:8px 0;padding:8px 0;border-top:1px solid #e6edf5"><b>${UI.esc(card.title || 'הזדמנות עסקית')}</b> · ${match.score}<br><span class="muted">תחום ${parts.sector?.points ?? 0} · תקציב ${parts.budget?.points ?? 0} · אזור ${parts.location?.points ?? 0} · ${flag}</span><br><span class="muted">${UI.esc(parts.sector?.text || '')} ${UI.esc(parts.budget?.text || '')} ${UI.esc(parts.location?.text || '')}</span>${match.business_id ? `<br><a href="businesses.html?open=${encodeURIComponent(match.business_id)}">כרטיס במערכת</a>` : ''}${sendingEnabled && match.sendable ? ` <button class="mail" type="button" data-send-match="${UI.esc(match.business_id)}">שליחת התראה</button>` : ''}</div>`;
+  }).join('') + (sendingEnabled ? '' : '<p class="muted">השליחה האוטומטית והידנית של התראות כבויה עד לאישור.</p>');
+}
+
+async function loadMatches(row){
+  const box = document.getElementById('matchBox');
+  if (!box) return;
+  if (sample){
+    const list = (row.sampleMatches || []).slice().sort((a, b) => b.score - a.score);
+    box.innerHTML = '<b>עסקים שמתאימים</b>' + matchHtml(list, false);
+    return;
+  }
+  try {
+    const result = await api('matches', { id: row.id });
+    box.innerHTML = '<b>עסקים שמתאימים</b><div class="actions" style="margin:8px 0"><button class="soft" id="recompute" type="button">חשב התאמות</button></div>' + matchHtml(result.matches || [], result.sendingEnabled === true);
+    const button = document.getElementById('recompute');
+    if (button) button.onclick = async () => {
+      button.disabled = true;
+      try {
+        await api('recompute', { id: row.id });
+        await loadMatches(row);
+      } catch (error) { toast(error.message); }
+      button.disabled = false;
+    };
+  } catch (error) {
+    box.innerHTML = '<b>עסקים שמתאימים</b><div class="muted">ההתאמות יופיעו אחרי הפעלת הטבלה.</div>';
+  }
+}
+
 async function convert(row){
   if (sample){ toast('בנתוני הדוגמה לא נוצר קונה'); return; }
   try {
@@ -335,6 +391,20 @@ async function openDetail(id){
 }
 
 document.getElementById('backBtn').addEventListener('click', goBack);
+document.getElementById('bizLookup').addEventListener('click', async () => {
+  if (sample) return;
+  const id = document.getElementById('bizId').value.trim();
+  if (!id) return;
+  try {
+    const result = await api('business_matches', { id });
+    const rowsHtml = (result.matches || []).map(match => {
+      const person = match.subscriber || {};
+      const name = ((person.first_name || '') + ' ' + (person.last_name || '')).trim();
+      return `<div><b>${UI.esc(name || 'נרשם')}</b> · ${match.score} · ${UI.esc(matchBlock(match.block_reason) || (match.sendable ? 'מתאים' : ''))}</div>`;
+    }).join('') || '<span class="muted">אין נרשמים שמתאימים לעסק הזה.</span>';
+    document.getElementById('byBusiness').innerHTML = rowsHtml;
+  } catch (error) { toast(error.message); }
+});
 document.getElementById('q').addEventListener('input', paint);
 document.getElementById('statusFilter').addEventListener('change', paint);
 document.getElementById('table').addEventListener('click', event => {
@@ -354,6 +424,7 @@ document.getElementById('table').addEventListener('click', event => {
   if (sample){
     document.getElementById('banner').innerHTML = '<div class="banner">נתוני דוגמה — לא נרשמים אמיתיים. המסך הזה נועד להדגמה בלבד.</div>';
     await load();
+    document.getElementById('byBusiness').innerHTML = '<div><b>מאפייה לדוגמה</b> · דנה לדוגמה, ציון 86 (תחום 38, תקציב 30, אזור 18)</div><div><b>מסעדה לדוגמה</b> · דנה לדוגמה, ציון 30, מחוץ לטווח התקציב</div>';
     const open = new URLSearchParams(location.search).get('open');
     if (open) openRow(open);
     return;

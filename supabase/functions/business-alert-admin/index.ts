@@ -15,6 +15,7 @@ import {
   whatsappMessage
 } from "../_shared/business-alert-mail.mjs";
 import { gateDecision } from "../_shared/business-alert-rules.mjs";
+import { matchAlertEmail, normalizeMatchConfig, publicCard, scoreAlert, sendGate } from "../_shared/alert-match.mjs";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -89,6 +90,146 @@ async function loadRow(id: string) {
   return data?.subscriber || null;
 }
 
+async function matchSettings() {
+  const { data, error } = await supabase.from("business_alert_match_settings").select("*").eq("id", true).maybeSingle();
+  if (error) return normalizeMatchConfig({});
+  return normalizeMatchConfig(data || {});
+}
+
+const BIZ_COLS = "id,business_number,internal_name,anon_display_name,field,category,subcategory,city,region,asking_price,short_description,anon_summary,anon_card_show_price,public_listing_active,anon_card_active,listing_status,is_archived";
+
+function listedBusiness(row: Record<string, unknown>) {
+  return row.is_archived !== true && (row.public_listing_active === true || row.anon_card_active === true);
+}
+
+async function recomputeMatches(subscriberId?: string) {
+  const settings = await matchSettings();
+  let subQuery = supabase.from("business_alert_subscribers").select("id,first_name,last_name,interests,region,budget_min,budget_max,budget_open,looking_for,manager_notes,legacy_no_consent,consent_general,consent_email,consent_whatsapp");
+  if (subscriberId) subQuery = subQuery.eq("id", subscriberId);
+  const { data: subscribers, error: subError } = await subQuery;
+  if (subError) throw subError;
+  const { data: businesses, error: bizError } = await supabase.from("businesses").select(BIZ_COLS).limit(2000);
+  if (bizError) throw bizError;
+  const listed = (businesses || []).filter(listedBusiness);
+  let stored = 0;
+  for (const subscriber of subscribers || []) {
+    const scored = [];
+    for (const business of listed) {
+      const match = scoreAlert(subscriber, business, settings);
+      if (!match) continue;
+      scored.push({
+        subscriber_id: subscriber.id,
+        business_id: business.id,
+        score: match.score,
+        sector_points: match.sector_points,
+        budget_points: match.budget_points,
+        location_points: match.location_points,
+        eligible: match.eligible,
+        sendable: match.sendable,
+        block_reason: match.block_reason,
+        breakdown: match.breakdown,
+        public_card: match.public_card,
+        computed_at: new Date().toISOString()
+      });
+    }
+    if (scored.length) {
+      const { error } = await supabase.from("business_alert_matches").upsert(scored, { onConflict: "subscriber_id,business_id" });
+      if (error) throw error;
+      stored += scored.length;
+    }
+    const keep = new Set(scored.map(row => row.business_id));
+    const { data: previous } = await supabase.from("business_alert_matches").select("id,business_id").eq("subscriber_id", subscriber.id);
+    const stale = (previous || []).filter(row => !keep.has(row.business_id)).map(row => row.id);
+    if (stale.length) {
+      await supabase.from("business_alert_matches").update({
+        sendable: false,
+        eligible: false,
+        block_reason: "no_longer_a_match",
+        score: 0,
+        computed_at: new Date().toISOString()
+      }).in("id", stale);
+    }
+  }
+  return { subscribers: (subscribers || []).length, businesses: listed.length, stored, sendingEnabled: settings.sendingEnabled };
+}
+
+async function matchAction(action: string, body: Record<string, unknown>, origin: string | null) {
+  if (action === "recompute") {
+    const result = await recomputeMatches(clean(body.id, 80) || undefined);
+    return json({ ok: true, ...result }, 200, origin);
+  }
+  if (action === "matches") {
+    const { data, error } = await supabase.from("business_alert_matches")
+      .select("business_id,score,sector_points,budget_points,location_points,eligible,sendable,block_reason,breakdown,public_card,computed_at")
+      .eq("subscriber_id", body.id)
+      .order("score", { ascending: false });
+    if (error) throw error;
+    return json({ ok: true, matches: data || [], sendingEnabled: (await matchSettings()).sendingEnabled }, 200, origin);
+  }
+  if (action === "business_matches") {
+    const { data, error } = await supabase.from("business_alert_matches")
+      .select("subscriber_id,score,sector_points,budget_points,location_points,sendable,block_reason,breakdown,public_card")
+      .eq("business_id", body.id)
+      .order("score", { ascending: false });
+    if (error) throw error;
+    const ids = [...new Set((data || []).map(row => row.subscriber_id))];
+    const { data: people } = ids.length
+      ? await supabase.from("business_alert_subscribers").select("id,first_name,last_name,region,interests,status,legacy_no_consent,consent_email,consent_whatsapp").in("id", ids)
+      : { data: [] };
+    const byId = new Map((people || []).map(person => [person.id, person]));
+    return json({
+      ok: true,
+      matches: (data || []).map(row => ({ ...row, subscriber: byId.get(row.subscriber_id) || null })),
+      sendingEnabled: (await matchSettings()).sendingEnabled
+    }, 200, origin);
+  }
+  const settings = await matchSettings();
+  const { data: stored, error } = await supabase.from("business_alert_matches")
+    .select("subscriber_id,sendable,block_reason,public_card")
+    .eq("subscriber_id", body.subscriber_id)
+    .eq("business_id", body.business_id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!stored) return json({ ok: false, error: "not_found" }, 404, origin);
+  const blocked = sendGate(settings, stored);
+  if (blocked) return json({ ok: false, error: blocked, allowed: false }, 200, origin);
+  const row = await loadSecrets(String(stored.subscriber_id));
+  if (!row) return json({ ok: false, error: "not_found" }, 404, origin);
+  const channel = body.channel === "whatsapp" ? "whatsapp" : "email";
+  const decision = gateDecision(row, channel);
+  await supabase.rpc("business_alert_gate_send", {
+    p_subscriber_id: row.id,
+    p_channel: channel,
+    p_purpose: "alert",
+    p_business_number: null,
+    p_match_pct: null
+  });
+  if (!decision.allowed) return json({ ok: false, error: decision.reason, allowed: false }, 200, origin);
+  const link = unsubscribeHttpsUrl(supabaseUrl, row.unsubscribe_token, channel);
+  const mail = matchAlertEmail({ firstName: row.first_name, card: stored.public_card, unsubscribeUrl: link });
+  if (channel === "whatsapp") {
+    const text = `${mail.text}`;
+    return json({ ok: true, allowed: true, text, url: waLink(row.phone || "", text) }, 200, origin);
+  }
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  if (!apiKey) return json({ ok: false, error: "missing_email_configuration", allowed: true }, 200, origin);
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      from: mail.from,
+      reply_to: SUBSCRIBER_REPLY_TO,
+      to: [row.email],
+      subject: mail.subject,
+      html: mail.html,
+      text: mail.text,
+      headers: listUnsubscribeHeaders(link)
+    })
+  });
+  if (!response.ok) return json({ ok: false, error: "send_failed", allowed: true }, 200, origin);
+  return json({ ok: true, allowed: true, sent: true }, 200, origin);
+}
+
 async function loadSecrets(id: string) {
   const { data, error } = await supabase
     .from("business_alert_subscribers")
@@ -120,7 +261,8 @@ Deno.serve(async req => {
       if (error) throw error;
       const { count } = await supabase.from("leads").select("id", { count: "exact", head: true })
         .eq("source", "אתר BSD החדש").eq("type", "buyer").eq("is_archived", false);
-      return json({ ok: true, subscribers: data || [], websiteBuyerLeads: count || 0, from: subscriberFromHeader() }, 200, origin);
+      const settings = await matchSettings();
+      return json({ ok: true, subscribers: data || [], websiteBuyerLeads: count || 0, from: subscriberFromHeader(), sendingEnabled: settings.sendingEnabled }, 200, origin);
     }
 
     if (action === "detail") {
@@ -248,6 +390,10 @@ Deno.serve(async req => {
       const { error: linkError } = await supabase.from("business_alert_subscribers").update({ crm_lead_id: lead.id }).eq("id", detail.id);
       if (linkError) throw linkError;
       return json({ ok: true, lead_id: lead.id, already: false }, 200, origin);
+    }
+
+    if (action === "recompute" || action === "matches" || action === "business_matches" || action === "send_match") {
+      return await matchAction(action, body, origin);
     }
 
     return json({ ok: false, error: "unknown_action" }, 400, origin);

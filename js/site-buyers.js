@@ -109,6 +109,10 @@
         views: [
           { page_path: "/עסקים-למכירה/", via: "email_link", viewed_at: today },
           { page_path: "/עסקים-למכירה/listing-sample", via: "cookie", viewed_at: today }
+        ],
+        sampleMatches: [
+          { business_id: "sample-biz", score: 86, sector_points: 38, budget_points: 30, location_points: 18, sendable: true, block_reason: null, public_card: { title: "מאפייה לדוגמה" }, breakdown: { sector: { points: 38, text: "תחום: מאפייה באותה ליגה של מזון." }, budget: { points: 30, text: "המחיר 1.1 מיליון בתוך הטווח." }, location: { points: 18, text: "אזור: חיפה והקריות." } } },
+          { business_id: "sample-biz-2", score: 30, sector_points: 38, budget_points: 0, location_points: 8, sendable: false, block_reason: "budget_out_of_range", public_card: { title: "מסעדה לדוגמה" }, breakdown: { sector: { points: 38, text: "תחום: מסעדה באותה ליגה של מזון." }, budget: { points: 0, text: "המחיר 3 מיליון מחוץ לטווח." }, location: { points: 8, text: "אזור סמוך." } } }
         ]
       },
       {
