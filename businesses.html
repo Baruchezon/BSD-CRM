@@ -1480,7 +1480,7 @@ function syncPublicDistribution(){
   const v = document.getElementById('listing_status').value;
   const pubCb = document.getElementById('public_listing_active');
   if (pubCb){
-    if (v !== 'active' || !document.getElementById('anon_card_active')?.checked){
+    if (v !== 'active'){
       pubCb.checked = false;
       pubCb.disabled = true;
     } else {
@@ -1925,54 +1925,44 @@ function openBizForm(id){
       <section style="margin-top:12px;background:#fff8e6;border:1px solid #e8d18a;border-radius:8px;padding:2px 12px 12px;">
       <div class="section-h" style="margin-top:12px;font-size:.95rem;color:#8a5a00;">הפצה והרשאות</div>
       <div class="field full">
+        <div id="bizVipDistribution"></div>
         <div class="biz-distribution-options">
-        <label style="display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer;">
-          <input type="checkbox" id="anon_card_active" style="width:auto;" onchange="syncPublicDistribution()" ${biz.anon_card_active?'checked':''}>
-          אפשר כרטיס אנונימי
-        </label>
-        <div style="font-size:.78rem;color:#665;margin-top:6px;">
-          הכרטיס יכלול רק: תחום, קטגוריה, עיר, וותק, מחזור/רווח/עובדים, ותקציר. הוא לעולם לא יכלול שם עסק, שם בעלים, טלפון, אימייל, כתובת מדויקת או קבצים - זה נאכף ברמת בסיס הנתונים, לא רק בממשק.
-        </div>
-        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;background:#eef6f0;border-radius:6px;padding:8px 10px;">
-          <input type="checkbox" id="public_listing_active" style="width:auto;" ${biz.public_listing_active?'checked':''} ${biz.listing_status && biz.listing_status !== 'active' ? 'disabled' : ''}>
-          פרסם באתר הציבורי של BSD
-        </label>
-        <div style="font-size:.72rem;color:#665;margin-top:4px;">
-          האתר מציג כרטיס אנונימי של עסק פעיל למכירה. כדי לפרסם, סמן גם ״אפשר כרטיס אנונימי״.
-        </div>
-
-          <div id="bizVipDistribution"></div>
           <label>
-            <input type="checkbox" id="bizAllAgents" ${biz.distribution_status==='all_authorized'?'checked':''} onchange="changeDistributionMode(this,'${biz.id}','all_authorized')">
+            <input type="checkbox" id="bizAllAgents" ${biz.distribution_status==='all_authorized'?'checked':''} onchange="changeDistributionSelection(this)">
             הפצה אנונימית לכל הסוכנים המורשים
           </label>
           <label>
-            <input type="checkbox" id="bizSelective" ${biz.distribution_status==='selective'?'checked':''} onchange="changeDistributionMode(this,'${biz.id}','selective')">
-            הפצה למשתמשים נבחרים בלבד
+            <input type="checkbox" id="public_listing_active" ${biz.public_listing_active?'checked':''}>
+            הפצה ציבורית (פרסום באתר)
           </label>
           ${CURRENT_PROFILE.role === 'admin' ? `
-          <label>
-            <input type="checkbox" id="bizFacebook" disabled onchange="requestFacebookDistribution(this,'${biz.id}')">
-            בקשת פרסום בפייסבוק מאדם
-          </label>
-          <div id="bizFacebookStatus" role="status" aria-live="polite"></div>` : ''}
-        </div>
-        <small>כרטיס אנונימי ופרסום באתר מתעדכנים בלחיצה על ״שמירה״. שאר הערוצים מתעדכנים בעת הפעולה.</small>
-        <div style="font-size:.78rem;color:#8a5a00;margin-top:6px;">הרשאה אישית קובעת מה כל משתמש רואה בכל מצב הפצה. להסרת גישה אישית, עדכן את רשימת המשתמשים למטה.</div>
-
-        <div style="margin-top:12px;padding-top:10px;border-top:1px dashed #e8d18a;">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <b style="font-size:.85rem;">חשיפה לסוכנים ולמשתמשים ספציפיים</b>
-            <button type="button" class="btn btn-ghost" onclick="openReleaseAccessModal('${biz.id}')">➕ בחר סוכן או משתמש</button>
+          <div>
+            <label>
+              <input type="checkbox" id="bizFacebook" disabled>
+              בקשה לפרסום בפייסבוק מאדם
+            </label>
+            <div id="bizFacebookStatus" role="status" aria-live="polite"></div>
+          </div>` : ''}
+          <div>
+            <label>
+              <input type="checkbox" id="bizSelective" aria-controls="bizSelectedUsers" aria-expanded="false" ${biz.distribution_status==='selective'?'checked':''} onchange="changeDistributionSelection(this)">
+              הפצה למשתמשים נבחרים בלבד
+            </label>
+            <div id="bizSelectedUsers" hidden style="margin:8px 24px 0;padding:10px 12px;background:#f7f5ef;border-radius:8px;">
+              <p style="margin:0 0 8px;font-size:.8rem;">אנונימי מציג את התקציר והכרטיס. גישה מלאה מאפשרת צפייה והורדה לפי ההרשאות הקיימות. חסימה מונעת גישה. כדי לערוך חריגים גם בהפצה לכל הסוכנים, פתח את הרשימה ובסיום בחר שוב ״כל הסוכנים המורשים״.</p>
+              <div id="bizAccessGrantsList">טוען משתמשים…</div>
+              <button type="button" class="btn btn-ghost" onclick="stageRemoveAllBizGrants()">הסר את כל ההרשאות האישיות</button>
+              <button type="button" class="btn btn-ghost" onclick="toggleBizAccessAudit('${biz.id}')">היסטוריית שינויי הרשאה</button>
+              <div id="bizAccessAuditList" style="display:none;font-size:.78rem;margin-top:8px;color:#665;"></div>
+            </div>
           </div>
-          <div id="bizAccessGrantsList" style="font-size:.82rem;margin-top:8px;">טוען...</div>
-          <button type="button" class="btn btn-ghost" style="margin-top:8px;color:#b3402c;" onclick="revokeAllAccessGrants('${biz.id}')" id="revokeAllBtn">🚫 בטל את כל ההרשאות המפורשות לעסק זה</button>
         </div>
-
-        <div style="margin-top:12px;padding-top:10px;border-top:1px dashed #e8d18a;">
-          <button type="button" class="btn btn-ghost" style="font-size:.75rem;" onclick="toggleBizAccessAudit('${biz.id}')">📜 היסטוריית שינויי הרשאה</button>
-          <div id="bizAccessAuditList" style="display:none;font-size:.78rem;margin-top:8px;color:#665;"></div>
-        </div>
+        <small>לחץ על ״שמירה״ כדי להחיל את הבחירות. הפצה באתר ובקשת פייסבוק זמינות יחד. שינויים בהפצה נרשמים בפורטל לפי ההגדרות השמורות.</small>
+        <details style="margin-top:8px;">
+          <summary>הגדרות כרטיס אנונימי</summary>
+          <label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="anon_card_active" style="width:auto;" ${biz.anon_card_active?'checked':''}> אפשר כרטיס אנונימי</label>
+        </details>
+        <div id="bizDistributionSaveStatus" role="status" aria-live="polite"></div>
         <div id="anonDistSummaryBox" style="margin-top:10px;"></div>
       </div>
       </section>
@@ -2034,6 +2024,7 @@ function openBizForm(id){
   if (window.BSDSellerPortal) BSDSellerPortal.mount(biz);
   if (biz && document.getElementById('bizFacebook')) loadFacebookRequest(biz.id);
   if (biz && document.getElementById('public_listing_active')) syncPublicDistribution();
+  syncSelectedUsersPanel();
   // בדיקת כפילות בזמן הקלדה - רק בפתיחת עסק חדש (לא בעריכת עסק קיים)
   if (!biz){
     const dupCheck = bsdDupDebounce(async () => {
@@ -2131,41 +2122,31 @@ function refreshBusinessDistributionBadges(){
   renderTable();
 }
 
+function syncSelectedUsersPanel(){
+  const input = document.getElementById('bizSelective');
+  const panel = document.getElementById('bizSelectedUsers');
+  if (!input || !panel) return;
+  panel.hidden = !input.checked;
+  input.setAttribute('aria-expanded', String(input.checked));
+}
+
+function changeDistributionSelection(input){
+  const form = document.getElementById('bizForm');
+  form.dataset.distributionEdited = 'true';
+  if (input.checked){
+    const otherId = input.id === 'bizSelective' ? 'bizAllAgents' : 'bizSelective';
+    document.getElementById(otherId).checked = false;
+  }
+  syncSelectedUsersPanel();
+}
+
 function displayDistributionMode(mode){
   const all = document.getElementById('bizAllAgents');
   const selective = document.getElementById('bizSelective');
-  if (all && selective){
-    all.checked = mode === 'all_authorized';
-    selective.checked = mode === 'selective';
-  }
-}
-
-async function changeDistributionMode(input, bizId, selectedMode){
-  const all = document.getElementById('bizAllAgents');
-  const selective = document.getElementById('bizSelective');
-  const mode = input.checked ? selectedMode : 'not_distributed';
-  if (!ALL_BIZ.some(b => b.id === bizId) && !ARCHIVED_BIZ.some(b => b.id === bizId)) return;
-  all.disabled = selective.disabled = true;
-  displayDistributionMode(mode);
-  try {
-    await setDistributionMode(bizId, mode);
-  } finally {
-    all.disabled = selective.disabled = false;
-    const saved = ALL_BIZ.find(b => b.id === bizId) || ARCHIVED_BIZ.find(b => b.id === bizId);
-    if (all.isConnected && saved) displayDistributionMode(saved.distribution_status);
-  }
-}
-
-async function setDistributionMode(bizId, mode){
-  const { error } = await window.supabaseClient.from('businesses')
-    .update({ distribution_status: mode }).eq('id', bizId).select('id').single();
-  if (error){ toast('שגיאה: ' + error.message); return; }
-  bsdLogActivity('set_distribution_mode', 'businesses', bizId, { mode });
-  const biz = ALL_BIZ.find(b => b.id === bizId) || ARCHIVED_BIZ.find(b => b.id === bizId);
-  if (biz) biz.distribution_status = mode;
-  toast(mode === 'not_distributed' ? 'העסק אינו מופץ' : mode === 'all_authorized' ? 'הופץ לכל הסוכנים המורשים' : 'הועבר להפצה סלקטיבית');
-  loadBizAccessGrants(bizId);
-  loadGrantCounts();
+  if (!all || !selective) return;
+  all.checked = mode === 'all_authorized';
+  selective.checked = mode === 'selective';
+  syncSelectedUsersPanel();
 }
 
 const FACEBOOK_TASK_TITLE = 'פרסום עסק בפייסבוק';
@@ -2213,13 +2194,12 @@ async function loadFacebookRequest(bizId){
     return;
   }
   input.dataset.assignee = adam[0].id;
-  status.textContent = 'סימון יפתח משימה עבור ' + adam[0].full_name + '.';
+  status.textContent = 'בשמירה תיפתח משימה עבור ' + adam[0].full_name + '.';
   input.disabled = false;
 }
 
-async function facebookTaskId(bizId){
-  // A stable task id lets concurrent requests use the tasks primary key to prevent duplicates.
-  const bytes = new TextEncoder().encode('bsd-facebook-publication:' + bizId);
+async function distributionTaskId(key){
+  const bytes = new TextEncoder().encode(key);
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)).slice(0, 16);
   digest[6] = (digest[6] & 15) | 128;
   digest[8] = (digest[8] & 63) | 128;
@@ -2227,147 +2207,167 @@ async function facebookTaskId(bizId){
   return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
 }
 
-async function requestFacebookDistribution(input, bizId){
-  const biz = ALL_BIZ.find(row => row.id === bizId) || ARCHIVED_BIZ.find(row => row.id === bizId);
-  if (!input.checked || !input.dataset.assignee || !biz || CURRENT_PROFILE?.role !== 'admin') return;
-  const status = document.getElementById('bizFacebookStatus');
-  input.disabled = true;
-  status.textContent = 'מעביר לאדם את בקשת הפרסום…';
-  try {
-    const id = await facebookTaskId(bizId);
-    const { error } = await window.supabaseClient.from('tasks').insert({
-      id,
+async function saveDistributionTask(bizId, task){
+  const db = window.supabaseClient;
+  const { error } = await db.from('tasks').insert({
+    ...task, related_type: 'business', related_id: bizId, status: 'פתוחה'
+  });
+  if (error){
+    const existing = await db.from('tasks').select('id').eq('id', task.id).eq('related_id', bizId).maybeSingle();
+    if (!existing.data) throw new Error(error.message);
+  }
+}
+
+function queuePortalDistributionNotice(pending, before, after, grants){
+  if (CURRENT_PROFILE?.role !== 'admin') return;
+  const changes = [];
+  if (isShownOnPublicSite(before) !== isShownOnPublicSite(after)){
+    changes.push(isShownOnPublicSite(after) ? 'להעלות את העסק לאתר הציבורי' : 'להסיר את העסק מהאתר הציבורי');
+  }
+  if (before.distribution_status !== after.distribution_status){
+    changes.push({
+      all_authorized: 'לעדכן הפצה אנונימית לכל הסוכנים המורשים',
+      selective: 'לעדכן הפצה למשתמשים נבחרים',
+      not_distributed: 'להסיר את ההפצה הכללית לסוכנים'
+    }[after.distribution_status]);
+  }
+  if (grants.length) changes.push('לבדוק את עדכון ההרשאות האישיות');
+  if (changes.length){
+    const previous = pending.get('portal');
+    pending.set('portal', { id: previous?.id || crypto.randomUUID(), changes: [...new Set([...(previous?.changes || []), ...changes])] });
+  }
+}
+
+async function sendBusinessDistributionNotices(bizId, bizName, facebook, pending){
+  if (facebook?.checked && !facebook.disabled && facebook.dataset.assignee && !FACEBOOK_REQUESTS.has(bizId)){
+    await saveDistributionTask(bizId, {
+      id: await distributionTaskId('bsd-facebook-publication:' + bizId),
       title: FACEBOOK_TASK_TITLE,
-      description: 'היי אדם, יש עסק חדש לפרסום בפייסבוק: ' + biz.internal_name,
-      assigned_to: input.dataset.assignee,
-      related_type: 'business',
-      related_id: bizId,
-      status: 'פתוחה',
+      description: 'היי אדם, יש עסק חדש לפרסום בפייסבוק: ' + bizName,
+      assigned_to: facebook.dataset.assignee,
       priority: 'רגילה'
     });
-    if (error){
-      const existing = await facebookRequestsQuery().eq('id', id).eq('related_id', bizId).maybeSingle();
-      if (!existing.data) throw new Error(error.message);
-    }
     FACEBOOK_REQUESTS.add(bizId);
-    status.textContent = 'בקשת הפרסום הועברה לאדם.';
-    refreshBusinessDistributionBadges();
-  } catch (error){
-    input.checked = false;
-    input.disabled = false;
-    status.textContent = 'שליחת בקשת הפרסום נכשלה. ' + error.message;
+    facebook.disabled = true;
+    document.getElementById('bizFacebookStatus').textContent = 'בקשת הפרסום הועברה לאדם.';
   }
+  const portal = pending.get('portal');
+  if (!portal) return;
+  const users = await window.supabaseClient.rpc('get_active_users_basic');
+  if (users.error) throw new Error(users.error.message);
+  const matches = (users.data || []).filter(user => /^(אלדד|eldad)(?:\s|$)/i.test((user.full_name || '').trim()));
+  if (matches.length !== 1) throw new Error('לא זוהה חשבון CRM פעיל יחיד של אלדד');
+  const now = new Date();
+  const dueDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jerusalem', year:'numeric', month:'2-digit', day:'2-digit' }).format(now);
+  const dueTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', hour:'2-digit', minute:'2-digit', hourCycle:'h23' }).format(now);
+  await saveDistributionTask(bizId, {
+    id: portal.id,
+    title: 'עדכון מיידי של הפצת עסק באתר ובפורטל',
+    description: 'אלדד, נא לטפל מיד בעדכון ההפצה של העסק ' + bizName + ': ' + portal.changes.join(', ') + '.',
+    assigned_to: matches[0].id,
+    priority: 'גבוהה',
+    due_date: dueDate,
+    due_time: dueTime
+  });
+  pending.delete('portal');
 }
 
 async function loadBizAccessGrants(bizId){
   const box = document.getElementById('bizAccessGrantsList');
   if (!box) return;
-  const { data, error } = await window.supabaseClient
-    .from('business_access_grants')
-    .select('*')
-    .eq('business_id', bizId)
-    .eq('active', true)
-    .order('granted_at', { ascending: false });
-  if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה: ${esc(error.message)}</span>`; return; }
+  const db = window.supabaseClient;
+  const [grants, users] = await Promise.all([
+    db.from('business_access_grants').select('*').eq('business_id', bizId).eq('active', true),
+    db.rpc('get_active_users_basic')
+  ]);
   if (!box.isConnected) return;
-  if (!data || !data.length){ box.innerHTML = '<span style="color:#999;">אין כרגע הרשאות מפורשות פר-משתמש - הגישה נקבעת לפי מצב ההפצה הכללי בלבד</span>'; return; }
-  box.innerHTML = data.map(g => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eee;flex-wrap:wrap;gap:6px;">
-      <span><b>${esc(userName(g.granted_to))}</b> · ${ACCESS_LEVEL_LABEL[g.access_level] || g.access_level} · נקבע ע"י ${esc(userName(g.granted_by))} ב-${fmtDate(g.granted_at)}</span>
-      <div style="display:flex;gap:6px;">
-        <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;" onclick="openReleaseAccessModal('${bizId}','${g.granted_to}','${g.access_level}')">שנה רמה</button>
-        <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="revokeAccessGrant('${g.id}','${bizId}')">הסר לגמרי</button>
-      </div>
+  if (grants.error || users.error){
+    box.textContent = 'לא ניתן לטעון את רשימת המשתמשים וההרשאות.';
+    return;
+  }
+  const original = new Map((grants.data || []).map(grant => [grant.granted_to, grant]));
+  box.distributionGrants = { original, draft: new Map([...original].map(([id, grant]) => [id, grant.access_level])), users: users.data || [] };
+  renderBizAccessGrants(box);
+}
+
+function renderBizAccessGrants(box){
+  const { original, draft, users } = box.distributionGrants;
+  const choices = Object.entries(ACCESS_LEVEL_LABEL).map(([value, label]) =>
+    `<option value="${value}">${label}</option>`).join('');
+  const names = new Map(users.map(user => [user.id, user.full_name || user.email]));
+  const options = users.filter(user => !draft.has(user.id)).map(user =>
+    `<option value="${esc(user.id)}">${esc(names.get(user.id))}</option>`).join('');
+  box.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <label>משתמש <select id="bizGrantUser"><option value="">בחר מהרשימה</option>${options}</select></label>
+      <label>רמת גישה <select id="bizGrantLevel"><option value="">בחר רמה</option>${choices}</select></label>
+      <button type="button" class="btn btn-ghost" onclick="stageBizGrant()">הוסף לרשימה</button>
     </div>
-  `).join('');
+    <div id="bizGrantStatus" role="status"></div>
+    ${[...draft].map(([id, level]) => `
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;">
+        <label>${esc(names.get(id) || userName(id))}
+          <select onchange="updateBizGrant('${id}',this.value)">
+            ${choices.replace('value="' + level + '"', 'value="' + level + '" selected')}
+          </select>
+        </label>
+        <button type="button" class="btn btn-ghost" onclick="updateBizGrant('${id}',null)">הסר</button>
+        ${original.get(id)?.access_level !== level ? '<small>ממתין לשמירה</small>' : ''}
+      </div>`).join('') || '<small>אין משתמשים עם הרשאה אישית ברשימה.</small>'}
+  `;
 }
 
-function openReleaseAccessModal(bizId, presetUser, presetLevel){
-  const overlay = document.createElement('div');
-  overlay.id = 'releaseAccessOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);display:flex;align-items:center;justify-content:center;z-index:400;padding:20px;';
-  overlay.innerHTML = `
-    <div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:'Heebo','Rubik',sans-serif;direction:rtl;">
-      <h3 style="margin:0 0 16px;color:#0e1b34;border-right:4px solid #c9a24b;padding-right:10px;">הרשאת משתמש לעסק</h3>
-      <label style="display:block;font-size:.8rem;color:#666;margin-bottom:4px;">משתמש</label>
-      <select id="releaseToUser" ${presetUser?'disabled':''} style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;margin-bottom:10px;">${userOptions(presetUser || null)}</select>
-      <label style="display:block;font-size:.8rem;color:#666;margin-bottom:4px;">רמת גישה</label>
-      <select id="releaseAccessLevel" style="width:100%;padding:10px 12px;border:1px solid #d8d3c4;border-radius:8px;font-family:inherit;box-sizing:border-box;">
-        <option value="none" ${presetLevel==='none'?'selected':''}>⛔ ללא גישה (חסימה מפורשת)</option>
-        <option value="anonymous" ${presetLevel==='anonymous'?'selected':''}>🪪 אנונימי בלבד</option>
-        <option value="full" ${presetLevel==='full'?'selected':''}>🔓 גישה מלאה (צפייה + הורדה, לא עריכה)</option>
-      </select>
-      <div id="releaseAccessError" style="display:none;color:#b00020;font-size:.82rem;margin-top:8px;"></div>
-      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;">
-        <button onclick="document.getElementById('releaseAccessOverlay').remove()" style="background:#fff;border:1px solid #d8d3c4;color:#0e1b34;padding:9px 18px;border-radius:8px;font-family:inherit;cursor:pointer;">ביטול</button>
-        <button id="releaseAccessSubmitBtn" onclick="submitReleaseAccess('${bizId}',${presetUser?`'${presetUser}'`:'null'})" style="background:#c9a24b;color:#1c2333;border:none;padding:9px 18px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שמור הרשאה</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-}
-
-async function submitReleaseAccess(bizId, presetUser){
-  const toUser = presetUser || document.getElementById('releaseToUser').value;
-  const level = document.getElementById('releaseAccessLevel').value;
-  const errEl = document.getElementById('releaseAccessError');
-  const showErr = msg => { if (errEl){ errEl.textContent = msg; errEl.style.display = 'block'; } toast(msg); };
-  if (errEl) errEl.style.display = 'none';
-  if (!toUser){ showErr('⚠️ יש לבחור משתמש מהרשימה'); return; }
-  const btn = document.getElementById('releaseAccessSubmitBtn');
-  if (btn){ btn.disabled = true; btn.textContent = 'שומר...'; }
-  // upsert: אם כבר קיימת הרשאה פעילה למשתמש הזה על העסק הזה - עדכן במקום להכשל על unique constraint
-  const { data: existing } = await window.supabaseClient.from('business_access_grants')
-    .select('id').eq('business_id', bizId).eq('granted_to', toUser).eq('active', true).maybeSingle();
-  let error;
-  if (existing){
-    ({ error } = await window.supabaseClient.from('business_access_grants')
-      .update({ access_level: level, granted_by: CURRENT_PROFILE.id })
-      .eq('id', existing.id));
-  } else {
-    ({ error } = await window.supabaseClient.from('business_access_grants').insert({
-      business_id: bizId, granted_to: toUser, granted_by: CURRENT_PROFILE.id, access_level: level
-    }));
+function stageBizGrant(){
+  const id = document.getElementById('bizGrantUser').value;
+  const level = document.getElementById('bizGrantLevel').value;
+  if (!id || !level){
+    document.getElementById('bizGrantStatus').textContent = 'בחר משתמש ורמת גישה.';
+    return;
   }
-  if (error){
-    if (btn){ btn.disabled = false; btn.textContent = 'שמור הרשאה'; }
-    showErr('שגיאה: ' + error.message); return;
+  updateBizGrant(id, level);
+}
+
+function updateBizGrant(id, level){
+  const box = document.getElementById('bizAccessGrantsList');
+  const state = box?.distributionGrants;
+  if (!state) return;
+  if (level) state.draft.set(id, level);
+  else state.draft.delete(id);
+  renderBizAccessGrants(box);
+}
+
+function stageRemoveAllBizGrants(){
+  const box = document.getElementById('bizAccessGrantsList');
+  if (!box?.distributionGrants) return;
+  box.distributionGrants.draft.clear();
+  renderBizAccessGrants(box);
+}
+
+function distributionGrantChanges(state){
+  if (!state) return [];
+  const { original, draft } = state;
+  const ids = new Set([...original.keys(), ...draft.keys()]);
+  return [...ids].flatMap(user => {
+    const previous = original.get(user);
+    const level = draft.get(user);
+    return previous?.access_level === level ? [] : [{ user, previous, level }];
+  });
+}
+
+async function saveBusinessGrantChanges(bizId, state, changes){
+  const db = window.supabaseClient;
+  for (const { user, previous, level } of changes){
+    const fields = level
+      ? { access_level: level, granted_by: CURRENT_PROFILE.id }
+      : { revoked_at: new Date().toISOString(), revoked_by: CURRENT_PROFILE.id };
+    const { data, error } = previous
+      ? await db.from('business_access_grants').update(fields).eq('id', previous.id).eq('business_id', bizId).eq('active', true).select('id').single()
+      : await db.from('business_access_grants').insert({ ...fields, business_id: bizId, granted_to: user }).select('id').single();
+    if (error) throw new Error(error.message);
+    if (level) state.original.set(user, { id: data.id, access_level: level });
+    else state.original.delete(user);
+    bsdLogActivity(level ? 'set_access_level' : 'revoke_access', 'businesses', bizId, { user, level });
   }
-  bsdLogActivity('set_access_level', 'businesses', bizId, { user: toUser, level });
-  document.getElementById('releaseAccessOverlay').remove();
-  toast('ההרשאה נשמרה');
-  loadBizAccessGrants(bizId);
-  loadGrantCounts();
-}
-
-async function revokeAccessGrant(grantId, bizId){
-  if (!confirm('להסיר לגמרי את המשתמש מרשימת ההרשאות המפורשות? הוא יחזור לרמת הגישה שנקבעת ע"י מצב ההפצה הכללי של העסק (ולא ל-none, אלא אם ההפצה במצב סלקטיבי).')) return;
-  const { error } = await window.supabaseClient.from('business_access_grants')
-    .update({ revoked_at: new Date().toISOString(), revoked_by: CURRENT_PROFILE.id })
-    .eq('id', grantId);
-  if (error){ toast('שגיאה: ' + error.message); return; }
-  bsdLogActivity('revoke_access', 'businesses', bizId);
-  toast('ההרשאה הוסרה');
-  loadBizAccessGrants(bizId);
-  loadGrantCounts();
-}
-
-async function revokeAllAccessGrants(bizId){
-  if (!confirm('להסיר את כל ההרשאות המפורשות פר-משתמש לעסק זה? כל המשתמשים יחזרו לרמת הגישה שנקבעת ע"י מצב ההפצה הכללי בלבד. פעולה זו לא ניתנת לביטול.')) return;
-  const btn = document.getElementById('revokeAllBtn');
-  if (btn){ btn.disabled = true; btn.textContent = 'מבטל...'; }
-  const { data: activeGrants, error: fetchErr } = await window.supabaseClient
-    .from('business_access_grants').select('id').eq('business_id', bizId).eq('active', true);
-  if (fetchErr){ toast('שגיאה: ' + fetchErr.message); if (btn){ btn.disabled = false; btn.textContent = '🚫 בטל את כל ההרשאות המפורשות לעסק זה'; } return; }
-  if (!activeGrants || !activeGrants.length){ toast('אין כרגע הרשאות מפורשות לביטול'); if (btn){ btn.disabled = false; btn.textContent = '🚫 בטל את כל ההרשאות המפורשות לעסק זה'; } return; }
-  const { error } = await window.supabaseClient.from('business_access_grants')
-    .update({ revoked_at: new Date().toISOString(), revoked_by: CURRENT_PROFILE.id })
-    .eq('business_id', bizId).eq('active', true);
-  if (btn){ btn.disabled = false; btn.textContent = '🚫 בטל את כל ההרשאות המפורשות לעסק זה'; }
-  if (error){ toast('שגיאה: ' + error.message); return; }
-  bsdLogActivity('revoke_all_access', 'businesses', bizId, { count: activeGrants.length });
-  toast(`בוטלו ${activeGrants.length} הרשאות מפורשות. כל המשתמשים חזרו לרמת הגישה שנקבעת ע"י מצב ההפצה הכללי`);
-  loadBizAccessGrants(bizId);
-  loadGrantCounts();
 }
 
 async function toggleBizAccessAudit(bizId){
@@ -3794,7 +3794,7 @@ async function bsdRevalidateOpenBizForm(bizId){
   if (!fresh || !BIZ_FORM_BASELINE || BIZ_FORM_BASELINE.bizId !== bizId) return;
   const form = document.getElementById('bizForm');
   if (!form || form.dataset.bizId !== bizId) return;
-  if (!document.getElementById('bizAllAgents')?.disabled) displayDistributionMode(fresh.distribution_status);
+  if (!form.dataset.distributionEdited) displayDistributionMode(fresh.distribution_status);
   refreshBusinessDistributionBadges();
   const updated = [];
   BIZ_GUARDED_TEXT_FIELDS.forEach(f => {
@@ -5625,7 +5625,7 @@ async function saveBiz(e){
   // עם רק הודעת שגיאה קטנה למעלה שקל לפספס.
   let anonBlocked = false;
   if (document.getElementById('anon_card_active')){
-    payload.anon_card_active = cb('anon_card_active');
+    payload.anon_card_active = cb('anon_card_active') || cb('public_listing_active') || (form.dataset.distributionEdited === 'true' && cb('bizAllAgents'));
     payload.anon_card_show_price = cb('anon_card_show_price');
     payload.anon_card_show_reason = cb('anon_card_show_reason');
     // public_listing_active דורש anon_card_active=true גם ב-DB (ה-VIEW
@@ -5637,7 +5637,7 @@ async function saveBiz(e){
     // VIEW כבר חוסם את זה דרך listing_status='active', כדי שהדגל בטופס
     // ישקף את המצב האמיתי ולא יטעה).
     const listingStatusVal = g('listing_status');
-    payload.public_listing_active = (cb('anon_card_active') && (listingStatusVal === 'active' || !listingStatusVal)) ? cb('public_listing_active') : false;
+    payload.public_listing_active = (payload.anon_card_active && (listingStatusVal === 'active' || !listingStatusVal)) ? cb('public_listing_active') : false;
 
     if (document.getElementById('anon_summary')){
       const manualDisplayName = g('anon_display_name');
@@ -5703,6 +5703,10 @@ async function saveBiz(e){
     }
   }
 
+  if (anonBlocked && cb('bizAllAgents') && document.getElementById('bizForm')?.dataset.distributionEdited){
+    bsdActivateBizTab('access');
+    return;
+  }
   if (!payload.internal_name){ showFormError('שם העסק הוא שדה חובה - השמירה לא בוצעה'); return; }
 
   // 11.10.2026: תווית «ממוצע N שנים (...)» של השדות הכספיים - נשלחת רק אם השתנתה
@@ -5746,12 +5750,35 @@ async function saveBiz(e){
     }
   }
 
+  const allAgents = document.getElementById('bizAllAgents');
+  const selective = document.getElementById('bizSelective');
+  const facebook = document.getElementById('bizFacebook');
+  const grants = document.getElementById('bizAccessGrantsList')?.distributionGrants;
+  const grantChanges = distributionGrantChanges(grants);
+  const pending = form.distributionNotifications || new Map();
+  form.distributionNotifications = pending;
+  let distributionBefore;
+  if (bizId && allAgents){
+    const { data, error } = await window.supabaseClient.from('businesses')
+      .select('distribution_status,anon_card_active,public_listing_active,listing_status,is_archived').eq('id', bizId).single();
+    if (error){ showFormError('טעינת מצב ההפצה נכשלה: ' + error.message); return; }
+    distributionBefore = data;
+    if (form.dataset.distributionEdited){
+      payload.distribution_status = allAgents.checked ? 'all_authorized' : selective.checked ? 'selective' : 'not_distributed';
+    }
+    if (selective.checked && !grants && form.dataset.distributionEdited){
+      bsdActivateBizTab('access');
+      showFormError('יש להמתין לטעינת רשימת המשתמשים לפני שמירת הפצה למשתמשים נבחרים.');
+      return;
+    }
+  }
+
   let error;
   let savedBizId = bizId || null;
   const anonTextSent = !!bizId && !anonBlocked && (payload.anon_summary !== undefined || payload.anon_display_name !== undefined);
   const portalRequested = !bizId && !!document.getElementById('sellerPortalEnabled')?.checked;
   if (bizId){
-    ({ error } = await window.supabaseClient.from('businesses').update(payload).eq('id', bizId));
+    ({ error } = await window.supabaseClient.from('businesses').update(payload).eq('id', bizId).select('id').single());
     if (!error) bsdLogActivity('update', 'businesses', bizId);
   } else {
     payload.created_by = CURRENT_PROFILE ? CURRENT_PROFILE.id : null;
@@ -5772,10 +5799,30 @@ async function saveBiz(e){
     }
     showFormError('❌ שגיאה בשמירה: ' + error.message); return;
   }
+  if (distributionBefore){
+    const saved = { ...distributionBefore, ...payload };
+    if (saved.distribution_status !== distributionBefore.distribution_status){
+      bsdLogActivity('set_distribution_mode', 'businesses', bizId, { mode: saved.distribution_status });
+    }
+    queuePortalDistributionNotice(pending, distributionBefore, saved, grantChanges);
+    try {
+      await saveBusinessGrantChanges(bizId, grants, grantChanges);
+      await sendBusinessDistributionNotices(bizId, payload.internal_name, facebook, pending);
+    } catch (error){
+      bsdActivateBizTab('access');
+      const status = document.getElementById('bizDistributionSaveStatus');
+      if (status) status.textContent = 'כרטיס העסק נשמר. השלמת ההפצה או ההתראה נכשלה: ' + error.message + '. לחץ שוב על ״שמירה״ כדי להשלים.';
+      if (anonTextSent) bsdQueueAnonPdfSync(bizId);
+      for (const field of BIZ_GUARDED_TEXT_FIELDS){
+        if (payload[field] !== undefined) bsdSetBizBaselineField(bizId, field, payload[field], payload[field]);
+      }
+      return;
+    }
+  }
   AI_EDIT_PENDING = {}; AI_EDIT_REVERTED = {}; // נשמרו בהצלחה - לא צריך לשלוח שוב
   if (bizId && window.BSDEconFill) window.BSDEconFill.forget(bizId);
   BIZ_FORM_BASELINE = null; BIZ_PENDING_CONFLICT = null;
-  const nowAnonActive = (document.getElementById('anon_card_active') && !anonBlocked) ? cb('anon_card_active') : wasAnonActive;
+  const nowAnonActive = payload.anon_card_active ?? wasAnonActive;
   // סעיף 1 באפיון: עסק שכבר היה מופץ (wasAnonActive=true, כלומר התוכן
   // האנונימי כבר היה פעיל לפני השמירה הזו - לא רק הופעל עכשיו) ופרט מהותי
   // שמשפיע על התקציר האנונימי השתנה - מרעננים את התקציר אוטומטית, בלי
