@@ -111,16 +111,15 @@ export function whatsappMessage(firstName, addressForm) {
   return ["פרסומת", ...lines, "", quietNoteText(addressForm), removal].join("\n");
 }
 
+// Baruch, 13.11.2026: these are personal emails. No «פרסומת» label anywhere.
 export function subscriberSubject(topic) {
-  const rest = String(topic || "").replace(/^פרסומת:\s*/, "").trim();
-  return `פרסומת: ${rest}`;
+  return String(topic || "").replace(/^\s*פרסומת\s*:?\s*/, "").trim();
 }
 
 export function subscriberText({ firstName, body, unsubscribeUrl, addressForm }) {
   const name = String(firstName || "").trim();
   const hello = name ? `שלום ${name},` : "שלום,";
   return [
-    "פרסומת",
     hello,
     "",
     String(body || "").trim(),
@@ -139,5 +138,5 @@ export function subscriberHtml({ firstName, body, unsubscribeUrl, addressForm })
   const link = unsubscribeUrl
     ? `<p style="margin:16px 0 0;font-size:14px"><a href="${escapeHtml(unsubscribeUrl)}" style="color:#1d67c8">${escapeHtml(say(copy.email.unsubscribe, addressForm))}</a></p>`
     : "";
-  return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb"><div dir="rtl" lang="he" style="max-width:640px;margin:0 auto;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#102844;text-align:right"><div style="background:#0e1b34;color:#f0d48a;padding:18px 24px;font-size:18px;font-weight:700">${escapeHtml(SUBSCRIBER_FROM_NAME)}</div><div style="padding:24px;line-height:1.7;font-size:16px"><p style="margin:0 0 8px;font-size:13px;color:#8a6d1f">פרסומת</p><p style="margin:0 0 12px">${hello}</p><p style="margin:0">${escapeHtml(body || "").replace(/\n/g, "<br>")}</p>${link}${quietNoteHtml(addressForm)}${signOffHtml()}</div></div></body></html>`;
+  return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb"><div dir="rtl" lang="he" style="max-width:640px;margin:0 auto;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#102844;text-align:right"><div style="background:#0e1b34;color:#f0d48a;padding:18px 24px;font-size:18px;font-weight:700">${escapeHtml(SUBSCRIBER_FROM_NAME)}</div><div style="padding:24px;line-height:1.7;font-size:16px"><p style="margin:0 0 12px">${hello}</p><p style="margin:0">${escapeHtml(body || "").replace(/\n/g, "<br>")}</p>${link}${quietNoteHtml(addressForm)}${signOffHtml()}</div></div></body></html>`;
 }

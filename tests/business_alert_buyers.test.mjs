@@ -215,7 +215,8 @@ test('subscriber mail uses one quoted sender and never the team name', () => {
   assert.equal(whatsappMessage('דנה', 'female').endsWith('להסרה השיבי הסר'), true);
   assert.equal(wa.includes('צוות BSD'), false);
   assert.equal(wa.includes('שם העסק'), false);
-  assert.equal(subscriberSubject('עדכון').startsWith('פרסומת:'), true);
+  assert.equal(subscriberSubject('עדכון'), 'עדכון');
+  assert.equal(subscriberSubject('פרסומת: עדכון'), 'עדכון');
 });
 
 test('the unsubscribe page is Hebrew and says the removal succeeded', () => {

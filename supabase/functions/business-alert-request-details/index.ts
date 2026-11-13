@@ -88,7 +88,7 @@ Deno.serve(async req => {
     const link = signed.data?.signedUrl || "";
     const mail = await sendMail(
       subscriber.email,
-      "פרסומת: הפרטים המורחבים שביקשת",
+      "הפרטים המורחבים שביקשת",
       link ? `הקובץ האנונימי מוכן:\n${link}` : "הקובץ האנונימי סומן, אבל הקישור לא נוצר."
     );
     await supabase.from("business_alert_detail_requests").insert({

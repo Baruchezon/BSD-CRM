@@ -60,7 +60,6 @@ export function thankYouEmailText({ firstName, unsubscribeLink, addressForm }) {
   const thanks = say(copy.email.signupThanks, addressForm);
   const greeting = firstName ? `${thanks}, ${firstName}` : thanks;
   return [
-    "פרסומת",
     greeting,
     "",
     say(copy.email.signupBody, addressForm),
@@ -87,7 +86,6 @@ export function thankYouEmailHtml({ firstName, unsubscribeLink, addressForm }) {
     </div>
     <div style="height:4px;background:linear-gradient(90deg,#b98520,#f0d48a,#b98520)"></div>
     <div style="padding:28px;text-align:right;line-height:1.7">
-      <p style="margin:0 0 8px;font-size:13px;color:#8a6d1f">פרסומת</p>
       <h1 style="margin:0 0 12px;font-size:26px;line-height:1.35;color:#0a1d42">${thanks}${name ? `, ${name}` : ""}</h1>
       <p style="margin:0 0 12px;font-size:17px">${escapeHtml(say(copy.email.signupBody, addressForm))}</p>
       <p style="margin:0 0 12px;font-size:17px">${escapeHtml(say(copy.email.signupKeep, addressForm))}</p>

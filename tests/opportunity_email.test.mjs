@@ -16,7 +16,9 @@ test('the approved three-business letter keeps the company sender and both butto
   assert.equal(mail.from, '"BSD - עסקים למכירה" <info@bsd-bbi.co.il>');
   assert.equal(mail.from, SUBSCRIBER_FROM);
   assert.equal(mail.from.includes('ברוך'), false);
-  assert.equal(mail.subject.startsWith('פרסומת:'), true);
+  assert.equal(mail.subject.includes('פרסומת'), false);
+  assert.equal(mail.html.includes('פרסומת'), false);
+  assert.equal(mail.text.includes('פרסומת'), false);
   assert.match(mail.subject, /3 עסקים שבחרנו בשבילך/);
   assert.match(mail.html, /שלום יבגני,/);
   assert.match(mail.html, /תודה שנרשמת לעדכונים של BSD/);

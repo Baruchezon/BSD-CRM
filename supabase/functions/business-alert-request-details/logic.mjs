@@ -32,5 +32,5 @@ export function gentleDetailsCopy(addressForm) {
     female: "קיבלנו את הבקשה. נחזור אלייך בהקדם.",
     neutral: "קיבלנו את הבקשה. נחזור אליך בהקדם."
   }[key];
-  return { subject: "פרסומת: קיבלנו את הבקשה לפרטים", text: line };
+  return { subject: "קיבלנו את הבקשה לפרטים", text: line };
 }
