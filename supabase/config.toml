@@ -1,0 +1,9 @@
+# Gateway flags for the new public functions only.
+# Do not run `supabase config push` from this file.
+# business-alert-signup and business-alert-admin keep the default verify_jwt = true.
+
+[functions.business-alert-unsubscribe]
+verify_jwt = false
+
+[functions.business-alert-visit]
+verify_jwt = false

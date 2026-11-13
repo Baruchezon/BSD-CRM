@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>קונים פוטנציאליים מהאתר</title>
+<link rel="stylesheet" href="css/style.css?v=202611130900">
+<style>
+body{margin:0;background:linear-gradient(180deg,#f7f1e4 0,#eef3f8 220px);color:#142033;font-family:Heebo,Rubik,Arial,sans-serif}
+.wrap{max-width:1280px;margin:0 auto;padding:22px}
+.top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:16px}
+.top h1{margin:0;font-size:1.7rem;color:#0e1b34}
+.top p{margin:6px 0 0;color:#5d6b80}
+.back{background:#0e1b34;color:#fff;border:0;border-radius:12px;padding:12px 18px;font:inherit;font-weight:800;cursor:pointer}
+.banner{background:#fff4c2;border:1px solid #e2c15a;color:#6d5313;border-radius:14px;padding:12px 14px;font-weight:800;margin-bottom:14px}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.card{border-radius:16px;padding:14px 16px;color:#fff;box-shadow:0 10px 24px rgba(14,27,52,.08);min-height:92px}
+.card b{display:block;font-size:1.8rem;line-height:1}
+.card span{display:block;margin-top:6px;font-size:.86rem;opacity:.95}
+.c1{background:linear-gradient(135deg,#0e1b34,#24507a)}
+.c2{background:linear-gradient(135deg,#1d6a8a,#3aa0b8)}
+.c3{background:linear-gradient(135deg,#1f7a4d,#49b07a)}
+.c4{background:linear-gradient(135deg,#a33b4a,#e07a62)}
+.c5{background:linear-gradient(135deg,#5a3d8a,#8b6bc4)}
+.c6{background:linear-gradient(135deg,#0f7a62,#2fbf8f)}
+.c7{background:linear-gradient(135deg,#8a4b12,#e0a15a)}
+.c8{background:linear-gradient(135deg,#7a1f4a,#d25b8a)}
+.splits{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.panel{background:#fff;border-radius:16px;padding:14px 16px;box-shadow:0 8px 22px rgba(14,27,52,.06)}
+.panel h2{margin:0 0 10px;font-size:1rem;color:#0e1b34}
+.bar{display:grid;grid-template-columns:120px 1fr 28px;gap:8px;align-items:center;margin:6px 0;font-size:.84rem}
+.bar i{display:block;height:10px;border-radius:99px;background:linear-gradient(90deg,#c9a24b,#0e1b34)}
+.searchbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.searchbar input,.searchbar select{border:1px solid #d7deea;border-radius:12px;padding:12px 14px;font:inherit;background:#fff}
+.searchbar input{flex:1;min-width:220px;font-size:1rem}
+table{width:100%;border-collapse:collapse}
+th{text-align:right;font-size:.78rem;color:#5d6b80;padding:8px;border-bottom:1px solid #e6edf5}
+td{padding:10px 8px;border-bottom:1px solid #f0f3f8;vertical-align:top;font-size:.9rem}
+tr.row{cursor:pointer}
+tr.row:hover{background:#f8fbff}
+.pill{display:inline-block;border-radius:99px;padding:3px 8px;font-size:.75rem;font-weight:800}
+.p-active{background:#e5f6ec;color:#14663a}
+.p-off{background:#fde8e4;color:#8d2d2d}
+.p-wait{background:#fff4c2;color:#6d5313}
+.p-call{background:#fde8e4;color:#8d2d2d}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.actions button,.drawer button{border:0;border-radius:10px;padding:8px 10px;font:inherit;font-weight:800;cursor:pointer}
+.wa{background:#1f9d55;color:#fff}
+.mail{background:#24507a;color:#fff}
+.soft{background:#eef2f8;color:#0e1b34}
+.drawer{position:fixed;inset:0;background:rgba(14,27,52,.45);display:flex;justify-content:flex-start;z-index:40}
+.sheet{width:min(560px,100%);background:#fff;height:100%;overflow:auto;padding:22px;box-shadow:-12px 0 40px rgba(0,0,0,.18)}
+.sheet h2{margin:0 0 8px}
+.muted{color:#6c7890}
+.field{margin:10px 0}
+.field textarea,.field input{width:100%;box-sizing:border-box;border:1px solid #d7deea;border-radius:10px;padding:10px;font:inherit}
+.views{background:#f7f8fb;border-radius:12px;padding:10px}
+.empty{padding:28px;text-align:center;color:#6c7890}
+.toast{position:fixed;bottom:16px;left:16px;background:#0e1b34;color:#fff;border-radius:12px;padding:12px 14px;z-index:50}
+@media(max-width:900px){.cards,.splits{grid-template-columns:1fr 1fr}.wrap{padding:12px}}
+@media(max-width:640px){.cards,.splits{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>קונים פוטנציאליים מהאתר</h1>
+      <p>נרשמים לעדכונים על עסקים למכירה. בלי שמות של עסקים בהודעות.</p>
+    </div>
+    <button class="back" id="backBtn" type="button">חזרה</button>
+  </div>
+  <div id="banner"></div>
+  <div class="cards" id="cards"></div>
+  <div class="splits">
+    <section class="panel"><h2>לפי אזור</h2><div id="regions"></div></section>
+    <section class="panel"><h2>לפי תחום עניין</h2><div id="sectors"></div></section>
+  </div>
+  <div class="panel">
+    <div class="searchbar">
+      <input id="q" type="search" placeholder="חיפוש לפי שם, טלפון, אימייל, אזור או תחום" autocomplete="off">
+      <select id="statusFilter">
+        <option value="">כל המצבים</option>
+        <option value="active">פעילים</option>
+        <option value="unsubscribed_email">הוסרו מאימייל</option>
+        <option value="unsubscribed_whatsapp">הוסרו מוואטסאפ</option>
+        <option value="unsubscribed_all">הוסרו מהכל</option>
+        <option value="legacy">בלי הסכמה שיווקית</option>
+        <option value="do_not_call">לא להתקשר</option>
+      </select>
+    </div>
+    <div id="leadNote" class="muted" style="margin-bottom:8px"></div>
+    <div id="table"></div>
+  </div>
+</div>
+<div id="drawer"></div>
+<div id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
+<script src="js/config.js?v=202611130900"></script>
+<script src="js/supabaseClient.js?v=202608111530"></script>
+<script src="js/auth.js?v=202609241200"></script>
+<script src="js/site-buyers.js?v=202611130900"></script>
+<script>
+const UI = window.BSDSiteBuyers;
+const API = (window.BSD_CONFIG && window.BSD_CONFIG.SUPABASE_URL || '') + '/functions/v1/business-alert-admin';
+let rows = [];
+let sample = false;
+let websiteBuyerLeads = 0;
+
+function toast(text){
+  const el = document.getElementById('toast');
+  el.innerHTML = '<div class="toast">' + UI.esc(text) + '</div>';
+  setTimeout(() => { el.innerHTML = ''; }, 2800);
+}
+
+function goBack(){
+  if (history.length > 1) history.back();
+  else location.href = 'app.html';
+}
+
+async function api(action, payload){
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (!session) throw new Error('אין התחברות');
+  const res = await fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+    body: JSON.stringify(Object.assign({ action }, payload || {}))
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body.ok === false && body.allowed !== false) throw new Error(body.message || body.error || 'שגיאה');
+  return body;
+}
+
+function cards(summary){
+  const items = [
+    ['c1', summary.total, 'סה״כ נרשמים'],
+    ['c2', summary.newThisWeek, 'חדשים השבוע'],
+    ['c3', summary.active, 'פעילים'],
+    ['c4', summary.unsubscribed, 'הוסרו'],
+    ['c5', summary.emailConsent, 'הסכמה לאימייל'],
+    ['c6', summary.whatsappConsent, 'הסכמה לוואטסאפ'],
+    ['c7', summary.doNotCall, 'לא להתקשר'],
+    ['c8', summary.awaitingConsent, 'ממתינים להסכמה']
+  ];
+  document.getElementById('cards').innerHTML = items.map(([cls, num, label]) =>
+    `<article class="card ${cls}"><b>${num}</b><span>${label}</span></article>`).join('');
+  document.getElementById('regions').innerHTML = UI.bars(summary.regions);
+  document.getElementById('sectors').innerHTML = UI.bars(summary.sectors);
+}
+
+function visible(){
+  const query = document.getElementById('q').value;
+  const filter = document.getElementById('statusFilter').value;
+  return UI.filterRows(rows, query).filter(row => {
+    if (!filter) return true;
+    if (filter === 'legacy') return row.legacy_no_consent === true || row.consent_general !== true;
+    if (filter === 'do_not_call') return row.do_not_call === true;
+    if (filter === 'unsubscribed_all') return row.status === 'unsubscribed_all' || row.status === 'unsubscribed';
+    return row.status === filter;
+  });
+}
+
+function paint(){
+  cards(UI.summarize(rows, new Date()));
+  const list = visible();
+  const note = document.getElementById('leadNote');
+  note.innerHTML = (websiteBuyerLeads
+    ? `פניות קונים מטופס יצירת הקשר באתר (${Number(websiteBuyerLeads) || 0}) נשארות ב<a href="leads-hub.html">מסך הלידים</a>, לא ברשימה הזו.`
+    : 'פניות מטופס יצירת הקשר באתר נשארות ב<a href="leads-hub.html">מסך הלידים</a>.');
+  if (!list.length){
+    document.getElementById('table').innerHTML = '<div class="empty">אין נרשמים להצגה</div>';
+    return;
+  }
+  document.getElementById('table').innerHTML = `<table><thead><tr><th>שם</th><th>קשר</th><th>אזור ותחום</th><th>מצב</th><th>עמודים</th><th></th></tr></thead><tbody>${list.map(row => {
+    const name = UI.esc((row.first_name || '') + ' ' + (row.last_name || ''));
+    const pill = row.legacy_no_consent || row.consent_general !== true
+      ? '<span class="pill p-wait">בלי הסכמה שיווקית</span>'
+      : `<span class="pill ${row.status === 'active' ? 'p-active' : 'p-off'}">${UI.esc(UI.statusLabel(row.status))}</span>`;
+    const call = row.do_not_call ? ' <span class="pill p-call">לא להתקשר</span>' : '';
+    return `<tr class="row" data-id="${UI.esc(row.id)}"><td><b>${name}</b></td><td dir="ltr" style="text-align:right">${UI.esc(row.phone || '')}<br>${UI.esc(row.email || '')}</td><td>${UI.esc(row.region || '—')}<br><span class="muted">${UI.esc((row.interests || []).join(', ') || '—')}</span></td><td>${pill}${call}</td><td>${Number(row.view_count || (row.views || []).length || 0)}</td><td><div class="actions"><button class="wa" data-act="wa" type="button">וואטסאפ</button><button class="mail" data-act="mail" type="button">אימייל</button></div></td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function openRow(id){
+  const row = rows.find(item => item.id === id);
+  if (!row) return;
+  const views = (row.views || []);
+  const viewHtml = views.length
+    ? views.map(view => `<div>${UI.esc(view.page_path)} <span class="muted">${view.via === 'cookie' ? 'עוגייה' : 'קישור מהמייל'} · ${UI.esc(new Date(view.viewed_at).toLocaleString('he-IL'))}</span></div>`).join('')
+    : '<span class="muted">אין עדיין היסטוריית עמודים. המעקב יתחיל אחרי שהאתר ישלח את אסימון הביקור.</span>';
+  document.getElementById('drawer').innerHTML = `<div class="drawer"><aside class="sheet">
+    <button class="soft" id="closeDrawer" type="button">סגירה</button>
+    <h2>${UI.esc(row.first_name || '')} ${UI.esc(row.last_name || '')}</h2>
+    <p class="muted">${UI.esc(UI.statusLabel(row.status))}${row.handled_at ? ' · טופל' : ''}</p>
+    <p><b>טלפון:</b> <span dir="ltr">${UI.esc(row.phone || '')}</span><br><b>אימייל:</b> <span dir="ltr">${UI.esc(row.email || '')}</span></p>
+    <p><b>הסכמה כללית:</b> ${row.consent_general ? 'כן' : 'לא'}<br>
+    <b>אימייל:</b> ${row.consent_email ? 'כן' : 'לא'} · <b>וואטסאפ:</b> ${row.consent_whatsapp ? 'כן' : 'לא'}<br>
+    <b>גרסה:</b> ${UI.esc(row.consent_version || row.consent_text_version || '—')}<br>
+    <b>מועד:</b> ${row.consent_at ? UI.esc(new Date(row.consent_at).toLocaleString('he-IL')) : '—'}<br>
+    <b>עמוד מקור:</b> ${UI.esc(row.source_url || '—')}</p>
+    <p><b>נוסח ההסכמה:</b><br>${UI.esc(row.consent_text || 'לא נשמר (הרשמה ישנה)')}</p>
+    <div class="views"><b>עמודים שנצפו</b><div>${viewHtml}</div></div>
+    <div class="field"><label>הערות</label><textarea id="notes">${UI.esc(row.manager_notes || '')}</textarea></div>
+    <label class="field"><input id="dnc" type="checkbox" ${row.do_not_call ? 'checked' : ''}> לא להתקשר</label>
+    <div class="actions">
+      <button class="wa" id="doWa" type="button">וואטסאפ</button>
+      <button class="mail" id="doMail" type="button">אימייל ידני</button>
+      <button class="soft" id="doSend" type="button">שליחה מהמערכת</button>
+      <button class="soft" id="saveNotes" type="button">שמירת הערות</button>
+    </div>
+    <div class="actions" style="margin-top:8px">
+      <button class="soft" data-status="unsubscribed_email" type="button">הסרה מאימייל</button>
+      <button class="soft" data-status="unsubscribed_whatsapp" type="button">הסרה מוואטסאפ</button>
+      <button class="soft" data-status="unsubscribed_all" type="button">הסרה מהכל</button>
+      <button class="soft" id="reactivate" type="button">החזרה לפעיל</button>
+      <button class="soft" id="handled" type="button">${row.handled_at ? 'ביטול טופל' : 'סמן כטופל'}</button>
+      <button class="soft" id="convert" type="button">הפיכה לקונה</button>
+    </div>
+    ${row.crm_lead_id ? `<p><a href="leads.html?open=${encodeURIComponent(row.crm_lead_id)}">פתיחת כרטיס הקונה</a></p>` : ''}
+  </aside></div>`;
+  document.getElementById('closeDrawer').onclick = () => { document.getElementById('drawer').innerHTML = ''; };
+  document.querySelector('.drawer').addEventListener('click', event => {
+    if (event.target.classList.contains('drawer')) document.getElementById('drawer').innerHTML = '';
+  });
+  document.getElementById('doWa').onclick = () => act(row, 'wa');
+  document.getElementById('doMail').onclick = () => act(row, 'mail');
+  document.getElementById('doSend').onclick = () => act(row, 'send');
+  document.getElementById('saveNotes').onclick = () => saveHandling(row, null);
+  document.getElementById('dnc').onchange = () => saveHandling(row, null);
+  document.getElementById('handled').onclick = () => saveHandling(row, !row.handled_at);
+  document.getElementById('convert').onclick = () => convert(row);
+  document.getElementById('reactivate').onclick = () => setStatus(row, 'active', true);
+  document.querySelectorAll('[data-status]').forEach(button => {
+    button.onclick = () => setStatus(row, button.getAttribute('data-status'), false);
+  });
+}
+
+async function act(row, kind){
+  if (sample){
+    toast(kind === 'wa' ? 'בנתוני הדוגמה לא נפתח וואטסאפ' : 'בנתוני הדוגמה לא נשלח אימייל');
+    return;
+  }
+  try {
+    if (kind === 'wa'){
+      const result = await api('prepare_whatsapp', { id: row.id });
+      if (!result.allowed){ toast(UI.reasonText(result.error)); return; }
+      if (result.url) window.open(result.url, '_blank', 'noopener');
+      return;
+    }
+    if (kind === 'mail'){
+      const result = await api('prepare_email', { id: row.id });
+      if (!result.allowed){ toast(UI.reasonText(result.error)); return; }
+      location.href = result.mailto;
+      return;
+    }
+    if (!confirm('לשלוח עכשיו אימייל מהמערכת אל הנרשם?')) return;
+    const result = await api('send_email', { id: row.id });
+    if (!result.allowed || result.ok === false){ toast(UI.reasonText(result.error)); return; }
+    toast('האימייל נשלח');
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
+async function saveHandling(row, handled){
+  const notes = document.getElementById('notes') ? document.getElementById('notes').value : row.manager_notes;
+  const doNotCall = document.getElementById('dnc') ? document.getElementById('dnc').checked : row.do_not_call;
+  if (sample){
+    row.manager_notes = notes;
+    row.do_not_call = doNotCall;
+    if (handled !== null) row.handled_at = handled ? new Date().toISOString() : null;
+    toast('נשמר בנתוני הדוגמה');
+    paint();
+    return;
+  }
+  try {
+    await api('handling', { id: row.id, notes, handled, do_not_call: doNotCall });
+    toast('נשמר');
+    await load();
+    openRow(row.id);
+  } catch (error) { toast(error.message); }
+}
+
+async function setStatus(row, status, fresh){
+  if (status === 'active' && fresh && !confirm('להחזיר לפעיל רק אם האדם ביקש שוב לקבל עדכונים?')) return;
+  if (sample){
+    row.status = status === 'active' ? 'active' : status;
+    if (status === 'active') row.legacy_no_consent = false;
+    toast('המצב עודכן בנתוני הדוגמה');
+    document.getElementById('drawer').innerHTML = '';
+    paint();
+    return;
+  }
+  try {
+    await api('status', { id: row.id, status, fresh_consent: fresh === true });
+    toast('המצב עודכן');
+    await load();
+    openRow(row.id);
+  } catch (error) { toast(error.message); }
+}
+
+async function convert(row){
+  if (sample){ toast('בנתוני הדוגמה לא נוצר קונה'); return; }
+  try {
+    const result = await api('convert_lead', { id: row.id });
+    toast(result.already ? 'כבר יש כרטיס קונה' : 'נוצר כרטיס קונה');
+    if (result.lead_id) location.href = 'leads.html?open=' + encodeURIComponent(result.lead_id);
+  } catch (error) { toast(error.message); }
+}
+
+async function load(){
+  if (sample){
+    rows = UI.sampleRows(new Date());
+    websiteBuyerLeads = 3;
+    paint();
+    return;
+  }
+  const result = await api('list');
+  rows = result.subscribers || [];
+  websiteBuyerLeads = result.websiteBuyerLeads || 0;
+  paint();
+}
+
+async function openDetail(id){
+  const row = rows.find(item => item.id === id);
+  if (!row) return;
+  if (!sample && !row.views){
+    try {
+      const detail = await api('detail', { id });
+      Object.assign(row, detail.subscriber || {}, { views: detail.views || [], attempts: detail.attempts || [] });
+    } catch (error) { toast(error.message); }
+  }
+  openRow(row.id);
+}
+
+document.getElementById('backBtn').addEventListener('click', goBack);
+document.getElementById('q').addEventListener('input', paint);
+document.getElementById('statusFilter').addEventListener('change', paint);
+document.getElementById('table').addEventListener('click', event => {
+  const button = event.target.closest('button');
+  const tr = event.target.closest('tr[data-id]');
+  if (!tr) return;
+  if (button){
+    event.stopPropagation();
+    act(rows.find(item => item.id === tr.dataset.id), button.dataset.act);
+    return;
+  }
+  openDetail(tr.dataset.id);
+});
+
+(async function start(){
+  sample = new URLSearchParams(location.search).get('sample') === '1' && UI.sampleAllowed();
+  if (sample){
+    document.getElementById('banner').innerHTML = '<div class="banner">נתוני דוגמה — לא נרשמים אמיתיים. המסך הזה נועד להדגמה בלבד.</div>';
+    await load();
+    const open = new URLSearchParams(location.search).get('open');
+    if (open) openRow(open);
+    return;
+  }
+  const profile = await requireAuth();
+  if (!profile || !['admin', 'manager'].includes(profile.role)){
+    document.body.innerHTML = '<div class="empty">אין הרשאה למסך זה</div>';
+    return;
+  }
+  try { await load(); } catch (error) { toast(error.message); }
+})();
+</script>
+</body>
+</html>
