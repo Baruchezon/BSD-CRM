@@ -17,7 +17,9 @@ const signupBody = {
 test("notes are optional, cleaned and capped at 500", () => {
   assert.equal(notesOf({}), undefined);
   assert.equal(notesOf({ notes: "   " }), null);
-  assert.equal(notesOf({ notes: null }), null);
+  assert.equal(notesOf({ notes: null }), undefined);
+  assert.equal(notesOf({ notes: "" }), null);
+  assert.equal(notesOf({ notes: "<b></b>" }), undefined);
   assert.equal(notesOf({ notes: "<b>שלום</b>\u0007 עולם<script>x</script>" }), "שלום עולם x");
   assert.equal(notesOf({ notes: "א".repeat(900) }).length, NOTES_MAX);
   const old = validateSignup(signupBody);
