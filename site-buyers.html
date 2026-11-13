@@ -70,6 +70,17 @@ tr.row:hover{background:#f8fbff}
 .channel-tabs{display:flex;gap:8px;margin:0 0 12px}
 .channel-tabs button{border:0;border-radius:999px;padding:10px 16px;font:inherit;font-weight:800;cursor:pointer;background:#e7edf5;color:#0e1b34}
 .channel-tabs button.on{background:#0e1b34;color:#fff}
+.people{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.person{border:0;border-radius:18px;padding:16px 16px 14px;text-align:right;cursor:pointer;color:#fff;font:inherit;box-shadow:0 10px 24px rgba(14,27,52,.12);min-height:108px;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.person b{font-size:1.15rem;line-height:1.3}
+.person.on{outline:3px solid #f0d48a;outline-offset:2px}
+.person .badge{background:rgba(255,255,255,.2);color:#fff}
+.tone-0{background:linear-gradient(135deg,#0e1b34,#24507a)}
+.tone-1{background:linear-gradient(135deg,#1d6a8a,#3aa0b8)}
+.tone-2{background:linear-gradient(135deg,#1f7a4d,#49b07a)}
+.tone-3{background:linear-gradient(135deg,#a33b4a,#e07a62)}
+.tone-4{background:linear-gradient(135deg,#5a3d8a,#8b6bc4)}
+.tone-5{background:linear-gradient(135deg,#8a4b12,#e0a15a)}
 @media(max-width:900px){.cards,.splits{grid-template-columns:1fr 1fr}.wrap{padding:12px}}
 @media(max-width:640px){.cards,.splits{grid-template-columns:1fr}}
 </style>
@@ -186,7 +197,7 @@ tr.row:hover{background:#f8fbff}
     <div id="leadNote" class="muted" style="margin-bottom:8px"></div>
     <div id="table"></div>
   </div>
-  <section class="panel" style="margin-top:12px">
+  <section class="panel" style="margin-top:12px" hidden>
     <h2>נרשמים לפי עסק</h2>
     <div class="searchbar">
       <input id="bizId" placeholder="מזהה עסק מהמערכת">
@@ -286,7 +297,7 @@ function visible(){
   const query = document.getElementById('q').value;
   const filters = currentFilters();
   filters.source = channel && channel !== 'all' ? channel : filters.source;
-  return UI.filterRows(rows, query).filter(row => UI.passesFilters(row, filters));
+  return UI.filterRows(rows, query).filter(row => row.is_test !== true && UI.passesFilters(row, filters));
 }
 
 function paint(){
@@ -306,29 +317,13 @@ function paint(){
     document.getElementById('table').innerHTML = '<div class="empty">' + UI.esc(text('list.empty', 'אין נרשמים להצגה במסנן הזה.')) + '</div>';
     return;
   }
-  const badgeClass = { website: 'p-web', vip: 'p-vip', our_link: 'p-ours', manual: 'p-hand', call: 'p-phone' };
-  document.getElementById('table').innerHTML = `<table><thead><tr><th>שם</th><th>טלפון</th><th>אימייל</th><th>נרשם</th><th>מקור</th><th>מצב</th><th>הסכמה</th><th>מה מחפש</th></tr></thead><tbody>${list.map(row => {
-    const name = UI.esc(((row.first_name || '') + ' ' + (row.last_name || '')).trim());
-    const kind = UI.sourceKind(row);
-    const when = row.created_at ? new Date(row.created_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-    const phoneHref = 'tel:' + String(row.phone || '').replace(/[^\d+]/g, '');
-    const wa = UI.waHref(row.phone, '');
-    const consent = [row.consent_email ? 'אימייל' : '', row.consent_whatsapp ? 'וואטסאפ' : ''].filter(Boolean).join(' · ') || 'אין';
-    const looking = [UI.lookingLine(row), UI.budgetLabel(row) === 'לא צוין' ? '' : UI.budgetLabel(row)].filter(Boolean).join(' · ');
-    const test = row.is_test ? ' <span class="pill p-wait">בדיקה</span>' : '';
-    const statusText = row.status === 'pending_consent'
-      ? 'ממתין להסכמה'
-      : String(row.status || '').indexOf('unsubscribed') === 0
-        ? 'הוסר'
-        : 'פעיל';
-    const pillClass = statusText === 'פעיל' ? 'p-active' : statusText === 'ממתין להסכמה' ? 'p-wait' : 'p-off';
-    return `<tr data-id="${UI.esc(row.id)}" style="cursor:pointer"><td><b>${name}</b>${test}${row.test_note ? '<br><span class="muted">' + UI.esc(row.test_note) + '</span>' : ''}</td><td><a dir="ltr" href="${UI.esc(phoneHref)}">${UI.esc(row.phone || '')}</a><br><a class="wa" href="${UI.esc(wa)}" target="_blank" rel="noopener">וואטסאפ</a></td><td dir="ltr">${UI.esc(row.email || '—')}</td><td>${UI.esc(when)}</td><td><span class="badge ${badgeClass[kind] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span></td><td><span class="pill ${pillClass}">${statusText}</span></td><td>${UI.esc(consent)}</td><td>${UI.esc(looking)}</td></tr>`;
-  }).join('')}</tbody></table>`;
-  document.querySelectorAll('#table tbody tr').forEach(tr => {
-    tr.addEventListener('click', event => {
-      if (event.target.closest('a')) return;
-      openDetail(tr.getAttribute('data-id'));
-    });
+  document.getElementById('table').innerHTML = '<div class="people">' + list.map((row, index) => {
+    const name = UI.esc((((row.first_name || '') + ' ' + (row.last_name || '')).trim()) || 'נרשם');
+    const open = document.getElementById('drawer') && document.getElementById('drawer').dataset.open === row.id;
+    return `<button type="button" class="person tone-${index % 6}${open ? ' on' : ''}" data-id="${UI.esc(row.id)}"><b>${name}</b><span class="badge">${UI.esc(UI.sourceBadge(row))}</span></button>`;
+  }).join('') + '</div>';
+  document.querySelectorAll('#table .person').forEach(button => {
+    button.addEventListener('click', () => openDetail(button.getAttribute('data-id')));
   });
 }
 
@@ -358,7 +353,13 @@ function openRow(id){
     <button class="soft" id="closeDrawer" type="button">סגירה</button>
     <h2>${UI.esc(row.first_name || '')} ${UI.esc(row.last_name || '')}</h2>
     <p class="muted">${UI.esc(UI.statusLabel(row.status))}${row.handled_at ? ' · טופל' : ''} · ${UI.esc(UI.sourceBadge(row))}${row.utm_campaign ? ' · ' + UI.esc(row.utm_campaign) : ''}</p>
-    <p><b>טלפון:</b> <span dir="ltr">${UI.esc(row.phone || '')}</span><br><b>אימייל:</b> <span dir="ltr">${UI.esc(row.email || '')}</span></p>
+    <p><b>נרשם:</b> ${row.created_at ? UI.esc(new Date(row.created_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' })) : '—'}<br>
+    <b>טלפון:</b> <span dir="ltr">${UI.esc(row.phone || '')}</span> <a class="soft" id="doDial" href="${UI.esc(phoneHref)}">חיוג</a><br>
+    <b>אימייל:</b> <span dir="ltr">${UI.esc(row.email || '—')}</span></p>
+    <p><b>הסכמה לאימייל:</b> <span class="pill ${row.consent_email ? 'p-active' : 'p-off'}">${row.consent_email ? 'כן' : 'לא'}</span>
+    <b>הסכמה לוואטסאפ:</b> <span class="pill ${row.consent_whatsapp ? 'p-active' : 'p-off'}">${row.consent_whatsapp ? 'כן' : 'לא'}</span><br>
+    <b>לא להתקשר:</b> <span class="pill ${row.do_not_call ? 'p-call' : 'p-active'}">${row.do_not_call ? 'כן' : 'לא'}</span><br>
+    <b>הערות מהטופס:</b> ${UI.esc(row.notes || '—')}</p>
     <p><b>ערוצים שאושרו:</b> ${UI.esc(channels)}<br>
     <b>תחומים:</b> ${UI.esc(UI.sectorLabels(row).join(', '))}<br>
     <b>תתי תחומים:</b> ${UI.esc(UI.subLabels(row).join(', ') || '—')}<br>
@@ -397,7 +398,7 @@ function openRow(id){
     <div class="field"><label>הערות</label><textarea id="notes">${UI.esc(row.manager_notes || '')}</textarea></div>
     <label class="field"><input id="dnc" type="checkbox" ${row.do_not_call ? 'checked' : ''}> לא להתקשר</label>
     <div class="actions">
-      <a class="soft" id="doDial" href="${UI.esc(phoneHref)}">חיוג</a>
+      <a class="soft" href="${UI.esc(phoneHref)}">חיוג</a>
       <a class="wa" id="doWa" href="${UI.esc(UI.waHref(row.phone, voice('whatsapp.prefill', row.address_form)))}" target="_blank" rel="noopener">וואטסאפ</a>
       <button class="mail" id="doMail" type="button">אימייל ידני</button>
       <button class="soft" id="doSend" type="button">שליחה מהמערכת</button>
@@ -413,9 +414,18 @@ function openRow(id){
     </div>
     ${row.crm_lead_id ? `<p><a href="leads.html?open=${encodeURIComponent(row.crm_lead_id)}">פתיחת כרטיס הקונה</a></p>` : ''}
   </aside></div>`;
-  document.getElementById('closeDrawer').onclick = () => { document.getElementById('drawer').innerHTML = ''; };
+  document.getElementById('closeDrawer').onclick = () => {
+    const drawer = document.getElementById('drawer');
+    drawer.innerHTML = '';
+    drawer.dataset.open = '';
+    paint();
+  };
   document.querySelector('.drawer').addEventListener('click', event => {
-    if (event.target.classList.contains('drawer')) document.getElementById('drawer').innerHTML = '';
+    if (!event.target.classList.contains('drawer')) return;
+    const box = document.getElementById('drawer');
+    box.innerHTML = '';
+    box.dataset.open = '';
+    paint();
   });
   document.getElementById('addressForm').onchange = () => saveAddress(row);
   document.getElementById('doDial').addEventListener('click', () => logTouch(row, 'call', null, ''));
@@ -605,8 +615,16 @@ async function load(){
 }
 
 async function openDetail(id){
+  const drawer = document.getElementById('drawer');
+  if (drawer.dataset.open === id && drawer.innerHTML){
+    drawer.innerHTML = '';
+    drawer.dataset.open = '';
+    paint();
+    return;
+  }
   const row = rows.find(item => item.id === id);
   if (!row) return;
+  drawer.dataset.open = id;
   if (!sample){
     try {
       const detail = await api('card', { id });
