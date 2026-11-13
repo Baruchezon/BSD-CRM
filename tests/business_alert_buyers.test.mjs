@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { validateSignup, usesNewConsentContract, CONSENT_TEXT_VERSION } from '../supabase/functions/business-alert-signup/logic.mjs';
+import { thankYouEmailHtml } from '../supabase/functions/business-alert-signup/email.mjs';
 import {
   SUBSCRIBER_FROM,
   SUBSCRIBER_FROM_ADDRESS,
   SUBSCRIBER_FROM_NAME,
   listUnsubscribeHeaders,
+  signOffHtml,
   signOffText,
   subscriberFromHeader,
   whatsappMessage,
@@ -109,6 +111,15 @@ test('subscriber mail uses one quoted sender and never the team name', () => {
   assert.equal(SUBSCRIBER_FROM, '"BSD - עסקים למכירה" <info@bsd-bbi.co.il>');
   assert.equal(subscriberFromHeader(), SUBSCRIBER_FROM);
   assert.equal(signOffText().split('\n')[0], SUBSCRIBER_FROM_NAME);
+  assert.match(signOffText(), /077-444-6707/);
+  assert.match(signOffText(), /054-2424999/);
+  assert.match(signOffHtml(), /href="tel:\+972774446707"/);
+  assert.match(signOffHtml(), /href="tel:\+972542424999"/);
+  const thanks = thankYouEmailHtml({ firstName: 'דנה', unsubscribeLink: 'https://example.com/unsub' });
+  assert.match(thanks, /href="tel:\+972774446707"/);
+  assert.match(thanks, /href="tel:\+972542424999"/);
+  assert.match(thanks, /טלפון BSD/);
+  assert.match(thanks, /נייד/);
   assert.equal(signOffText().includes('צוות BSD'), false);
   const headers = listUnsubscribeHeaders('https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/business-alert-unsubscribe?token=abc&channel=all');
   assert.match(headers['List-Unsubscribe'], new RegExp(`<mailto:${SUBSCRIBER_FROM_ADDRESS}\\?subject=unsubscribe>`));
@@ -128,6 +139,8 @@ test('the unsubscribe page is Hebrew and says the removal succeeded', () => {
   assert.match(page, /הוסרת בהצלחה/);
   assert.match(page, /אימייל/);
   assert.match(page, /BSD - עסקים למכירה/);
+  assert.match(page, /href="tel:\+972774446707"/);
+  assert.match(page, /href="tel:\+972542424999"/);
   assert.match(unsubscribePage({ ok: false, channel: 'all' }), /הקישור אינו תקין/);
 });
 

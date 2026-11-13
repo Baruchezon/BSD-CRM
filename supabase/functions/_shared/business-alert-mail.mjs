@@ -8,8 +8,19 @@ export const SUBSCRIBER_FROM_NAME = "BSD - עסקים למכירה";
 export const SUBSCRIBER_FROM_ADDRESS = "info@bsd-bbi.co.il";
 export const SUBSCRIBER_REPLY_TO = "info@bsd-bbi.co.il";
 export const SUBSCRIBER_SITE = "https://www.bsd-bbi.co.il";
-export const SUBSCRIBER_PHONE = "077-444-6707";
+export const SUBSCRIBER_PHONES = copy.footer.phones;
+export const SUBSCRIBER_PHONE = SUBSCRIBER_PHONES[0].display;
 export const SUBSCRIBER_ADDRESS = "מגדל BSR 3, רח׳ מצדה 9, בני ברק";
+
+export function phonesText(phones = SUBSCRIBER_PHONES) {
+  return phones.map(phone => `${phone.label}: ${phone.display}`).join("\n");
+}
+
+export function phonesHtml(linkStyle = "color:#0f5ea8;text-decoration:none", phones = SUBSCRIBER_PHONES) {
+  return phones.map(phone =>
+    `${escapeHtml(phone.label)}: <a href="${escapeHtml(phone.tel)}" style="${linkStyle}" dir="ltr">${escapeHtml(phone.display)}</a>`
+  ).join("<br>");
+}
 
 export function subscriberFromHeader(name = SUBSCRIBER_FROM_NAME, address = SUBSCRIBER_FROM_ADDRESS) {
   const quoted = String(name).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -22,7 +33,8 @@ export function signOffLines() {
   return [
     SUBSCRIBER_FROM_NAME,
     SUBSCRIBER_ADDRESS,
-    `${SUBSCRIBER_FROM_ADDRESS} | ${SUBSCRIBER_SITE.replace("https://", "")} | ${SUBSCRIBER_PHONE}`
+    `${SUBSCRIBER_FROM_ADDRESS} | ${SUBSCRIBER_SITE.replace("https://", "")}`,
+    ...SUBSCRIBER_PHONES.map(phone => `${phone.label}: ${phone.display}`)
   ];
 }
 
@@ -42,7 +54,7 @@ export function escapeHtml(value) {
 
 export function signOffHtml() {
   const [name, address, contacts] = signOffLines();
-  return `<div dir="rtl" style="margin-top:28px;padding-top:14px;border-top:1px solid #e3d9bf;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#1f2d3d;text-align:right"><b>${escapeHtml(name)}</b><br>${escapeHtml(address)}<br><span dir="ltr">${escapeHtml(contacts)}</span></div>`;
+  return `<div dir="rtl" style="margin-top:28px;padding-top:14px;border-top:1px solid #e3d9bf;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#1f2d3d;text-align:right"><b>${escapeHtml(name)}</b><br>${escapeHtml(address)}<br><span dir="ltr">${escapeHtml(contacts)}</span><br>${phonesHtml()}</div>`;
 }
 
 export function unsubscribeHttpsUrl(supabaseUrl, token, channel = "all") {
