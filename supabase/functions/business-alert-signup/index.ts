@@ -6,11 +6,15 @@
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import {
   RATE_LIMITS,
+  alreadyRegisteredPlan,
   cleanText,
   isUnsubscribeToken,
   consentWritePayload,
+  newUpdateNonce,
+  planSubscriberUpdate,
   planSubscriberWrite,
-  validateSignup
+  validateSignup,
+  verifyUpdateToken
 } from "./logic.mjs";
 import {
   INTERNAL_TO,
@@ -34,7 +38,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 
 const TABLE = "business_alert_subscribers";
 const ATTEMPTS = "business_alert_signup_attempts";
-const LOOKUP = "id, first_name, last_name, email, phone, phone9, unsubscribe_token, status, unsubscribed_at, unsubscribed_by, unsubscribe_reason, email_unsubscribed_at, whatsapp_unsubscribed_at, status_history, resubscribed_at";
+const LOOKUP = "id, first_name, last_name, email, phone, phone9, unsubscribe_token, status, unsubscribed_at, unsubscribed_by, unsubscribe_reason, email_unsubscribed_at, whatsapp_unsubscribed_at, status_history, resubscribed_at, categories, subcategories, flags, budget_min, budget_max, budget_open, regions, looking_for, consent_email, consent_whatsapp, address_form, crm_lead_id, region, interests";
 
 const allowedOrigins = new Set([
   "https://bsd-bbi.co.il",
@@ -106,9 +110,22 @@ async function countAttempts(kind: string, column: "ip" | "email", value: string
   return count || 0;
 }
 
-async function recordAttempt(kind: string, email: string, ip: string) {
-  const { error } = await supabase.from(ATTEMPTS).insert({ kind, email: email || null, ip: ip || null });
+async function recordAttempt(kind: string, email: string, ip: string, subscriberId?: string) {
+  const { error } = await supabase.from(ATTEMPTS).insert({
+    kind,
+    email: email || null,
+    ip: ip || null,
+    ...(subscriberId ? { subscriber_id: subscriberId } : {})
+  });
   if (error) console.error("Alert attempt log failed", error.message);
+}
+
+async function countSubscriberUpdates(subscriberId: string, windowMs: number) {
+  const since = new Date(Date.now() - windowMs).toISOString();
+  const { count, error } = await supabase.from(ATTEMPTS).select("id", { count: "exact", head: true })
+    .eq("kind", "update").eq("subscriber_id", subscriberId).gte("created_at", since);
+  if (error) throw error;
+  return count || 0;
 }
 
 async function findByEmail(email: string) {
@@ -196,6 +213,83 @@ async function writeSubscriber(row: Record<string, unknown>, consentIp: string, 
   return { ...data, signupKind: "new", previousStatus: null, consentAt: now };
 }
 
+function updateTokenSecret() {
+  return Deno.env.get("UPDATE_TOKEN_SECRET") || "";
+}
+
+async function applyProfileUpdate(body: Record<string, unknown>, origin: string | null, ip: string) {
+  const secret = updateTokenSecret();
+  if (!secret) return json({ ok: false, error: "token_unavailable" }, 500, origin);
+  const ipAttempts = await countAttempts("update", "ip", ip, RATE_LIMITS.updatePerIp.windowMs);
+  if (ipAttempts >= RATE_LIMITS.updatePerIp.limit) return json({ ok: false, error: "rate_limited" }, 429, origin);
+  const verified = verifyUpdateToken(body.update_token, secret, Date.now());
+  if (!verified.ok) return json({ ok: false, error: verified.error }, 400, origin);
+  const subAttempts = await countSubscriberUpdates(verified.subscriberId, RATE_LIMITS.updatePerSubscriber.windowMs);
+  if (subAttempts >= RATE_LIMITS.updatePerSubscriber.limit) return json({ ok: false, error: "rate_limited" }, 429, origin);
+  await recordAttempt("update", "", ip, verified.subscriberId);
+
+  const { data: nonceRow, error: nonceError } = await supabase.from("business_alert_update_nonces")
+    .select("nonce, subscriber_id, email_matched, expires_at, used_at")
+    .eq("nonce", verified.nonce)
+    .maybeSingle();
+  if (nonceError) throw nonceError;
+  if (!nonceRow || nonceRow.used_at || nonceRow.subscriber_id !== verified.subscriberId || new Date(nonceRow.expires_at).getTime() <= Date.now()) {
+    return json({ ok: false, error: "invalid_token" }, 400, origin);
+  }
+
+  const { data: stored, error: storedError } = await supabase.from(TABLE).select(LOOKUP).eq("id", verified.subscriberId).maybeSingle();
+  if (storedError) throw storedError;
+  if (!stored) return json({ ok: false, error: "invalid_token" }, 400, origin);
+
+  let incoming: Record<string, unknown> = { all_good: body.all_good === true };
+  if (incoming.all_good !== true) {
+    const signup = validateSignup(body);
+    if (!signup.ok) return json({ ok: false, error: signup.error }, 400, origin);
+    incoming = signup.row;
+  }
+  const now = new Date().toISOString();
+  const plan = planSubscriberUpdate({
+    stored,
+    incoming,
+    emailMatched: verified.emailMatched === true && nonceRow.email_matched === true,
+    now
+  });
+  const { data: claimed, error: claimError } = await supabase.from("business_alert_update_nonces")
+    .update({ used_at: now })
+    .eq("nonce", verified.nonce)
+    .is("used_at", null)
+    .select("nonce");
+  if (claimError) throw claimError;
+  if (!claimed?.length) return json({ ok: false, error: "invalid_token" }, 400, origin);
+
+  if (Object.keys(plan.changes).length) {
+    const { error } = await supabase.from(TABLE).update(plan.changes).eq("id", stored.id);
+    if (error) {
+      await supabase.from("business_alert_update_nonces").update({ used_at: null }).eq("nonce", verified.nonce);
+      throw error;
+    }
+  }
+  if (plan.lead?.id) {
+    const leadPatch: Record<string, unknown> = {};
+    if (plan.lead.requested_area !== undefined) leadPatch.requested_area = plan.lead.requested_area;
+    if (Object.hasOwn(plan.lead, "budget")) leadPatch.budget = plan.lead.budget;
+    if (Object.keys(leadPatch).length) {
+      const { error } = await supabase.from("leads").update(leadPatch).eq("id", plan.lead.id);
+      if (error) console.error("lead update was not stored", error.message);
+    }
+  }
+  const closed = ["unsubscribed", "unsubscribed_all", "unsubscribed_email", "unsubscribed_whatsapp"].includes(stored.status);
+  const { error: historyError } = await supabase.from("business_alert_subscriber_history").insert({
+    subscriber_id: stored.id,
+    action: plan.changes.status === "active" && closed ? "reactivate" : plan.action,
+    actor: "self_update",
+    previous: plan.history.previous,
+    next: plan.history.next
+  });
+  if (historyError) console.error("subscriber history was not stored", historyError.message);
+  return json({ ok: true, status: "updated" }, 200, origin);
+}
+
 async function unsubscribe(token: string, origin: string | null, ip: string) {
   const attempts = await countAttempts("unsubscribe", "ip", ip, RATE_LIMITS.unsubscribePerIp.windowMs);
   if (attempts >= RATE_LIMITS.unsubscribePerIp.limit) return json({ ok: false, error: "rate_limited" }, 429, origin);
@@ -230,6 +324,7 @@ Deno.serve(async req => {
     }
 
     if (cleanText(body?.website, 200)) return json({ ok: true }, 200, origin);
+    if (body?.mode === "update") return await applyProfileUpdate(body, origin, ip);
 
     const signup = validateSignup(body);
     const emailForLimit = cleanText(body?.email, 180).toLowerCase();
@@ -242,6 +337,29 @@ Deno.serve(async req => {
     }
     await recordAttempt("signup", emailForLimit, ip);
     if (!signup.ok) return json({ ok: false, error: signup.error }, 400, origin);
+
+    const secret = updateTokenSecret();
+    const phoneRow = signup.row.phone9 ? await findByPhone9(String(signup.row.phone9)) : null;
+    const emailRow = await findByEmail(String(signup.row.email));
+    const existing = phoneRow || emailRow;
+    if (existing?.id) {
+      if (!secret) return json({ ok: false, error: "token_unavailable" }, 500, origin);
+      const nonce = newUpdateNonce();
+      const plan = alreadyRegisteredPlan(existing, signup.row.email, { nonce, nowMs: Date.now(), secret });
+      const { error } = await supabase.from("business_alert_update_nonces").insert({
+        nonce,
+        subscriber_id: existing.id,
+        email_matched: plan.emailMatched,
+        expires_at: plan.expiresAt
+      });
+      if (error) throw error;
+      return json({
+        ok: true,
+        status: plan.status,
+        update_token: plan.update_token,
+        ...(plan.prefill ? { prefill: plan.prefill } : {})
+      }, 200, origin);
+    }
 
     const saved = await writeSubscriber(signup.row, ip, cleanText(req.headers.get("user-agent"), 300));
     const pageLink = saved.identityKept ? "" : unsubscribeUrl(saved.unsubscribe_token, "all");

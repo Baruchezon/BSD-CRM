@@ -46,9 +46,12 @@ export const BUDGET_OPTIONS = [
 export const RATE_LIMITS = {
   signupPerIp: { limit: 8, windowMs: 15 * 60 * 1000 },
   signupPerEmail: { limit: 4, windowMs: 60 * 60 * 1000 },
-  unsubscribePerIp: { limit: 30, windowMs: 15 * 60 * 1000 }
+  unsubscribePerIp: { limit: 30, windowMs: 15 * 60 * 1000 },
+  updatePerIp: { limit: 10, windowMs: 15 * 60 * 1000 },
+  updatePerSubscriber: { limit: 6, windowMs: 15 * 60 * 1000 }
 };
 
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { formInterestFromPhrase, formRegionFromText, parseAlertBudget } from "../_shared/alert-match.mjs";
 import { categorySlugs, flagSlugs, regionSlugs, subcategorySlugs } from "../_shared/taxonomy.mjs";
 
@@ -428,6 +431,137 @@ export function consentWritePayload(row, previous, now) {
     ...(reopened ? { resubscribed_at: now } : {}),
     status_history: history
   };
+}
+
+export const UPDATE_TOKEN_TTL_MS = 30 * 60 * 1000;
+const PREFILL_KEYS = [
+  "categories", "subcategories", "flags", "budget_min", "budget_max", "budget_open",
+  "regions", "looking_for", "consent_email", "consent_whatsapp", "address_form"
+];
+const PROFILE_KEYS = [
+  ...PREFILL_KEYS, "interests", "region"
+];
+const IDENTITY_KEYS = ["first_name", "last_name", "email", "phone", "phone9"];
+
+export function emailsMatch(stored, submitted) {
+  const left = String(stored ?? "").trim().toLowerCase();
+  const right = String(submitted ?? "").trim().toLowerCase();
+  return Boolean(left && right && left === right);
+}
+
+export function newUpdateNonce() {
+  return randomBytes(32).toString("base64url");
+}
+
+export function signUpdateToken({ subscriberId, nonce, emailMatched, expiresAt, secret }) {
+  const payload = Buffer.from(JSON.stringify({
+    sub: subscriberId,
+    nonce,
+    exp: expiresAt,
+    email_match: emailMatched === true
+  })).toString("base64url");
+  const signature = createHmac("sha256", secret).update(payload).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+export function verifyUpdateToken(token, secret, nowMs) {
+  const [payload, signature] = String(token || "").split(".");
+  if (!payload || !signature || String(token).split(".").length !== 2) return { ok: false, error: "invalid_token" };
+  const expected = createHmac("sha256", secret).update(payload).digest("base64url");
+  const left = Buffer.from(signature);
+  const right = Buffer.from(expected);
+  if (left.length !== right.length || !timingSafeEqual(left, right)) return { ok: false, error: "invalid_token" };
+  let body;
+  try { body = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")); }
+  catch { return { ok: false, error: "invalid_token" }; }
+  if (!body?.sub || !body?.nonce || typeof body.exp !== "number") return { ok: false, error: "invalid_token" };
+  if (body.exp <= nowMs) return { ok: false, error: "expired" };
+  return { ok: true, subscriberId: body.sub, nonce: body.nonce, emailMatched: body.email_match === true, expiresAt: body.exp };
+}
+
+export function signupPrefill(stored, submittedEmail) {
+  if (!emailsMatch(stored?.email, submittedEmail)) return null;
+  const prefill = {};
+  for (const key of PREFILL_KEYS) prefill[key] = stored?.[key] ?? null;
+  return prefill;
+}
+
+export function alreadyRegisteredPlan(stored, submittedEmail, { nonce, nowMs, secret }) {
+  const emailMatched = emailsMatch(stored?.email, submittedEmail);
+  const expiresAt = nowMs + UPDATE_TOKEN_TTL_MS;
+  const plan = {
+    status: "already_registered",
+    update_token: signUpdateToken({
+      subscriberId: stored.id,
+      nonce,
+      emailMatched,
+      expiresAt,
+      secret
+    }),
+    nonce,
+    expiresAt: new Date(expiresAt).toISOString(),
+    emailMatched
+  };
+  const prefill = signupPrefill(stored, submittedEmail);
+  if (prefill) plan.prefill = prefill;
+  return plan;
+}
+
+function definedProfile(body) {
+  const next = {};
+  for (const key of PROFILE_KEYS) {
+    if (Object.hasOwn(body || {}, key)) next[key] = body[key];
+  }
+  return next;
+}
+
+export function planSubscriberUpdate({ stored, incoming, emailMatched, now }) {
+  if (incoming?.all_good === true) {
+    return { action: "confirm", changes: {}, lead: null, history: { previous: {}, next: { all_good: true } } };
+  }
+  const changes = definedProfile(incoming);
+  if (emailMatched) {
+    for (const key of IDENTITY_KEYS) {
+      if (incoming?.[key]) changes[key] = incoming[key];
+    }
+  }
+  const closed = CLOSED_STATUSES.includes(stored?.status);
+  const fresh = hasFreshConsent(incoming);
+  if (closed && fresh) {
+    changes.status = "active";
+    changes.resubscribed_at = now;
+    changes.unsubscribed_at = null;
+    changes.unsubscribed_by = null;
+    changes.unsubscribe_reason = null;
+    changes.email_unsubscribed_at = incoming.consent_email === true ? null : stored.email_unsubscribed_at;
+    changes.whatsapp_unsubscribed_at = incoming.consent_whatsapp === true ? null : stored.whatsapp_unsubscribed_at;
+    changes.consent_general = true;
+    changes.consent_at = now;
+    changes.consent_method = "self_update";
+  } else if (closed) {
+    delete changes.status;
+  }
+  if (Object.hasOwn(changes, "consent_email") || Object.hasOwn(changes, "consent_whatsapp") || fresh) {
+    changes.consent_method = "self_update";
+    if (changes.consent_email === true) changes.consent_email_method = "self_update";
+    if (changes.consent_whatsapp === true) changes.consent_whatsapp_method = "self_update";
+  }
+  const previous = {};
+  const next = {};
+  for (const key of Object.keys(changes)) {
+    previous[key] = stored?.[key] ?? null;
+    next[key] = changes[key];
+  }
+  const lead = stored?.crm_lead_id && (Object.hasOwn(changes, "region") || Object.hasOwn(changes, "regions") || Object.hasOwn(changes, "budget_max"))
+    ? {
+      id: stored.crm_lead_id,
+      ...(Object.hasOwn(changes, "region") || Object.hasOwn(changes, "regions")
+        ? { requested_area: changes.region || (Array.isArray(changes.regions) ? changes.regions.join(", ") : null) }
+        : {}),
+      ...(Object.hasOwn(changes, "budget_max") ? { budget: changes.budget_max } : {})
+    }
+    : null;
+  return { action: Object.keys(changes).length ? "update" : "confirm", changes, lead, history: { previous, next } };
 }
 
 export function planSubscriberWrite({ emailRow, phoneRow }) {
