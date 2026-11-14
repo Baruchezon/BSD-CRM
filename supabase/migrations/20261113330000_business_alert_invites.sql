@@ -19,7 +19,7 @@ create table if not exists public.business_alert_invites (
   buyer_id uuid references public.leads (id) on delete cascade,
   channel text not null,
   token_hash text not null unique,
-  short_code text not null unique,
+  short_code text unique,
   prefill jsonb not null default '{}'::jsonb,
   status text not null default 'sent',
   sent_at timestamptz not null default now(),
@@ -33,7 +33,7 @@ create table if not exists public.business_alert_invites (
   constraint business_alert_invites_card_check check (lead_id is not null or buyer_id is not null),
   constraint business_alert_invites_channel_check check (channel in ('whatsapp', 'email')),
   constraint business_alert_invites_status_check check (status in ('sent', 'opened', 'joined', 'expired', 'superseded')),
-  constraint business_alert_invites_code_check check (short_code ~ '^[A-Za-z0-9]{7}$')
+  constraint business_alert_invites_code_check check (short_code is null or short_code ~ '^[A-Za-z0-9]{7}$')
 );
 
 create index if not exists business_alert_invites_lead_idx
@@ -52,6 +52,27 @@ alter table public.business_alert_signup_attempts
   check (kind = any (array['signup', 'unsubscribe', 'visit', 'send', 'update', 'invite_resolve']));
 
 comment on table public.business_alert_invites is
-  'Staff invites from a lead or buyer card. token_hash is sha256 of the secret. No anon access.';
+  'Staff invites from a lead or buyer card. token_hash is sha256 of the secret. short_code is filled only when short_links_live is true. No anon access.';
+
+alter table public.business_alert_match_settings
+  add column if not exists invite_whatsapp_template text not null default $invite$שלום {שם} 😊
+תודה רבה על השיחה ועל האמון.
+כדי שאוכל לעדכן אותך ראשון בעסקים שבאמת מתאימים לך, אשמח שתצטרף/י לרשימת התפוצה האישית שלנו. זה לוקח פחות מדקה:
+👉 {לינק}
+יישלחו אליך עסקים רלוונטיים להגדרות שלך, בדיסקרטיות מלאה. אנחנו גם יכולים לעזור במימון רכישת העסק וללוות אותך לאורך כל הדרך.
+בברכה,
+ברוך איזון | BSD$invite$,
+  add column if not exists invite_email_template text not null default $invite$שלום {שם} 😊
+תודה רבה על השיחה ועל האמון.
+כדי שאוכל לעדכן אותך ראשון בעסקים שבאמת מתאימים לך, אשמח שתצטרף/י לרשימת התפוצה האישית שלנו. זה לוקח פחות מדקה:
+👉 {לינק}
+יישלחו אליך עסקים רלוונטיים להגדרות שלך, בדיסקרטיות מלאה. אנחנו גם יכולים לעזור במימון רכישת העסק וללוות אותך לאורך כל הדרך.
+בברכה,
+ברוך איזון | BSD$invite$;
+
+comment on column public.business_alert_match_settings.invite_whatsapp_template is
+  'WhatsApp invite. Placeholders {שם} and {לינק}. Edit this row to change the text without a deploy.';
+comment on column public.business_alert_match_settings.invite_email_template is
+  'Email invite body. Same placeholders. The link is sent as a button, not as a visible address.';
 
 commit;

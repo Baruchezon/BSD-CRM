@@ -6,7 +6,18 @@ export const INVITE_GAP_MS = 24 * 60 * 60 * 1000;
 export const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const SIGNUP_PATH = "/הרשמה-לעדכונים/";
 export const SIGNUP_ORIGIN = "https://www.bsd-bbi.co.il";
-export const LINK_PLACEHOLDER = "הקישור האישי";
+export const NAME_PLACEHOLDER = "{שם}";
+export const LINK_PLACEHOLDER = "{לינק}";
+// Baruch's wording. Stored on business_alert_match_settings so it can change without a deploy.
+export const DEFAULT_INVITE_TEMPLATE = [
+  "שלום {שם} 😊",
+  "תודה רבה על השיחה ועל האמון.",
+  "כדי שאוכל לעדכן אותך ראשון בעסקים שבאמת מתאימים לך, אשמח שתצטרף/י לרשימת התפוצה האישית שלנו. זה לוקח פחות מדקה:",
+  "👉 {לינק}",
+  "יישלחו אליך עסקים רלוונטיים להגדרות שלך, בדיסקרטיות מלאה. אנחנו גם יכולים לעזור במימון רכישת העסק וללוות אותך לאורך כל הדרך.",
+  "בברכה,",
+  "ברוך איזון | BSD"
+].join("\n");
 const CLOSED = new Set(["unsubscribed", "unsubscribed_all", "unsubscribed_email", "unsubscribed_whatsapp"]);
 
 export function newInviteToken() {
@@ -30,28 +41,41 @@ export function phone9(phone) {
   return digits.length >= 9 ? digits.slice(-9) : "";
 }
 
-export function inviteMessage(name) {
+export function storedTemplate(value) {
+  const text = String(value || "").trim();
+  return text || DEFAULT_INVITE_TEMPLATE;
+}
+
+export function fillName(template, name) {
   const who = String(name || "").trim();
-  return [
-    who ? `שלום ${who} 😊` : "שלום 😊",
-    "תודה רבה על השיחה ועל האמון.",
-    "כדי שאוכל לעדכן אותך ראשון בעסקים שבאמת מתאימים לך, אשמח לצרף אותך לרשימת התפוצה האישית שלנו.",
-    "זה לוקח פחות מדקה, הפרטים כבר ממולאים:",
-    `👉 ${LINK_PLACEHOLDER}`,
-    "נשלח רק הזדמנויות רלוונטיות, בדיסקרטיות מלאה.",
-    "אנחנו גם יכולים לעזור במימון רכישת העסק וללוות אותך לאורך כל הדרך.",
-    "ברוך, BSD"
-  ].join("\n");
+  const text = storedTemplate(template);
+  if (!who) return text.replaceAll(NAME_PLACEHOLDER, "").replace(/שלום\s+😊/g, "שלום 😊");
+  return text.replaceAll(NAME_PLACEHOLDER, who);
+}
+
+export function inviteMessage(name) {
+  return fillName(DEFAULT_INVITE_TEMPLATE, name);
 }
 
 export function messageWithLink(message, url) {
   const text = String(message || "");
-  if (text.includes(LINK_PLACEHOLDER)) return text.replaceAll(LINK_PLACEHOLDER, url);
-  return `${text}\n${url}`;
+  const link = String(url || "");
+  if (text.includes(LINK_PLACEHOLDER)) return text.replaceAll(LINK_PLACEHOLDER, link);
+  if (link && text.includes(link)) return text;
+  return link ? `${text}\n${link}` : text;
+}
+
+// Email shows the same wording. The link is a button, never a visible address.
+export function emailBody(message) {
+  return String(message || "")
+    .replace(/^[ \t]*👉[ \t]*\{לינק\}[ \t]*$/gm, "")
+    .replaceAll(LINK_PLACEHOLDER, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function inviteUrl({ live, token, code }) {
-  if (live) return shortLinkUrl(code);
+  if (live && code) return shortLinkUrl(code);
   return `${SIGNUP_ORIGIN}${SIGNUP_PATH}?i=${encodeURIComponent(token)}`;
 }
 

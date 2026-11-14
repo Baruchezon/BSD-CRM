@@ -10,6 +10,13 @@
     missing_email_configuration: "שליחת המייל לא מוגדרת.",
     send_failed: "המייל לא יצא. ההזמנה נשמרה כדי שלא תישלח פעמיים."
   };
+  const FALLBACK = "שלום {שם} 😊\nתודה רבה על השיחה ועל האמון.\nכדי שאוכל לעדכן אותך ראשון בעסקים שבאמת מתאימים לך, אשמח שתצטרף/י לרשימת התפוצה האישית שלנו. זה לוקח פחות מדקה:\n👉 {לינק}\nיישלחו אליך עסקים רלוונטיים להגדרות שלך, בדיסקרטיות מלאה. אנחנו גם יכולים לעזור במימון רכישת העסק וללוות אותך לאורך כל הדרך.\nבברכה,\nברוך איזון | BSD";
+  function fillName(template, name) {
+    const who = String(name || "").trim();
+    const text = String(template || FALLBACK);
+    if (!who) return text.replaceAll("{שם}", "").replace(/שלום\s+😊/g, "שלום 😊");
+    return text.replaceAll("{שם}", who);
+  }
   function esc(value) {
     return String(value ?? "").replace(/[&<>"']/g, character => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -61,14 +68,26 @@
     </div>`;
     document.body.appendChild(overlay);
     const preview = overlay.querySelector("#invitePreview");
-    preview.value = `שלום ${name} 😊\nתודה רבה על השיחה ועל האמון.\nכדי שאוכל לעדכן אותך ראשון בעסקים שבאמת מתאימים לך, אשמח לצרף אותך לרשימת התפוצה האישית שלנו.\nזה לוקח פחות מדקה, הפרטים כבר ממולאים:\n👉 הקישור האישי\nנשלח רק הזדמנויות רלוונטיות, בדיסקרטיות מלאה.\nאנחנו גם יכולים לעזור במימון רכישת העסק וללוות אותך לאורך כל הדרך.\nברוך, BSD`;
-    overlay.querySelector("#inviteClose").onclick = () => overlay.remove();
-    call({ action: "status", card_type: cardType, card_id: lead.id }).then(data => {
-      overlay.querySelector("#inviteHistory").innerHTML = (data.invites || []).map(item => `<div>${esc(chip(item))}</div>`).join("");
-    }).catch(() => {});
+    const templates = { whatsapp: FALLBACK, email: FALLBACK };
+    let auto = "";
     function channel() {
       return overlay.querySelector("input[name=inviteChannel]:checked").value;
     }
+    function showTemplate() {
+      const next = fillName(templates[channel()] || FALLBACK, name);
+      if (!preview.value || preview.value === auto) {
+        preview.value = next;
+        auto = next;
+      }
+    }
+    showTemplate();
+    overlay.querySelector("#inviteClose").onclick = () => overlay.remove();
+    call({ action: "status", card_type: cardType, card_id: lead.id }).then(data => {
+      if (data.templates?.whatsapp) templates.whatsapp = data.templates.whatsapp;
+      if (data.templates?.email) templates.email = data.templates.email;
+      showTemplate();
+      overlay.querySelector("#inviteHistory").innerHTML = (data.invites || []).map(item => `<div>${esc(chip(item))}</div>`).join("");
+    }).catch(() => {});
     function explain() {
       const note = overlay.querySelector("#inviteBlock");
       const send = overlay.querySelector("#inviteSend");
@@ -85,7 +104,10 @@
       note.textContent = "";
       send.disabled = false;
     }
-    overlay.querySelectorAll("input[name=inviteChannel]").forEach(input => input.addEventListener("change", explain));
+    overlay.querySelectorAll("input[name=inviteChannel]").forEach(input => input.addEventListener("change", () => {
+      showTemplate();
+      explain();
+    }));
     explain();
     overlay.querySelector("#inviteSend").onclick = async () => {
       const send = overlay.querySelector("#inviteSend");

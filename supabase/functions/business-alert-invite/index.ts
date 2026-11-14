@@ -2,18 +2,20 @@
 // WhatsApp is not sent here: the caller opens the returned wa.me link.
 // Email is sent from "BSD - עסקים למכירה" after the invite row is reserved.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { SUBSCRIBER_FROM, BSD_SLOGAN } from "../_shared/business-alert-mail.mjs";
-import { newShortCode, shortLinksLive } from "../_shared/short-links.mjs";
+import { SUBSCRIBER_FROM, escapeHtml, signOffHtml, signOffText } from "../_shared/business-alert-mail.mjs";
+import { newShortCode } from "../_shared/short-links.mjs";
 import {
   INVITE_TTL_MS,
+  emailBody,
+  fillName,
   hashInviteToken,
   inviteGuard,
-  inviteMessage,
   inviteUrl,
   messageWithLink,
   newInviteToken,
   phone9,
   prefillFromCard,
+  storedTemplate,
   waNumber
 } from "../_shared/business-alert-invite.mjs";
 
@@ -63,6 +65,19 @@ function chip(invite: Record<string, unknown>) {
   };
 }
 
+async function inviteSettings() {
+  const { data, error } = await supabase.from("business_alert_match_settings")
+    .select("short_links_live, invite_whatsapp_template, invite_email_template")
+    .eq("id", true)
+    .maybeSingle();
+  if (error) throw error;
+  return {
+    live: data?.short_links_live === true,
+    whatsapp: storedTemplate(data?.invite_whatsapp_template),
+    email: storedTemplate(data?.invite_email_template)
+  };
+}
+
 async function loadCard(cardType: string, cardId: string) {
   const { data, error } = await supabase.from("leads")
     .select("id, type, first_name, last_name, full_name, phone, email, requested_categories, requested_field, requested_area, budget")
@@ -92,8 +107,13 @@ Deno.serve(async req => {
       .eq(column, cardId)
       .order("sent_at", { ascending: false });
     if (listError) throw listError;
+    const settings = await inviteSettings();
     if (body.action === "status" || !body.channel) {
-      return json({ ok: true, invites: (invites || []).map(chip), preview: inviteMessage("") }, 200, origin);
+      return json({
+        ok: true,
+        invites: (invites || []).map(chip),
+        templates: { whatsapp: settings.whatsapp, email: settings.email }
+      }, 200, origin);
     }
     const channel = body.channel === "whatsapp" || body.channel === "email" ? body.channel : "";
     if (!channel) return json({ ok: false, error: "channel" }, 400, origin);
@@ -117,12 +137,12 @@ Deno.serve(async req => {
       await supabase.from("business_alert_invites").update({ status: "superseded" }).in("id", decision.supersede);
     }
     const token = newInviteToken();
-    const code = newShortCode();
-    const live = await shortLinksLive(supabase);
-    const url = inviteUrl({ live, token, code });
+    const code = settings.live ? newShortCode() : null;
+    const url = inviteUrl({ live: settings.live, token, code });
     const name = card.first_name || String(card.full_name || "").split(/\s+/)[0] || "";
-    const draft = String(body.message || "").trim() || inviteMessage(name);
-    const whatsappText = messageWithLink(draft.includes(name) || !name ? draft : inviteMessage(name), url);
+    const template = channel === "email" ? settings.email : settings.whatsapp;
+    const named = fillName(String(body.message || "").trim() || template, name);
+    const whatsappText = messageWithLink(named, url);
     const expires = new Date(Date.now() + INVITE_TTL_MS).toISOString();
     const row = {
       [column]: cardId,
@@ -144,13 +164,13 @@ Deno.serve(async req => {
     }
     const apiKey = Deno.env.get("RESEND_API_KEY");
     if (!apiKey) return json({ ok: false, error: "missing_email_configuration", invite: chip(saved) }, 200, origin);
+    const visible = emailBody(named);
     const html = `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f7fb;font-family:Arial,sans-serif">
 <div dir="rtl" style="max-width:600px;margin:0 auto;background:#fff;padding:24px;text-align:right;color:#102844">
 <img src="${LOGO}" alt="BSD" width="88" style="width:88px;height:auto;border:0">
-<p style="font-size:18px;line-height:1.6;white-space:pre-wrap">${draft.replaceAll(LINK_PLACEHOLDER, "").replace(/[&<>]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[character]))}</p>
-<p><a href="${url}" style="display:inline-block;background:#0e1b34;color:#fff;text-decoration:none;border-radius:12px;padding:12px 18px;font-weight:700">הצטרפות לרשימה</a></p>
-<p style="color:#8a6d1f">${BSD_SLOGAN}</p>
-<p>ברוך<br>BSD - עסקים למכירה</p>
+<p style="font-size:18px;line-height:1.6;white-space:pre-wrap">${escapeHtml(visible)}</p>
+<p><a href="${escapeHtml(url)}" style="display:inline-block;background:#0e1b34;color:#fff;text-decoration:none;border-radius:12px;padding:12px 18px;font-weight:700">הצטרפות לרשימה</a></p>
+${signOffHtml()}
 </div></body></html>`;
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -160,7 +180,7 @@ Deno.serve(async req => {
         to: [card.email],
         subject: "הצטרפות לרשימת העדכונים של BSD",
         html,
-        text: draft.replaceAll(LINK_PLACEHOLDER, "").trim()
+        text: `${visible}\n\n${signOffText()}`
       })
     });
     if (!response.ok) return json({ ok: false, error: "send_failed", invite: chip(saved) }, 200, origin);

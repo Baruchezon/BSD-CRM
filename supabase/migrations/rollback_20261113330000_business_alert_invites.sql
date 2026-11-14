@@ -8,6 +8,10 @@ alter table public.business_alert_signup_attempts
 
 drop table if exists public.business_alert_invites;
 
+alter table public.business_alert_match_settings
+  drop column if exists invite_email_template,
+  drop column if exists invite_whatsapp_template;
+
 alter table public.business_alert_subscribers
   drop column if exists buyer_id,
   drop column if exists lead_id;
