@@ -51,7 +51,8 @@ const allowedOrigins = new Set([
   "https://bsd-bbi.co.il",
   "https://www.bsd-bbi.co.il",
   "https://lively-wood-e2c6.baruch-ezon.workers.dev",
-  "https://cursor-alerts-consent-unsubscribe-afca-lively-wood-e2c6.baruch-ezon.workers.dev"
+  "https://cursor-alerts-consent-unsubscribe-afca-lively-wood-e2c6.baruch-ezon.workers.dev",
+  "https://cursor-invite-link-prefill-f01e-lively-wood-e2c6.baruch-ezon.workers.dev"
 ]);
 
 function cors(origin: string | null) {

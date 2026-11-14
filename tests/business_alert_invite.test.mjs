@@ -78,8 +78,12 @@ test("prefill is Roman's shape, and the invite link is /s/<code> unless invite_s
   assert.deepEqual(prefill.categories, ["מזון", "קמעונאות"]);
   assert.equal(prefill.budget, 500000);
   const shown = publicPrefill({ prefill, id: "secret", token: "secret-token", lead_id: "secret" });
-  assert.deepEqual(Object.keys(shown).sort(), ["budget", "categories", "email", "first_name", "last_name", "phone", "regions"]);
-  assert.deepEqual(shown.regions, ["מרכז"]);
+  assert.deepEqual(Object.keys(shown).sort(), ["budget", "categories", "category_labels", "email", "first_name", "last_name", "phone", "region_labels", "regions", "subcategories"]);
+  assert.deepEqual(shown.categories, []);
+  assert.deepEqual(shown.regions, ["center"]);
+  assert.deepEqual(shown.region_labels, ["מרכז וגוש דן"]);
+  assert.equal(shown.budget, 500000);
+  assert.equal(Object.hasOwn(shown, "id"), false);
   const token = newInviteToken();
   assert.equal(hashInviteToken(token).length, 64);
   assert.equal(
@@ -119,6 +123,9 @@ test("signup still claims one thank-you and marks an invite as joined", () => {
   const resolve = readFileSync("supabase/functions/business-alert-invite-resolve/index.ts", "utf8");
   assert.match(resolve, /prefill: publicPrefill/);
   assert.match(resolve, /\.select\("id, status, expires_at, opened_at, prefill, short_code"\)/);
+  assert.match(resolve, /\.eq\("short_code", token\)/);
+  assert.match(resolve, /cursor-invite-link-prefill-f01e-lively-wood-e2c6/);
+  assert.match(src, /cursor-invite-link-prefill-f01e-lively-wood-e2c6/);
   const migration = readFileSync("supabase/migrations/20261113330000_business_alert_invites.sql", "utf8");
   assert.match(migration, /invite_whatsapp_template/);
   assert.match(migration, /invite_email_template/);

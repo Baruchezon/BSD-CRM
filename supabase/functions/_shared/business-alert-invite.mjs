@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { budgetNumber, invitePrefillKeys } from "./invite-prefill-keys.mjs";
 import { newShortCode, shortLinkUrl } from "./short-links.mjs";
 
 export const INVITE_LIMIT = 3;
@@ -105,30 +106,39 @@ export function inviteUrl({ short, token, code }) {
 }
 
 export function prefillFromCard(card) {
-  const categories = String(card?.requested_categories || card?.requested_field || "")
-    .split(/[,،]/).map(item => item.trim()).filter(Boolean);
-  const region = String(card?.requested_area || "").trim();
+  const requestedCategories = String(card?.requested_categories || "").trim();
+  const requestedField = String(card?.requested_field || "").trim();
+  const requestedArea = String(card?.requested_area || "").trim();
+  const categories = [requestedCategories, requestedField].filter(Boolean)
+    .flatMap(value => value.split(/[,،]/).map(item => item.trim()).filter(Boolean));
   return {
     first_name: String(card?.first_name || "").trim(),
     last_name: String(card?.last_name || "").trim(),
     phone: String(card?.phone || "").trim(),
     email: String(card?.email || "").trim(),
+    requested_categories: requestedCategories,
+    requested_field: requestedField,
+    requested_area: requestedArea,
     categories,
-    regions: region ? [region] : [],
+    regions: requestedArea ? [requestedArea] : [],
     budget: card?.budget == null || card.budget === "" ? null : Number(card.budget)
   };
 }
 
 export function publicPrefill(row) {
   const stored = row?.prefill || {};
+  const keys = invitePrefillKeys(stored);
   return {
     first_name: stored.first_name || "",
     last_name: stored.last_name || "",
     phone: stored.phone || "",
     email: stored.email || "",
-    categories: Array.isArray(stored.categories) ? stored.categories : [],
-    regions: Array.isArray(stored.regions) ? stored.regions : [],
-    budget: stored.budget ?? null
+    categories: keys.categories,
+    subcategories: keys.subcategories,
+    regions: keys.regions,
+    category_labels: keys.category_labels,
+    region_labels: keys.region_labels,
+    budget: budgetNumber(stored.budget)
   };
 }
 
