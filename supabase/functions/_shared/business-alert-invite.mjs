@@ -74,13 +74,17 @@ export function emailBody(message) {
     .trim();
 }
 
-export function inviteUrl({ live, token, code }) {
-  if (live && code) return shortLinkUrl(code);
-  return `${SIGNUP_ORIGIN}${SIGNUP_PATH}?i=${encodeURIComponent(token)}`;
+// Roman's signup page. The percent-encoding is the Hebrew path /הרשמה-לעדכונים/.
+export function longInviteUrl(token) {
+  const path = encodeURIComponent(SIGNUP_PATH.replace(/^\/|\/$/g, ""));
+  return `${SIGNUP_ORIGIN}/${path}/?i=${encodeURIComponent(token)}&src=invite`;
 }
 
-export function signupUrlForCode(code) {
-  return `${SIGNUP_ORIGIN}${SIGNUP_PATH}?i=${encodeURIComponent(code)}`;
+// Invite links ignore short_links_live. invite_short_links (default true) chooses
+// /s/<code>; false falls back to the long signup URL.
+export function inviteUrl({ short, token, code }) {
+  if (short && code) return shortLinkUrl(code);
+  return longInviteUrl(token);
 }
 
 export function prefillFromCard(card) {

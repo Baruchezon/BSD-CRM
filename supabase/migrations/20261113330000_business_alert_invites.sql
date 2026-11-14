@@ -18,6 +18,7 @@ create table if not exists public.business_alert_invites (
   lead_id uuid references public.leads (id) on delete cascade,
   buyer_id uuid references public.leads (id) on delete cascade,
   channel text not null,
+  token text not null unique,
   token_hash text not null unique,
   short_code text unique,
   prefill jsonb not null default '{}'::jsonb,
@@ -52,7 +53,7 @@ alter table public.business_alert_signup_attempts
   check (kind = any (array['signup', 'unsubscribe', 'visit', 'send', 'update', 'invite_resolve']));
 
 comment on table public.business_alert_invites is
-  'Staff invites from a lead or buyer card. token_hash is sha256 of the secret. short_code is filled only when short_links_live is true. No anon access.';
+  'Staff invites from a lead or buyer card. token is kept so /s/<code> can redirect to ?i=<token>&src=invite. The public resolve response never returns it. short_code is filled only when invite_short_links is true. No anon access.';
 
 alter table public.business_alert_match_settings
   add column if not exists invite_whatsapp_template text not null default $invite$שלום {שם} 😊
@@ -74,5 +75,10 @@ comment on column public.business_alert_match_settings.invite_whatsapp_template 
   'WhatsApp invite. Placeholders {שם} and {לינק}. Edit this row to change the text without a deploy.';
 comment on column public.business_alert_match_settings.invite_email_template is
   'Email invite body. Same placeholders. The link is sent as a button, not as a visible address.';
+
+alter table public.business_alert_match_settings
+  add column if not exists invite_short_links boolean not null default true;
+comment on column public.business_alert_match_settings.invite_short_links is
+  'Invite WhatsApp and email use /s/<code>. Independent of short_links_live. false uses the long signup URL.';
 
 commit;

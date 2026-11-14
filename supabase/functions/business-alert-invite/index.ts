@@ -67,12 +67,12 @@ function chip(invite: Record<string, unknown>) {
 
 async function inviteSettings() {
   const { data, error } = await supabase.from("business_alert_match_settings")
-    .select("short_links_live, invite_whatsapp_template, invite_email_template")
+    .select("invite_short_links, invite_whatsapp_template, invite_email_template")
     .eq("id", true)
     .maybeSingle();
   if (error) throw error;
   return {
-    live: data?.short_links_live === true,
+    short: data?.invite_short_links !== false,
     whatsapp: storedTemplate(data?.invite_whatsapp_template),
     email: storedTemplate(data?.invite_email_template)
   };
@@ -137,8 +137,8 @@ Deno.serve(async req => {
       await supabase.from("business_alert_invites").update({ status: "superseded" }).in("id", decision.supersede);
     }
     const token = newInviteToken();
-    const code = settings.live ? newShortCode() : null;
-    const url = inviteUrl({ live: settings.live, token, code });
+    const code = settings.short ? newShortCode() : null;
+    const url = inviteUrl({ short: settings.short, token, code });
     const name = card.first_name || String(card.full_name || "").split(/\s+/)[0] || "";
     const template = channel === "email" ? settings.email : settings.whatsapp;
     const named = fillName(String(body.message || "").trim() || template, name);
@@ -147,6 +147,7 @@ Deno.serve(async req => {
     const row = {
       [column]: cardId,
       channel,
+      token,
       token_hash: hashInviteToken(token),
       short_code: code,
       prefill: prefillFromCard(card),

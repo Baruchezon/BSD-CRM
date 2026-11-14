@@ -8,6 +8,7 @@ import {
   inviteGuard,
   inviteMessage,
   inviteUrl,
+  longInviteUrl,
   messageWithLink,
   newInviteToken,
   prefillFromCard,
@@ -63,21 +64,25 @@ test("guards block do-not-contact, a recent invite, and a fourth invite", () => 
   assert.deepEqual(ready.supersede, ["old"]);
 });
 
-test("prefill has profile fields only, and the invite link is the long signup url unless short links are live", () => {
+test("prefill is Roman's shape, and the invite link is /s/<code> unless invite_short_links is off", () => {
   const prefill = prefillFromCard(card);
   assert.deepEqual(prefill.categories, ["מזון", "קמעונאות"]);
   assert.equal(prefill.budget, 500000);
-  assert.equal(Object.hasOwn(publicPrefill({ prefill, id: "secret" }), "id"), false);
+  const shown = publicPrefill({ prefill, id: "secret", token: "secret-token", lead_id: "secret" });
+  assert.deepEqual(Object.keys(shown).sort(), ["budget", "categories", "email", "first_name", "last_name", "phone", "regions"]);
+  assert.deepEqual(shown.regions, ["מרכז"]);
   const token = newInviteToken();
   assert.equal(hashInviteToken(token).length, 64);
-  const quiet = inviteUrl({ live: false, token, code: "Ab12Cd3" });
-  assert.match(quiet, /הרשמה-לעדכונים\/\?i=/);
+  assert.equal(
+    longInviteUrl(token),
+    `https://www.bsd-bbi.co.il/%D7%94%D7%A8%D7%A9%D7%9E%D7%94-%D7%9C%D7%A2%D7%93%D7%9B%D7%95%D7%A0%D7%99%D7%9D/?i=${encodeURIComponent(token)}&src=invite`
+  );
+  const quiet = inviteUrl({ short: false, token, code: "Ab12Cd3" });
+  assert.equal(quiet, longInviteUrl(token));
   assert.equal(quiet.includes("/s/"), false);
-  assert.ok(quiet.includes(encodeURIComponent(token)));
-  const unset = inviteUrl({ live: true, token, code: "" });
-  assert.equal(unset.includes("/s/"), false);
-  assert.ok(unset.includes(encodeURIComponent(token)));
-  const live = inviteUrl({ live: true, token, code: "Ab12Cd3" });
+  const unset = inviteUrl({ short: true, token, code: "" });
+  assert.equal(unset, longInviteUrl(token));
+  const live = inviteUrl({ short: true, token, code: "Ab12Cd3" });
   assert.equal(live, "https://www.bsd-bbi.co.il/s/Ab12Cd3");
   assert.equal(live.includes(token), false);
 });
@@ -94,12 +99,19 @@ test("signup still claims one thank-you and marks an invite as joined", () => {
   assert.match(readFileSync("js/business-alert-invite.js", "utf8"), /wa_url/);
   const inviteFn = readFileSync("supabase/functions/business-alert-invite/index.ts", "utf8");
   assert.match(inviteFn, /invite_whatsapp_template/);
-  assert.match(inviteFn, /settings\.live \? newShortCode\(\) : null/);
+  assert.match(inviteFn, /settings\.short \? newShortCode\(\) : null/);
+  assert.equal(inviteFn.includes("short_links_live"), false);
   assert.match(inviteFn, /signOffHtml\(\)/);
   assert.match(inviteFn, /emailBody\(named\)/);
+  const go = readFileSync("supabase/functions/business-alert-go/index.ts", "utf8");
+  assert.match(go, /longInviteUrl\(invite\.token\)/);
+  const resolve = readFileSync("supabase/functions/business-alert-invite-resolve/index.ts", "utf8");
+  assert.match(resolve, /prefill: publicPrefill/);
+  assert.match(resolve, /\.select\("id, status, expires_at, opened_at, prefill, short_code"\)/);
   const migration = readFileSync("supabase/migrations/20261113330000_business_alert_invites.sql", "utf8");
   assert.match(migration, /invite_whatsapp_template/);
   assert.match(migration, /invite_email_template/);
+  assert.match(migration, /invite_short_links boolean not null default true/);
   assert.match(migration, /short_code text unique/);
   assert.equal(/short_code text not null/.test(migration), false);
   const modal = readFileSync("js/business-alert-invite.js", "utf8");
