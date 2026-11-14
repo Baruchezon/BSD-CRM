@@ -200,13 +200,14 @@ export function internalAlertFields(row) {
     ["תחומי עניין", interestText],
     ["תאריך הרשמה", signupDateLabel(row.consent_at)],
     ["תקציב", budgetText(row)],
-    ["הערות", String(row.notes || "").trim()]
+    ["הערות", String(row.notes || "").trim()],
+    ["מקור", row.invited_by_baruch ? "הוזמן ע״י ברוך" : ""]
   ].filter(([, value]) => String(value).trim() !== "");
 }
 
 export function internalAlertEmail(row) {
   const name = [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || "ללא שם";
-  const title = !row.signupKind || row.signupKind === "new" ? "נרשם חדש" : "נרשם מחדש";
+  const title = row.invited_by_baruch ? "נרשם מההזמנה של ברוך" : (!row.signupKind || row.signupKind === "new" ? "נרשם חדש" : "נרשם מחדש");
   const subject = `${INTERNAL_SUBJECT_PREFIX} ${title} – ${name}`;
   const fields = internalAlertFields(row);
   const text = fields.map(([label, value]) => `${label}: ${value}`).join("\n");
