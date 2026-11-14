@@ -6,6 +6,7 @@
 // page        -> the public business page on www.bsd-bbi.co.il
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { isShortCode } from "../_shared/short-links.mjs";
+import { longInviteUrl } from "../_shared/business-alert-invite.mjs";
 import { APPROVED_ALERT_BUSINESSES } from "../_shared/opportunity-email.mjs";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -36,7 +37,17 @@ Deno.serve(async req => {
     console.error("short link lookup failed", error.message);
     return page("אירעה תקלה. אפשר להשיב למייל שקיבלת ונחזור אליך.", 500);
   }
-  if (!link) return page("הקישור אינו מוכר.", 404);
+  if (!link) {
+    // Invite codes are not in business_alert_short_links: that table requires a subscriber.
+    const { data: invite } = await supabase.from("business_alert_invites")
+      .select("token, status, expires_at")
+      .eq("short_code", code)
+      .maybeSingle();
+    if (invite?.token && invite.status !== "superseded" && invite.status !== "expired" && Date.parse(invite.expires_at) > Date.now()) {
+      return redirect(longInviteUrl(invite.token));
+    }
+    return page("הקישור אינו מוכר.", 404);
+  }
   // HEAD (link scanners) never triggers an action.
   if (req.method === "HEAD") return new Response(null, { status: 200 });
   await supabase.from("business_alert_short_links")

@@ -13,3 +13,9 @@ verify_jwt = false
 
 [functions.business-alert-request-details]
 verify_jwt = false
+
+[functions.business-alert-go]
+verify_jwt = false
+
+[functions.business-alert-invite-resolve]
+verify_jwt = false

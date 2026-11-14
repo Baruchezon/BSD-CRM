@@ -32,7 +32,8 @@ import {
   welcomeBackSubject,
   welcomeBackText
 } from "./email.mjs";
-import { buttonLink, shortLinksLive } from "../_shared/short-links.mjs";
+import { buttonLink, isShortCode, shortLinksLive } from "../_shared/short-links.mjs";
+import { hashInviteToken, inviteOpen } from "../_shared/business-alert-invite.mjs";
 import { listUnsubscribeHeaders, unsubscribeHttpsUrl } from "../_shared/business-alert-mail.mjs";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -439,11 +440,25 @@ Deno.serve(async req => {
     await recordAttempt("signup", emailForLimit, ip);
     if (!signup.ok) return json({ ok: false, error: signup.error }, 400, origin);
 
+    const inviteSecret = cleanText(body?.invite_token, 200);
+    let invite: Record<string, unknown> | null = null;
+    if (inviteSecret) {
+      const lookup = supabase.from("business_alert_invites")
+        .select("id, lead_id, buyer_id, status, expires_at, opened_at");
+      const found = isShortCode(inviteSecret) && inviteSecret.length === 7
+        ? await lookup.eq("short_code", inviteSecret).maybeSingle()
+        : await lookup.eq("token_hash", hashInviteToken(inviteSecret)).maybeSingle();
+      if (found.error) throw found.error;
+      const open = inviteOpen(found.data, Date.now());
+      if (!open.ok) return json({ ok: false, error: open.error }, 400, origin);
+      invite = found.data;
+    }
+
     const secret = updateTokenSecret();
     const phoneRow = signup.row.phone9 ? await findByPhone9(String(signup.row.phone9)) : null;
     const emailRow = await findByEmail(String(signup.row.email));
     const existing = phoneRow || emailRow;
-    if (existing?.id) {
+    if (existing?.id && !invite) {
       const now = new Date().toISOString();
       const reactivate = reactivationPlan(existing, signup.row, now);
       if (reactivate) return await resubscribe(existing, signup.row, reactivate, ip, cleanText(req.headers.get("user-agent"), 300), origin);
@@ -465,7 +480,18 @@ Deno.serve(async req => {
       }, 200, origin);
     }
 
-    const saved = await writeSubscriber(signup.row, ip, cleanText(req.headers.get("user-agent"), 300));
+    const invitedRow = { ...signup.row };
+    if (invite && !existing?.id) invitedRow.source = "invited_by_baruch";
+    const saved = await writeSubscriber(invitedRow, ip, cleanText(req.headers.get("user-agent"), 300));
+    if (invite?.id) {
+      const link = invite.buyer_id ? { buyer_id: invite.buyer_id } : { lead_id: invite.lead_id };
+      await supabase.from(TABLE).update(link).eq("id", saved.id);
+      await supabase.from("business_alert_invites").update({
+        status: "joined",
+        joined_at: new Date().toISOString(),
+        subscriber_id: saved.id
+      }).eq("id", invite.id);
+    }
     // One thank-you and one alert to Baruch per subscriber, ever (double submit, race).
     if (!(await claimWelcome(String(saved.id)))) {
       return json({ ok: true, emailSent: false, emailError: null, duplicate: true }, 200, origin);
@@ -484,7 +510,8 @@ Deno.serve(async req => {
       signupKind: saved.signupKind,
       previousStatus: saved.previousStatus,
       consent_at: saved.consentAt,
-      identityKept: saved.identityKept === true
+      identityKept: saved.identityKept === true,
+      invited_by_baruch: Boolean(invite)
     });
     const internal = await sendEmail(INTERNAL_TO, alert.subject, alert.html, alert.text, undefined, alert.from);
     if (!internal.sent) console.error("Internal alert email was not sent", internal.error || "");
