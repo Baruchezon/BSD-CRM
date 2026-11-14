@@ -51,7 +51,8 @@
     vip: "VIP",
     our_link: "יזום שלנו",
     manual: "יזום שלנו",
-    call: "יזום שלנו"
+    call: "יזום שלנו",
+    invited_by_baruch: "הוזמן ע״י ברוך"
   };
   const CONSENT_METHODS = ["verbal_call", "whatsapp_reply", "written"];
 
@@ -67,6 +68,7 @@
   }
 
   function sourceKind(row) {
+    if (row.source === "invited_by_baruch") return "invited_by_baruch";
     if (row.signup_channel === "vip" || String(row.source || "") === "vip") return "vip";
     if (row.manual_source === "call") return "call";
     if (row.manual_source === "manual") return "manual";

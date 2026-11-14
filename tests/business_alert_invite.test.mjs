@@ -1,0 +1,81 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import {
+  hashInviteToken,
+  inviteGuard,
+  inviteMessage,
+  inviteUrl,
+  messageWithLink,
+  newInviteToken,
+  prefillFromCard,
+  publicPrefill,
+  waNumber
+} from "../supabase/functions/_shared/business-alert-invite.mjs";
+
+const card = {
+  first_name: "דנה",
+  last_name: "לוי",
+  phone: "050-1234567",
+  email: "dana@example.com",
+  requested_categories: "מזון, קמעונאות",
+  requested_area: "מרכז",
+  budget: 500000
+};
+
+test("an Israeli mobile becomes a wa.me number and the message has no advertisement label", () => {
+  assert.equal(waNumber("050-1234567"), "972501234567");
+  assert.equal(waNumber(""), "");
+  const text = inviteMessage("דנה");
+  assert.match(text, /שלום דנה/);
+  assert.match(text, /הקישור האישי/);
+  assert.equal(text.includes("פרסומת"), false);
+  assert.equal(messageWithLink(text, "https://www.bsd-bbi.co.il/s/Ab12Cd3").includes("פרסומת"), false);
+  assert.match(messageWithLink(text, "https://www.bsd-bbi.co.il/s/Ab12Cd3"), /bsd-bbi\.co\.il\/s\/Ab12Cd3/);
+});
+
+test("guards block do-not-contact, a recent invite, and a fourth invite", () => {
+  const now = Date.parse("2026-11-14T12:00:00Z");
+  assert.equal(inviteGuard({ card: { ...card, do_not_call: true }, channel: "email", invites: [], subscribers: [], now }).error, "do_not_call");
+  assert.equal(inviteGuard({
+    card, channel: "whatsapp", invites: [], subscribers: [{ status: "unsubscribed_email" }], now
+  }).error, "do_not_contact");
+  assert.equal(inviteGuard({ card: { ...card, phone: "" }, channel: "whatsapp", invites: [], subscribers: [], now }).error, "no_phone");
+  assert.equal(inviteGuard({
+    card, channel: "email", invites: [{ id: "a", status: "sent", sent_at: "2026-11-14T10:00:00Z" }], subscribers: [], now
+  }).error, "too_soon");
+  const old = [{ id: "1", status: "joined", sent_at: "2026-10-01T00:00:00Z" }, { id: "2", status: "expired", sent_at: "2026-10-02T00:00:00Z" }, { id: "3", status: "superseded", sent_at: "2026-10-03T00:00:00Z" }];
+  assert.equal(inviteGuard({ card, channel: "email", invites: old, subscribers: [], now }).error, "invite_limit");
+  const ready = inviteGuard({
+    card, channel: "email", invites: [{ id: "old", status: "opened", sent_at: "2026-11-01T00:00:00Z" }], subscribers: [], now
+  });
+  assert.equal(ready.ok, true);
+  assert.deepEqual(ready.supersede, ["old"]);
+});
+
+test("prefill has profile fields only, and the public link hides the token when short links are live", () => {
+  const prefill = prefillFromCard(card);
+  assert.deepEqual(prefill.categories, ["מזון", "קמעונאות"]);
+  assert.equal(prefill.budget, 500000);
+  assert.equal(Object.hasOwn(publicPrefill({ prefill, id: "secret" }), "id"), false);
+  const token = newInviteToken();
+  assert.equal(hashInviteToken(token).length, 64);
+  const live = inviteUrl({ live: true, token, code: "Ab12Cd3" });
+  assert.equal(live, "https://www.bsd-bbi.co.il/s/Ab12Cd3");
+  assert.equal(live.includes(token), false);
+  const quiet = inviteUrl({ live: false, token, code: "Ab12Cd3" });
+  assert.match(quiet, /הרשמה-לעדכונים/);
+  assert.match(quiet, /i=/);
+});
+
+test("signup still claims one thank-you and marks an invite as joined", () => {
+  const src = readFileSync("supabase/functions/business-alert-signup/index.ts", "utf8");
+  const inviteAt = src.indexOf("invite_token");
+  const claimAt = src.indexOf("claimWelcome", inviteAt);
+  assert.ok(inviteAt > 0 && claimAt > inviteAt);
+  assert.match(src, /status: "joined"/);
+  assert.match(src, /invited_by_baruch/);
+  assert.match(readFileSync("supabase/functions/business-alert-signup/email.mjs", "utf8"), /הוזמן ע״י ברוך/);
+  assert.match(readFileSync("leads.html", "utf8"), /רשימת תפוצת עסקים|businessAlertInvite/);
+  assert.match(readFileSync("js/business-alert-invite.js", "utf8"), /wa_url/);
+});

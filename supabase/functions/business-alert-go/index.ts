@@ -36,7 +36,16 @@ Deno.serve(async req => {
     console.error("short link lookup failed", error.message);
     return page("אירעה תקלה. אפשר להשיב למייל שקיבלת ונחזור אליך.", 500);
   }
-  if (!link) return page("הקישור אינו מוכר.", 404);
+  if (!link) {
+    const { data: invite } = await supabase.from("business_alert_invites")
+      .select("short_code, status, expires_at")
+      .eq("short_code", code)
+      .maybeSingle();
+    if (invite && invite.status !== "superseded" && invite.status !== "expired" && Date.parse(invite.expires_at) > Date.now()) {
+      return redirect(`${SITE}/${encodeURIComponent("הרשמה-לעדכונים")}/?i=${encodeURIComponent(invite.short_code)}`);
+    }
+    return page("הקישור אינו מוכר.", 404);
+  }
   // HEAD (link scanners) never triggers an action.
   if (req.method === "HEAD") return new Response(null, { status: 200 });
   await supabase.from("business_alert_short_links")
