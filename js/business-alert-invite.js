@@ -10,12 +10,17 @@
     missing_email_configuration: "שליחת המייל לא מוגדרת.",
     send_failed: "המייל לא יצא. ההזמנה נשמרה כדי שלא תישלח פעמיים."
   };
-  const FALLBACK = "שלום {שם} 😊\nתודה רבה על השיחה ועל האמון.\nכדי שאוכל לעדכן אותך ראשון בעסקים שבאמת מתאימים לך, אשמח שתצטרף/י לרשימת התפוצה האישית שלנו. זה לוקח פחות מדקה:\n👉 {לינק}\nיישלחו אליך עסקים רלוונטיים להגדרות שלך, בדיסקרטיות מלאה. אנחנו גם יכולים לעזור במימון רכישת העסק וללוות אותך לאורך כל הדרך.\nבברכה,\nברוך איזון | BSD";
+  const FALLBACK = "שלום {שם} 😊\nתודה על השיחה!\nמוזמן/ת להצטרף לרשימת התפוצה האישית שלנו, ויישלחו אליך עסקים רלוונטיים להגדרות שלך:\n👉 {לינק}\nברוך איזון | BSD";
   function fillName(template, name) {
     const who = String(name || "").trim();
     const text = String(template || FALLBACK);
     if (!who) return text.replaceAll("{שם}", "").replace(/שלום\s+😊/g, "שלום 😊");
     return text.replaceAll("{שם}", who);
+  }
+  function applyAddress(text, form) {
+    const raw = String(form || "").trim().toLowerCase();
+    const word = raw === "m" || raw === "male" ? "מוזמן" : raw === "f" || raw === "female" ? "מוזמנת" : "מוזמן/ת";
+    return String(text || "").replaceAll("מוזמן/ת", word);
   }
   function esc(value) {
     return String(value ?? "").replace(/[&<>"']/g, character => ({
@@ -69,12 +74,13 @@
     document.body.appendChild(overlay);
     const preview = overlay.querySelector("#invitePreview");
     const templates = { whatsapp: FALLBACK, email: FALLBACK };
+    let addressForm = "";
     let auto = "";
     function channel() {
       return overlay.querySelector("input[name=inviteChannel]:checked").value;
     }
     function showTemplate() {
-      const next = fillName(templates[channel()] || FALLBACK, name);
+      const next = applyAddress(fillName(templates[channel()] || FALLBACK, name), addressForm);
       if (!preview.value || preview.value === auto) {
         preview.value = next;
         auto = next;
@@ -85,6 +91,7 @@
     call({ action: "status", card_type: cardType, card_id: lead.id }).then(data => {
       if (data.templates?.whatsapp) templates.whatsapp = data.templates.whatsapp;
       if (data.templates?.email) templates.email = data.templates.email;
+      addressForm = data.address_form || "";
       showTemplate();
       overlay.querySelector("#inviteHistory").innerHTML = (data.invites || []).map(item => `<div>${esc(chip(item))}</div>`).join("");
     }).catch(() => {});

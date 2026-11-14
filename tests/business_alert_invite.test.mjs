@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   DEFAULT_INVITE_TEMPLATE,
+  applyAddressForm,
   emailBody,
   hashInviteToken,
+  knownAddressForm,
   inviteGuard,
   inviteMessage,
   inviteUrl,
@@ -31,8 +33,14 @@ test("an Israeli mobile becomes a wa.me number and the message is Baruch's wordi
   assert.equal(waNumber(""), "");
   const text = inviteMessage("דנה");
   assert.equal(text, DEFAULT_INVITE_TEMPLATE.replaceAll("{שם}", "דנה"));
-  assert.match(text, /תצטרף\/י/);
+  assert.match(text, /מוזמן\/ת להצטרף/);
+  assert.match(text, /תודה על השיחה!/);
   assert.match(text, /ברוך איזון \| BSD/);
+  assert.equal(inviteMessage("דנה", "m").includes("מוזמן/ת"), false);
+  assert.match(inviteMessage("דנה", "male"), /מוזמן להצטרף/);
+  assert.match(inviteMessage("דנה", "f"), /מוזמנת להצטרף/);
+  assert.equal(knownAddressForm([{ address_form: "male" }, { address_form: "female" }]), "");
+  assert.equal(applyAddressForm("מוזמן/ת", ""), "מוזמן/ת");
   assert.equal(text.includes("פרסומת"), false);
   const link = "https://www.bsd-bbi.co.il/הרשמה-לעדכונים/?i=abc";
   const sent = messageWithLink(text, link);
@@ -42,7 +50,8 @@ test("an Israeli mobile becomes a wa.me number and the message is Baruch's wordi
   const mail = emailBody(text);
   assert.equal(mail.includes("http"), false);
   assert.equal(mail.includes("{לינק}"), false);
-  assert.match(mail, /תצטרף\/י/);
+  assert.equal(mail.includes("ברוך איזון | BSD"), false);
+  assert.match(mail, /תודה על השיחה!/);
 });
 
 test("guards block do-not-contact, a recent invite, and a fourth invite", () => {
@@ -103,6 +112,8 @@ test("signup still claims one thank-you and marks an invite as joined", () => {
   assert.equal(inviteFn.includes("short_links_live"), false);
   assert.match(inviteFn, /signOffHtml\(\)/);
   assert.match(inviteFn, /emailBody\(named\)/);
+  assert.match(inviteFn, /applyAddressForm/);
+  assert.match(inviteFn, />להצטרפות</);
   const go = readFileSync("supabase/functions/business-alert-go/index.ts", "utf8");
   assert.match(go, /longInviteUrl\(invite\.token\)/);
   const resolve = readFileSync("supabase/functions/business-alert-invite-resolve/index.ts", "utf8");

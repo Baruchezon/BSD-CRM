@@ -6,9 +6,11 @@ import { SUBSCRIBER_FROM, escapeHtml, signOffHtml, signOffText } from "../_share
 import { newShortCode } from "../_shared/short-links.mjs";
 import {
   INVITE_TTL_MS,
+  applyAddressForm,
   emailBody,
   fillName,
   hashInviteToken,
+  knownAddressForm,
   inviteGuard,
   inviteUrl,
   messageWithLink,
@@ -78,6 +80,20 @@ async function inviteSettings() {
   };
 }
 
+async function matchingSubscribers(card: Record<string, unknown> | null) {
+  if (!card) return [];
+  const nine = phone9(card.phone);
+  if (!card.email && !nine) return [];
+  const filters = [];
+  if (card.email) filters.push(`email.ilike.${card.email}`);
+  if (nine) filters.push(`phone9.eq.${nine}`);
+  const { data, error } = await supabase.from("business_alert_subscribers")
+    .select("id, status, do_not_call, email_unsubscribed_at, whatsapp_unsubscribed_at, address_form")
+    .or(filters.join(","));
+  if (error) throw error;
+  return data || [];
+}
+
 async function loadCard(cardType: string, cardId: string) {
   const { data, error } = await supabase.from("leads")
     .select("id, type, first_name, last_name, full_name, phone, email, requested_categories, requested_field, requested_area, budget")
@@ -109,9 +125,12 @@ Deno.serve(async req => {
     if (listError) throw listError;
     const settings = await inviteSettings();
     if (body.action === "status" || !body.channel) {
+      const previewCard = await loadCard(cardType, cardId);
+      const addressForm = knownAddressForm(await matchingSubscribers(previewCard));
       return json({
         ok: true,
         invites: (invites || []).map(chip),
+        address_form: addressForm || null,
         templates: { whatsapp: settings.whatsapp, email: settings.email }
       }, 200, origin);
     }
@@ -119,18 +138,7 @@ Deno.serve(async req => {
     if (!channel) return json({ ok: false, error: "channel" }, 400, origin);
     const card = await loadCard(cardType, cardId);
     if (!card) return json({ ok: false, error: "not_found" }, 404, origin);
-    const nine = phone9(card.phone);
-    let people: Record<string, unknown>[] = [];
-    if (card.email || nine) {
-      const filters = [];
-      if (card.email) filters.push(`email.ilike.${card.email}`);
-      if (nine) filters.push(`phone9.eq.${nine}`);
-      const { data, error } = await supabase.from("business_alert_subscribers")
-        .select("id, status, do_not_call, email_unsubscribed_at, whatsapp_unsubscribed_at")
-        .or(filters.join(","));
-      if (error) throw error;
-      people = data || [];
-    }
+    const people = await matchingSubscribers(card);
     const decision = inviteGuard({ card, channel, invites: invites || [], subscribers: people, now: Date.now() });
     if (!decision.ok) return json({ ok: false, error: decision.error, invites: (invites || []).map(chip) }, 200, origin);
     if (decision.supersede.length) {
@@ -141,7 +149,7 @@ Deno.serve(async req => {
     const url = inviteUrl({ short: settings.short, token, code });
     const name = card.first_name || String(card.full_name || "").split(/\s+/)[0] || "";
     const template = channel === "email" ? settings.email : settings.whatsapp;
-    const named = fillName(String(body.message || "").trim() || template, name);
+    const named = applyAddressForm(fillName(String(body.message || "").trim() || template, name), knownAddressForm(people));
     const whatsappText = messageWithLink(named, url);
     const expires = new Date(Date.now() + INVITE_TTL_MS).toISOString();
     const row = {
@@ -170,7 +178,7 @@ Deno.serve(async req => {
 <div dir="rtl" style="max-width:600px;margin:0 auto;background:#fff;padding:24px;text-align:right;color:#102844">
 <img src="${LOGO}" alt="BSD" width="88" style="width:88px;height:auto;border:0">
 <p style="font-size:18px;line-height:1.6;white-space:pre-wrap">${escapeHtml(visible)}</p>
-<p><a href="${escapeHtml(url)}" style="display:inline-block;background:#0e1b34;color:#fff;text-decoration:none;border-radius:12px;padding:12px 18px;font-weight:700">הצטרפות לרשימה</a></p>
+<p><a href="${escapeHtml(url)}" style="display:inline-block;background:#0e1b34;color:#fff;text-decoration:none;border-radius:12px;padding:12px 18px;font-weight:700">להצטרפות</a></p>
 ${signOffHtml()}
 </div></body></html>`;
     const response = await fetch("https://api.resend.com/emails", {

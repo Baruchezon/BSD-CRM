@@ -11,11 +11,9 @@ export const LINK_PLACEHOLDER = "{לינק}";
 // Baruch's wording. Stored on business_alert_match_settings so it can change without a deploy.
 export const DEFAULT_INVITE_TEMPLATE = [
   "שלום {שם} 😊",
-  "תודה רבה על השיחה ועל האמון.",
-  "כדי שאוכל לעדכן אותך ראשון בעסקים שבאמת מתאימים לך, אשמח שתצטרף/י לרשימת התפוצה האישית שלנו. זה לוקח פחות מדקה:",
+  "תודה על השיחה!",
+  "מוזמן/ת להצטרף לרשימת התפוצה האישית שלנו, ויישלחו אליך עסקים רלוונטיים להגדרות שלך:",
   "👉 {לינק}",
-  "יישלחו אליך עסקים רלוונטיים להגדרות שלך, בדיסקרטיות מלאה. אנחנו גם יכולים לעזור במימון רכישת העסק וללוות אותך לאורך כל הדרך.",
-  "בברכה,",
   "ברוך איזון | BSD"
 ].join("\n");
 const CLOSED = new Set(["unsubscribed", "unsubscribed_all", "unsubscribed_email", "unsubscribed_whatsapp"]);
@@ -53,8 +51,25 @@ export function fillName(template, name) {
   return text.replaceAll(NAME_PLACEHOLDER, who);
 }
 
-export function inviteMessage(name) {
-  return fillName(DEFAULT_INVITE_TEMPLATE, name);
+export function inviteMessage(name, addressForm) {
+  return applyAddressForm(fillName(DEFAULT_INVITE_TEMPLATE, name), addressForm);
+}
+
+// male/m and female/f choose the word. Unknown, or two subscribers who disagree, stays מוזמן/ת.
+export function knownAddressForm(people) {
+  const forms = new Set();
+  for (const person of people || []) {
+    const raw = String(person?.address_form || "").trim().toLowerCase();
+    if (raw === "m" || raw === "male") forms.add("male");
+    else if (raw === "f" || raw === "female") forms.add("female");
+  }
+  return forms.size === 1 ? [...forms][0] : "";
+}
+
+export function applyAddressForm(text, addressForm) {
+  const raw = String(addressForm || "").trim().toLowerCase();
+  const word = raw === "m" || raw === "male" ? "מוזמן" : raw === "f" || raw === "female" ? "מוזמנת" : "מוזמן/ת";
+  return String(text || "").replaceAll("מוזמן/ת", word);
 }
 
 export function messageWithLink(message, url) {
@@ -65,11 +80,13 @@ export function messageWithLink(message, url) {
   return link ? `${text}\n${link}` : text;
 }
 
-// Email shows the same wording. The link is a button, never a visible address.
+// Email uses the same wording. The link line becomes a button, and the personal
+// closing is dropped because the full BSD signature follows.
 export function emailBody(message) {
   return String(message || "")
     .replace(/^[ \t]*👉[ \t]*\{לינק\}[ \t]*$/gm, "")
     .replaceAll(LINK_PLACEHOLDER, "")
+    .replace(/^[ \t]*ברוך איזון \| BSD[ \t]*$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
