@@ -77,11 +77,85 @@ function clientIp(req: Request) {
   return cleanText(forwarded.split(",")[0], 64);
 }
 
+// 15.11.2026 lead audit stage 3 (Baruch approved 08:28 via Roman): test signups never reach
+// Baruch's Gmail. A test is a +tag address on Baruch's Gmail, a reserved test domain, or a name
+// marked «בדיקה»/is_test. Their mail goes to Resend's sink (accepted, reaches no mailbox).
+const TEST_SINK = "delivered@resend.dev";
+export function isTestEmail(email: unknown) {
+  return /^baruch\.ezon\+[^@]*@gmail\.com$/i.test(String(email || "").trim())
+    || /@(example\.(com|org|net)|test\.local|resend\.dev)$/i.test(String(email || "").trim());
+}
+export function isTestSignup(row: Record<string, unknown> | null | undefined, body?: Record<string, unknown>) {
+  if (!row) return false;
+  if (body && (body.is_test === true || body.is_test === "true")) return true;
+  if (isTestEmail(row.email)) return true;
+  return /(^|[^a-z_])is_test([^a-z_]|$)|בדיקה/i.test(`${row.first_name || ""} ${row.last_name || ""}`);
+}
+
+// Stage 4: every subscriber is linked to a CRM lead by phone (existing card, else a new
+// website lead for Baruch to classify). Never throws: signup must not fail because of it.
+async function linkSubscriberToCrm(subscriberId: string, row: Record<string, unknown>, isTest: boolean) {
+  try {
+    const { data: sub } = await supabase.from(TABLE).select("crm_lead_id, buyer_id, lead_id").eq("id", subscriberId).maybeSingle();
+    if (!sub || sub.crm_lead_id) return;
+    let leadId = (sub.buyer_id || sub.lead_id || null) as string | null;
+    const p9 = String(row.phone9 || "").replace(/\D/g, "").slice(-9);
+    if (!leadId && p9.length === 9) {
+      const { data } = await supabase.rpc("website_lead_find_by_phone9", { p_phone9: p9, p_is_test: isTest });
+      const hit = Array.isArray(data) ? data[0] : data;
+      if (hit?.id) leadId = hit.id;
+    }
+    if (!leadId && !isTest) {
+      const { data: admin } = await supabase.from("profiles").select("id").eq("email", "baruch@bsd-bbi.co.il").maybeSingle();
+      const fullName = [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || null;
+      const interests = [row.categories, row.subcategories, row.regions].flat().filter(Boolean).join(", ");
+      const { data: lead, error } = await supabase.from("leads").insert({
+        type: "buyer",
+        first_name: row.first_name || null,
+        last_name: row.last_name || null,
+        full_name: fullName,
+        phone: row.phone || null,
+        email: row.email || null,
+        source: "הרשמה לעדכונים באתר",
+        status: "חדש",
+        website_intake_stage: "new",
+        website_purpose_guess: "נרשם לעדכונים על עסקים למכירה",
+        website_inquiry_kind: "buyer",
+        lead_side: "buyer",
+        lead_side_source: "alert_signup",
+        agreement_status: "אין הסכם",
+        created_by: admin?.id ?? null,
+        handled_by: admin?.id ?? null,
+        source_src: "business-alert-signup",
+        notes: `[נרשם לעדכונים על עסקים למכירה]\n${interests ? `תחומים/אזורים: ${interests}\n` : ""}${row.budget_max ? `תקציב עד: ${row.budget_max}\n` : ""}${row.notes ? `הערות: ${row.notes}` : ""}`.trim(),
+      }).select("id").single();
+      if (error) { console.error("CRM lead for subscriber not created", error.message); return; }
+      leadId = lead?.id ?? null;
+    }
+    if (leadId) {
+      const { error } = await supabase.from(TABLE).update({ crm_lead_id: leadId }).eq("id", subscriberId).is("crm_lead_id", null);
+      if (error) console.error("subscriber CRM link not stored", error.message);
+    }
+  } catch (error) {
+    console.error("subscriber CRM link failed", error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function markTestSubscriber(subscriberId: string) {
+  const { error } = await supabase.from(TABLE).update({ is_test: true, test_note: "סומן אוטומטית כבדיקה (מייל/שם בדיקה)" })
+    .eq("id", subscriberId).or("is_test.is.null,is_test.eq.false");
+  if (error) console.error("test flag not stored", error.message);
+}
+
 async function sendEmail(to: string, subject: string, html: string, text?: string, headers?: Record<string, string>, from: string = MAIL_FROM) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) {
     console.error("Alert email failed: missing Resend API key");
     return { sent: false, error: "missing_email_configuration" };
+  }
+  if (isTestEmail(to)) {
+    to = TEST_SINK;
+    if (!subject.startsWith("[בדיקה]")) subject = `[בדיקה] ${subject}`;
   }
   try {
     const response = await fetch("https://api.resend.com/emails", {
@@ -403,8 +477,11 @@ async function resubscribe(
       listUnsubscribeHeaders(oneClick)
     );
   }
+  const test = isTestSignup(saved || row);
+  if (test) await markTestSubscriber(String(existing.id));
+  await linkSubscriberToCrm(String(existing.id), { ...row, ...(saved || {}) }, test);
   const alert = internalAlertEmail({ ...saved, notes: saved?.notes ?? row.notes ?? null, signupKind: "resubscribe" });
-  const internal = await sendEmail(INTERNAL_TO, alert.subject, alert.html, alert.text, undefined, alert.from);
+  const internal = await sendEmail(test ? TEST_SINK : INTERNAL_TO, `${test ? "[בדיקה] " : ""}${alert.subject}`, alert.html, alert.text, undefined, alert.from);
   if (!internal.sent) console.error("Internal alert email was not sent", internal.error || "");
   return json({ ok: true, status: plan.status, emailSent: thankYou.sent }, 200, origin);
 }
@@ -496,6 +573,9 @@ Deno.serve(async req => {
         subscriber_id: saved.id
       }).eq("id", invite.id);
     }
+    const test = isTestSignup(signup.row, body);
+    if (test) await markTestSubscriber(String(saved.id));
+    await linkSubscriberToCrm(String(saved.id), signup.row, test);
     // One thank-you and one alert to Baruch per subscriber, ever (double submit, race).
     if (!(await claimWelcome(String(saved.id)))) {
       return json({ ok: true, emailSent: false, emailError: null, duplicate: true }, 200, origin);
@@ -517,7 +597,7 @@ Deno.serve(async req => {
       identityKept: saved.identityKept === true,
       invited_by_baruch: Boolean(invite)
     });
-    const internal = await sendEmail(INTERNAL_TO, alert.subject, alert.html, alert.text, undefined, alert.from);
+    const internal = await sendEmail(test ? TEST_SINK : INTERNAL_TO, `${test ? "[בדיקה] " : ""}${alert.subject}`, alert.html, alert.text, undefined, alert.from);
     if (!internal.sent) console.error("Internal alert email was not sent", internal.error || "");
     if (!thankYou.sent) {
       // Not delivered: release the claim so a later signup can still send the one thank-you.
