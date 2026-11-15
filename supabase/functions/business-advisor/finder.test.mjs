@@ -24,4 +24,20 @@ assert.equal(titleLeaksName("קפה רוטשילד", ["רוטשילד קפה ב�
 assert.deepEqual(normalizeBusinessNumbers(["bsd-b-2607-1001", "x", "BSD-B-2607-1001", "BSD-B-2608-1028"]), ["BSD-B-2607-1001", "BSD-B-2608-1028"]);
 assert.equal(parseBudget("1,500,000"), 1500000); assert.equal(parseBudget(null), null);
 assert.equal(querySide("", "").open, true);
+// v11: description words alone never make a sector fit (hotel with a restaurant in its description).
+const H = [...L, { business_number: "BSD-B-2608-1028", anon_display_name: "בית מלון למכירה", category: "", subcategory: "", field: "", region: "", short_description: "מלון עם מסעדה, בית קפה ומאפייה במקום", asking_price: 90000000 }];
+r = findMatches(H, { category: "food", region: "", budget_max: null });
+assert.ok(!r.matches.some(m => m.listing_number === "BSD-B-2608-1028"), "hotel must not match food by description only");
+// v11: open budget prefers the reasonable band; a far outlier in the same sector ranks last.
+const O = [...L, { business_number: "BSD-B-2607-1009", anon_display_name: "רשת מסעדות", category: "מזון ומסעדנות", subcategory: "מסעדה", field: "מסעדה", region: "מרכז", asking_price: 95000000 }];
+r = findMatches(O, { category: "restaurant", region: "center", budget_max: null });
+assert.equal(r.matches[0].listing_number, "BSD-B-2607-1001");
+{ const ids = r.matches.map(m => m.listing_number); assert.ok(ids.indexOf("BSD-B-2607-1009") > ids.indexOf("BSD-B-2607-1001")); } // same sector tier: in-band first
+r = findMatches(O, { category: "food", region: "", budget_max: null }); // equal sector tier: 95M outlier is not in the top 3
+assert.ok(!r.matches.some(m => m.listing_number === "BSD-B-2607-1009"));
+// v11: structured sector beats title; description hint only breaks ties.
+r = findMatches([{ business_number: "BSD-B-2607-1100", anon_display_name: "בית קפה", category: "רכב", subcategory: "מוסך", field: "מוסך", region: "מרכז", asking_price: 500000 }], { category: "cafe", region: "", budget_max: null });
+assert.equal(r.matches.length, 0);
+r = findMatches(L.slice(2, 3), { category: "auto", region: "", budget_max: null });
+assert.match(r.message, /^מצאנו עסק אחד שיכול להתאים/);
 console.log("finder tests ok");

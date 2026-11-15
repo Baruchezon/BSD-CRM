@@ -63,13 +63,27 @@ const SECTOR_WHY = {
 };
 function whyLine(sector, budget, loc) {
   const parts = [SECTOR_WHY[sector] || "עסק שכדאי להכיר"];
-  if (budget === "open_budget") parts.push("ומתאים לתקציב פתוח");
+  if (budget === "open_budget" || budget === "open_budget_outlier") parts.push("ומתאים לתקציב פתוח");
   else if (budget === "within") parts.push("בתוך התקציב");
   else if (budget === "slightly_over") parts.push("מעט מעל התקציב, עם מקום לשיחה");
   else if (budget === "price_open") parts.push("המחיר פתוח להצעות");
   if (loc === "same" || loc === "all") parts.push("באזור שביקשת");
   else if (loc === "near") parts.push("באזור סמוך");
   return parts.length > 2 ? `${parts.slice(0, -1).join(", ")} ו${parts.at(-1)}.` : `${parts.join(", ")}.`;
+}
+
+export function listingSectorSide(b) {
+  const structured = [b?.category, b?.subcategory, b?.field].map(v => String(v || "").trim()).filter(Boolean).join(" ");
+  const text = structured || String(b?.anon_display_name || "").trim();
+  const hit = classifyText({ field: text });
+  return { categories: hit.categories, subcategories: hit.subcategories, text, from: structured ? "sector_fields" : "title" };
+}
+
+export function reasonableBand(prices) {
+  const p = prices.filter(n => n > 0).sort((a, b) => a - b);
+  if (p.length < 3) return null;
+  const median = p.length % 2 ? p[(p.length - 1) / 2] : (p[p.length / 2 - 1] + p[p.length / 2]) / 2;
+  return { median, lo: median / 4, hi: median * 4 };
 }
 
 // listings: rows of public_business_listings (already published-only, region not city).
@@ -79,14 +93,23 @@ export function findMatches(listings, { category, region, budget_max }, { sitema
   const scored = [];
   for (const b of listings || []) {
     if (!b?.business_number || !b?.anon_display_name || blockedNumbers.has(b.business_number)) continue;
-    const biz = businessTaxonomy({ category: b.category, subcategory: b.subcategory, field: b.field, short_description: b.short_description, region: b.region });
-    let sector;
+    // v11: sector fit comes from the listing's structured sector fields (category/subcategory/field);
+    // only when those are empty, from the public listing title. Description words are a weak tiebreaker
+    // and are never enough alone to count as a sector fit.
+    const sectorSide = listingSectorSide(b);
+    const descSide = classifyText({ description: b.short_description });
+    let sector, descHint = 0;
     if (q.unknownCategory) {
       const words = q.unknownCategory.split(/\s+/).filter(w => w.length >= 3);
-      const hay = [b.category, b.subcategory, b.field, b.anon_display_name].join(" ");
+      const hay = sectorSide.text;
       sector = words.some(w => hay.includes(w)) ? { kind: "category", ratio: 0.76 } : { kind: "none", ratio: 0 };
-    } else sector = sectorRelation(q, biz);
+      descHint = words.some(w => String(b.short_description || "").includes(w)) ? 1 : 0;
+    } else {
+      sector = q.open ? { kind: "open", ratio: 0.44 } : sectorRelation(q, sectorSide);
+      descHint = !q.open && sectorRelation(q, descSide).ratio > 0 ? 1 : 0;
+    }
     if (sector.ratio <= 0) continue;
+    const biz = businessTaxonomy({ region: b.region, short_description: b.short_description });
     const price = Number(b.asking_price) > 0 ? Number(b.asking_price) : null;
     let budgetKind, budgetScore;
     if (budget === null) { budgetKind = "open_budget"; budgetScore = 1; }
@@ -98,8 +121,20 @@ export function findMatches(listings, { category, region, budget_max }, { sitema
     const loc = locationRelation(q.regions, bizRegions);
     scored.push({
       b, sector, budgetKind, loc, bizRegions,
-      key: [sector.ratio, budgetScore, loc.ratio, price && budget ? -Math.abs(budget - price) / budget : 0],
+      price, descHint,
+      key: [sector.ratio, budgetScore, loc.ratio, price && budget ? -Math.abs(budget - price) / budget : 0, descHint],
     });
+  }
+  // v11 open budget: prefer listings inside a reasonable price band (¼× … 4× the median asking price of
+  // the sector-fit candidates); outliers (e.g. a 90M hotel among 0.5–1M businesses) rank lower.
+  if (budget === null) {
+    const band = reasonableBand(scored.map(x => x.price).filter(Boolean));
+    for (const x of scored) {
+      const inBand = x.price === null ? 0.7 : !band || (x.price >= band.lo && x.price <= band.hi) ? 1 : 0.4;
+      x.key[1] = inBand;
+      x.key[3] = x.price && band ? -Math.abs(Math.log(x.price / band.median)) : 0;
+      if (inBand === 0.4) x.budgetKind = "open_budget_outlier";
+    }
   }
   scored.sort((x, y) => { for (let i = 0; i < x.key.length; i++) if (y.key[i] !== x.key[i]) return y.key[i] - x.key[i]; return 0; });
   const top = scored.slice(0, MAX_MATCHES);
@@ -113,7 +148,7 @@ export function findMatches(listings, { category, region, budget_max }, { sitema
     why: whyLine(sector.kind, budgetKind, loc.kind),
   }));
   const message = matches.length
-    ? `מצאנו ${matches.length === 1 ? "עסק אחד" : `${matches.length} עסקים`} שיכולים להתאים לחיפוש. אפשר להשאיר שם וטלפון ונחזור עם פרטים נוספים.`
+    ? `${matches.length === 1 ? "מצאנו עסק אחד שיכול" : `מצאנו ${matches.length} עסקים שיכולים`} להתאים לחיפוש. אפשר להשאיר שם וטלפון ונחזור עם פרטים נוספים.`
     : "כרגע אין עסק מפורסם שמתאים בדיוק לחיפוש. אפשר להשאיר שם וטלפון ונעדכן כשיעלה עסק מתאים.";
   return { matches, message, query: { categories: q.categories, subcategories: q.subcategories, regions: q.regions, open: q.open, budget_max: budget } };
 }

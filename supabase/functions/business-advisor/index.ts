@@ -7,6 +7,23 @@ const origins = new Set(['https://www.bsd-bbi.co.il','https://bsd-bbi.co.il','ht
 const clean = (v, n=2000) => typeof v === 'string' ? v.trim().slice(0,n) : '';
 const headers = {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'};
 const json = (v,status=200) => new Response(JSON.stringify(v),{status,headers});
+// 15.11 v11: preview builds of the site worker (https only, one label, port-less), all on Baruch's account subdomain:
+//   <alias>-lively-wood-e2c6.baruch-ezon.workers.dev  (Cloudflare preview-alias form, e.g. cursor-advisor-finder-mode-…)
+//   <label>.lively-wood-e2c6.baruch-ezon.workers.dev
+const PREVIEW_HOST=/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?[.-]lively-wood-e2c6\.baruch-ezon\.workers\.dev$/;
+export function originAllowed(origin){
+  if(!origin)return false;
+  if(origins.has(origin))return true;
+  try{const u=new URL(origin);return u.protocol==='https:'&&!u.port&&!u.username&&u.origin===origin&&PREVIEW_HOST.test(u.hostname);}catch{return false;}
+}
+function withCors(req,res){
+  const origin=req.headers.get('origin')||'';
+  if(!originAllowed(origin))return res;
+  const h=new Headers(res.headers);
+  h.set('Access-Control-Allow-Origin',origin);h.set('Vary','Origin');
+  h.set('Access-Control-Allow-Methods','POST, OPTIONS');h.set('Access-Control-Allow-Headers','apikey, authorization, content-type, x-client-info');h.set('Access-Control-Max-Age','600');
+  return new Response(res.body,{status:res.status,headers:h});
+}
 async function db(path,method='GET',body=undefined) {
   const r=await fetch(DB+'/rest/v1/'+path,{method,headers:{apikey:SERVICE,Authorization:'Bearer '+SERVICE,'Content-Type':'application/json',Prefer:'return=representation'},body:body===undefined?undefined:JSON.stringify(body)});
   if(!r.ok) throw new Error('database_'+r.status);
@@ -78,10 +95,12 @@ async function linkLeadToBusinesses(leadId,shown){
   if(!cur.business_id)patch.business_id=shown[0].id;
   await db('leads?id=eq.'+leadId,'PATCH',patch);
 }
-Deno.serve(async req=>{
+Deno.serve(async req=>withCors(req,await handle(req)));
+async function handle(req){
+  if(req.method==='OPTIONS') return originAllowed(req.headers.get('origin')||'')?new Response(null,{status:204}):json({ok:false},403);
   if(req.method!=='POST') return json({ok:false},405);
   // Public visitor endpoint: no CRM JWT or CRM record access is granted.
-  if(req.headers.get('apikey')!==PUBLIC_KEY || !origins.has(req.headers.get('origin')||'')) return json({ok:false},403);
+  if(req.headers.get('apikey')!==PUBLIC_KEY || !originAllowed(req.headers.get('origin')||'')) return json({ok:false},403);
   try {
     const raw=await req.text(); if(raw.length>40000) return json({ok:false},413);
     const body=JSON.parse(raw); const action=body.action||'chat';
@@ -195,4 +214,4 @@ Deno.serve(async req=>{
     }});
     return new Response(stream,{headers:{'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
   }catch{return json({handoff:true,message:FALLBACK});}
-});
+}
