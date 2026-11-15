@@ -198,7 +198,8 @@ test('form file keeps print, save and back, and the research button is screen-on
   assert.match(form, /\.tbl\.prose td\{width:80%\}/);
   assert.doesNotMatch(form, /font-size:12pt/);
   assert.ok(Number(JSON.parse(read('version.json')).version) >= 202611100710); // later deploys bump version.json
-  assert.match(read('businesses.html'), /PAGE_BUILD = '202611100710'/);
+  const bizBuild = (read('businesses.html').match(/var PAGE_BUILD = '(\d{12})'/) || [])[1];
+  assert.ok(bizBuild && bizBuild >= '202611100710' && bizBuild <= JSON.parse(read('version.json')).version, bizBuild);
 });
 
 test('migration is additive and the edge function does not email or read CRM notes', () => {
