@@ -109,15 +109,8 @@ test("signup still claims one thank-you and marks an invite as joined", () => {
   assert.match(src, /invited_by_baruch/);
   assert.match(readFileSync("supabase/functions/business-alert-signup/email.mjs", "utf8"), /הוזמן ע״י ברוך/);
   assert.match(readFileSync("leads.html", "utf8"), /רשימת תפוצת עסקים|businessAlertInvite/);
-  const inviteJs = readFileSync("js/business-alert-invite.js", "utf8");
-  assert.match(inviteJs, /wa_url/);
-  assert.match(inviteJs, /הקישור האישי/);
-  assert.match(inviteJs, /window\.open\("", "_blank"\)/);
-  assert.match(inviteJs, /already_subscribed/);
-  assert.equal(inviteJs.includes("window.open(data.wa_url"), false);
-  assert.match(readFileSync("leads.html", "utf8"), /business-alert-invite\.js\?v=202611150620/);
+  assert.match(readFileSync("js/business-alert-invite.js", "utf8"), /wa_url/);
   const inviteFn = readFileSync("supabase/functions/business-alert-invite/index.ts", "utf8");
-  assert.match(inviteFn, /x-client-info/);
   assert.match(inviteFn, /invite_whatsapp_template/);
   assert.match(inviteFn, /settings\.short \? newShortCode\(\) : null/);
   assert.equal(inviteFn.includes("short_links_live"), false);
@@ -131,8 +124,11 @@ test("signup still claims one thank-you and marks an invite as joined", () => {
   assert.match(resolve, /prefill: publicPrefill/);
   assert.match(resolve, /\.select\("id, status, expires_at, opened_at, prefill, short_code"\)/);
   assert.match(resolve, /\.eq\("short_code", token\)/);
-  assert.match(resolve, /cursor-invite-link-prefill-f01e-lively-wood-e2c6/);
-  assert.match(src, /cursor-invite-link-prefill-f01e-lively-wood-e2c6/);
+  // Roman's site PR #85 is live: the temporary preview origin is gone again.
+  assert.equal(resolve.includes("cursor-invite-link-prefill"), false);
+  assert.equal(src.includes("cursor-invite-link-prefill"), false);
+  // supabase-js sends x-client-info; without it the browser blocks every call (15.11 05:56 bug).
+  assert.match(inviteFn, /Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type"/);
   const migration = readFileSync("supabase/migrations/20261113330000_business_alert_invites.sql", "utf8");
   assert.match(migration, /invite_whatsapp_template/);
   assert.match(migration, /invite_email_template/);
@@ -144,4 +140,20 @@ test("signup still claims one thank-you and marks an invite as joined", () => {
     assert.ok(migration.includes(line), line);
     assert.ok(modal.includes(line), line);
   }
+});
+
+test("invite guard: joined, subscribed, WhatsApp re-share of the open link, email 24h lock", async () => {
+  const { inviteGuard } = await import("../supabase/functions/_shared/business-alert-invite.mjs");
+  const now = Date.parse("2026-11-15T04:00:00Z");
+  const card = { phone: "0500000811", email: "a@b.co" };
+  const open = { id: "i1", status: "sent", sent_at: "2026-11-14T20:08:46Z", expires_at: "2026-12-14T20:08:46Z" };
+  assert.deepEqual(inviteGuard({ card, channel: "whatsapp", invites: [open], subscribers: [], now }), { ok: true, reshare: "i1" });
+  assert.equal(inviteGuard({ card, channel: "email", invites: [open], subscribers: [], now }).error, "too_soon");
+  assert.equal(inviteGuard({ card, channel: "email", invites: [open], subscribers: [], now }).last_sent_at, open.sent_at);
+  assert.equal(inviteGuard({ card, channel: "whatsapp", invites: [{ ...open, status: "joined" }], subscribers: [], now }).error, "already_joined");
+  assert.equal(inviteGuard({ card, channel: "whatsapp", invites: [], subscribers: [{ status: "active" }], now }).error, "already_subscribed");
+  assert.equal(inviteGuard({ card, channel: "whatsapp", invites: [], subscribers: [{ status: "unsubscribed_all" }], now }).error, "do_not_contact");
+  assert.equal(inviteGuard({ card: { email: "a@b.co" }, channel: "whatsapp", invites: [], subscribers: [], now }).error, "no_phone");
+  const old = { ...open, sent_at: "2026-11-10T00:00:00Z" };
+  assert.deepEqual(inviteGuard({ card, channel: "email", invites: [old], subscribers: [], now }), { ok: true, supersede: ["i1"] });
 });

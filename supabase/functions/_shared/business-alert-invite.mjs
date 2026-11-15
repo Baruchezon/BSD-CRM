@@ -142,18 +142,37 @@ export function publicPrefill(row) {
   };
 }
 
+export function latestInvite(invites) {
+  return [...(invites || [])].sort((a, b) => Date.parse(b.sent_at || b.created_at || 0) - Date.parse(a.sent_at || a.created_at || 0))[0] || null;
+}
+
+function stillOpen(invite, now) {
+  return Boolean(invite && (invite.status === "sent" || invite.status === "opened") && Date.parse(invite.expires_at || 0) > now);
+}
+
+// ok:true + reshare: WhatsApp inside 24 hours re-shares the SAME open link (no new row, no send).
+// Email keeps the 24-hour lock. last_sent_at lets the CRM say when the last one went out.
 export function inviteGuard({ card, channel, invites, subscribers, now }) {
   if (card?.do_not_call === true) return { ok: false, error: "do_not_call" };
   const blocked = (subscribers || []).some(person =>
     person.do_not_call === true || CLOSED.has(person.status) || person.email_unsubscribed_at || person.whatsapp_unsubscribed_at
   );
   if (blocked) return { ok: false, error: "do_not_contact" };
+  if ((subscribers || []).some(person => person.status === "active")) return { ok: false, error: "already_subscribed" };
   if (channel === "whatsapp" && !waNumber(card?.phone)) return { ok: false, error: "no_phone" };
   if (channel === "email" && !String(card?.email || "").includes("@")) return { ok: false, error: "no_email" };
   const sent = invites || [];
-  if (sent.length >= INVITE_LIMIT) return { ok: false, error: "invite_limit" };
-  const latest = sent.map(item => Date.parse(item.sent_at || item.created_at || 0)).sort((a, b) => b - a)[0];
-  if (latest && now - latest < INVITE_GAP_MS) return { ok: false, error: "too_soon" };
+  const latest = latestInvite(sent);
+  const latestAt = latest ? Date.parse(latest.sent_at || latest.created_at || 0) : 0;
+  if (latest?.status === "joined") return { ok: false, error: "already_joined", last_sent_at: latest.sent_at || null };
+  if (latestAt && now - latestAt < INVITE_GAP_MS) {
+    if (channel === "whatsapp" && stillOpen(latest, now)) return { ok: true, reshare: latest.id };
+    return { ok: false, error: "too_soon", last_sent_at: latest.sent_at || null };
+  }
+  if (sent.length >= INVITE_LIMIT) {
+    if (channel === "whatsapp" && stillOpen(latest, now)) return { ok: true, reshare: latest.id };
+    return { ok: false, error: "invite_limit", last_sent_at: latest?.sent_at || null };
+  }
   return {
     ok: true,
     supersede: sent.filter(item => item.status === "sent" || item.status === "opened").map(item => item.id)

@@ -73,12 +73,12 @@ test("the public prefill is taxonomy keys and a number budget, with no internal 
   assert.equal(publicPrefill({ prefill: { budget: "לא מספר" } }).budget, null);
 });
 
-test("resolve looks up a short code and both public functions allow the preview origin", () => {
+test("resolve looks up a short code and the preview origin is removed again", () => {
   const resolve = readFileSync("supabase/functions/business-alert-invite-resolve/index.ts", "utf8");
   const signup = readFileSync("supabase/functions/business-alert-signup/index.ts", "utf8");
   const origin = "https://cursor-invite-link-prefill-f01e-lively-wood-e2c6.baruch-ezon.workers.dev";
-  assert.ok(resolve.includes(origin));
-  assert.ok(signup.includes(origin));
+  assert.equal(resolve.includes(origin), false);
+  assert.equal(signup.includes(origin), false);
   assert.match(resolve, /isShortCode\(token\) && token\.length === 7/);
   assert.match(resolve, /\.eq\("short_code", token\)/);
 });
