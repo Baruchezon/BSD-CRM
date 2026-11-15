@@ -34,13 +34,14 @@ test("fresh email consent reactivates only the email channel, matching the statu
   assert.equal(plan.history.previous.status, "unsubscribed_all");
 });
 
-test("fresh consent on both channels makes the row active again", () => {
+test("a WhatsApp tick on re-signup reopens email only (WhatsApp delivery is future, 15.11)", () => {
   const plan = reactivationPlan(gone, validateSignup({ ...body, consent_whatsapp: true }).row, now);
-  assert.equal(plan.changes.status, "active");
-  assert.equal(plan.changes.unsubscribed_at, null);
-  assert.equal(plan.changes.unsubscribed_by, null);
+  assert.equal(plan.changes.status, "unsubscribed_whatsapp");
   assert.equal(plan.changes.email_unsubscribed_at, null);
-  assert.equal(plan.changes.whatsapp_unsubscribed_at, null);
+  assert.equal(plan.changes.whatsapp_unsubscribed_at, gone.whatsapp_unsubscribed_at);
+  assert.equal(plan.changes.consent_email, true);
+  assert.equal(plan.changes.consent_whatsapp, false);
+  assert.equal(plan.changes.consent_whatsapp_method, undefined);
 });
 
 test("email-only unsubscribe plus fresh email consent -> active", () => {
@@ -61,10 +62,10 @@ test("no reactivation without fresh consent, with another email, or for an activ
 test("prefill shows the real consent state", () => {
   const prefill = signupPrefill(gone, "dana@example.com");
   assert.equal(prefill.consent_email, false);
-  assert.equal(prefill.consent_whatsapp, false);
+  assert.equal("consent_whatsapp" in prefill, false);
   const active = signupPrefill({ ...gone, status: "active", email_unsubscribed_at: null, whatsapp_unsubscribed_at: null, unsubscribed_at: null }, "dana@example.com");
   assert.equal(active.consent_email, true);
-  assert.equal(active.consent_whatsapp, false);
+  assert.equal("consent_whatsapp" in active, false);
 });
 
 test("Baruch's alert says נרשם מחדש for a re-signup", () => {

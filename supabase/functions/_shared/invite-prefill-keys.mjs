@@ -1,11 +1,12 @@
 // CRM free text on an invite becomes the signup form's taxonomy slugs.
 // Exact taxonomy-v1 labels win, then a short list of CRM phrasings, then the
-// matcher only when it finds exactly one category. Bare מזון and קמעונאות are ambiguous.
+// matcher only when it finds exactly one category. Bare מזון is ambiguous;
+// bare קמעונאות maps to retail (Roman, 15.11).
 import taxonomy from "./taxonomy-v1.json" with { type: "json" };
 import { classifyText, subcategoryBySlug } from "./taxonomy.mjs";
 
 const SPLIT = /[,،;/—]+/;
-const AMBIGUOUS = new Set(["מזון", "קמעונאות"]);
+const AMBIGUOUS = new Set(["מזון"]);
 
 const categoryByLabel = new Map(taxonomy.categories.map(item => [item.label, item.slug]));
 const regionByLabel = new Map(taxonomy.regions.map(item => [item.label, item.slug]));
@@ -25,6 +26,7 @@ const PHRASES = new Map([
   ["סופרמרקט", { categories: ["grocery"], subcategories: ["supermarket"] }],
   ["סופמרקט", { categories: ["grocery"], subcategories: ["supermarket"] }],
   ["מסחר וקמעונאות", { categories: ["retail"] }],
+  ["קמעונאות", { categories: ["retail"] }],
   ["מסעדה", { categories: ["food"], subcategories: ["restaurant"] }],
   ["בית קפה", { categories: ["food"], subcategories: ["cafe"] }],
   ["מאפיה", { categories: ["food"], subcategories: ["bakery"] }],

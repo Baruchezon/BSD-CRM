@@ -79,7 +79,8 @@ test("prefill is Roman's shape, and the invite link is /s/<code> unless invite_s
   assert.equal(prefill.budget, 500000);
   const shown = publicPrefill({ prefill, id: "secret", token: "secret-token", lead_id: "secret" });
   assert.deepEqual(Object.keys(shown).sort(), ["budget", "categories", "category_labels", "email", "first_name", "last_name", "phone", "region_labels", "regions", "subcategories"]);
-  assert.deepEqual(shown.categories, []);
+  assert.deepEqual(shown.categories, ["retail"]);
+  assert.equal(Object.keys(shown).some(key => /whatsapp|channel/i.test(key)), false);
   assert.deepEqual(shown.regions, ["center"]);
   assert.deepEqual(shown.region_labels, ["מרכז וגוש דן"]);
   assert.equal(shown.budget, 500000);

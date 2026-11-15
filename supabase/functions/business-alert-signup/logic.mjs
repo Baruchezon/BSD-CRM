@@ -9,6 +9,30 @@ export const CONSENT_WHATSAPP_TEXT = "אני מאשר/ת לקבל מ-BSD עדכ�
 export const CONSENT_GENERAL_TEXT = "אני מאשר/ת לקבל מ-BSD עדכונים ופרסומות על עסקים למכירה";
 export const NEW_CONSENT_KEYS = ["consent_general", "consent_text", "consent_version", "source_url"];
 
+// 15.11 (Baruch): updates to subscribers go out by email only for now. WhatsApp
+// is shown on the form as «בעתיד». consent_whatsapp / whatsapp in the payload is
+// accepted but ignored: a new or resubmitted signup is always stored with
+// consent_whatsapp=false. A valid email is required (email_required).
+export const DELIVERY_CHANNELS = ["email"];
+export const IGNORED_CHANNEL_FIELDS = ["consent_whatsapp", "whatsapp", "channel", "channels", "preferred_channel", "delivery_channel"];
+
+export const ERROR_MESSAGES = {
+  email_required: "יש להזין כתובת אימייל תקינה. עדכוני עסקים נשלחים כרגע באימייל בלבד",
+  missing_required_fields: "יש למלא שם פרטי, שם משפחה, טלפון ואימייל",
+  invalid_phone: "מספר הטלפון אינו תקין",
+  consent_required: "יש לאשר קבלת עדכונים",
+  no_channel: "יש לאשר קבלת עדכונים באימייל",
+  consent_version: "גרסת נוסח ההסכמה אינה תקינה, יש לרענן את הדף",
+  rate_limited: "יותר מדי ניסיונות, נסו שוב מאוחר יותר",
+  expired: "תוקף הקישור פג",
+  invalid_invite: "הקישור אינו תקין",
+  save_failed: "השמירה לא הצליחה, נסו שוב"
+};
+
+export function errorMessage(code) {
+  return ERROR_MESSAGES[code] || "";
+}
+
 export const INTERESTS = [
   "מזון",
   "תעשייה",
@@ -239,9 +263,10 @@ function sharedFields(body) {
   const lastName = cleanText(body?.last_name, 80);
   const phone = cleanText(body?.phone, 40);
   const email = cleanText(body?.email, 180).toLowerCase();
-  if (!firstName || !lastName || !phone || !email) return { ok: false, error: "missing_required_fields" };
+  // Email is the only delivery channel: missing or malformed -> email_required.
+  if (!email || !/^[^\s@%]+@[^\s@%]+\.[^\s@%]+$/.test(email)) return { ok: false, error: "email_required" };
+  if (!firstName || !lastName || !phone) return { ok: false, error: "missing_required_fields" };
   if (!isIsraeliPhone(phone)) return { ok: false, error: "invalid_phone" };
-  if (!/^[^\s@%]+@[^\s@%]+\.[^\s@%]+$/.test(email)) return { ok: false, error: "invalid_email" };
   const interests = normalizeInterests(body?.interests);
   if (!interests) return { ok: false, error: "invalid_interests" };
   const region = normalizeRegion(body?.region);
@@ -314,7 +339,7 @@ export function validateSignup(body) {
       row: {
         ...shared.base,
         consent_email: true,
-        consent_whatsapp: body?.consent_whatsapp === true,
+        consent_whatsapp: false,
         consent_text_version: CONSENT_TEXT_VERSION,
         consent_general: null,
         consent_text: null,
@@ -325,9 +350,11 @@ export function validateSignup(body) {
   }
 
   if (body?.consent_general !== true) return { ok: false, error: "consent_required" };
-  const consentEmail = body?.consent_email === true;
-  const consentWhatsapp = body?.consent_whatsapp === true;
-  if (!consentEmail && !consentWhatsapp) return { ok: false, error: "no_channel" };
+  // Email only (15.11): email is required and is the one delivery channel, so
+  // consent_general covers it. consent_email / consent_whatsapp are accepted
+  // but no longer decide anything; no_channel cannot happen on this contract.
+  const consentEmail = true;
+  const consentWhatsapp = false;
   const consentText = cleanMultiline(body?.consent_text, 2000);
   if (!consentText) return { ok: false, error: "consent_required" };
   const namedVersion = cleanText(body?.consent_version, 80);
@@ -528,7 +555,8 @@ export function signupPrefill(stored, submittedEmail) {
   prefill.notes = stored?.notes ?? null;
   // Show the real consent state: false for a channel the person left.
   prefill.consent_email = !channelClosed(stored, "email");
-  prefill.consent_whatsapp = !channelClosed(stored, "whatsapp");
+  // No WhatsApp delivery for now: never offer it back to the form.
+  delete prefill.consent_whatsapp;
   return prefill;
 }
 

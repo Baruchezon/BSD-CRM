@@ -17,6 +17,7 @@ import {
   planSubscriberUpdate,
   planSubscriberWrite,
   validateSignup,
+  errorMessage,
   verifyUpdateToken
 } from "./logic.mjs";
 import {
@@ -259,7 +260,7 @@ async function applyProfileUpdate(body: Record<string, unknown>, origin: string 
   let incoming: Record<string, unknown> = { all_good: body.all_good === true };
   if (incoming.all_good !== true) {
     const signup = validateSignup(body);
-    if (!signup.ok) return json({ ok: false, error: signup.error }, 400, origin);
+    if (!signup.ok) return json({ ok: false, error: signup.error, message: errorMessage(signup.error) }, 400, origin);
     incoming = signup.row;
   }
   const now = new Date().toISOString();
@@ -438,7 +439,7 @@ Deno.serve(async req => {
       return json({ ok: false, error: "rate_limited" }, 429, origin);
     }
     await recordAttempt("signup", emailForLimit, ip);
-    if (!signup.ok) return json({ ok: false, error: signup.error }, 400, origin);
+    if (!signup.ok) return json({ ok: false, error: signup.error, message: errorMessage(signup.error) }, 400, origin);
 
     const inviteSecret = cleanText(body?.invite_token, 200);
     let invite: Record<string, unknown> | null = null;
@@ -450,7 +451,7 @@ Deno.serve(async req => {
         : await lookup.eq("token_hash", hashInviteToken(inviteSecret)).maybeSingle();
       if (found.error) throw found.error;
       const open = inviteOpen(found.data, Date.now());
-      if (!open.ok) return json({ ok: false, error: open.error }, 400, origin);
+      if (!open.ok) return json({ ok: false, error: open.error, message: errorMessage(open.error) }, 400, origin);
       invite = found.data;
     }
 
