@@ -169,7 +169,11 @@ Deno.serve(async req => {
 
     // Structured context: new payload fields first, then the lines the current form folds into «message».
     const ctx = parseMessageContext(message);
-    const businessNumber = normalizeBusinessNumber(clean(body.business_number, 40)) || ctx.businessNumber;
+    // 15.11 finder: «business_numbers» = all listings shown to the visitor (first one is the primary business).
+    const shownNumbers = [...new Set((Array.isArray(body.business_numbers) ? body.business_numbers : [])
+      .slice(0, 10).map((x: unknown) => normalizeBusinessNumber(clean(x, 40))).filter(Boolean))].slice(0, 5) as string[];
+    const businessNumber = normalizeBusinessNumber(clean(body.business_number, 40)) || ctx.businessNumber || shownNumbers[0] || '';
+    const matchedNumbers = [...new Set([businessNumber, ...shownNumbers].filter(Boolean))];
     const listingTitle = oneLine(body.listing_title, 200) || ctx.listingTitle;
     const page = oneLine(body.page, 300);
     const src = oneLine(body.src, 120);
@@ -188,6 +192,7 @@ Deno.serve(async req => {
 
     const contextLines = INTAKE_V2
       ? [businessNumber && `מספר עסק: ${businessNumber}`, listingTitle && `שם עסק: ${listingTitle}`,
+         matchedNumbers.length > 1 && `עסקים שהוצגו: ${matchedNumbers.join(', ')}`,
          page && `עמוד: ${page}`, sourceText && `מקור: ${sourceText}`].filter(Boolean).join('\n')
       : '';
     const notes = `[פנייה ישירה מאתר BSD]\nמטרת הפנייה: ${purposes.join(', ') || 'לא נבחרה'}\nהודעה: ${message || 'לא נכתבה'}\nעיר: ${city}\nמועד מועדף: ${preferredDate || 'לא צוין'}\nשפה: ${language}${contextLines ? `\n${contextLines}` : ''}`;
@@ -248,6 +253,13 @@ Deno.serve(async req => {
       leadId = lead.id;
     }
 
+    if (INTAKE_V2 && matchedNumbers.length) {
+      const { data: cur } = await supabase.from('leads').select('matched_business_numbers').eq('id', leadId).maybeSingle();
+      const merged = [...new Set([...((cur?.matched_business_numbers as string[] | null) ?? []), ...matchedNumbers])];
+      const { error: mErr } = await supabase.from('leads').update({ matched_business_numbers: merged }).eq('id', leadId);
+      if (mErr) console.error('matched_business_numbers not stored', mErr.message);
+    }
+
     if (!isTest) {
       const task: Record<string, unknown> = {
         title: existing ? `פנייה חוזרת מהאתר: ${fullName}`
@@ -267,6 +279,7 @@ Deno.serve(async req => {
     await supabase.from('audit_log').insert({
       table_name: 'leads', record_id: leadId, action: existing ? 'website_repeat_inquiry' : 'create', actor_id: adminId,
       details: { source: 'bsd_new_website', language, purposes, kind, is_test: isTest, business_number: businessNumber || null,
+        matched_business_numbers: matchedNumbers.length ? matchedNumbers : null,
         business_id: business?.id ?? null, page: page || null, src: src || null },
     });
 
