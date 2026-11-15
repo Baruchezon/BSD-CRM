@@ -548,6 +548,7 @@
 <script src="js/standaloneRecording.js?v=20261012-1"></script>
 <script src="js/meetingPrepContent.js?v=202611100710"></script>
 <script src="js/meetingPrepForm.js?v=202611100710"></script>
+<script src="js/meetingPrepSheet.js?v=202611150830"></script>
 <script src="js/pdfPipeline.js?v=20261012-1"></script>
 <script src="js/saleFileModule2.js?v=202611131000"></script>
 <script src="js/listReturn.js?v=202611092100"></script>
@@ -2087,6 +2088,7 @@ function openBizForm(id){
       <div class="field full">
         ${CURRENT_PROFILE.can_record!==false ? `<button type="button" class="btn btn-ghost" onclick="window.openStandaloneRecording({type:'business', id:'${biz.id}', label:'${esc((biz.internal_name||'עסק').replace(/'/g,''))}', currentProfile:CURRENT_PROFILE, onSaved: () => loadBizMeetings('${biz.id}')})">🔴 הקלט שיחה/פגישה</button>` : ''}
         <button type="button" class="btn btn-ghost" style="margin:8px 0;font-weight:700;" onclick="BSDMeetingPrep.open(ALL_BIZ.find(b=>b.id==='${biz.id}')).catch(e=>toast(e.message,true))">📄 טופס הכנה לפגישה | הדפסה וסיכום</button>
+        <button type="button" style="margin:8px 8px 8px 0;font-weight:800;border:0;border-radius:14px;padding:10px 14px;color:#fff;cursor:pointer;background:linear-gradient(135deg,#0e1b34,#1e3a8a);box-shadow:0 5px 0 rgba(8,16,32,.28);" onclick="BSDMeetingSheet.openFromBusiness(ALL_BIZ.find(b=>b.id==='${biz.id}')).catch(e=>toast((e&&e.message)||'לא ניתן להכין את הדף',true))">דף הכנה לפגישה (הדפסה)</button>
         <div id="bizMeetingsList" style="margin-top:10px;font-size:.82rem;">טוען...</div>
       </div>
       <div class="section-h" style="margin-top:14px;">קבצים מצורפים</div>

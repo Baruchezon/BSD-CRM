@@ -304,6 +304,7 @@
 <script src="js/phoneCalls.js?v=202610142200"></script>
 <script src="js/listReturn.js?v=202611092100"></script>
 <script src="js/business-alert-invite.js?v=202611150640"></script>
+<script src="js/meetingPrepSheet.js?v=202611150830"></script>
 <script>
 let ALL_LEADS = [];
 let ARCHIVED_LEADS = [];
@@ -1296,6 +1297,7 @@ function openLeadForm(id, forcedType, prefillData){
           ${fieldRow('partnership_willingness','נכונות לשותפות', lead?.partnership_willingness)}
         ` : `
           <div class="section-h">פרטי העסק והמוכר</div>
+          ${(lead && !isGrantOnlyViewer(lead)) ? `<div class="field full"><button type="button" style="font-weight:800;border:0;border-radius:14px;padding:10px 14px;color:#fff;cursor:pointer;background:linear-gradient(135deg,#0e1b34,#1e3a8a);box-shadow:0 5px 0 rgba(8,16,32,.28);" onclick="BSDMeetingSheet.openFromSeller(ALL_LEADS.find(l=>l.id==='${lead.id}')).catch(e=>toast((e&&e.message)||'לא ניתן להכין את הדף',true))">דף הכנה לפגישה (הדפסה)</button></div>` : ''}
           ${fieldRow('business_name','שם העסק', lead?.business_name)}
           ${fieldRow('business_field','תחום העסק', lead?.business_field)}
           ${fieldRow('business_city','עיר העסק', lead?.business_city)}
