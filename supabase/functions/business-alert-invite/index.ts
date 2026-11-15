@@ -140,7 +140,21 @@ Deno.serve(async req => {
     if (!card) return json({ ok: false, error: "not_found" }, 404, origin);
     const people = await matchingSubscribers(card);
     const decision = inviteGuard({ card, channel, invites: invites || [], subscribers: people, now: Date.now() });
-    if (!decision.ok) return json({ ok: false, error: decision.error, invites: (invites || []).map(chip) }, 200, origin);
+    if (!decision.ok) return json({ ok: false, error: decision.error, last_sent_at: decision.last_sent_at || null, invites: (invites || []).map(chip) }, 200, origin);
+    if (decision.reshare) {
+      // Same open link again on WhatsApp: nothing new is stored or sent by the server.
+      const { data: again, error: againError } = await supabase.from("business_alert_invites")
+        .select("id, channel, status, sent_at, opened_at, joined_at, expires_at, token, short_code")
+        .eq("id", decision.reshare).maybeSingle();
+      if (againError) throw againError;
+      if (again?.token) {
+        const sameUrl = inviteUrl({ short: Boolean(again.short_code), token: again.token, code: again.short_code });
+        const firstName = card.first_name || String(card.full_name || "").split(/\s+/)[0] || "";
+        const sameText = messageWithLink(applyAddressForm(fillName(String(body.message || "").trim() || settings.whatsapp, firstName), knownAddressForm(people)), sameUrl);
+        const { token: _hidden, short_code: _code, ...shown } = again;
+        return json({ ok: true, reshared: true, wa_url: `https://wa.me/${waNumber(card.phone)}?text=${encodeURIComponent(sameText)}`, link: sameUrl, message: sameText, invite: chip(shown) }, 200, origin);
+      }
+    }
     if (decision.supersede.length) {
       await supabase.from("business_alert_invites").update({ status: "superseded" }).in("id", decision.supersede);
     }
@@ -169,7 +183,7 @@ Deno.serve(async req => {
     if (insertError) throw insertError;
     if (channel === "whatsapp") {
       const wa = `https://wa.me/${waNumber(card.phone)}?text=${encodeURIComponent(whatsappText)}`;
-      return json({ ok: true, wa_url: wa, invite: chip(saved) }, 200, origin);
+      return json({ ok: true, wa_url: wa, link: url, message: whatsappText, invite: chip(saved) }, 200, origin);
     }
     const apiKey = Deno.env.get("RESEND_API_KEY");
     if (!apiKey) return json({ ok: false, error: "missing_email_configuration", invite: chip(saved) }, 200, origin);

@@ -1,25 +1,27 @@
 // «רשימת תפוצת עסקים» on every lead and buyer card.
 (function () {
   const REASONS = {
+    not_authenticated: "פג תוקף ההתחברות, יש להתחבר מחדש",
+    session_expired: "פג תוקף ההתחברות, יש להתחבר מחדש",
+    forbidden: "אין לך הרשאה לשלוח הזמנה. יש לפנות למנהל המערכת.",
+    already_joined: "איש הקשר כבר רשום לרשימת התפוצה",
+    already_subscribed: "איש הקשר כבר רשום לרשימת התפוצה",
+    card: "כרטיס איש הקשר לא תקין. יש לסגור ולפתוח אותו מחדש.",
+    not_found: "כרטיס איש הקשר לא נמצא. יש לרענן את הרשימה.",
+    channel: "יש לבחור ערוץ שליחה: וואטסאפ או מייל.",
+    method_not_allowed: "גרסת הדף אינה מעודכנת. יש לרענן את הדף.",
+    save_failed: "לא ניתן לשמור את ההזמנה כרגע. יש לנסות שוב בעוד רגע.",
+    network: "לא ניתן להתחבר לשרת. יש לבדוק חיבור לאינטרנט ולנסות שוב.",
+    unknown: "אירעה שגיאה בשרת. יש לרענן את הדף ולנסות שוב.",
     do_not_call: "מסומן לא להתקשר. אי אפשר לשלוח הזמנה.",
     do_not_contact: "האדם הוסר מהרשימה או מסומן לא להתקשר.",
     no_phone: "אין טלפון בכרטיס, אי אפשר לפתוח וואטסאפ.",
     no_email: "אין אימייל בכרטיס, אי אפשר לשלוח מייל.",
-    too_soon: "אפשר לשלוח שוב רק אחרי 24 שעות.",
+    too_soon: "כבר נשלחה הזמנה לאיש קשר זה ב-24 השעות האחרונות",
     invite_limit: "כבר נשלחו 3 הזמנות לכרטיס הזה.",
     missing_email_configuration: "שליחת המייל לא מוגדרת.",
-    send_failed: "המייל לא יצא. ההזמנה נשמרה כדי שלא תישלח פעמיים.",
-    already_subscribed: "האדם כבר ברשימת התפוצה.",
-    already_joined: "האדם כבר הצטרף מההזמנה.",
-    not_authenticated: "צריך להתחבר מחדש.",
-    forbidden: "אין הרשאה לשלוח הזמנה.",
-    save_failed: "השמירה נכשלה. נסה שוב.",
-    not_found: "הכרטיס לא נמצא.",
-    card: "הכרטיס לא תקין.",
-    channel: "צריך לבחור וואטסאפ או מייל."
+    send_failed: "המייל לא יצא. ההזמנה נשמרה כדי שלא תישלח פעמיים."
   };
-  const LINK_MARK = "{לינק}";
-  const LINK_SHOWN = "הקישור האישי";
   const FALLBACK = "שלום {שם} 😊\nתודה על השיחה!\nמוזמן/ת להצטרף לרשימת התפוצה האישית שלנו, ויישלחו אליך עסקים רלוונטיים להגדרות שלך:\n👉 {לינק}\nברוך איזון | BSD";
   function fillName(template, name) {
     const who = String(name || "").trim();
@@ -46,31 +48,33 @@
     const channel = invite.channel === "whatsapp" ? "וואטסאפ" : "מייל";
     return `נשלח · ${channel}${when ? " · " + when : ""}`;
   }
-  function reason(code) {
-    return REASONS[code] || "אי אפשר לשלוח עכשיו.";
+  function reason(data) {
+    const code = data?.error || "unknown";
+    let message = REASONS[code] || REASONS.unknown;
+    const sent = data?.last_sent_at || data?.invites?.[0]?.sent_at;
+    if (code === "too_soon" && sent && Number.isFinite(Date.parse(sent))) {
+      message += ` (נשלחה ב-${new Date(sent).toLocaleTimeString("he-IL", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit" })})`;
+    }
+    return message;
   }
   async function call(body) {
-    const result = await window.supabaseClient.functions.invoke("business-alert-invite", { body });
-    if (!result.error) return result.data || {};
-    let payload = null;
     try {
-      if (result.error.context && typeof result.error.context.json === "function") payload = await result.error.context.json();
-    } catch (ignore) { payload = null; }
-    if (payload && payload.error) return payload;
-    return { ok: false, error: "save_failed" };
+      const result = await window.supabaseClient.functions.invoke("business-alert-invite", { body });
+      if (!result.error) return result.data || { ok: false, error: "unknown" };
+      const context = result.error.context;
+      const status = context?.status || result.error.status;
+      let payload = {};
+      if (context?.clone) payload = await context.clone().json().catch(() => ({}));
+      if (status === 401) return { ok: false, error: "session_expired" };
+      if (status === 403) return { ok: false, error: "forbidden" };
+      if (payload.error && typeof payload.error === "string") return payload;
+      return { ok: false, error: status ? "unknown" : "network" };
+    } catch (_) { return { ok: false, error: "network" }; }
   }
-  function openWa(url, tab) {
-    if (tab && !tab.closed) {
-      tab.location.href = url;
-      return;
-    }
-    const link = document.createElement("a");
-    link.href = url;
-    link.target = "_blank";
-    link.rel = "noopener";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+  // The editable message is NOT a link preview. Show a real preview only after the
+  // function returns its real link (never show the raw {לינק} placeholder).
+  function editableCopy(text) {
+    return String(text || "").replace(/^.*\{לינק\}.*(?:\n|$)/gm, "").trim();
   }
   function mountBusinessAlertInvite(lead) {
     const box = document.getElementById("businessAlertInvite");
@@ -79,6 +83,7 @@
     box.innerHTML = `<button type="button" id="inviteOpen" style="border:0;border-radius:16px;padding:12px 16px;font:inherit;font-weight:800;color:#fff;cursor:pointer;background:linear-gradient(135deg,#0e1b34,#1f7a4d);box-shadow:0 6px 0 rgba(8,16,32,.28);">רשימת תפוצת עסקים</button><div id="inviteChips" style="margin-top:8px;font-size:.82rem;"></div>`;
     const chips = document.getElementById("inviteChips");
     call({ action: "status", card_type: cardType, card_id: lead.id }).then(data => {
+      if (!data.ok) { chips.textContent = reason(data); return; }
       chips.innerHTML = (data.invites || []).map(item => `<div>${esc(chip(item))}</div>`).join("") || "<span style=\"color:#888\">עדיין לא נשלחה הזמנה</span>";
     }).catch(() => { chips.textContent = ""; });
     document.getElementById("inviteOpen").onclick = () => openModal(lead, cardType);
@@ -95,7 +100,9 @@
       <div id="inviteHistory" style="font-size:.82rem;margin-bottom:8px;"></div>
       <label style="display:flex;gap:8px;align-items:center;"><input type="radio" name="inviteChannel" value="whatsapp" checked style="width:auto;"> וואטסאפ</label>
       <label style="display:flex;gap:8px;align-items:center;"><input type="radio" name="inviteChannel" value="email" style="width:auto;"> מייל</label>
+      <p style="font-size:.85rem">נוסח ההודעה לעריכה. קישור אישי יתווסף לאחר הכנת ההזמנה.</p>
       <textarea id="invitePreview" rows="8" style="width:100%;box-sizing:border-box;margin-top:8px;border-radius:12px;padding:10px;font:inherit;"></textarea>
+      <div id="inviteReady" hidden><p id="inviteRealPreview" style="white-space:pre-wrap;overflow-wrap:anywhere"></p><a id="inviteWhatsApp" target="_blank" rel="noopener" style="display:block;background:#128C4A;color:white;padding:14px;border-radius:12px;text-align:center;font-weight:bold">פתח וואטסאפ</a></div>
       <p id="inviteBlock" style="color:#8d2d2d;font-weight:700;"></p>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button type="button" id="inviteClose">סגירה</button>
@@ -111,7 +118,7 @@
       return overlay.querySelector("input[name=inviteChannel]:checked").value;
     }
     function showTemplate() {
-      const next = applyAddress(fillName(templates[channel()] || FALLBACK, name), addressForm).replaceAll(LINK_MARK, LINK_SHOWN);
+      const next = editableCopy(applyAddress(fillName(templates[channel()] || FALLBACK, name), addressForm));
       if (!preview.value || preview.value === auto) {
         preview.value = next;
         auto = next;
@@ -119,7 +126,9 @@
     }
     showTemplate();
     overlay.querySelector("#inviteClose").onclick = () => overlay.remove();
+    let statusError = null;
     call({ action: "status", card_type: cardType, card_id: lead.id }).then(data => {
+      if (!data.ok) { statusError = data; explain(); return; }
       if (data.templates?.whatsapp) templates.whatsapp = data.templates.whatsapp;
       if (data.templates?.email) templates.email = data.templates.email;
       addressForm = data.address_form || "";
@@ -129,6 +138,7 @@
     function explain() {
       const note = overlay.querySelector("#inviteBlock");
       const send = overlay.querySelector("#inviteSend");
+      if (statusError) { note.textContent = reason(statusError); send.disabled = true; return; }
       if (channel() === "whatsapp" && !String(lead.phone || "").replace(/\D/g, "")) {
         note.textContent = REASONS.no_phone;
         send.disabled = true;
@@ -149,28 +159,40 @@
     explain();
     overlay.querySelector("#inviteSend").onclick = async () => {
       const send = overlay.querySelector("#inviteSend");
-      const waTab = channel() === "whatsapp" ? window.open("", "_blank") : null;
+      const isWhatsApp = channel() === "whatsapp";
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      // Desktop popup must be created in the click stack, not after an await.
+      const popup = isWhatsApp && !isMobile ? window.open("about:blank", "_blank") : null;
+      if (popup) popup.opener = null;
       send.disabled = true;
-      try {
-        const data = await call({
-          card_type: cardType,
-          card_id: lead.id,
-          channel: channel(),
-          message: preview.value.replaceAll(LINK_SHOWN, LINK_MARK)
-        });
-        if (!data.ok) {
-          if (waTab && !waTab.closed) waTab.close();
-          overlay.querySelector("#inviteBlock").textContent = reason(data.error);
-          send.disabled = true;
-          return;
-        }
-        if (data.wa_url) openWa(data.wa_url, waTab);
-        else if (waTab && !waTab.closed) waTab.close();
-        overlay.remove();
+      const data = await call({ card_type: cardType, card_id: lead.id, channel: channel(), message: preview.value.replace(/(\nברוך איזון \| BSD\s*)$/, "\n👉 {לינק}$1") });
+      if (!data.ok) {
+        if (popup) popup.close();
+        overlay.querySelector("#inviteBlock").textContent = reason(data);
+        send.disabled = ["network", "unknown", "save_failed", "send_failed"].includes(data.error) ? false : true;
+        return;
+      }
+      if (data.wa_url && /^https:\/\/wa\.me\/\d+\?text=/.test(data.wa_url)) {
+        // Always leave a tappable real link, including when the app is unavailable.
+        const link = overlay.querySelector("#inviteWhatsApp");
+        link.href = data.wa_url;
+        overlay.querySelector("#inviteRealPreview").textContent = data.message || decodeURIComponent(data.wa_url.split("text=")[1] || "");
+        overlay.querySelector("#inviteReady").hidden = false;
+        preview.hidden = true;
+        send.hidden = true;
+        overlay.querySelector("#inviteBlock").textContent = "הקישור מוכן. אם וואטסאפ לא נפתח, לחץ/י על «פתח וואטסאפ».";
         mountBusinessAlertInvite(lead);
-      } catch (error) {
-        if (waTab && !waTab.closed) waTab.close();
-        overlay.querySelector("#inviteBlock").textContent = "השליחה לא הושלמה.";
+        if (isMobile) window.location.href = data.wa_url;
+        else if (popup) popup.location.href = data.wa_url;
+        return;
+      }
+      if (popup) popup.close();
+      if (data.sent) {
+        overlay.querySelector("#inviteBlock").textContent = "ההזמנה נשלחה במייל בהצלחה.";
+        send.hidden = true;
+        mountBusinessAlertInvite(lead);
+      } else {
+        overlay.querySelector("#inviteBlock").textContent = REASONS.unknown;
         send.disabled = false;
       }
     };
