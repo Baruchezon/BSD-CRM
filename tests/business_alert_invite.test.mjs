@@ -109,8 +109,15 @@ test("signup still claims one thank-you and marks an invite as joined", () => {
   assert.match(src, /invited_by_baruch/);
   assert.match(readFileSync("supabase/functions/business-alert-signup/email.mjs", "utf8"), /הוזמן ע״י ברוך/);
   assert.match(readFileSync("leads.html", "utf8"), /רשימת תפוצת עסקים|businessAlertInvite/);
-  assert.match(readFileSync("js/business-alert-invite.js", "utf8"), /wa_url/);
+  const inviteJs = readFileSync("js/business-alert-invite.js", "utf8");
+  assert.match(inviteJs, /wa_url/);
+  assert.match(inviteJs, /הקישור האישי/);
+  assert.match(inviteJs, /window\.open\("", "_blank"\)/);
+  assert.match(inviteJs, /already_subscribed/);
+  assert.equal(inviteJs.includes("window.open(data.wa_url"), false);
+  assert.match(readFileSync("leads.html", "utf8"), /business-alert-invite\.js\?v=202611150620/);
   const inviteFn = readFileSync("supabase/functions/business-alert-invite/index.ts", "utf8");
+  assert.match(inviteFn, /x-client-info/);
   assert.match(inviteFn, /invite_whatsapp_template/);
   assert.match(inviteFn, /settings\.short \? newShortCode\(\) : null/);
   assert.equal(inviteFn.includes("short_links_live"), false);

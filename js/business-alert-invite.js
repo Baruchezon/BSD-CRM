@@ -8,8 +8,18 @@
     too_soon: "אפשר לשלוח שוב רק אחרי 24 שעות.",
     invite_limit: "כבר נשלחו 3 הזמנות לכרטיס הזה.",
     missing_email_configuration: "שליחת המייל לא מוגדרת.",
-    send_failed: "המייל לא יצא. ההזמנה נשמרה כדי שלא תישלח פעמיים."
+    send_failed: "המייל לא יצא. ההזמנה נשמרה כדי שלא תישלח פעמיים.",
+    already_subscribed: "האדם כבר ברשימת התפוצה.",
+    already_joined: "האדם כבר הצטרף מההזמנה.",
+    not_authenticated: "צריך להתחבר מחדש.",
+    forbidden: "אין הרשאה לשלוח הזמנה.",
+    save_failed: "השמירה נכשלה. נסה שוב.",
+    not_found: "הכרטיס לא נמצא.",
+    card: "הכרטיס לא תקין.",
+    channel: "צריך לבחור וואטסאפ או מייל."
   };
+  const LINK_MARK = "{לינק}";
+  const LINK_SHOWN = "הקישור האישי";
   const FALLBACK = "שלום {שם} 😊\nתודה על השיחה!\nמוזמן/ת להצטרף לרשימת התפוצה האישית שלנו, ויישלחו אליך עסקים רלוונטיים להגדרות שלך:\n👉 {לינק}\nברוך איזון | BSD";
   function fillName(template, name) {
     const who = String(name || "").trim();
@@ -36,10 +46,31 @@
     const channel = invite.channel === "whatsapp" ? "וואטסאפ" : "מייל";
     return `נשלח · ${channel}${when ? " · " + when : ""}`;
   }
+  function reason(code) {
+    return REASONS[code] || "אי אפשר לשלוח עכשיו.";
+  }
   async function call(body) {
     const result = await window.supabaseClient.functions.invoke("business-alert-invite", { body });
-    if (result.error) throw result.error;
-    return result.data || {};
+    if (!result.error) return result.data || {};
+    let payload = null;
+    try {
+      if (result.error.context && typeof result.error.context.json === "function") payload = await result.error.context.json();
+    } catch (ignore) { payload = null; }
+    if (payload && payload.error) return payload;
+    return { ok: false, error: "save_failed" };
+  }
+  function openWa(url, tab) {
+    if (tab && !tab.closed) {
+      tab.location.href = url;
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   }
   function mountBusinessAlertInvite(lead) {
     const box = document.getElementById("businessAlertInvite");
@@ -80,7 +111,7 @@
       return overlay.querySelector("input[name=inviteChannel]:checked").value;
     }
     function showTemplate() {
-      const next = applyAddress(fillName(templates[channel()] || FALLBACK, name), addressForm);
+      const next = applyAddress(fillName(templates[channel()] || FALLBACK, name), addressForm).replaceAll(LINK_MARK, LINK_SHOWN);
       if (!preview.value || preview.value === auto) {
         preview.value = next;
         auto = next;
@@ -118,23 +149,27 @@
     explain();
     overlay.querySelector("#inviteSend").onclick = async () => {
       const send = overlay.querySelector("#inviteSend");
+      const waTab = channel() === "whatsapp" ? window.open("", "_blank") : null;
       send.disabled = true;
       try {
         const data = await call({
           card_type: cardType,
           card_id: lead.id,
           channel: channel(),
-          message: preview.value
+          message: preview.value.replaceAll(LINK_SHOWN, LINK_MARK)
         });
         if (!data.ok) {
-          overlay.querySelector("#inviteBlock").textContent = REASONS[data.error] || "אי אפשר לשלוח עכשיו.";
+          if (waTab && !waTab.closed) waTab.close();
+          overlay.querySelector("#inviteBlock").textContent = reason(data.error);
           send.disabled = true;
           return;
         }
-        if (data.wa_url) window.open(data.wa_url, "_blank", "noopener");
+        if (data.wa_url) openWa(data.wa_url, waTab);
+        else if (waTab && !waTab.closed) waTab.close();
         overlay.remove();
         mountBusinessAlertInvite(lead);
       } catch (error) {
+        if (waTab && !waTab.closed) waTab.close();
         overlay.querySelector("#inviteBlock").textContent = "השליחה לא הושלמה.";
         send.disabled = false;
       }
