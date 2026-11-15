@@ -31,9 +31,12 @@ test("CRM phrases become signup slugs, and ambiguous food words are dropped", ()
     region_labels: []
   });
 
-  const dropped = keys("מזון، קמעונאות");
-  assert.deepEqual(dropped.categories, []);
-  assert.deepEqual(dropped.subcategories, []);
+  // Bare מזון stays ambiguous; bare קמעונאות is retail (Roman, 15.11).
+  const mixed = keys("מזון، קמעונאות");
+  assert.deepEqual(mixed.categories, ["retail"]);
+  assert.deepEqual(mixed.subcategories, []);
+  assert.deepEqual(keys("קמעונאות").category_labels, ["מסחר וקמעונאות"]);
+  assert.deepEqual(keys("מזון").categories, []);
 });
 
 test("area phrases map to region slugs, and a mixed token is omitted", () => {

@@ -59,14 +59,16 @@ test('the new form requires general consent and at least one channel', () => {
     source_url: 'https://www.bsd-bbi.co.il/עסקים-למכירה/'
   };
   assert.equal(validateSignup({ ...base, consent_general: false }).error, 'consent_required');
-  assert.equal(validateSignup({ ...base, consent_email: false, consent_whatsapp: false }).error, 'no_channel');
+  // 15.11 email only: general consent is enough, stored as email.
+  assert.equal(validateSignup({ ...base, consent_email: false, consent_whatsapp: false }).row.consent_email, true);
   const ok = validateSignup({ ...base, consent_email: false, consent_whatsapp: true });
   assert.equal(ok.ok, true);
   assert.equal(ok.contract, 'current');
   assert.equal(ok.row.legacy_no_consent, false);
   assert.equal(ok.row.consent_general, true);
-  assert.equal(ok.row.consent_whatsapp, true);
-  assert.equal(ok.row.consent_email, false);
+  // 15.11: WhatsApp delivery is "future"; a WhatsApp choice is stored as email only.
+  assert.equal(ok.row.consent_whatsapp, false);
+  assert.equal(ok.row.consent_email, true);
   assert.equal(ok.row.source_url, base.source_url);
 });
 
@@ -104,10 +106,11 @@ test('a repeat signup stays unsubscribed until the form brings fresh consent', (
     source_url: 'https://www.bsd-bbi.co.il/עסקים-למכירה/'
   });
   const back = consentWritePayload(fresh.row, previous, now);
-  assert.equal(back.status, 'active');
-  assert.equal(back.unsubscribed_at, null);
+  // Email only (15.11): WhatsApp stays closed, the row is reachable by email.
+  assert.equal(back.status, 'unsubscribed_whatsapp');
+  assert.equal(back.consent_whatsapp, false);
   assert.equal(back.email_unsubscribed_at, null);
-  assert.equal(back.whatsapp_unsubscribed_at, null);
+  assert.equal(back.whatsapp_unsubscribed_at, previous.whatsapp_unsubscribed_at);
   assert.equal(back.consent_at, now);
   assert.equal(back.consent_text, fresh.row.consent_text);
   assert.equal(back.consent_version, 'v1-2026-11-13');
