@@ -950,6 +950,12 @@ document.addEventListener('click', event => {
     return;
   }
   try { await load(); } catch (error) { toast(error.message); }
+  // deep link from the dashboard global search: site-buyers.html?open=<subscriber id>
+  const openParam = new URLSearchParams(location.search).get('open');
+  if (openParam){
+    if (rows.some(item => item.id === openParam)) openDetail(openParam);
+    else toast('הנרשם לא מופיע ברשימה הנוכחית (ייתכן שהוא בארכיון)');
+  }
 })();
 </script>
 </body>

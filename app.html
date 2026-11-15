@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610270430';
+    var PAGE_BUILD = '202611151600';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -180,6 +180,9 @@
     </div>
   </div>
 
+  <!-- 15.11.2026: חיפוש אחד בכל המערכת (לידים, ארכיון, עסקים, קונים, משקיעים, בעלי עסקים, נרשמים) -->
+  <div id="globalSearch"></div>
+
   <div class="section-title">תמונת מצב כללית</div>
   <div class="kpi-grid">
     <a href="leads.html" class="kpi-link"><div class="kpi c-blue"><div class="icon">👤</div><div class="num" id="k_buyers">–</div><div class="label">קונים</div></div></a>
@@ -257,6 +260,7 @@
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/taskActions.js?v=202610211000"></script>
 <script src="js/push.js?v=202610211000"></script>
+<script src="js/globalSearch.js?v=202611151600"></script>
 <script>
 let currentPeriod = 'week';
 let customFrom = null, customTo = null;
