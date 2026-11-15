@@ -146,44 +146,66 @@ export type AlertValues = {
   kind: InquiryKind; message: string; preferredDate: string;
   businessNumber: string; listingTitle: string; businessUrl: string; businessFound: boolean;
   source: string; page: string; crmUrl: string; repeatOf?: string; isTest: boolean;
+  // Email body only. The contact form has no budget field; shown when a caller sends one.
+  budget?: string;
+  registeredAt?: string;
 };
 
+// Same clock as the compact new-subscriber alert (business-alert-signup signupDateLabel).
+export function israelDateTime(value?: string) {
+  const parsed = value ? new Date(value) : new Date();
+  const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jerusalem',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date).map(part => [part.type, part.value]));
+  return `${parts.day}.${parts.month}.${parts.year} ${parts.hour}:${parts.minute}`;
+}
+
+export function alertBudget(body: Record<string, unknown>): string {
+  const raw = body.budget;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return `${new Intl.NumberFormat('he-IL').format(raw)} ₪`;
+  return oneLine(raw, 120);
+}
+
+function splitPersonName(fullName: string) {
+  const parts = String(fullName || '').split(/\s+/).filter(Boolean);
+  return { firstName: parts[0] || '', lastName: parts.slice(1).join(' ') };
+}
+
+// What they are looking for, then the request text. Technical context lines are
+// already removed by parseMessageContext before this runs.
+function interestText(v: AlertValues) {
+  return [v.purposes, v.message].map(s => String(s || '').trim()).filter(Boolean).join('\n');
+}
+
+// Baruch, 13.11 content rule (same list as the compact subscriber alert): first name,
+// last name, phone, interests, registration time in Israel, and budget only when given.
+// No CRM links, source URLs, the lead's email, ids, or other technical fields.
+export function alertFields(v: AlertValues): [string, string][] {
+  const { firstName, lastName } = splitPersonName(v.fullName);
+  return ([
+    ['שם פרטי', firstName],
+    ['שם משפחה', lastName],
+    ['טלפון', v.phone],
+    ['תחומי עניין', interestText(v)],
+    ['תאריך הרשמה', israelDateTime(v.registeredAt)],
+    ['תקציב', v.budget || ''],
+  ] as [string, string][]).filter(([, value]) => String(value).trim() !== '');
+}
+
+const LTR_LABELS = new Set(['טלפון', 'תאריך הרשמה']);
+
 export function alertHtml(v: AlertValues) {
-  const row = (label: string, valueHtml: string) =>
-    `<tr><td style="padding:6px 10px;color:#6b7280;white-space:nowrap;vertical-align:top">${escapeHtml(label)}</td><td style="padding:6px 10px;color:#111827">${valueHtml}</td></tr>`;
-  const text = (s: string) => escapeHtml(s || 'לא צוין');
-  const link = (href: string, label: string) => href ? `<a href="${escapeHtml(href)}" style="color:#0f5ea8">${escapeHtml(label)}</a>` : text('');
-  const telDigits = v.phone.replace(/[^\d+]/g, '');
-  const rows = [
-    row('שם מלא', text(v.fullName)),
-    row('טלפון', telDigits ? `<a href="tel:${escapeHtml(telDigits)}" style="color:#0f5ea8" dir="ltr">${escapeHtml(v.phone)}</a>` : text('')),
-    row('אימייל', v.email ? `<a href="mailto:${escapeHtml(v.email)}" style="color:#0f5ea8" dir="ltr">${escapeHtml(v.email)}</a>` : text('')),
-    row('עיר', text(v.city)),
-    row('סוג פנייה', `<b>${escapeHtml(KIND_LABEL[v.kind])}</b> <span style="color:#6b7280">(${text(v.purposes)})</span>`),
-    row('מספר עסק', v.businessNumber ? `<span dir="ltr">${escapeHtml(v.businessNumber)}</span>${v.businessFound ? '' : ' <span style="color:#b45309">(לא נמצא ב-CRM)</span>'}` : text('')),
-    row('שם העסק', text(v.listingTitle)),
-    row('דף העסק באתר', v.businessUrl ? link(v.businessUrl, 'פתיחת דף העסק') : text('')),
-    row('מקור', text(v.source)),
-    row('עמוד', v.page ? `<span dir="ltr">${escapeHtml(v.page)}</span>` : text('')),
-    row('הודעה', escapeHtml(v.message || 'לא נכתבה').replace(/\n/g, '<br>')),
-    row('מועד מועדף לשיחה', text(v.preferredDate)),
-    row('כרטיס ב-CRM', link(v.crmUrl, v.repeatOf ? 'פתיחת הכרטיס הקיים' : 'פתיחת הליד')),
-  ].join('');
-  const repeat = v.repeatOf
-    ? `<p style="background:#fff7dc;border:1px solid #ead08b;padding:8px 10px;border-radius:6px">הטלפון כבר קיים ב-CRM (${escapeHtml(v.repeatOf)}). הפנייה צורפה לכרטיס הקיים ולא נפתח ליד כפול.</p>`
-    : '';
-  const test = v.isTest ? '<p style="color:#b91c1c"><b>בדיקה (is_test)</b>: לא נשלח לברוך.</p>' : '';
-  return `<div dir="rtl" lang="he" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5">${test}<h2 style="margin:0 0 8px">${escapeHtml(alertSubject({ kind: v.kind, businessNumber: v.businessNumber, fullName: v.fullName, repeat: !!v.repeatOf }))}</h2>${repeat}<p style="margin:0 0 10px;color:#374151">«השב» למייל הזה יגיע ישירות לפונה${v.email ? '' : ' (לא נמסר מייל)'}.</p><table style="border-collapse:collapse;border:1px solid #e5e7eb">${rows}</table><div dir="rtl" style="margin-top:24px;padding-top:12px;border-top:1px solid #e3d9bf;font-size:13px;line-height:1.6;color:#1f2d3d"><b>BSD - עסקים למכירה</b><br><span style="color:#8a6d1f">משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות</span><br><span dir="ltr"><a href="mailto:info@bsd-bbi.co.il" style="color:#0f5ea8;text-decoration:none">info@bsd-bbi.co.il</a> | <a href="https://www.bsd-bbi.co.il/" style="color:#0f5ea8;text-decoration:none">www.bsd-bbi.co.il</a></span></div></div>`;
+  const lines = alertFields(v).map(([label, value]) => {
+    const inner = escapeHtml(value).replace(/\n/g, '<br>');
+    const shown = LTR_LABELS.has(label) ? `<span dir="ltr">${inner}</span>` : inner;
+    return `<p style="margin:0 0 10px;font-size:16px;line-height:1.5"><b>${escapeHtml(label)}:</b> ${shown}</p>`;
+  }).join('');
+  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ליד חדש</title></head><body style="margin:0;padding:0;background:#ffffff"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" dir="rtl" style="border-collapse:collapse;width:100%;background:#ffffff"><tr><td align="center" style="padding:16px"><div dir="rtl" lang="he" style="max-width:600px;width:100%;margin:0 auto;text-align:right;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#102844;overflow-wrap:anywhere">${lines}</div></td></tr></table></body></html>`;
 }
 
 export function alertText(v: AlertValues) {
-  return [
-    alertSubject({ kind: v.kind, businessNumber: v.businessNumber, fullName: v.fullName, repeat: !!v.repeatOf, isTest: v.isTest }),
-    v.repeatOf ? `הטלפון כבר קיים ב-CRM (${v.repeatOf}). הפנייה צורפה לכרטיס הקיים.` : '',
-    `שם מלא: ${v.fullName}`, `טלפון: ${v.phone}`, `אימייל: ${v.email || 'לא צוין'}`, `עיר: ${v.city || 'לא צוין'}`,
-    `סוג פנייה: ${KIND_LABEL[v.kind]} (${v.purposes || 'לא נבחרה'})`,
-    `מספר עסק: ${v.businessNumber || 'לא צוין'}`, `שם העסק: ${v.listingTitle || 'לא צוין'}`,
-    `דף העסק באתר: ${v.businessUrl || 'לא צוין'}`, `מקור: ${v.source || 'לא צוין'}`, `עמוד: ${v.page || 'לא צוין'}`,
-    `הודעה: ${v.message || 'לא נכתבה'}`, `מועד מועדף לשיחה: ${v.preferredDate || 'לא צוין'}`, `כרטיס ב-CRM: ${v.crmUrl}`,
-  ].filter(Boolean).join('\n');
+  return alertFields(v).map(([label, value]) => `${label}: ${value}`).join('\n');
 }

@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import {
-  AlertValues, InquiryKind, alertHtml, alertSubject, alertText, businessUrlFromSitemap, clean,
+  AlertValues, InquiryKind, alertBudget, alertHtml, alertSubject, alertText, businessUrlFromSitemap, clean,
   inquiryKind, isTestSubmission, leadTypeFor, normalizeBusinessNumber, oneLine, parseMessageContext,
   phone9, purposeGuess, safeHttpUrl, websiteLeadSide,
 } from './logic.ts';
@@ -8,8 +8,9 @@ import {
 export { websiteLeadSide };
 
 // 15.11.2026 lead audit (Baruch approved 15.11 08:28 via Roman), shipped in stages:
-//  stage 1: useful alert email (unique subject, separate lines, business link, Reply-To = lead)
-//           + email status stored on the lead; is_test submissions never email Baruch.
+//  stage 1: alert email with the same subject as before. The body is the compact phone
+//           list (name, phone, interests, Israel registration time, budget if any).
+//           Reply-To is always info@. is_test submissions never email Baruch.
 //  stage 2: CRM intake (business_id link, attach to existing client by phone, page/src stored,
 //           «שאלה»/«אחר» not classified as buyer, website_lead_submissions log).
 const INTAKE_V2 = true;
@@ -25,6 +26,7 @@ const BARUCH_TO = 'baruch.ezon@gmail.com';
 // Resend's sink address: accepted and "delivered" by Resend, reaches no mailbox.
 const TEST_TO = 'delivered@resend.dev';
 const MAIL_FROM = 'BSD - עסקים למכירה <info@bsd-bbi.co.il>';
+const MAIL_REPLY_TO = 'info@bsd-bbi.co.il';
 const SITE = 'https://www.bsd-bbi.co.il';
 const CATALOG_URL = `${SITE}/%D7%A2%D7%A1%D7%A7%D7%99%D7%9D-%D7%9C%D7%9E%D7%9B%D7%99%D7%A8%D7%94/`;
 const CRM_LEAD_URL = 'https://baruchezon.github.io/BSD-CRM/leads-hub.html?open=';
@@ -68,7 +70,7 @@ async function businessPageUrl(businessNumber: string): Promise<string> {
   }
 }
 
-async function sendAlert(to: string, values: AlertValues, replyTo: string): Promise<{ sent: boolean; id?: string; error?: string }> {
+async function sendAlert(to: string, values: AlertValues): Promise<{ sent: boolean; id?: string; error?: string }> {
   const apiKey = Deno.env.get('RESEND_API_KEY');
   if (!apiKey) {
     console.error('Lead notification email failed: missing Resend API key');
@@ -80,8 +82,7 @@ async function sendAlert(to: string, values: AlertValues, replyTo: string): Prom
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         from: MAIL_FROM,
-        // Reply goes to the person who filled the form; info@ only when no email was given.
-        reply_to: replyTo || 'info@bsd-bbi.co.il',
+        reply_to: MAIL_REPLY_TO,
         to: [to],
         subject: alertSubject({ kind: values.kind, businessNumber: values.businessNumber, fullName: values.fullName, isTest: values.isTest, repeat: !!values.repeatOf }),
         html: alertHtml(values),
@@ -285,11 +286,13 @@ Deno.serve(async req => {
 
     const values: AlertValues = {
       fullName, phone, email: contactEmail, city, purposes: purposes.join(', '), kind,
-      message: ctx.original || message, preferredDate, businessNumber, listingTitle,
+      // Request text only. Context lines (business id, listing, source, referrer) stay in the CRM notes.
+      message: ctx.original, preferredDate, businessNumber, listingTitle,
       businessUrl: await businessPageUrl(businessNumber), businessFound: !INTAKE_V2 || !businessNumber || !!business,
       source: sourceText, page, crmUrl: CRM_LEAD_URL + leadId, repeatOf: repeatOf || undefined, isTest,
+      budget: alertBudget(body), registeredAt: new Date().toISOString(),
     };
-    const emailDelivery = await sendAlert(isTest ? TEST_TO : BARUCH_TO, values, contactEmail);
+    const emailDelivery = await sendAlert(isTest ? TEST_TO : BARUCH_TO, values);
     const status = emailDelivery.sent ? (isTest ? 'skipped_test' : 'sent') : 'failed';
     const at = new Date().toISOString();
     const { error: statusErr } = await supabase.from('leads').update({
