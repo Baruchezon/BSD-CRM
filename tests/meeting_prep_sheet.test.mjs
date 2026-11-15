@@ -97,7 +97,7 @@ test("a card like 1104 prints price, employees and company number without cuttin
   assert.equal(cutIsAtBoundary(description, data.business_blurb.split("\n").slice(1).join("\n")), true);
   assert.equal(data.business_blurb.includes(longWord + "ה"), false);
   data.market_research.forEach(line => assert.equal(cutIsAtBoundary(research, line.replace(/…$/, "")), true));
-  assert.ok(data.market_research.length >= 3 && data.market_research.length <= 4);
+  assert.ok(data.market_research.length >= 3 && data.market_research.length <= 6);
   assert.match(html, /<bdi dir="ltr">https:\/\/example.com\/report<\/bdi>/);
   assert.equal(html.includes('class="src"'), true);
   assert.equal(data.purpose, "פגישת היכרות");
@@ -114,11 +114,41 @@ test("a card like 1104 prints price, employees and company number without cuttin
   assert.match(readFileSync("js/meetingPrepSheet.js", "utf8"), /seller_id/);
 });
 
+test("1104 research keeps the company number with ח.פ. and still shows turnover and debt", () => {
+  const research = [
+    "ח.פ. 511863706. מחזור שנתי של כ-4 מיליון ₪.",
+    "חוב של כ-1 מיליון ₪. פירוט מלא בהערות השיחה.",
+    "ע.מ. פעיל. רח. הרצל 1. מס. רישיון 12.",
+    "א. לא נשבר. משפט נוסף אחרי האות.",
+    "משפט שנשאר בגבול.",
+    "משפט שנזרק מהרשימה."
+  ].join("\n");
+  const data = sheet.buildMeetingSheet({
+    business: { id: "biz-1104", owner_name: "בעל העסק", pre_research: research },
+    meetings: [],
+    now: new Date("2026-11-15T06:00:00Z")
+  });
+  const bullets = data.market_research;
+  assert.ok(bullets.length <= 6);
+  const company = bullets.find(line => line.includes("ח.פ. 511863706"));
+  assert.ok(company);
+  assert.equal(company.includes("511863706"), true);
+  assert.equal(bullets.some(line => line === "ח.פ" || line.startsWith("511863706")), false);
+  assert.equal(bullets.join("\n").includes("מחזור שנתי של כ-4 מיליון"), true);
+  assert.equal(bullets.join("\n").includes("חוב של כ-1 מיליון"), true);
+  assert.equal(bullets.join("\n").includes("פירוט מלא בהערות השיחה"), true);
+  assert.equal(bullets.some(line => line.includes("ע.מ. פעיל")), true);
+  assert.equal(bullets.some(line => line.includes("רח. הרצל")), true);
+  assert.equal(bullets.some(line => line.includes("א. לא נשבר")), true);
+  assert.equal(bullets[bullets.length - 1].endsWith("…"), true);
+  assert.equal(bullets.join("\n").includes("משפט שנזרק מהרשימה"), false);
+});
+
 test("the print buttons are on the business card and the seller card, and the old form stays", () => {
   const businesses = readFileSync("businesses.html", "utf8");
   const leads = readFileSync("leads.html", "utf8");
-  assert.match(businesses, /meetingPrepSheet\.js\?v=202611151010/);
-  assert.match(leads, /meetingPrepSheet\.js\?v=202611151010/);
+  assert.match(businesses, /meetingPrepSheet\.js\?v=202611151100/);
+  assert.match(leads, /meetingPrepSheet\.js\?v=202611151100/);
   assert.match(businesses, /דף הכנה לפגישה \(הדפסה\)/);
   assert.match(leads, /דף הכנה לפגישה \(הדפסה\)/);
   assert.match(businesses, /BSDMeetingPrep\.open/);
