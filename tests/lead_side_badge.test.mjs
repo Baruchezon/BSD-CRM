@@ -112,7 +112,8 @@ test('card saves keep lead_side in step with the chosen «סוג הליד»', ()
 
 test('website-lead edge function: side only from the explicit purpose; both/neither/training -> null; written on insert', () => {
   const src = read('supabase/functions/website-lead/index.ts');
-  const fn = src.slice(src.indexOf('export function websiteLeadSide('), src.indexOf('function escapeHtml('))
+  const logic = read('supabase/functions/website-lead/logic.ts');
+  const fn = logic.slice(logic.indexOf('export function websiteLeadSide('), logic.indexOf('// Classification from'))
     .replace('export function', 'function').replace(/\(purposes: string\[\], isTraining: boolean\): 'seller' \| 'buyer' \| null/, '(purposes, isTraining)');
   const c = {}; vm.createContext(c); vm.runInContext(fn, c);
   assert.equal(c.websiteLeadSide(['למכור עסק'], false), 'seller');

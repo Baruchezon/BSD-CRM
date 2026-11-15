@@ -1,4 +1,18 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
+import {
+  AlertValues, InquiryKind, alertHtml, alertSubject, alertText, businessUrlFromSitemap, clean,
+  inquiryKind, isTestSubmission, leadTypeFor, normalizeBusinessNumber, oneLine, parseMessageContext,
+  phone9, purposeGuess, safeHttpUrl, websiteLeadSide,
+} from './logic.ts';
+
+export { websiteLeadSide };
+
+// 15.11.2026 lead audit (Baruch approved 15.11 08:28 via Roman), shipped in stages:
+//  stage 1: useful alert email (unique subject, separate lines, business link, Reply-To = lead)
+//           + email status stored on the lead; is_test submissions never email Baruch.
+//  stage 2: CRM intake (business_id link, attach to existing client by phone, page/src stored,
+//           «שאלה»/«אחר» not classified as buyer, website_lead_submissions log).
+const INTAKE_V2 = true;
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -6,6 +20,14 @@ if (!supabaseUrl || !serviceRoleKey) throw new Error('Supabase configuration is 
 const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
+
+const BARUCH_TO = 'baruch.ezon@gmail.com';
+// Resend's sink address: accepted and "delivered" by Resend, reaches no mailbox.
+const TEST_TO = 'delivered@resend.dev';
+const MAIL_FROM = 'BSD - עסקים למכירה <info@bsd-bbi.co.il>';
+const SITE = 'https://www.bsd-bbi.co.il';
+const CATALOG_URL = `${SITE}/%D7%A2%D7%A1%D7%A7%D7%99%D7%9D-%D7%9C%D7%9E%D7%9B%D7%99%D7%A8%D7%94/`;
+const CRM_LEAD_URL = 'https://baruchezon.github.io/BSD-CRM/leads-hub.html?open=';
 
 const allowedOrigins = new Set([
   'https://bsd-bbi.co.il',
@@ -29,71 +51,86 @@ function json(body: unknown, status: number, origin: string | null) {
   });
 }
 
-function clean(value: unknown, max = 500) {
-  return typeof value === 'string' ? value.trim().slice(0, max) : '';
+let sitemapCache: { at: number; xml: string } | null = null;
+async function businessPageUrl(businessNumber: string): Promise<string> {
+  if (!businessNumber) return '';
+  try {
+    if (!sitemapCache || Date.now() - sitemapCache.at > 10 * 60 * 1000) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 3000);
+      const r = await fetch(`${SITE}/sitemap.xml`, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (r.ok) sitemapCache = { at: Date.now(), xml: await r.text() };
+    }
+    return businessUrlFromSitemap(sitemapCache?.xml || '', businessNumber) || CATALOG_URL;
+  } catch {
+    return CATALOG_URL;
+  }
 }
 
-export function websiteLeadSide(purposes: string[], isTraining: boolean): 'seller' | 'buyer' | null {
-  if (isTraining) return null;
-  const joined = purposes.join(' ').toLowerCase();
-  const sell = /למכור|sell/.test(joined);
-  const buy = /לקנות|buy/.test(joined);
-  if (sell && !buy) return 'seller';
-  if (buy && !sell) return 'buyer';
-  return null;
-}
-
-function escapeHtml(value: string) {
-  const entities: Record<string, string> = {
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
-  };
-  return value.replace(/[&<>'"]/g, character => entities[character] ?? character);
-}
-
-async function sendLeadNotification(values: {
-  fullName: string;
-  phone: string;
-  email: string;
-  city: string;
-  purposes: string;
-  message: string;
-  preferredDate: string;
-}): Promise<{ sent: boolean; error?: string }> {
+async function sendAlert(to: string, values: AlertValues, replyTo: string): Promise<{ sent: boolean; id?: string; error?: string }> {
   const apiKey = Deno.env.get('RESEND_API_KEY');
-  // 09.10.2026 (Baruch): all BSD system emails from «צוות BSD <info@bsd-bbi.co.il>», replies to info@.
-  // The shared RESEND_FROM_EMAIL secret is no longer read.
-  const from = 'צוות BSD <info@bsd-bbi.co.il>';
   if (!apiKey) {
     console.error('Lead notification email failed: missing Resend API key');
     return { sent: false, error: 'missing_email_configuration' };
   }
-
-  const field = (label: string, value: string) =>
-    `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value || 'לא צוין')}</p>`;
-  const html = `<div dir="rtl" lang="he"><h2>פנייה חדשה מאתר BSD</h2>${field('שם מלא', values.fullName)}${field('טלפון', values.phone)}${field('אימייל', values.email)}${field('עיר', values.city)}${field('מטרת הפנייה', values.purposes)}${field('הודעה', values.message)}${field('מועד מועדף לשיחה', values.preferredDate)}<div dir="rtl" style="margin-top:24px;padding-top:12px;border-top:1px solid #e3d9bf;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#1f2d3d;text-align:right"><b>צוות BSD</b><br><span style="color:#8a6d1f">משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות</span><br><span dir="ltr"><a href="mailto:info@bsd-bbi.co.il" style="color:#0f5ea8;text-decoration:none">info@bsd-bbi.co.il</a> | <a href="https://www.bsd-bbi.co.il/" style="color:#0f5ea8;text-decoration:none">www.bsd-bbi.co.il</a></span></div></div>`;
-
   try {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        from,
-        reply_to: 'info@bsd-bbi.co.il',
-        to: ['baruch.ezon@gmail.com'],
-        subject: 'פנייה חדשה מאתר BSD',
-        html,
+        from: MAIL_FROM,
+        // Reply goes to the person who filled the form; info@ only when no email was given.
+        reply_to: replyTo || 'info@bsd-bbi.co.il',
+        to: [to],
+        subject: alertSubject({ kind: values.kind, businessNumber: values.businessNumber, fullName: values.fullName, isTest: values.isTest, repeat: !!values.repeatOf }),
+        html: alertHtml(values),
+        text: alertText(values),
       }),
     });
+    const detail = await response.text();
     if (!response.ok) {
-      const detail = await response.text();
-      console.error('Lead notification email failed', response.status, detail);
-      return { sent: false, error: `resend_${response.status}` };
+      console.error('Lead notification email failed', response.status, detail.slice(0, 300));
+      return { sent: false, error: `resend_${response.status}: ${detail.slice(0, 200)}` };
     }
-    return { sent: true };
+    let id = '';
+    try { id = JSON.parse(detail)?.id || ''; } catch { /* ignore */ }
+    return { sent: true, id };
   } catch (error) {
-    console.error('Lead notification email failed', error instanceof Error ? error.message : String(error));
-    return { sent: false, error: 'email_request_failed' };
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('Lead notification email failed', msg);
+    return { sent: false, error: `email_request_failed: ${msg.slice(0, 200)}` };
   }
+}
+
+type BusinessRow = { id: string; business_number: string | null; anon_display_name: string | null };
+async function resolveBusiness(businessId: string, businessNumber: string, listingTitle: string): Promise<BusinessRow | null> {
+  const cols = 'id, business_number, anon_display_name';
+  if (/^[0-9a-f-]{36}$/i.test(businessId)) {
+    const { data } = await supabase.from('businesses').select(cols).eq('id', businessId).maybeSingle();
+    if (data) return data as BusinessRow;
+  }
+  if (businessNumber) {
+    const { data } = await supabase.from('businesses').select(cols).eq('business_number', businessNumber).limit(2);
+    if (data?.length === 1) return data[0] as BusinessRow;
+  }
+  if (listingTitle) {
+    const { data } = await supabase.from('businesses').select(cols)
+      .eq('anon_display_name', listingTitle).eq('is_archived', false).limit(2);
+    if (data?.length === 1) return data[0] as BusinessRow;
+  }
+  return null;
+}
+
+type ExistingLead = { id: string; full_name: string | null; client_number: string | null; email: string | null; notes: string | null; type: string };
+async function findExistingLead(p9: string, isTest: boolean): Promise<ExistingLead | null> {
+  if (!p9) return null;
+  // Same normalization as bsd_enforce_lead_dedupe (last 9 digits of phone or phone2), which
+  // service_role skips. Test submissions only ever attach to is_test leads and vice versa.
+  const { data, error } = await supabase.rpc('website_lead_find_by_phone9', { p_phone9: p9, p_is_test: isTest });
+  if (error) { console.error('existing-lead lookup failed', error.message); return null; }
+  const row = Array.isArray(data) ? data[0] : data;
+  return row?.id ? row as ExistingLead : null;
 }
 
 Deno.serve(async req => {
@@ -121,79 +158,147 @@ Deno.serve(async req => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) return json({ ok: false, error: 'invalid_email' }, 400, origin);
     if (phone.replace(/\D/g, '').length < 9) return json({ ok: false, error: 'invalid_phone' }, 400, origin);
 
-    const joined = purposes.join(' ').toLowerCase();
-    const isTraining = /קורס|הכשר|training/.test(joined);
-    const type = /למכור|sell/.test(joined) ? 'seller' : /שותף|השקע|partner|invest/.test(joined) ? 'partner' : 'buyer';
-    const guess = isTraining ? 'מתעניין בהכשרת מתווכי עסקים'
-      : type === 'seller' ? 'מעוניין למכור עסק'
-      : type === 'partner' ? 'מעוניין בשותפות או השקעה'
-      : /לקנות|buy/.test(joined) ? 'מחפש לקנות עסק'
-      : 'דורש בדיקה';
-    // 11.10.2026 (Baruch): «מוכר עסק» / «קונה עסק» badge in «לידים». Confirmed side only from the
-    // explicit form purpose (never from the free-text message); both or neither -> null («לא ידוע»).
+    const isTest = isTestSubmission(body, fullName, contactEmail, message);
+    const kind: InquiryKind = inquiryKind(purposes);
+    const isTraining = kind === 'training';
+    const type = INTAKE_V2 ? leadTypeFor(kind)
+      : (/למכור|sell/.test(purposes.join(' ').toLowerCase()) ? 'seller' : /שותף|השקע|partner|invest/.test(purposes.join(' ').toLowerCase()) ? 'partner' : 'buyer');
+    const guess = INTAKE_V2 ? purposeGuess(kind)
+      : (isTraining ? 'מתעניין בהכשרת מתווכי עסקים' : type === 'seller' ? 'מעוניין למכור עסק' : type === 'partner' ? 'מעוניין בשותפות או השקעה' : /לקנות|buy/.test(purposes.join(' ').toLowerCase()) ? 'מחפש לקנות עסק' : 'דורש בדיקה');
     const leadSide = websiteLeadSide(purposes, isTraining);
+
+    // Structured context: new payload fields first, then the lines the current form folds into «message».
+    const ctx = parseMessageContext(message);
+    const businessNumber = normalizeBusinessNumber(clean(body.business_number, 40)) || ctx.businessNumber;
+    const listingTitle = oneLine(body.listing_title, 200) || ctx.listingTitle;
+    const page = oneLine(body.page, 300);
+    const src = oneLine(body.src, 120);
+    const utm = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content']
+      .map(k => oneLine(body[k], 120)).filter(Boolean).join(' / ') || ctx.sourceLine;
+    const referrer = oneLine(body.referrer, 200) || ctx.referrer;
+    const sourceText = [src && `src: ${src}`, utm && `מקור הגעה: ${utm}`, referrer && `הפניה: ${referrer}`].filter(Boolean).join(' · ');
 
     const { data: admin } = await supabase.from('profiles').select('id').eq('email', 'baruch@bsd-bbi.co.il').maybeSingle();
     const adminId = admin?.id ?? null;
     const nameParts = fullName.split(/\s+/).filter(Boolean);
-    const notes = `[פנייה ישירה מאתר BSD]\nמטרת הפנייה: ${purposes.join(', ') || 'לא נבחרה'}\nהודעה: ${message || 'לא נכתבה'}\nעיר: ${city}\nמועד מועדף: ${preferredDate || 'לא צוין'}\nשפה: ${language}`;
+    const today = new Date().toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' });
 
-    const payload: Record<string, unknown> = {
-      type,
-      first_name: nameParts[0] || null,
-      last_name: nameParts.slice(1).join(' ') || null,
-      full_name: fullName,
-      phone,
-      email: contactEmail,
-      city,
-      source: 'אתר BSD החדש',
-      status: isTraining ? 'חדש לטיפול' : 'חדש',
-      notes,
-      website_intake_stage: isTraining ? 'training' : 'new',
-      website_purpose_guess: guess,
-      created_by: adminId,
-      handled_by: adminId,
-      agreement_status: 'אין הסכם',
-      lead_side: leadSide,
-      lead_side_source: leadSide ? 'website_form' : null,
-    };
-    if (type === 'seller') payload.business_city = city;
-    else payload.requested_area = city;
+    const business = INTAKE_V2 ? await resolveBusiness(clean(body.business_id, 40), businessNumber, listingTitle) : null;
+    const existing = INTAKE_V2 ? await findExistingLead(phone9(phone), isTest) : null;
 
-    const { data: lead, error } = await supabase.from('leads').insert(payload).select('id').single();
-    if (error || !lead?.id) throw error ?? new Error('lead_not_created');
+    const contextLines = INTAKE_V2
+      ? [businessNumber && `מספר עסק: ${businessNumber}`, listingTitle && `שם עסק: ${listingTitle}`,
+         page && `עמוד: ${page}`, sourceText && `מקור: ${sourceText}`].filter(Boolean).join('\n')
+      : '';
+    const notes = `[פנייה ישירה מאתר BSD]\nמטרת הפנייה: ${purposes.join(', ') || 'לא נבחרה'}\nהודעה: ${message || 'לא נכתבה'}\nעיר: ${city}\nמועד מועדף: ${preferredDate || 'לא צוין'}\nשפה: ${language}${contextLines ? `\n${contextLines}` : ''}`;
 
-    const { data: verifiedLead, error: verifyError } = await supabase
-      .from('leads').select('id').eq('id', lead.id).maybeSingle();
-    if (verifyError || !verifiedLead?.id) throw verifyError ?? new Error('lead_not_verified');
+    let leadId: string;
+    let repeatOf = '';
+    if (existing) {
+      // Attach to the existing client instead of opening a duplicate lead. Only fill gaps and
+      // append the inquiry to the notes; nothing already on the card is overwritten.
+      leadId = existing.id;
+      repeatOf = [existing.full_name, existing.client_number].filter(Boolean).join(' · ') || 'כרטיס קיים';
+      const patch: Record<string, unknown> = {
+        notes: `${existing.notes ? `${existing.notes}\n\n` : ''}[פנייה חוזרת מאתר BSD ${today}]\nשם בטופס: ${fullName}\nמטרת הפנייה: ${purposes.join(', ') || 'לא נבחרה'}\nהודעה: ${ctx.original || 'לא נכתבה'}${contextLines ? `\n${contextLines}` : ''}`,
+      };
+      if (!existing.email) patch.email = contactEmail;
+      const { error: upErr } = await supabase.from('leads').update(patch).eq('id', leadId);
+      if (upErr) throw upErr;
+      if (business?.id) await supabase.from('leads').update({ business_id: business.id }).eq('id', leadId).is('business_id', null);
+      if (page || src) {
+        await supabase.from('leads').update({ source_page: page || null, source_src: src || null }).eq('id', leadId).is('source_page', null).is('source_src', null);
+      }
+    } else {
+      const payload: Record<string, unknown> = {
+        type,
+        first_name: nameParts[0] || null,
+        last_name: nameParts.slice(1).join(' ') || null,
+        full_name: isTest && !/is_test/i.test(fullName) ? `${fullName} (is_test)` : fullName,
+        phone,
+        email: contactEmail,
+        city,
+        source: isTest ? 'is_test' : 'אתר BSD החדש',
+        status: isTest ? 'בדיקה' : isTraining ? 'חדש לטיפול' : 'חדש',
+        notes,
+        // is_test leads never enter the «new website lead» inbox/popup.
+        website_intake_stage: isTest ? null : isTraining ? 'training' : 'new',
+        website_purpose_guess: guess,
+        created_by: adminId,
+        handled_by: adminId,
+        agreement_status: 'אין הסכם',
+        lead_side: leadSide,
+        lead_side_source: leadSide ? 'website_form' : null,
+      };
+      if (isTest) { payload.is_archived = true; payload.archive_reason = 'is_test'; payload.archived_at = new Date().toISOString(); }
+      if (type === 'seller') payload.business_city = city;
+      else payload.requested_area = city;
+      if (INTAKE_V2) {
+        payload.business_id = business?.id ?? null;
+        payload.source_page = page || null;
+        payload.source_src = src || null;
+        payload.website_inquiry_kind = kind;
+      }
 
-    const { error: taskError } = await supabase.from('tasks').insert({
-      title: isTraining ? `מתעניין חדש בהכשרה ממתין לטיפול ${fullName}` : `צור קשר עם ליד חדש מהאתר ${fullName}`,
-      description: `מטרה: ${purposes.join(', ') || 'לא נבחרה'}\nטלפון: ${phone}\nמייל: ${contactEmail}\nהודעה: ${message || 'לא נכתבה'}`,
-      priority: 'רגילה',
-      assigned_to: adminId,
-      status: 'פתוחה',
-      related_type: 'lead',
-      related_id: lead.id,
-    });
-    if (taskError) console.error('Task insert failed', taskError.message);
+      const { data: lead, error } = await supabase.from('leads').insert(payload).select('id').single();
+      if (error || !lead?.id) throw error ?? new Error('lead_not_created');
+      const { data: verifiedLead, error: verifyError } = await supabase
+        .from('leads').select('id').eq('id', lead.id).maybeSingle();
+      if (verifyError || !verifiedLead?.id) throw verifyError ?? new Error('lead_not_verified');
+      leadId = lead.id;
+    }
+
+    if (!isTest) {
+      const task: Record<string, unknown> = {
+        title: existing ? `פנייה חוזרת מהאתר: ${fullName}`
+          : isTraining ? `מתעניין חדש בהכשרה ממתין לטיפול ${fullName}` : `צור קשר עם ליד חדש מהאתר ${fullName}`,
+        description: `מטרה: ${purposes.join(', ') || 'לא נבחרה'}\nטלפון: ${phone}\nמייל: ${contactEmail}\nהודעה: ${message || 'לא נכתבה'}`,
+        priority: 'רגילה',
+        assigned_to: adminId,
+        status: 'פתוחה',
+        related_type: 'lead',
+        related_id: leadId,
+      };
+      if (INTAKE_V2 && business?.id) task.business_id = business.id;
+      const { error: taskError } = await supabase.from('tasks').insert(task);
+      if (taskError) console.error('Task insert failed', taskError.message);
+    }
 
     await supabase.from('audit_log').insert({
-      table_name: 'leads', record_id: lead.id, action: 'create', actor_id: adminId,
-      details: { source: 'bsd_new_website', language, purposes },
+      table_name: 'leads', record_id: leadId, action: existing ? 'website_repeat_inquiry' : 'create', actor_id: adminId,
+      details: { source: 'bsd_new_website', language, purposes, kind, is_test: isTest, business_number: businessNumber || null,
+        business_id: business?.id ?? null, page: page || null, src: src || null },
     });
 
-    const emailDelivery = await sendLeadNotification({
-      fullName,
-      phone,
-      email: contactEmail,
-      city,
-      purposes: purposes.join(', '),
-      message,
-      preferredDate,
-    });
+    const values: AlertValues = {
+      fullName, phone, email: contactEmail, city, purposes: purposes.join(', '), kind,
+      message: ctx.original || message, preferredDate, businessNumber, listingTitle,
+      businessUrl: await businessPageUrl(businessNumber), businessFound: !INTAKE_V2 || !businessNumber || !!business,
+      source: sourceText, page, crmUrl: CRM_LEAD_URL + leadId, repeatOf: repeatOf || undefined, isTest,
+    };
+    const emailDelivery = await sendAlert(isTest ? TEST_TO : BARUCH_TO, values, contactEmail);
+    const status = emailDelivery.sent ? (isTest ? 'skipped_test' : 'sent') : 'failed';
+    const at = new Date().toISOString();
+    const { error: statusErr } = await supabase.from('leads').update({
+      website_alert_email_status: status,
+      website_alert_email_at: at,
+      website_alert_email_error: emailDelivery.sent ? null : (emailDelivery.error ?? 'unknown'),
+      website_alert_email_id: emailDelivery.id || null,
+    }).eq('id', leadId);
+    if (statusErr) console.error('email status not stored', statusErr.message);
 
-    return json({ ok: true, leadId: lead.id, emailSent: emailDelivery.sent, emailError: emailDelivery.error ?? null }, 200, origin);
+    if (INTAKE_V2) {
+      const { error: subErr } = await supabase.from('website_lead_submissions').insert({
+        lead_id: leadId, attached_existing: !!existing, is_test: isTest, kind, purposes,
+        business_id: business?.id ?? null, business_number: businessNumber || null, listing_title: listingTitle || null,
+        page: page || null, src: src || null, utm: utm || null, referrer: referrer || null, language,
+        email_status: status, email_at: at, email_error: emailDelivery.sent ? null : (emailDelivery.error ?? 'unknown'),
+        email_id: emailDelivery.id || null,
+      });
+      if (subErr) console.error('submission log not stored', subErr.message);
+    }
+
+    return json({ ok: true, leadId, attachedExisting: !!existing, emailSent: emailDelivery.sent, emailError: emailDelivery.error ?? null }, 200, origin);
   } catch (error) {
     console.error('website-lead failed', error);
     return json({ ok: false, error: 'save_failed' }, 500, origin);
