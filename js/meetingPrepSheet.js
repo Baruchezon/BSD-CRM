@@ -71,13 +71,38 @@
       return `<div class="note-sec"><h2 class="${esc(section.class)}">${esc(section.title)}</h2><div class="body">${lines}</div></div>`;
     }).join("\n");
   }
+  function withBidiUrls(text) {
+    return esc(text).replace(/https?:\/\/[^\s<]+/g, match => {
+      const url = match.replace(/[.,);:!?]+$/, "");
+      return `<bdi dir="ltr">${url}</bdi>${match.slice(url.length)}`;
+    });
+  }
   function bulletsHtml(items) {
     const list = items && items.length ? items : [UNK];
-    return list.map(item => `<li>${item === UNK ? unk() : esc(item)}</li>`).join("\n");
+    return list.map(item => `<li>${item === UNK ? unk() : withBidiUrls(item)}</li>`).join("\n");
   }
   function htmlOrUnknown(value) {
     const text = present(value);
-    return text ? esc(text) : unk();
+    if (!text) return unk();
+    return withBidiUrls(text).replace(/\n/g, "<br>");
+  }
+  function clipAtBoundary(text, max) {
+    const source = present(text).replace(/\s+/g, " ");
+    if (!source || source.length <= max) return source;
+    const window = source.slice(0, max + 1);
+    const sentenceAt = Math.max(window.lastIndexOf(". "), window.lastIndexOf("! "), window.lastIndexOf("? "));
+    const wordAt = window.lastIndexOf(" ");
+    let cut = -1;
+    if (sentenceAt >= Math.floor(max * 0.4)) cut = sentenceAt + 1;
+    else if (wordAt > 0) cut = wordAt;
+    if (cut < 1) return source;
+    return source.slice(0, cut).trim() + "…";
+  }
+  function sentences(text, limit) {
+    const source = present(text);
+    if (!source) return [];
+    const parts = source.split(/\n+|(?<=[.!?])\s+/).map(present).filter(Boolean);
+    return (parts.length ? parts : [source]).slice(0, limit).map(part => clipAtBoundary(part, 260));
   }
   function fill(template, data, questionLines) {
     const lines = questionLines == null ? 1 : questionLines;
@@ -101,12 +126,13 @@
       BUSINESS_BLURB: htmlOrUnknown(data.business_blurb),
       ONLINE_HTML: bulletsHtml(data.online_presence),
       MARKET_HTML: bulletsHtml(data.market_research),
-      MARKET_SOURCES: htmlOrUnknown(data.market_sources),
+      MARKET_SOURCES: present(data.market_sources) ? esc(data.market_sources) : "",
       QUESTIONS_HTML: questionsHtml(data.questions || QUESTIONS, lines),
       DOCUMENTS_HTML: documentsHtml(data.documents || DOCUMENTS),
       NOTES_HTML: notesHtml(data.note_sections || NOTE_SECTIONS)
     };
     let out = String(template || "");
+    if (!present(data.market_sources)) out = out.replace(/\s*<div class="src">\{\{MARKET_SOURCES\}\}<\/div>/, "");
     Object.keys(repl).forEach(key => {
       out = out.split("{{" + key + "}}").join(repl[key]);
     });
@@ -132,15 +158,6 @@
       .filter(item => item && !item.deleted_at && String(item.meeting_date || "") >= today)
       .sort((a, b) => String(a.meeting_date).localeCompare(String(b.meeting_date)) || String(a.start_time || "").localeCompare(String(b.start_time || "")))[0] || null;
   }
-  function historyText(notes, meetings) {
-    const bits = [];
-    const note = present(notes);
-    if (note) bits.push(note.length > 700 ? note.slice(0, 700) + "…" : note);
-    (meetings || []).filter(item => present(item && item.summary_text)).slice(0, 4).forEach(item => {
-      bits.push(`${item.meeting_date || ""} — ${present(item.summary_text)}`);
-    });
-    return bits.join(" ");
-  }
   function tenure(years) {
     if (years == null || years === "") return null;
     return `${years} שנים · שטח ${UNK}`;
@@ -162,6 +179,29 @@
     const listing = { active: "סטטוס מכירה: פעיל", removed: "עסקה לא פעילה", sold: "נמכר" }[record.listing_status] || "";
     return [site, listing].filter(Boolean).join(" · ");
   }
+  const FEE_KEYS = ["opening_fee", "file_opening_fee", "agreement_fee", "case_opening_fee", "intake_fee", "onboarding_fee"];
+  function openingFee(record) {
+    if (!record) return "";
+    for (const key of FEE_KEYS) {
+      if (record[key] != null && String(record[key]).trim() !== "") return money(record[key]) || present(record[key]);
+    }
+    return "";
+  }
+  function purposeText(upcoming, biz, seller) {
+    const title = present(upcoming && (upcoming.title || upcoming.meeting_type));
+    const notes = present(upcoming && upcoming.notes);
+    const reason = present(biz && biz.sale_reason) || present(seller && seller.sale_reason);
+    return title || notes || reason || "";
+  }
+  function findLinkedBusiness(lead, businesses) {
+    const list = businesses || [];
+    if (!lead) return null;
+    const live = item => item && item.is_archived !== true;
+    return list.find(item => live(item) && item.id === lead.id)
+      || (lead.business_id && list.find(item => live(item) && item.id === lead.business_id))
+      || list.find(item => live(item) && item.seller_id === lead.id)
+      || null;
+  }
   function addressOf(record, lead) {
     const businessAddress = [present(record && record.address), present(record && record.city)].filter(Boolean).join(", ");
     if (businessAddress) return businessAddress;
@@ -177,10 +217,6 @@
     const when = start && end ? `${start}–${end}` : start;
     const place = present(upcoming && upcoming.location);
     const cardAddress = addressOf(biz, seller);
-    const unverified = [];
-    if (place && cardAddress && place !== cardAddress) {
-      unverified.push(`מקום הפגישה ביומן (${place}) שונה מכתובת הכרטיס (${cardAddress}).`);
-    }
     const person = present(biz && biz.owner_name) || present(seller && seller.full_name) || [present(seller && seller.first_name), present(seller && seller.last_name)].filter(Boolean).join(" ");
     const phone = present(biz && biz.owner_phone) || present(seller && seller.phone);
     const email = present(biz && biz.owner_email) || present(seller && seller.email);
@@ -197,19 +233,27 @@
     const description = present(biz && biz.short_description);
     const callFacts = [];
     const pushCall = text => {
-      const line = present(text);
+      const line = clipAtBoundary(text, 260);
       if (!line || callFacts.length >= 3) return;
-      callFacts.push(line.length > 220 ? line.slice(0, 220) + "…" : line);
+      callFacts.push(line);
     };
     if (place && cardAddress && place !== cardAddress) pushCall(`מקום ביומן (${place}) שונה מכתובת הכרטיס (${cardAddress}).`);
     present((biz && biz.notes) || (seller && seller.notes)).split(/\n+/).forEach(pushCall);
     (meetings || []).forEach(item => pushCall(item && item.summary_text ? `${item.meeting_date || ""} — ${item.summary_text}` : ""));
-    const blurbBits = [description ? description.replace(/\s+/g, " ") : "", uniqueSector, biz && biz.years_active ? biz.years_active + " שנים" : "", present(biz && biz.sale_reason) || present(seller && seller.sale_reason)].filter(Boolean);
+    const reason = present(biz && biz.sale_reason) || present(seller && seller.sale_reason);
+    const blurbBody = description
+      ? clipAtBoundary(description.replace(/\s+/g, " "), 340)
+      : [uniqueSector, biz && biz.years_active != null && biz.years_active !== "" ? String(biz.years_active) + " שנים" : ""].filter(Boolean).join(", ");
+    const price = money((biz && biz.asking_price) || (seller && seller.asking_price));
+    const employees = (biz && biz.employees_count != null && biz.employees_count !== "") ? String(biz.employees_count) : "";
+    const companyNumber = present(biz && biz.id_number) || present(seller && seller.id_number);
+    const fee = openingFee(biz) || openingFee(seller);
     const missing = [];
-    if (!money((biz && biz.asking_price) || (seller && seller.asking_price))) missing.push("מחיר מבוקש");
+    if (!price) missing.push("מחיר מבוקש");
     if (!profit(biz)) missing.push("רווח");
-    if (!(biz && biz.employees_count != null && biz.employees_count !== "")) missing.push("עובדים");
-    if (!legal(biz || seller)) missing.push("ח.פ.");
+    if (!employees) missing.push("עובדים");
+    if (!companyNumber) missing.push("ח.פ.");
+    if (!fee) missing.push("פתיחת תיק");
     missing.push("עמלה", "חוזה שכירות");
     return {
       logo_src: logoSrc || "assets/meeting-prep-logo.png",
@@ -221,12 +265,12 @@
       lead_code: leadCode,
       business_code: businessCode,
       prepared_on: "עודכן ב-" + prepared,
-      purpose: "",
+      purpose: purposeText(upcoming, biz, seller),
       missing_fields: missing.join(", "),
       call_facts: callFacts,
-      business_blurb: blurbBits.join(", ").slice(0, 240),
+      business_blurb: [reason ? "סיבת מכירה: " + reason : "", blurbBody].filter(Boolean).join("\n"),
       online_presence: website ? ["אתר בכרטיס: " + website] : [],
-      market_research: research ? research.split(/\n+/).map(line => present(line)).filter(Boolean).slice(0, 3).map(line => line.length > 220 ? line.slice(0, 220) + "…" : line) : [],
+      market_research: sentences(research, 4),
       market_sources: research ? "מקור: חקר מקדים בכרטיס" : "",
       questions: QUESTIONS,
       documents: DOCUMENTS,
@@ -236,8 +280,11 @@
         fact("מייל", email),
         fact("ליד / עסק", codes),
         fact("כתובת CRM", cardAddress),
+        fact("מחיר מבוקש", price),
+        fact("עובדים", employees),
+        fact("ח.פ.", companyNumber),
         fact("הסכם / הפצה", [agreement, spread].filter(Boolean).join(" · ")),
-        fact("פתיחת תיק", "")
+        fact("פתיחת תיק", fee)
       ]
     };
   }
@@ -261,7 +308,7 @@
   async function meetingsFor(column, id) {
     if (!id || !root.supabaseClient) return [];
     const { data, error } = await root.supabaseClient.from("match_meetings")
-      .select("meeting_date,start_time,end_time,location,summary_text,meeting_type,notes,deleted_at")
+      .select("id,meeting_date,start_time,end_time,location,summary_text,meeting_type,notes,deleted_at")
       .eq(column, id)
       .is("deleted_at", null)
       .order("meeting_date", { ascending: true });
@@ -274,8 +321,12 @@
     const url = URL.createObjectURL(blob);
     const tab = window.open(url, "_blank");
     if (!tab) return;
-    const start = () => {
-      try { tab.focus(); tab.print(); } catch (ignore) { /* the sheet is still open to print */ }
+    const start = async () => {
+      try {
+        if (tab.document.fonts && tab.document.fonts.ready) await tab.document.fonts.ready;
+        tab.focus();
+        tab.print();
+      } catch (ignore) { /* the sheet is still open to print */ }
     };
     tab.addEventListener ? tab.addEventListener("load", start) : setTimeout(start, 400);
   }
@@ -293,12 +344,37 @@
 
   async function openFromSeller(lead) {
     if (!lead || !lead.id) return;
-    const meetings = await meetingsFor("buyer_id", lead.id);
-    await openSheet(buildMeetingSheet({ lead, meetings, now: new Date(), logoSrc: logoUrl() }));
+    const business = await loadLinkedBusiness(lead);
+    const lists = await Promise.all([
+      meetingsFor("buyer_id", lead.id),
+      business && business.id ? meetingsFor("business_id", business.id) : Promise.resolve([])
+    ]);
+    const seen = new Set();
+    const meetings = lists.flat().filter(item => {
+      const key = item && (item.id || [item.meeting_date, item.start_time, item.location].join("|"));
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    await openSheet(buildMeetingSheet({ business, lead, meetings, now: new Date(), logoSrc: logoUrl() }));
+  }
+
+  async function loadLinkedBusiness(lead) {
+    if (!lead || !root.supabaseClient) return findLinkedBusiness(lead, []);
+    const db = root.supabaseClient;
+    const same = await db.from("businesses").select("*").eq("id", lead.id).maybeSingle();
+    if (same && same.data && !same.error) return same.data;
+    if (lead.business_id) {
+      const linked = await db.from("businesses").select("*").eq("id", lead.business_id).maybeSingle();
+      if (linked && linked.data && !linked.error) return linked.data;
+    }
+    const bySeller = await db.from("businesses").select("*").eq("seller_id", lead.id).limit(5);
+    const rows = (bySeller && bySeller.data) || [];
+    return rows.find(item => item && item.is_archived !== true) || null;
   }
 
   const api = {
-    UNK, QUESTIONS, DOCUMENTS, fill, buildMeetingSheet, renderHtml, openFromBusiness, openFromSeller
+    UNK, QUESTIONS, DOCUMENTS, fill, buildMeetingSheet, renderHtml, findLinkedBusiness, openFromBusiness, openFromSeller
   };
   root.BSDMeetingSheet = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
