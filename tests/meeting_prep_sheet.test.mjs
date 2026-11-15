@@ -24,6 +24,7 @@ test("a sample card renders both pages, with לבירור for fields that have n
       sale_reason: "רילוקיישן",
       public_listing_active: false,
       listing_status: "active",
+      short_description: "מספרה משפחתית ברמת אביב הירוקה.",
       notes: "11.11 — נקבעה פגישה."
     },
     lead: { type: "seller", client_number: "BSD-SEL-20261110-002", full_name: "אלי כהן" },
@@ -35,24 +36,31 @@ test("a sample card renders both pages, with לבירור for fields that have n
   assert.equal((html.match(/<div class="page"/g) || []).length, 1);
   assert.equal((html.match(/<div class="page p2"/g) || []).length, 1);
   assert.match(html, /משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות/);
+  assert.match(html, /font-size:14\.25pt/);
+  assert.match(html, /font-size:16pt/);
+  assert.equal((html.match(/<div class="q">/g) || []).length, 7);
+  assert.equal((html.match(/<div class="ln"><\/div>/g) || []).length, 7);
   assert.match(html, /052-3950967/);
-  assert.match(html, /500,000 ₪/);
-  assert.match(html, /שכירות[\s\S]{0,120}לבירור/);
-  assert.match(html, /עמלה[\s\S]{0,120}לבירור/);
-  assert.match(html, /לקוחות[\s\S]{0,120}לבירור/);
-  assert.match(html, /פתיחת תיק[\s\S]{0,120}לבירור/);
+  assert.match(html, /נתונים שנמסרו בשיחה/);
+  assert.match(html, /כמה מילים על העסק/);
+  assert.match(html, /נוכחות ברשת/);
+  assert.match(html, /חקר שוק קצר/);
+  assert.match(html, /מספרה משפחתית ברמת אביב הירוקה/);
+  assert.match(html, /11\.11 — נקבעה פגישה/);
+  assert.match(html, /לבירור:[\s\S]{0,200}עמלה/);
+  assert.match(html, /חוזה שכירות/);
+  assert.match(html, /פתיחת תיק[\s\S]{0,80}לבירור/);
   assert.match(html, /מטרת הפגישה:[\s\S]{0,80}לבירור/);
-  assert.match(html, /מקום הפגישה[\s\S]{0,160}לבירור/);
-  assert.equal(data.facts.find(item => item.label === "מחיר מבוקש").unknown, true);
-  assert.equal(data.facts.find(item => item.label === "עובדים").unknown, true);
-  assert.equal(data.facts.find(item => item.label === "שם משפטי / ח.פ.").unknown, true);
+  assert.match(html, /נוכחות ברשת[\s\S]{0,280}לבירור/);
+  assert.match(html, /חקר שוק קצר[\s\S]{0,280}לבירור/);
+  assert.equal(data.facts.find(item => item.label === "מחיר מבוקש"), undefined);
 });
 
 test("the print buttons are on the business card and the seller card, and the old form stays", () => {
   const businesses = readFileSync("businesses.html", "utf8");
   const leads = readFileSync("leads.html", "utf8");
-  assert.match(businesses, /meetingPrepSheet\.js\?v=202611150830/);
-  assert.match(leads, /meetingPrepSheet\.js\?v=202611150830/);
+  assert.match(businesses, /meetingPrepSheet\.js\?v=202611150930/);
+  assert.match(leads, /meetingPrepSheet\.js\?v=202611150930/);
   assert.match(businesses, /דף הכנה לפגישה \(הדפסה\)/);
   assert.match(leads, /דף הכנה לפגישה \(הדפסה\)/);
   assert.match(businesses, /BSDMeetingPrep\.open/);
