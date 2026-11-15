@@ -51,7 +51,9 @@
 
   // Wires up behavior. Call once, after the markup above is in the DOM.
   // items: array of source objects
-  // opts: { getId(item), getLabel(item), valueId, allowClear, clearLabel, onChange(value) }
+  // opts: { getId(item), getLabel(item), getOptionHtml(item), valueId, allowClear, clearLabel, onChange(value) }
+  // getOptionHtml is optional. When set, the open list uses its HTML (caller escapes).
+  // The closed field still shows getLabel, so a long note in the list does not fill the box.
   window.initSearchSelect = function(boxId, items, opts){
     ensureStyles();
     const getId = opts.getId, getLabel = opts.getLabel;
@@ -85,7 +87,10 @@
       if (filtered.length === 0){
         html += `<div class="ss-empty">לא נמצאו תוצאות</div>`;
       } else {
-        html += filtered.map(it => `<div class="ss-opt" data-id="${esc(getId(it))}">${esc(getLabel(it))}</div>`).join('');
+        html += filtered.map(it => {
+          const body = typeof opts.getOptionHtml === 'function' ? opts.getOptionHtml(it) : esc(getLabel(it));
+          return `<div class="ss-opt" data-id="${esc(getId(it))}">${body}</div>`;
+        }).join('');
         if (overflow) html += `<div class="ss-empty">מוצגות 60 התוצאות הראשונות — המשיכו להקליד לצמצום</div>`;
       }
       list.innerHTML = html;

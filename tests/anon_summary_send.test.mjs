@@ -254,3 +254,49 @@ test('after send: a concurrent insert (unique buyer+business) falls back to upda
 test('buyer without agreement is blocked (same rule as before)', () => {
   assert.match(src, /if \(!b\.agreement_status \|\| b\.agreement_status === 'אין הסכם'\) return/);
 });
+
+test('signed buyer is warned on the buyer list and in the confirmation, and the link only opens the sale-file send', () => {
+  const warn = 'הקונה חתום — יישלח רק תקציר אנונימי. לשליחת חומר מלא השתמש בתיק המכירה';
+  assert.equal(api.SIGNED_BUYER_WARNING, warn);
+  assert.equal(api.buyerIsSigned({ agreement_status: 'יש הסכם חתום' }), true);
+  assert.equal(api.buyerIsSigned({ agreement_status: 'נשלח הסכם לחתימה' }), false);
+  assert.equal(api.buyerIsSigned({ agreement_status: 'אין הסכם' }), false);
+  assert.equal(api.buyerIsSigned({}), false);
+  const signed = { id: 'l1', full_name: 'דנה לוי', phone: '052-1111111', agreement_status: 'יש הסכם חתום' };
+  const opt = api.buyerOptionHtml(signed);
+  assert.ok(opt.includes(warn), 'every signed buyer in the selection list');
+  assert.ok(opt.includes('דנה לוי'));
+  assert.equal(opt.includes('data-act="sale-file"'), false, 'choosing the buyer must not be a send button');
+  const pending = api.buyerOptionHtml({ id: 'l2', full_name: 'יוסי', phone: '052-2222222', agreement_status: 'נשלח הסכם לחתימה' });
+  assert.equal(pending.includes('הקונה חתום'), false);
+  const box = api.signedWarningHtml([{ id: 'b1', business_number: 'BSD-B-1' }, { id: 'b2', business_number: 'BSD-B-2' }]);
+  assert.ok(box.includes(warn));
+  assert.equal((box.match(/data-act="sale-file"/g) || []).length, 2);
+  assert.ok(box.includes('data-biz="b1"') && box.includes('data-biz="b2"'));
+  assert.equal(api.signedWarningHtml([]).includes('data-act="sale-file"'), false);
+  assert.ok(api.buyerIsSigned(signed) && api.chooseSource({ id: 'full', confidentiality_level: 2 }, true) === 'generate', 'a level-2 file is still not what this screen sends');
+
+  assert.match(src.slice(src.indexOf('function loadBuyers'), src.indexOf('function buyerBlockReason')), /getOptionHtml: buyerOptionHtml/);
+  assert.match(src.slice(src.indexOf('function renderBuyerInfo'), src.indexOf('async function loadFileInfo')), /signedWarningHtml/);
+  assert.match(src.slice(src.indexOf('function renderBizList'), src.indexOf('function renderActions')), /saleFileRowLink/);
+  assert.match(src.slice(src.indexOf('function renderActions'), src.indexOf('function onChange')), /signedWarningHtml\(S\.prepared\.map/);
+  const block = src.slice(src.indexOf('function buyerBlockReason'), src.indexOf('function renderBuyerInfo'));
+  assert.match(block, /אין הסכם/);
+  assert.equal(block.includes('יש הסכם חתום'), false, 'a signed buyer is not blocked');
+  const sendFns = src.slice(src.indexOf('async function prepare'), src.indexOf('window.openAnonSummarySendModal'));
+  assert.equal(sendFns.includes('SIGNED_BUYER_WARNING'), false);
+  assert.equal(sendFns.includes('openSendToBuyerModal'), false);
+  assert.equal(sendFns.includes('data-act="sale-file"'), false);
+  assert.match(sendFns, /await navigator\.share\(\{ files, title: /);
+  const opener = src.slice(src.indexOf('async function openSaleFileSend'), src.indexOf('async function buildPdfFromText'));
+  assert.match(opener, /g\('openSendToBuyerModal'\)/);
+  assert.match(opener, /sfSelectSendBuyer/);
+  assert.equal(/navigator\.share|recordAll|recordOne|functions\.invoke|\.insert\(|\.update\(/.test(opener), false);
+  assert.ok(help.includes(warn));
+  const ss = fs.readFileSync(new URL('../js/searchSelect.js', import.meta.url), 'utf8');
+  assert.match(ss, /opts\.getOptionHtml/);
+  assert.match(ss, /esc\(getLabel\(it\)\)/);
+  const version = JSON.parse(fs.readFileSync(new URL('../version.json', import.meta.url), 'utf8')).version;
+  assert.match(html, new RegExp(`js/anonSummarySend\\.js\\?v=${version}`));
+  assert.match(html, new RegExp(`js/searchSelect\\.js\\?v=${version}`));
+});

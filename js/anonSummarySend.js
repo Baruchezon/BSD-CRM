@@ -36,6 +36,11 @@
   // Early statuses that move forward to «תקציר נשלח». Later stages are never moved back.
   const EARLY_STATUSES = ['התאמה חדשה', 'ממתין לחתימת סודיות', 'נחתמה סודיות', 'מידע ראשוני נשלח'];
   const MAX_SELECTED = 10;
+  // A signed buyer may receive full sale-file materials from «תיק המכירה».
+  // This screen still sends only the anonymous summary. The warning is shown;
+  // the send path below is unchanged.
+  const SIGNED_AGREEMENT = 'יש הסכם חתום';
+  const SIGNED_BUYER_WARNING = 'הקונה חתום — יישלח רק תקציר אנונימי. לשליחת חומר מלא השתמש בתיק המכירה';
 
   // ---------------------------------------------------------------- pure helpers
   function normText(v){ return (v === null || v === undefined) ? '' : String(v).replace(/\r\n?/g, '\n'); }
@@ -147,6 +152,25 @@
 
   function buyerLabel(b){ return (b && (b.full_name || [b.first_name, b.last_name].filter(Boolean).join(' ') || b.email)) || 'קונה ללא שם'; }
   function buyerFirstName(b){ return normText(b && (b.first_name || (b.full_name || '').split(' ')[0])).trim(); }
+  function buyerIsSigned(b){ return !!(b && b.agreement_status === SIGNED_AGREEMENT); }
+
+  function saleFileButton(biz){
+    const label = (biz && (biz.business_number || biz.anon_display_name || biz.internal_name)) || 'העסק';
+    return `<button type="button" data-act="sale-file" data-biz="${escHtml(biz && biz.id)}" style="min-height:40px;padding:6px 12px;border-radius:8px;border:1px solid #c9a24b;background:#fff;color:#6a4a00;font-family:inherit;font-weight:700;font-size:.8rem;cursor:pointer;">📁 שליחה מתיק המכירה · ${escHtml(label)}</button>`;
+  }
+  function signedWarningHtml(businesses){
+    const links = (businesses || []).filter(b => b && b.id).map(saleFileButton).join('');
+    return `<div class="anon-signed-warn" style="width:100%;box-sizing:border-box;background:#fff6e0;color:#6a4a00;border:1px solid #e6c200;border-radius:8px;padding:8px 12px;font-size:.84rem;font-weight:700;line-height:1.65;margin-top:6px;">⚠️ ${escHtml(SIGNED_BUYER_WARNING)}${links ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${links}</div>` : ''}</div>`;
+  }
+  function buyerOptionHtml(b){
+    const label = escHtml(buyerLabel(b) + (b.phone ? ' · ' + b.phone : ''));
+    if (!buyerIsSigned(b)) return label;
+    return `${label}<span class="anon-signed-warn" style="display:block;color:#8a5a00;font-weight:700;font-size:.75rem;line-height:1.45;margin-top:2px;">⚠️ ${escHtml(SIGNED_BUYER_WARNING)}</span>`;
+  }
+  function saleFileRowLink(biz){
+    if (!S || !buyerIsSigned(S.buyer)) return '';
+    return `<button type="button" data-act="sale-file" data-biz="${escHtml(biz.id)}" title="${escHtml(SIGNED_BUYER_WARNING)}" style="flex:0 0 auto;align-self:center;min-height:36px;padding:4px 8px;border-radius:8px;border:1px solid #e6c200;background:#fff8e6;color:#6a4a00;font-family:inherit;font-weight:700;font-size:.72rem;cursor:pointer;white-space:nowrap;">📁 תיק המכירה</button>`;
+  }
 
   // What to write in matches for buyer+business. Never duplicates (unique
   // buyer_id+business_id), never moves a later stage back.
@@ -267,7 +291,8 @@
       window.initSearchSelect('anonSendBuyerSelect', all, {
         getId: b => b.id,
         getLabel: b => buyerLabel(b) + (b.phone ? ' · ' + b.phone : ''),
-        onChange: id => { if (!S) return; S.buyer = S.buyers.find(b => b.id === id) || null; S.recorded = new Set(); renderBuyerInfo(); renderActions(); },
+        getOptionHtml: buyerOptionHtml,
+        onChange: id => { if (!S) return; S.buyer = S.buyers.find(b => b.id === id) || null; S.recorded = new Set(); renderBuyerInfo(); renderBizList(); renderActions(); },
       });
     } catch (e){
       if (box) box.innerHTML = `<span style="color:#b3402c;">שגיאה בטעינת קונים: ${escHtml(e.message || e)}</span>`;
@@ -288,9 +313,11 @@
     const b = S.buyer;
     if (!b){ el.innerHTML = ''; return; }
     const block = buyerBlockReason(b);
+    const signed = buyerIsSigned(b);
+    const chosen = signed ? S.rows.filter(row => S.selected.has(row.id)) : [];
     el.innerHTML = `<div style="background:#f7f5ef;border-radius:8px;padding:8px 12px;font-size:.85rem;line-height:1.7;">
         <b>${escHtml(buyerLabel(b))}</b> · <span dir="ltr">${escHtml(b.phone || 'אין טלפון')}</span> · הסכם: ${escHtml(b.agreement_status || 'אין הסכם')}
-      </div>${block ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:8px 12px;font-size:.85rem;margin-top:6px;">❌ ${escHtml(block)}</div>` : ''}`;
+      </div>${signed ? signedWarningHtml(chosen) : ''}${block ? `<div style="background:#fbe9e7;color:#b3402c;border-radius:8px;padding:8px 12px;font-size:.85rem;margin-top:6px;">❌ ${escHtml(block)}</div>` : ''}`;
   }
 
   // Latest anonymous PDF per business + is it built from the current text.
@@ -353,14 +380,17 @@
       const blocked = !info || !hasAnonText(b) || b.listing_status === 'sold' || b.listing_status === 'removed';
       const checked = S.selected.has(b.id) && !blocked;
       const stamp = b.listing_status === 'sold' ? ' · נמכר' : (b.listing_status === 'removed' ? ' · לא פעיל' : '');
-      return `<label style="display:flex;gap:10px;align-items:flex-start;padding:9px 2px;border-bottom:1px solid #f0ede4;cursor:${blocked ? 'default' : 'pointer'};opacity:${blocked && info ? '.75' : '1'};">
+      return `<div style="display:flex;gap:8px;align-items:flex-start;padding:9px 2px;border-bottom:1px solid #f0ede4;">
+          <label style="display:flex;gap:10px;align-items:flex-start;flex:1;min-width:0;cursor:${blocked ? 'default' : 'pointer'};opacity:${blocked && info ? '.75' : '1'};">
           <input type="checkbox" data-biz="${escHtml(b.id)}" ${checked ? 'checked' : ''} ${blocked ? 'disabled' : ''} style="width:22px;height:22px;flex:0 0 auto;margin-top:2px;">
           <span style="flex:1;min-width:0;font-size:.86rem;line-height:1.55;">
             <b>${escHtml(b.business_number || '')}</b> ${escHtml(b.anon_display_name || b.field || '')}${escHtml(stamp)}
             ${b.internal_name ? `<span style="color:#999;font-size:.75rem;"> (${escHtml(b.internal_name)})</span>` : ''}
             <br><span style="font-size:.78rem;">${warnLabel(info)}${sourceLabel(info)}</span>
           </span>
-        </label>`;
+          </label>
+          ${saleFileRowLink(b)}
+        </div>`;
     }).join('');
   }
 
@@ -381,6 +411,7 @@
     const previews = S.prepared.map((p, i) => `<a href="${p.url}" target="_blank" rel="noopener" style="display:inline-block;margin:2px 0 2px 10px;color:#0e5a8a;">👁 ${escHtml(p.file.name)}</a>`).join('');
     // Confirmation step: content warnings are shown here; sending them is the sender's decision.
     const warned = S.prepared.filter(p => p.warn);
+    const signedBox = buyerIsSigned(S.buyer) ? signedWarningHtml(S.prepared.map(p => p.biz)) : '';
     const warnBox = warned.length ? `<div style="width:100%;background:#fff6e0;color:#8a5a00;border-radius:8px;padding:8px 12px;font-size:.82rem;line-height:1.7;margin-bottom:4px;">
         ${warned.map(p => `<div><b>${escHtml(p.biz.business_number || p.biz.anon_display_name || 'עסק')}</b>: ${escHtml(p.warn)}</div>`).join('')}
         <div>אפשר לפתוח את הקובץ ולבדוק. בלחיצה על שליחה אתה מאשר לשלוח כמו שהוא.</div></div>` : '';
@@ -388,6 +419,7 @@
     const chatUrl = phone.valid ? `https://wa.me/${phone.e164}?text=${encodeURIComponent(waGreeting(S.buyer))}` : '';
     box.innerHTML = `
       <div style="width:100%;font-size:.82rem;line-height:1.7;margin-bottom:4px;">קבצים מוכנים: ${previews}</div>
+      ${signedBox}
       ${warnBox}
       ${share ? `<div style="width:100%;font-size:.8rem;color:#555;line-height:1.6;">בלחיצה על «שלח בוואטסאפ» נפתח חלון השיתוף: בוחרים WhatsApp ואז את ${escHtml(buyerLabel(S.buyer))}. אם הקונה לא שמור באנשי הקשר, לחצו קודם על «פתח צ'אט עם הקונה».</div>` : `<div style="width:100%;font-size:.8rem;color:#555;line-height:1.6;">בלחיצה הקובץ יורד למחשב ונפתח צ'אט וואטסאפ עם ${escHtml(buyerLabel(S.buyer))}. גוררים את הקובץ לצ'אט (או 📎 מסמך) ולוחצים שלח.</div>`}
       ${btn('back', '↩ חזרה', false)}
@@ -398,12 +430,13 @@
 
   function onChange(e){
     const t = e.target;
-    if (!S || !t || !t.dataset || !t.dataset.biz) return;
+    if (!S || !t || t.type !== 'checkbox' || !t.dataset || !t.dataset.biz) return;
     if (t.checked){
       if (S.selected.size >= MAX_SELECTED){ t.checked = false; say(`אפשר לבחור עד ${MAX_SELECTED} עסקים בכל שליחה`); return; }
       S.selected.add(t.dataset.biz);
     } else S.selected.delete(t.dataset.biz);
     resetPrepared();
+    renderBuyerInfo();
     renderBizList();
     renderActions();
   }
@@ -425,6 +458,58 @@
     else if (act === 'back'){ resetPrepared(); renderActions(); }
     else if (act === 'share') shareFiles(el);
     else if (act === 'download') downloadAndOpenChat(el);
+    else if (act === 'sale-file') openSaleFileSend(el.dataset.biz);
+  }
+
+  // Opens the existing «שליחת חומרים» dialog for this business. Does not send.
+  async function ensureSaleFilesLoaded(bizId){
+    const bucketFn = g('sfBucketKeyForFile');
+    let canWrite = false;
+    try { canWrite = typeof SF_FILES_BY_CATEGORY !== 'undefined'; } catch (_e){ canWrite = false; }
+    if (canWrite && typeof bucketFn === 'function'){
+      const { data, error } = await sb().from('business_sale_files')
+        .select('*')
+        .eq('business_id', bizId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      const by = {};
+      (data || []).forEach(f => {
+        const k = bucketFn(f);
+        (by[k] = by[k] || []).push(f);
+      });
+      SF_FILES_BY_CATEGORY = by;
+      SF_CURRENT_BIZ = bizId;
+      return;
+    }
+    const load = g('loadSaleFileModule');
+    if (typeof load === 'function') await load(bizId);
+  }
+
+  async function openSaleFileSend(bizId){
+    if (!bizId) return;
+    const buyerId = S && S.buyer && S.buyer.id;
+    const biz = ((S && S.rows) || []).find(b => b.id === bizId) || allBiz().find(b => b && b.id === bizId);
+    const bizName = (biz && (biz.internal_name || biz.anonymous_name || biz.anon_display_name)) || 'עסק';
+    const openSend = g('openSendToBuyerModal');
+    if (typeof openSend !== 'function'){ say('שליחה מתיק המכירה לא זמינה במסך הזה'); return; }
+    close();
+    try {
+      const overlay = document.getElementById('overlay');
+      const form = document.getElementById('bizForm');
+      const cardOpen = !!(overlay && overlay.classList.contains('open') && form && form.dataset && form.dataset.bizId);
+      if (cardOpen && form.dataset.bizId !== bizId){
+        const openBiz = g('openBizForm');
+        if (typeof openBiz === 'function') openBiz(bizId);
+      }
+      await ensureSaleFilesLoaded(bizId);
+      await openSend(bizId, bizName);
+      if (buyerId && document.getElementById('sfSendBuyer') && typeof window.sfSelectSendBuyer === 'function'){
+        window.sfSelectSendBuyer(buyerId);
+      }
+    } catch (e){
+      say('שגיאה בפתיחת תיק המכירה: ' + ((e && e.message) || e));
+    }
   }
 
   async function buildPdfFromText(biz){
@@ -594,6 +679,6 @@
 
   window.openAnonSummarySendModal = open;
   window.BSDAnonSend = { scanAnonText, warnCategories, warnNote, hasAnonText, eligibleBusinesses, bizMatchesQuery, chooseSource, pdfFileName, normalizePhone,
-    planMatchWrite, waGreeting, buyerLabel, hasHebrewWord, PROFIT_WORD_RE, EARLY_STATUSES, SENT_STATUS, MATERIAL_TYPE, close,
+    planMatchWrite, waGreeting, buyerLabel, buyerIsSigned, SIGNED_BUYER_WARNING, signedWarningHtml, buyerOptionHtml, hasHebrewWord, PROFIT_WORD_RE, EARLY_STATUSES, SENT_STATUS, MATERIAL_TYPE, close,
     _recordOne: recordOne };
 })();
