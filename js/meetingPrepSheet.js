@@ -86,11 +86,27 @@
     if (!text) return unk();
     return withBidiUrls(text).replace(/\n/g, "<br>");
   }
+  const ABBREV_BEFORE_DOT = /(?:ח\.פ|ע\.מ|ע\.ר|מס|רח|וכו['׳]?|בע["״']מ)$/;
+  function isSentenceDot(source, dotIndex) {
+    if (source[dotIndex] !== ".") return false;
+    const prev = dotIndex > 0 ? source[dotIndex - 1] : "";
+    if (/[0-9]/.test(prev)) return false;
+    let next = dotIndex + 1;
+    if (next >= source.length || !/\s/.test(source[next])) return false;
+    while (next < source.length && /\s/.test(source[next])) next++;
+    if (next >= source.length || /[0-9]/.test(source[next])) return false;
+    if (ABBREV_BEFORE_DOT.test(source.slice(0, dotIndex))) return false;
+    if (dotIndex > 0 && /\p{L}/u.test(prev) && (dotIndex === 1 || !/\p{L}/u.test(source[dotIndex - 2]))) return false;
+    return true;
+  }
   function clipAtBoundary(text, max) {
     const source = present(text).replace(/\s+/g, " ");
     if (!source || source.length <= max) return source;
     const window = source.slice(0, max + 1);
-    const sentenceAt = Math.max(window.lastIndexOf(". "), window.lastIndexOf("! "), window.lastIndexOf("? "));
+    let sentenceAt = -1;
+    for (let i = 0; i < window.length; i++) {
+      if (isSentenceDot(source, i) && i <= max) sentenceAt = i;
+    }
     const wordAt = window.lastIndexOf(" ");
     let cut = -1;
     if (sentenceAt >= Math.floor(max * 0.4)) cut = sentenceAt + 1;
@@ -98,11 +114,42 @@
     if (cut < 1) return source;
     return source.slice(0, cut).trim() + "…";
   }
+  function splitResearch(source) {
+    const parts = [];
+    let start = 0;
+    for (let i = 0; i < source.length; i++) {
+      const ch = source[i];
+      if (ch === "\n") {
+        const piece = present(source.slice(start, i));
+        if (piece) parts.push(piece);
+        while (i + 1 < source.length && source[i + 1] === "\n") i++;
+        start = i + 1;
+        continue;
+      }
+      if (!isSentenceDot(source, i)) continue;
+      const piece = present(source.slice(start, i + 1));
+      if (piece) parts.push(piece);
+      let j = i + 1;
+      while (j < source.length && /\s/.test(source[j])) j++;
+      start = j;
+      i = j - 1;
+    }
+    const tail = present(source.slice(start));
+    if (tail) parts.push(tail);
+    return parts;
+  }
   function sentences(text, limit) {
     const source = present(text);
     if (!source) return [];
-    const parts = source.split(/\n+|(?<=[.!?])\s+/).map(present).filter(Boolean);
-    return (parts.length ? parts : [source]).slice(0, limit).map(part => clipAtBoundary(part, 260));
+    const cap = limit == null ? 6 : limit;
+    const parts = splitResearch(source);
+    const kept = parts.slice(0, cap);
+    const dropped = parts.length > kept.length;
+    return kept.map((part, index) => {
+      let line = clipAtBoundary(part, 260);
+      if (index === kept.length - 1 && dropped && !line.endsWith("…")) line = line.replace(/[.\s]+$/, "") + "…";
+      return line;
+    }).filter(Boolean);
   }
   function fill(template, data, questionLines) {
     const lines = questionLines == null ? 1 : questionLines;
@@ -270,7 +317,7 @@
       call_facts: callFacts,
       business_blurb: [reason ? "סיבת מכירה: " + reason : "", blurbBody].filter(Boolean).join("\n"),
       online_presence: website ? ["אתר בכרטיס: " + website] : [],
-      market_research: sentences(research, 4),
+      market_research: sentences(research, 6),
       market_sources: research ? "מקור: חקר מקדים בכרטיס" : "",
       questions: QUESTIONS,
       documents: DOCUMENTS,
