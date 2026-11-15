@@ -260,7 +260,8 @@ export function scoreAlert(subscriber, business, config = DEFAULT_MATCH_CONFIG) 
   const score = sectorPoints + budgetPoints + locationPoints;
   const legacy = subscriber.legacy_no_consent === true || subscriber.consent_general !== true;
   let block = null;
-  if (subscriber.is_test === true) block = "is_test";
+  if (subscriber.archived_at) block = "archived";
+  else if (subscriber.is_test === true) block = "is_test";
   else if (subscriber.status === "pending_consent") block = "pending_consent";
   else if (excluded) block = "sector_excluded";
   else if (!budgetOk) block = "budget_out_of_range";

@@ -18,6 +18,7 @@ import {
   whatsappMessage
 } from "../_shared/business-alert-mail.mjs";
 import { gateDecision } from "../_shared/business-alert-rules.mjs";
+import { archivePlan, purgePlan, PURGE_TABLES, restorePlan } from "../_shared/subscriber-archive.mjs";
 import { matchAlertEmail, normalizeMatchConfig, publicCard, scoreAlert, sendGate } from "../_shared/alert-match.mjs";
 import { APPROVED_ALERT_BUSINESSES, threeBusinessEmail } from "../_shared/opportunity-email.mjs";
 import { buttonLink, shortLinksLive } from "../_shared/short-links.mjs";
@@ -172,7 +173,7 @@ function listedBusiness(row: Record<string, unknown>) {
 
 async function recomputeMatches(subscriberId?: string) {
   const settings = await matchSettings();
-  let subQuery = supabase.from("business_alert_subscribers").select("id,first_name,last_name,interests,categories,subcategories,regions,region,budget_min,budget_max,budget_open,looking_for,manager_notes,legacy_no_consent,consent_general,consent_email,consent_whatsapp,is_test,status");
+  let subQuery = supabase.from("business_alert_subscribers").select("id,first_name,last_name,interests,categories,subcategories,regions,region,budget_min,budget_max,budget_open,looking_for,manager_notes,legacy_no_consent,consent_general,consent_email,consent_whatsapp,is_test,status,archived_at").is("archived_at", null);
   if (subscriberId) subQuery = subQuery.eq("id", subscriberId);
   const { data: subscribers, error: subError } = await subQuery;
   if (subError) throw subError;
@@ -382,10 +383,39 @@ async function claimVipSend(businessId: string, leadId: string, actor: string) {
   return retried?.[0]?.id || null;
 }
 
+async function archivedMarks() {
+  const { data, error } = await supabase.from("business_alert_subscribers")
+    .select("id, archived_at, archived_by, archive_reason, prev_status")
+    .not("archived_at", "is", null);
+  if (error) throw error;
+  return new Map((data || []).map(row => [row.id, row]));
+}
+
+function withArchive(rows: Record<string, unknown>[] | null, marks: Map<string, Record<string, unknown>>) {
+  return (rows || []).map(row => {
+    const extra = marks.get(String(row.id));
+    return extra ? { ...row, ...extra } : row;
+  });
+}
+
+async function loadPerson(id: string) {
+  const { data, error } = await supabase.from("business_alert_subscribers")
+    .select("id, status, email, phone, archived_at, archived_by, archive_reason, prev_status")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function writeHistory(row: { subscriber_id: string; action: string; actor: string; previous: unknown; next: unknown }) {
+  const { error } = await supabase.from("business_alert_subscriber_history").insert(row);
+  if (error) throw error;
+}
+
 async function loadSecrets(id: string) {
   const { data, error } = await supabase
     .from("business_alert_subscribers")
-    .select("id, unsubscribe_token, visit_token, first_name, email, phone, address_form, legacy_no_consent, consent_general, consent_email, consent_whatsapp, status, email_unsubscribed_at, whatsapp_unsubscribed_at, is_test")
+    .select("id, unsubscribe_token, visit_token, first_name, email, phone, address_form, legacy_no_consent, consent_general, consent_email, consent_whatsapp, status, email_unsubscribed_at, whatsapp_unsubscribed_at, is_test, archived_at")
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
@@ -420,10 +450,11 @@ Deno.serve(async req => {
     if (action === "list") {
       const { data, error } = await supabase.rpc("business_alert_crm_list");
       if (error) throw error;
+      const marks = await archivedMarks();
       const { count } = await supabase.from("leads").select("id", { count: "exact", head: true })
         .eq("source", "אתר BSD החדש").eq("type", "buyer").eq("is_archived", false);
       const settings = await matchSettings();
-      return json({ ok: true, subscribers: data || [], websiteBuyerLeads: count || 0, from: subscriberFromHeader(), sendingEnabled: settings.sendingEnabled }, 200, origin);
+      return json({ ok: true, subscribers: withArchive(data || [], marks), websiteBuyerLeads: count || 0, from: subscriberFromHeader(), sendingEnabled: settings.sendingEnabled }, 200, origin);
     }
 
     if (action === "screen") {
@@ -436,10 +467,11 @@ Deno.serve(async req => {
         p_status: clean(body.status, 40) || null
       });
       if (error) throw error;
+      const marks = await archivedMarks();
       const { count } = await supabase.from("leads").select("id", { count: "exact", head: true })
         .eq("source", "אתר BSD החדש").eq("type", "buyer").eq("is_archived", false);
       const settings = await matchSettings();
-      return json({ ok: true, subscribers: data || [], websiteBuyerLeads: count || 0, from: subscriberFromHeader(), sendingEnabled: settings.sendingEnabled }, 200, origin);
+      return json({ ok: true, subscribers: withArchive(data || [], marks), websiteBuyerLeads: count || 0, from: subscriberFromHeader(), sendingEnabled: settings.sendingEnabled }, 200, origin);
     }
 
     if (action === "card") {
@@ -453,6 +485,48 @@ Deno.serve(async req => {
       const { data, error } = await supabase.rpc("business_alert_sends_history", { p_subscriber_id: body.id });
       if (error) throw error;
       return json({ ok: true, sends: data || [] }, 200, origin);
+    }
+
+    if (action === "archive" || action === "restore" || action === "purge") {
+      const id = clean(body.id, 80);
+      const person = await loadPerson(id);
+      const actor = clean(auth.profile.full_name, 120) || clean(auth.user.email, 180) || "baruch";
+      if (action === "archive") {
+        const plan = archivePlan(person, { by: actor, reason: clean(body.reason, 300), now: new Date().toISOString() });
+        if (!plan.ok) return json({ ok: false, error: plan.error }, plan.error === "not_found" ? 404 : 400, origin);
+        const { error } = await supabase.from("business_alert_subscribers").update(plan.changes).eq("id", id);
+        if (error) throw error;
+        await writeHistory({ subscriber_id: id, ...plan.history });
+        return json({ ok: true, archived: true }, 200, origin);
+      }
+      if (action === "restore") {
+        const plan = restorePlan(person, { by: actor });
+        if (!plan.ok) return json({ ok: false, error: plan.error }, plan.error === "not_found" ? 404 : 400, origin);
+        const { error } = await supabase.from("business_alert_subscribers").update(plan.changes).eq("id", id);
+        if (error) throw error;
+        await writeHistory({ subscriber_id: id, ...plan.history });
+        return json({ ok: true, restored: true, status: plan.changes.status }, 200, origin);
+      }
+      const plan = purgePlan(person, body.confirm);
+      if (!plan.ok) return json({ ok: false, error: plan.error }, plan.error === "not_found" ? 404 : 400, origin);
+      const { count } = await supabase.from("business_alert_sends").select("id", { count: "exact", head: true }).eq("subscriber_id", id);
+      const { error: purgeError } = await supabase.from("business_alert_subscriber_purges").insert({
+        subscriber_id: id,
+        purged_by: actor,
+        had_email: Boolean(person.email && String(person.email).includes("@")),
+        had_phone: Boolean(String(person.phone || "").replace(/\D/g, "")),
+        sends_count: count || 0
+      });
+      if (purgeError) throw purgeError;
+      const counts: Record<string, number> = { sends: count || 0 };
+      for (const table of PURGE_TABLES) {
+        const { count: removed, error } = await supabase.from(table).delete({ count: "exact" }).eq("subscriber_id", id);
+        if (error) throw error;
+        counts[table] = removed || 0;
+      }
+      const { error: dropError } = await supabase.from("business_alert_subscribers").delete().eq("id", id);
+      if (dropError) throw dropError;
+      return json({ ok: true, purged: true, counts }, 200, origin);
     }
 
     if (action === "do_not_call") {

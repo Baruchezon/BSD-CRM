@@ -30,6 +30,7 @@ body{margin:0;background:linear-gradient(180deg,#f7f1e4 0,#eef3f8 220px);color:#
 .c6{background:linear-gradient(135deg,#0f7a62,#2fbf8f)}
 .c7{background:linear-gradient(135deg,#8a4b12,#e0a15a)}
 .c8{background:linear-gradient(135deg,#7a1f4a,#d25b8a)}
+.c9{background:linear-gradient(135deg,#3d2a6d,#8a6ad4)}
 .splits{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
 .panel{background:#fff;border-radius:16px;padding:14px 16px;box-shadow:0 8px 22px rgba(14,27,52,.06)}
 .panel h2{margin:0 0 10px;font-size:1rem;color:#0e1b34}
@@ -60,7 +61,10 @@ tr.row:hover{background:#f8fbff}
 .actions .back{background:#0e1b34;color:#fff;padding:12px 18px}
 .wa{background:#1f9d55;color:#fff}
 .mail{background:#24507a;color:#fff}
+.purge{background:linear-gradient(180deg,#c4473a,#8d2d2d);color:#fff;box-shadow:0 4px 0 #5c1c1c}
 .soft{background:#eef2f8;color:#0e1b34}
+.person-tools{display:flex;flex-direction:column;gap:6px}
+.person-tools .soft,.person-tools .purge{border:0;border-radius:12px;padding:8px 10px;font:inherit;font-weight:800;cursor:pointer}
 .drawer{position:fixed;inset:0;background:rgba(14,27,52,.45);display:flex;justify-content:flex-start;z-index:40}
 .sheet{width:min(560px,100%);background:#fff;height:100%;overflow:auto;padding:22px;box-shadow:-12px 0 40px rgba(0,0,0,.18)}
 .sheet h2{margin:0 0 8px}
@@ -225,7 +229,7 @@ tr.row:hover{background:#f8fbff}
 <script src="js/config.js?v=202611131800"></script>
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
-<script src="js/site-buyers.js?v=202611132200"></script>
+<script src="js/site-buyers.js?v=202611150730"></script>
 <script>
 const UI = window.BSDSiteBuyers;
 const API = (window.BSD_CONFIG && window.BSD_CONFIG.SUPABASE_URL || '') + '/functions/v1/business-alert-admin';
@@ -273,8 +277,72 @@ async function api(action, payload){
   return body;
 }
 
+async function archiveRow(id){
+  if (!window.confirm('להעביר את הנרשם לארכיון? הוא יוסתר מהרשימות ולא יקבל שליחות.')) return;
+  await api('archive', { id, reason: 'ארכיון מהמסך' });
+  const row = rows.find(item => item.id === id);
+  if (row){
+    row.prev_status = row.status;
+    row.archived_at = new Date().toISOString();
+  }
+  paint();
+}
+
+async function restoreRow(id){
+  const body = await api('restore', { id });
+  const row = rows.find(item => item.id === id);
+  if (row){
+    row.status = body.status || row.prev_status || row.status;
+    row.archived_at = null;
+    row.archived_by = null;
+    row.archive_reason = null;
+    row.prev_status = null;
+  }
+  paint();
+  if (document.getElementById('drawer').dataset.open === id) openRow(id);
+}
+
+function askPurge(id){
+  const previous = document.getElementById('purgeModal');
+  if (previous) previous.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'purgeModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.55);z-index:80;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML = `<div dir="rtl" style="background:#fff;border-radius:18px;max-width:440px;width:100%;padding:18px;font-family:Heebo,Rubik,Arial,sans-serif;">
+    <h3 style="margin:0 0 8px;">מחיקה לצמיתות</h3>
+    <p>המחיקה אינה הפיכה. פרטי הנרשם יימחקו ולא ניתן לשחזר אותם.</p>
+    <p>כדי לאשר, הקלד <b>מחק</b></p>
+    <input id="purgeWord" style="width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid #d7deea;font:inherit;">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button type="button" id="purgeCancel" class="soft">ביטול</button>
+      <button type="button" id="purgeGo" class="purge" disabled>מחק לצמיתות</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const word = overlay.querySelector('#purgeWord');
+  const go = overlay.querySelector('#purgeGo');
+  word.addEventListener('input', () => { go.disabled = word.value.trim() !== 'מחק'; });
+  overlay.querySelector('#purgeCancel').onclick = () => overlay.remove();
+  go.onclick = async () => {
+    go.disabled = true;
+    await api('purge', { id, confirm: 'DELETE' });
+    rows = rows.filter(item => item.id !== id);
+    overlay.remove();
+    const drawer = document.getElementById('drawer');
+    drawer.innerHTML = '';
+    drawer.dataset.open = '';
+    paint();
+  };
+}
+
 function audience(){
   return rows.filter(row => row.is_test !== true);
+}
+function liveRows(){
+  return audience().filter(row => !row.archived_at);
+}
+function archivedRows(){
+  return audience().filter(row => row.archived_at);
 }
 function statBars(map, kind){
   const entries = Object.entries(map || {}).sort((a, b) => b[1] - a[1]);
@@ -298,7 +366,8 @@ function cards(summary){
     cardButton('c5', summary.calls || 0, 'שיחות', 'calls', ''),
     cardButton('c6', UI.answerRateText(summary.answerRate), 'אחוז מענה', 'answer', ''),
     cardButton('c7', summary.unknown || 0, 'לא ידוע', 'unknown', ''),
-    cardButton('c8', summary.unsubscribed, 'הוסרו', 'unsubscribed', '')
+    cardButton('c8', summary.unsubscribed, 'הוסרו', 'unsubscribed', ''),
+    cardButton('c9', archivedRows().length, 'ארכיון', 'archive', '')
   ].join('');
   document.getElementById('regions').innerHTML = statBars(summary.regions, 'region');
   document.getElementById('sectors').innerHTML = statBars(summary.sectors, 'sector');
@@ -325,6 +394,7 @@ function matchesStat(row, filter){
   }
   if (filter.kind === 'unknown') return UI.contactStats(row).unknown > 0;
   if (filter.kind === 'unsubscribed') return closedStatus(row.status);
+  if (filter.kind === 'archive') return Boolean(row.archived_at);
   if (filter.kind === 'region') return UI.regionLabels(row).includes(filter.value);
   if (filter.kind === 'sector') return UI.sectorLabels(row).includes(filter.value);
   if (filter.kind === 'campaign') return (row.utm_campaign || 'בלי קמפיין') === filter.value;
@@ -346,9 +416,13 @@ function currentFilters(){
   };
 }
 
+function listed(){
+  if (statFilter && statFilter.kind === 'archive') return archivedRows();
+  return liveRows();
+}
 function visible(){
   const query = document.getElementById('q').value;
-  const base = audience().filter(row => matchesStat(row, statFilter));
+  const base = listed().filter(row => matchesStat(row, statFilter));
   if (statFilter) return UI.filterRows(base, query);
   const filters = currentFilters();
   filters.source = channel && channel !== 'all' ? channel : filters.source;
@@ -356,7 +430,7 @@ function visible(){
 }
 
 function paint(){
-  cards(UI.summarize(audience(), new Date()));
+  cards(UI.summarize(liveRows(), new Date()));
   const banner = document.getElementById('statBanner');
   if (banner){
     banner.hidden = !statFilter;
@@ -366,7 +440,7 @@ function paint(){
   const tabLabel = { all: text('tabs.all', 'הכל'), website: text('tabs.website', 'נרשם דרך האתר'), our_link: text('tabs.ourLink', 'יזום שלנו') };
   document.querySelectorAll('#channelTabs button').forEach(button => {
     button.classList.toggle('on', button.dataset.channel === channel);
-    const count = audience().filter(row => UI.inChannel(row, button.dataset.channel)).length;
+    const count = liveRows().filter(row => UI.inChannel(row, button.dataset.channel)).length;
     button.textContent = (tabLabel[button.dataset.channel] || button.dataset.channel) + ' (' + count + ')';
   });
   const list = visible().slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
@@ -383,13 +457,25 @@ function paint(){
     const open = document.getElementById('drawer') && document.getElementById('drawer').dataset.open === row.id;
     const when = row.created_at ? new Date(row.created_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
     const interest = UI.sectorLabels(row)[0] || 'לא צוין';
+    const tools = row.archived_at
+      ? `<button type="button" class="soft" data-restore="${UI.esc(row.id)}">שחזר</button><button type="button" class="purge" data-purge="${UI.esc(row.id)}">מחק לצמיתות</button>`
+      : `<button type="button" class="soft" data-archive="${UI.esc(row.id)}">העבר לארכיון</button>`;
     if (statFilter){
-      return `<button type="button" class="person-row${open ? ' on' : ''}" data-id="${UI.esc(row.id)}"><b>${name}</b><span dir="ltr">${UI.esc(row.phone || '—')}</span><span>${UI.esc(when)}</span><span class="badge ${{ website: 'p-web', vip: 'p-vip', our_link: 'p-ours', manual: 'p-hand', call: 'p-phone' }[UI.sourceKind(row)] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span><span>${UI.esc(interest)}</span></button>`;
+      return `<div class="person-tools"><button type="button" class="person-row${open ? ' on' : ''}" data-id="${UI.esc(row.id)}"><b>${name}</b><span dir="ltr">${UI.esc(row.phone || '—')}</span><span>${UI.esc(when)}</span><span class="badge ${{ website: 'p-web', vip: 'p-vip', our_link: 'p-ours', manual: 'p-hand', call: 'p-phone' }[UI.sourceKind(row)] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span><span>${UI.esc(interest)}</span></button>${tools}</div>`;
     }
-    return `<button type="button" class="person tone-${index % 6}${open ? ' on' : ''}" data-id="${UI.esc(row.id)}"><b>${name}</b><span class="badge">${UI.esc(UI.sourceBadge(row))}</span></button>`;
+    return `<div class="person-tools"><button type="button" class="person tone-${index % 6}${open ? ' on' : ''}" data-id="${UI.esc(row.id)}"><b>${name}</b><span class="badge">${UI.esc(UI.sourceBadge(row))}</span></button>${tools}</div>`;
   }).join('') + '</div>';
   document.querySelectorAll('#table .person, #table .person-row').forEach(button => {
     button.addEventListener('click', () => openDetail(button.getAttribute('data-id')));
+  });
+  document.querySelectorAll('[data-archive]').forEach(button => {
+    button.addEventListener('click', event => { event.stopPropagation(); archiveRow(button.getAttribute('data-archive')); });
+  });
+  document.querySelectorAll('[data-restore]').forEach(button => {
+    button.addEventListener('click', event => { event.stopPropagation(); restoreRow(button.getAttribute('data-restore')); });
+  });
+  document.querySelectorAll('[data-purge]').forEach(button => {
+    button.addEventListener('click', event => { event.stopPropagation(); askPurge(button.getAttribute('data-purge')); });
   });
 }
 function applyStat(kind, value, label){
@@ -484,6 +570,9 @@ function openRow(id){
       <button class="soft" id="reactivate" type="button">החזרה לפעיל</button>
       <button class="soft" id="handled" type="button">${row.handled_at ? 'ביטול טופל' : 'סמן כטופל'}</button>
       <button class="soft" id="convert" type="button">הפיכה לקונה</button>
+      ${row.archived_at
+        ? '<button class="soft" id="doRestore" type="button">שחזר</button><button class="purge" id="doPurge" type="button">מחק לצמיתות</button>'
+        : '<button class="soft" id="doArchive" type="button">העבר לארכיון</button>'}
     </div>
     ${row.crm_lead_id ? `<p><a href="leads.html?open=${encodeURIComponent(row.crm_lead_id)}">פתיחת כרטיס הקונה</a></p>` : ''}
   </aside></div>`;
@@ -500,6 +589,12 @@ function openRow(id){
     box.dataset.open = '';
     paint();
   });
+  const archiveBtn = document.getElementById('doArchive');
+  if (archiveBtn) archiveBtn.onclick = () => archiveRow(row.id);
+  const restoreBtn = document.getElementById('doRestore');
+  if (restoreBtn) restoreBtn.onclick = () => restoreRow(row.id);
+  const purgeBtn = document.getElementById('doPurge');
+  if (purgeBtn) purgeBtn.onclick = () => askPurge(row.id);
   document.getElementById('addressForm').onchange = () => saveAddress(row);
   document.getElementById('doDial').addEventListener('click', () => logTouch(row, 'call', null, ''));
   document.getElementById('doWa').addEventListener('click', () => logTouch(row, 'whatsapp', null, ''));

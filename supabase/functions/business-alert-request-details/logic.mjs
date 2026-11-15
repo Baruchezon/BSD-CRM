@@ -16,6 +16,7 @@ export function chooseAnonymousFile(files) {
 }
 
 export function detailAccess({ enabled, allowlist, subscriber }) {
+  if (subscriber?.archived_at) return false;
   if (subscriber?.is_test === true) return true;
   if (enabled === true) return true;
   return Array.isArray(allowlist) && allowlist.map(String).includes(String(subscriber?.id || ""));
