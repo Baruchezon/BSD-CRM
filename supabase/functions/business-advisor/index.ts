@@ -1,3 +1,4 @@
+import { businessUrlFromSitemap, findMatches, normalizeBusinessNumbers, titleLeaksName } from './finder.mjs';
 const DB = Deno.env.get('SUPABASE_URL');
 const SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const PUBLIC_KEY = 'sb_publishable_baq54BVGwvtjB8c7ZiegCQ_tAXevwfN';
@@ -22,13 +23,13 @@ const PROMPT = `אתה היועץ העסקי החכם של BSD. גבול שיר�
 // 15.11.2026 lead audit stage 4 (Baruch approved 08:28 via Roman): an advisor lead also emails
 // Baruch, like the contact form. Test leads (name «בדיקה»/is_test) go to Resend's sink only.
 const esc=(v)=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-export function advisorAlert({name,phone,question,message,source,leadId,isTest}){
+export function advisorAlert({name,phone,question,message,source,leadId,isTest,finder=false,shown=[]}){
   const first=String(name||'').trim().split(/\s+/)[0]||'ללא שם';
-  const subject=`${isTest?'[בדיקה] ':''}ליד חדש · שאלה מהיועץ · ${first}`;
+  const subject=`${isTest?'[בדיקה] ':''}ליד חדש · ${finder?'מצא לי עסק':'שאלה מהיועץ'} · ${first}`;
   const crm='https://baruchezon.github.io/BSD-CRM/leads-hub.html?open='+leadId;
   const row=(l,v)=>`<tr><td style="padding:6px 10px;color:#6b7280;white-space:nowrap;vertical-align:top">${esc(l)}</td><td style="padding:6px 10px">${v}</td></tr>`;
-  const html=`<div dir="rtl" lang="he" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5"><h2 style="margin:0 0 8px">${esc(subject)}</h2><table style="border-collapse:collapse;border:1px solid #e5e7eb">${row('שם',esc(name))}${row('טלפון',`<a href="tel:${esc(phone)}" dir="ltr">${esc(phone)}</a>`)}${row('שאלה',esc(question).replace(/\n/g,'<br>'))}${message?row('הודעה',esc(message).replace(/\n/g,'<br>')):''}${row('מקור','יועץ ה-AI באתר'+(source?' · '+esc(source):''))}${row('כרטיס ב-CRM',`<a href="${esc(crm)}">פתיחת הליד</a>`)}</table><div style="margin-top:24px;padding-top:12px;border-top:1px solid #e3d9bf;font-size:13px;color:#1f2d3d"><b>BSD - עסקים למכירה</b><br><span style="color:#8a6d1f">משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות</span></div></div>`;
-  const text=[subject,`שם: ${name}`,`טלפון: ${phone}`,`שאלה: ${question}`,message?`הודעה: ${message}`:'',`מקור: יועץ ה-AI באתר${source?' · '+source:''}`,`כרטיס ב-CRM: ${crm}`].filter(Boolean).join('\n');
+  const html=`<div dir="rtl" lang="he" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5"><h2 style="margin:0 0 8px">${esc(subject)}</h2><table style="border-collapse:collapse;border:1px solid #e5e7eb">${row('שם',esc(name))}${row('טלפון',`<a href="tel:${esc(phone)}" dir="ltr">${esc(phone)}</a>`)}${row('שאלה',esc(question).replace(/\n/g,'<br>'))}${message?row('הודעה',esc(message).replace(/\n/g,'<br>')):''}${shown.length?row('עסקים שהוצגו',shown.map(b=>`<a href="${esc(b.url||'')}" dir="ltr">${esc(b.business_number)}</a> ${esc(b.title||'')}`).join('<br>')):''}${row('מקור',(finder?'יועץ ה-AI באתר · מצא לי עסק':'יועץ ה-AI באתר')+(source?' · '+esc(source):''))}${row('כרטיס ב-CRM',`<a href="${esc(crm)}">פתיחת הליד</a>`)}</table><div style="margin-top:24px;padding-top:12px;border-top:1px solid #e3d9bf;font-size:13px;color:#1f2d3d"><b>BSD - עסקים למכירה</b><br><span style="color:#8a6d1f">משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות</span></div></div>`;
+  const text=[subject,`שם: ${name}`,`טלפון: ${phone}`,`שאלה: ${question}`,message?`הודעה: ${message}`:'',shown.length?`עסקים שהוצגו: ${shown.map(b=>`${b.business_number} ${b.title||''} ${b.url||''}`).join(' | ')}`:'',`מקור: יועץ ה-AI באתר${finder?' · מצא לי עסק':''}${source?' · '+source:''}`,`כרטיס ב-CRM: ${crm}`].filter(Boolean).join('\n');
   return {from:'BSD - עסקים למכירה <info@bsd-bbi.co.il>',to:[isTest?'delivered@resend.dev':'baruch.ezon@gmail.com'],reply_to:'info@bsd-bbi.co.il',subject,html,text};
 }
 async function sendAdvisorAlert(args){
@@ -43,6 +44,40 @@ async function sendAdvisorAlert(args){
   if(status==='failed') console.error('advisor alert email failed',error);
   if(args.leadId) await db('leads?id=eq.'+args.leadId,'PATCH',{website_alert_email_status:status,website_alert_email_at:at,website_alert_email_error:error,website_alert_email_id:id}).catch(e=>console.error('advisor email status not stored',e?.message));
 }
+// 15.11.2026 finder mode (Baruch approved Roman's plan 08:28): published listings only.
+const LISTING_COLS='id,business_number,anon_display_name,field,category,subcategory,region,asking_price,short_description';
+async function publicListings(filter=''){
+  const r=await fetch(DB+'/rest/v1/public_business_listings?select='+LISTING_COLS+'&limit=200'+filter,{headers:{apikey:PUBLIC_KEY}});
+  return r.ok?await r.json():[];
+}
+let sitemapCache=null;
+async function sitemapXml(){
+  try{ if(!sitemapCache||Date.now()-sitemapCache.at>600000){const r=await fetch('https://www.bsd-bbi.co.il/sitemap.xml',{signal:AbortSignal.timeout(3000)}); if(r.ok)sitemapCache={at:Date.now(),xml:await r.text()};} }catch{}
+  return sitemapCache?.xml||'';
+}
+async function leakedNumbers(listings){
+  const nums=listings.map(b=>b.business_number).filter(Boolean);
+  if(!nums.length)return new Set();
+  const rows=await db('businesses?select=business_number,internal_name,legal_name,owner_name&business_number=in.('+nums.map(n=>'"'+n+'"').join(',')+')').catch(()=>[]);
+  const byNum=Object.fromEntries((rows||[]).map(r=>[r.business_number,r]));
+  const blocked=new Set();
+  for(const b of listings){const n=byNum[b.business_number]; if(n&&titleLeaksName(b.anon_display_name,[n.internal_name,n.legal_name,n.owner_name])){blocked.add(b.business_number);console.error('finder: title hidden for anonymity',b.business_number);}}
+  return blocked;
+}
+async function shownBusinesses(numbers){
+  if(!numbers.length)return [];
+  const rows=await publicListings('&business_number=in.('+numbers.map(n=>'"'+n+'"').join(',')+')');
+  const xml=await sitemapXml();
+  return numbers.map(n=>rows.find(r=>r.business_number===n)).filter(Boolean).map(r=>({id:r.id,business_number:r.business_number,title:r.anon_display_name,url:businessUrlFromSitemap(xml,r.business_number)}));
+}
+async function linkLeadToBusinesses(leadId,shown){
+  if(!leadId||!shown.length)return;
+  const cur=(await db('leads?id=eq.'+leadId+'&select=business_id,matched_business_numbers'))?.[0]||{};
+  const merged=[...new Set([...(cur.matched_business_numbers||[]),...shown.map(b=>b.business_number)])];
+  const patch={matched_business_numbers:merged};
+  if(!cur.business_id)patch.business_id=shown[0].id;
+  await db('leads?id=eq.'+leadId,'PATCH',patch);
+}
 Deno.serve(async req=>{
   if(req.method!=='POST') return json({ok:false},405);
   // Public visitor endpoint: no CRM JWT or CRM record access is granted.
@@ -50,6 +85,16 @@ Deno.serve(async req=>{
   try {
     const raw=await req.text(); if(raw.length>40000) return json({ok:false},413);
     const body=JSON.parse(raw); const action=body.action||'chat';
+    if(action==='finder'||(body.mode==='finder'&&!body.action)){
+      const ipH=await hash('ip:'+(req.headers.get('x-forwarded-for')||'unknown').split(',')[0]);
+      const quota=await db('rpc/advisor_reserve','POST',{p_bucket:ipH,p_action:'finder'});
+      if(!quota)return json({ok:false,mode:'finder',matches:[],message:'הגעת למספר החיפושים להיום. אפשר לפנות אלינו בטלפון 0774446707.'},429);
+      const listings=await publicListings();
+      const result=findMatches(listings,{category:body.category,region:body.region,budget_max:body.budget_max},{sitemapXml:await sitemapXml(),blockedNumbers:await leakedNumbers(listings)});
+      const session=clean(body.session,80);
+      await db('advisor_events','POST',{session_hash:await hash('session:'+(/^[a-f0-9-]{36}$/i.test(session)?session:'finder:'+ipH)),kind:body.is_test===true?'finder_test':'finder',topic:clean(String(body.category||'פתוח'),80)}).catch(()=>{});
+      return json({ok:true,mode:'finder',matches:result.matches,message:result.message});
+    }
     const session=clean(body.session,80); if(!/^[a-f0-9-]{36}$/i.test(session)) return json({ok:false},400);
     const sessionHash=await hash('session:'+session);
     const ipHash=await hash('ip:'+(req.headers.get('x-forwarded-for')||'unknown').split(',')[0]);
@@ -59,16 +104,29 @@ Deno.serve(async req=>{
       await db('advisor_events?id=eq.'+body.event+'&session_hash=eq.'+sessionHash,'PATCH',{feedback:body.value}); return json({ok:true});
     }
     if(action==='lead') {
-      const name=clean(body.name,120),phone=clean(body.phone,40),question=clean(body.question,4000);
+      const businessNumbers=normalizeBusinessNumbers(body.business_numbers);
+      const isFinder=body.mode==='finder'||body.lead_kind==='finder'||businessNumbers.length>0;
+      const criteria=[body.category&&'תחום: '+clean(String(body.category),80),body.region&&'אזור: '+clean(String(body.region),80),'תקציב: '+(Number(body.budget_max)>0?Number(body.budget_max).toLocaleString('he-IL')+' ₪':'פתוח')].filter(Boolean).join(', ');
+      const name=clean(body.name,120),phone=clean(body.phone,40),question=clean(body.question,4000)||(isFinder?'מצא לי עסק · '+criteria:'');
+      const isTest=body.is_test===true||/is_test|בדיקה/i.test(name);
       const digits=phone.replace(/\D/g,'').replace(/^972/,'0');
       if(body.consent!==true||name.length<2||!/^05\d{8}$/.test(digits)||question.length<2||!/^[a-f0-9-]{36}$/i.test(body.request||''))return json({ok:false,message:'יש למלא שם, טלפון נייד ושאלה ולאשר יצירת קשר.'},400);
       const existing=await db('advisor_inquiries?id=eq.'+body.request+'&select=id');
       if(existing?.length)return json({ok:true});
       const quota=await db('rpc/advisor_reserve','POST',{p_bucket:ipHash,p_action:'lead'});if(!quota)return json({ok:false,message:'אפשר לפנות אלינו בטלפון 0774446707.'},429);
       const transcript=body.shareConversation===true&&Array.isArray(body.messages)?body.messages.slice(-24).filter(m=>['user','assistant'].includes(m.role)).map(m=>({role:m.role,content:clean(m.content,3000)})):null;
-      const lead=await db('rpc/advisor_capture','POST',{p_request:body.request,p_name:name,p_phone:digits,p_question:question,p_message:clean(body.message),p_transcript:transcript,p_transcript_consent:body.shareConversation===true,p_source:clean(body.traffic,500)});
-      await db('advisor_events','POST',{session_hash:sessionHash,kind:'lead',topic:topic(question),lead_id:lead}).catch(()=>{});
-      await sendAdvisorAlert({name,phone:digits,question,message:clean(body.message),source:clean(body.traffic,200),leadId:typeof lead==='string'?lead:null,isTest:/is_test|בדיקה/i.test(name)});
+      const shown=await shownBusinesses(businessNumbers);
+      let lead;
+      if(isTest){
+        // is_test: never through advisor_capture (it attaches by phone to real cards and opens a task for Baruch).
+        const rows=await db('leads','POST',{type:'buyer',full_name:/is_test/i.test(name)?name:name+' (is_test)',first_name:name.split(' ')[0],phone:digits,source:'is_test',status:'בדיקה',website_purpose_guess:isFinder?'מצא לי עסק (בדיקה)':'שאלה מהיועץ (בדיקה)',website_inquiry_kind:isFinder?'buyer':'question',notes:'[בדיקה מהיועץ באתר]\n'+question,agreement_status:'אין הסכם',is_archived:true,archive_reason:'is_test',archived_at:new Date().toISOString()});
+        lead=rows?.[0]?.id;
+      } else {
+        lead=await db('rpc/advisor_capture','POST',{p_request:body.request,p_name:name,p_phone:digits,p_question:question,p_message:clean(body.message),p_transcript:transcript,p_transcript_consent:body.shareConversation===true,p_source:clean(body.traffic,500)});
+      }
+      await linkLeadToBusinesses(typeof lead==='string'?lead:null,shown).catch(e=>console.error('finder link failed',e?.message));
+      await db('advisor_events','POST',{session_hash:sessionHash,kind:isTest?'lead_test':'lead',topic:isFinder?'מצא לי עסק':topic(question),lead_id:lead}).catch(()=>{});
+      await sendAdvisorAlert({name,phone:digits,question,message:clean(body.message),source:clean(body.traffic,200),leadId:typeof lead==='string'?lead:null,isTest,finder:isFinder,shown});
       return json({ok:true});
     }
     if(action!=='chat')return json({ok:false},400);
