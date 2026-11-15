@@ -8,6 +8,7 @@ import { createHmac } from "node:crypto";
 import {
   RATE_LIMITS,
   alreadyRegisteredPlan,
+  archiveSignupPlan,
   cleanText,
   isUnsubscribeToken,
   consentWritePayload,
@@ -46,7 +47,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 
 const TABLE = "business_alert_subscribers";
 const ATTEMPTS = "business_alert_signup_attempts";
-const LOOKUP = "id, welcome_sent_at, welcome_back_sent_at, first_name, last_name, email, phone, phone9, unsubscribe_token, status, unsubscribed_at, unsubscribed_by, unsubscribe_reason, email_unsubscribed_at, whatsapp_unsubscribed_at, status_history, resubscribed_at, categories, subcategories, flags, budget_min, budget_max, budget_open, regions, looking_for, consent_email, consent_whatsapp, address_form, crm_lead_id, region, interests, notes";
+const LOOKUP = "id, welcome_sent_at, welcome_back_sent_at, first_name, last_name, email, phone, phone9, unsubscribe_token, status, unsubscribed_at, unsubscribed_by, unsubscribe_reason, email_unsubscribed_at, whatsapp_unsubscribed_at, status_history, resubscribed_at, categories, subcategories, flags, budget_min, budget_max, budget_open, regions, looking_for, consent_email, consent_whatsapp, address_form, crm_lead_id, region, interests, notes, archived_at, archived_by, archive_reason, prev_status";
 
 const allowedOrigins = new Set([
   "https://bsd-bbi.co.il",
@@ -458,9 +459,11 @@ Deno.serve(async req => {
     const secret = updateTokenSecret();
     const phoneRow = signup.row.phone9 ? await findByPhone9(String(signup.row.phone9)) : null;
     const emailRow = await findByEmail(String(signup.row.email));
-    const existing = phoneRow || emailRow;
+    const existing = (emailRow?.archived_at ? emailRow : null) || phoneRow || emailRow;
     if (existing?.id && !invite) {
       const now = new Date().toISOString();
+      const fromArchive = archiveSignupPlan(existing, signup.row, now);
+      if (fromArchive) return await resubscribe(existing, signup.row, fromArchive, ip, cleanText(req.headers.get("user-agent"), 300), origin);
       const reactivate = reactivationPlan(existing, signup.row, now);
       if (reactivate) return await resubscribe(existing, signup.row, reactivate, ip, cleanText(req.headers.get("user-agent"), 300), origin);
       if (!secret) return json({ ok: false, error: "token_unavailable" }, 500, origin);

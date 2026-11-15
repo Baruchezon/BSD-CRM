@@ -2,6 +2,7 @@ const CLOSED = new Set(["unsubscribed", "unsubscribed_all", "unsubscribed_email"
 
 export function oneAlertDecision({ subscriber, serviceRole, allowlist, sendingEnabled, dryRun }) {
   if (!subscriber?.id) return { ok: false, error: "not_found" };
+  if (subscriber.archived_at) return { ok: false, error: "archived" };
   const test = subscriber.is_test === true;
   const listed = (allowlist || []).map(String).includes(String(subscriber.id));
   if (serviceRole && !test) return { ok: false, error: "test_only" };

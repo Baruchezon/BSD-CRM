@@ -88,7 +88,7 @@ async function matchingSubscribers(card: Record<string, unknown> | null) {
   if (card.email) filters.push(`email.ilike.${card.email}`);
   if (nine) filters.push(`phone9.eq.${nine}`);
   const { data, error } = await supabase.from("business_alert_subscribers")
-    .select("id, status, do_not_call, email_unsubscribed_at, whatsapp_unsubscribed_at, address_form")
+    .select("id, status, do_not_call, email_unsubscribed_at, whatsapp_unsubscribed_at, address_form, archived_at")
     .or(filters.join(","));
   if (error) throw error;
   return data || [];

@@ -158,6 +158,7 @@ export function inviteGuard({ card, channel, invites, subscribers, now }) {
     person.do_not_call === true || CLOSED.has(person.status) || person.email_unsubscribed_at || person.whatsapp_unsubscribed_at
   );
   if (blocked) return { ok: false, error: "do_not_contact" };
+  if ((subscribers || []).some(person => person.archived_at)) return { ok: false, error: "archived" };
   if ((subscribers || []).some(person => person.status === "active")) return { ok: false, error: "already_subscribed" };
   if (channel === "whatsapp" && !waNumber(card?.phone)) return { ok: false, error: "no_phone" };
   if (channel === "email" && !String(card?.email || "").includes("@")) return { ok: false, error: "no_email" };

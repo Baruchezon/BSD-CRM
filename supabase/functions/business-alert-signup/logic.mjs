@@ -624,6 +624,31 @@ export function reactivationPlan(stored, row, now) {
   };
 }
 
+// An archived person who signs up again with the same email comes back as a resubscribe.
+// The old history rows stay. A purged row is already gone, so that signup is a new person.
+export function archiveSignupPlan(stored, row, now) {
+  if (!stored?.id || !stored.archived_at) return null;
+  if (!emailsMatch(stored.email, row?.email) || !hasFreshConsent(row)) return null;
+  const plan = reactivationPlan({
+    ...stored,
+    status: "unsubscribed_all",
+    unsubscribed_at: stored.unsubscribed_at || stored.archived_at,
+    email_unsubscribed_at: stored.email_unsubscribed_at || stored.archived_at,
+    whatsapp_unsubscribed_at: stored.whatsapp_unsubscribed_at || stored.archived_at
+  }, row, now);
+  if (!plan) return null;
+  plan.changes.archived_at = null;
+  plan.changes.archived_by = null;
+  plan.changes.archive_reason = null;
+  plan.changes.prev_status = null;
+  plan.history.previous = {
+    ...plan.history.previous,
+    archived_at: stored.archived_at,
+    prev_status: stored.prev_status || null
+  };
+  return plan;
+}
+
 export function alreadyRegisteredPlan(stored, submittedEmail, { nonce, nowMs, secret }) {
   const emailMatched = emailsMatch(stored?.email, submittedEmail);
   const expiresAt = nowMs + UPDATE_TOKEN_TTL_MS;

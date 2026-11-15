@@ -85,11 +85,12 @@ Deno.serve(async req => {
   if (!token || !businessNumber) return page("הקישור אינו שלם.", 400);
 
   const { data: subscriber, error: subscriberError } = await supabase.from("business_alert_subscribers")
-    .select("id, email, first_name, last_name, phone, address_form, is_test, status")
+    .select("id, email, first_name, last_name, phone, address_form, is_test, status, archived_at")
     .eq("unsubscribe_token", token)
     .maybeSingle();
   if (subscriberError) throw subscriberError;
   if (!subscriber?.id) return page("הקישור אינו מוכר.", 404);
+  if (subscriber.archived_at) return page("הקישור אינו פעיל.", 410);
 
   const { data: settings } = await supabase.from("business_alert_match_settings")
     .select("request_details_enabled, request_details_allowlist")
