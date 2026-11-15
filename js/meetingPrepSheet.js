@@ -3,29 +3,27 @@
 (function (root) {
   const UNK = "לבירור";
   const QUESTIONS = [
-    "שם העסק המדויק, שם משפטי, ח.פ./ע.מ. וכתובת מדויקת?",
-    "בעלות: האם הבעלים היחיד? מה מעמד שותפים או פעילות נוספת במקום?",
-    "כמה עובדים, ומה תפקידם? האם ימשיכו אחרי המכירה?",
-    "מחיר מבוקש, ומה כלול (ציוד, מוניטין, מאגר לקוחות, שם העסק)?",
-    "רווח נקי אמיתי, חלוקה בין פעילויות, עונתיות?",
-    "חוזה השכירות: תקופה, אופציות, העברה, ערבויות, בעל הנכס?",
-    "האם פעילות נוספת במקום נמכרת יחד או לא? האם אפשרי שותף?",
-    "מתי המעבר או סיום הפעילות, ומה הדחיפות?",
-    "האם העסק הוצע למתווכים אחרים או יש התחייבות קיימת?"
+    "שם העסק המדויק, ח.פ./ע.מ. וכתובת מדויקת?",
+    "האם הבעלים היחיד, ומה מעמד פעילות נוספת במקום?",
+    "כמה עובדים — והאם ימשיכו אחרי המכירה?",
+    "מחיר מבוקש, ומה כלול?",
+    "רווח נקי, וחלוקה בין הפעילויות?",
+    "חוזה השכירות: תקופה, העברה ואופציות?",
+    "מתי המעבר, והאם העסק הוצע לאחרים?"
   ];
   const DOCUMENTS = [
-    "דוחות רווח והפסד / שנתיים ל-2–3 שנים, וסיכום מחזורים חודשי",
-    "חוזה שכירות והסכמים נלווים",
-    "רשימת ציוד ונכסים",
+    "דוחות 2–3 שנים ומחזורים",
+    "חוזה שכירות",
+    "רשימת ציוד",
     "רישיון עסק וביטוחים",
-    "רשימת עובדים והסכמיהם",
-    "תעודת עוסק וצילום ת״ז לחתימה על ההסכם",
-    "תמונות של העסק (לתיק מכירה אנונימי)"
+    "רשימת עובדים",
+    "תעודת עוסק ות״ז",
+    "תמונות לתיק אנונימי"
   ];
   const NOTE_SECTIONS = [
     { class: "amber", title: "נתונים כספיים שנשמעו" },
     { class: "green", title: "צוות ושכירות" },
-    { class: "purple", title: "מוטיבציה של המוכר ולוח זמנים" },
+    { class: "purple", title: "מוטיבציה ולוח זמנים" },
     { class: "teal", title: "צעדים הבאים / הסכם" }
   ];
 
@@ -69,12 +67,20 @@
   }
   function notesHtml(sections) {
     return sections.map(section => {
-      const lines = Array.from({ length: 14 }, () => '<div class="line"></div>').join("");
+      const lines = Array.from({ length: 12 }, () => '<div class="line"></div>').join("");
       return `<div class="note-sec"><h2 class="${esc(section.class)}">${esc(section.title)}</h2><div class="body">${lines}</div></div>`;
     }).join("\n");
   }
+  function bulletsHtml(items) {
+    const list = items && items.length ? items : [UNK];
+    return list.map(item => `<li>${item === UNK ? unk() : esc(item)}</li>`).join("\n");
+  }
+  function htmlOrUnknown(value) {
+    const text = present(value);
+    return text ? esc(text) : unk();
+  }
   function fill(template, data, questionLines) {
-    const lines = questionLines || 2;
+    const lines = questionLines == null ? 1 : questionLines;
     const lead = present(data.lead_code);
     const business = present(data.business_code);
     const repl = {
@@ -87,11 +93,15 @@
       LEAD_CODE: lead,
       BUSINESS_CODE: business,
       BUSINESS_CODE_SEP: lead && business ? " · " : "",
-      HISTORY: present(data.history) ? esc(data.history) : unk(),
-      PURPOSE: present(data.purpose) ? esc(data.purpose) : unk(),
+      PURPOSE: htmlOrUnknown(data.purpose),
       PREPARED_ON: present(data.prepared_on),
+      MISSING_FIELDS: present(data.missing_fields) || UNK,
       FACTS_HTML: (data.facts || []).map(factRow).join("\n"),
-      UNVERIFIED_HTML: (data.unverified || []).map(item => `<li>${esc(item)}</li>`).join("\n"),
+      CALL_FACTS_HTML: bulletsHtml(data.call_facts),
+      BUSINESS_BLURB: htmlOrUnknown(data.business_blurb),
+      ONLINE_HTML: bulletsHtml(data.online_presence),
+      MARKET_HTML: bulletsHtml(data.market_research),
+      MARKET_SOURCES: htmlOrUnknown(data.market_sources),
       QUESTIONS_HTML: questionsHtml(data.questions || QUESTIONS, lines),
       DOCUMENTS_HTML: documentsHtml(data.documents || DOCUMENTS),
       NOTES_HTML: notesHtml(data.note_sections || NOTE_SECTIONS)
@@ -178,9 +188,29 @@
     const businessCode = present(biz && biz.business_number);
     const sector = [present(biz && biz.field), present(biz && biz.category), present(biz && biz.subcategory), present(seller && seller.business_field)].filter(Boolean);
     const uniqueSector = [...new Set(sector)].join(", ");
-    const source = biz || seller || {};
     const prepared = (now || new Date()).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Jerusalem" });
     const codes = [leadCode, businessCode].filter(Boolean).join(" / ");
+    const agreement = present(biz && biz.agreement_status) || present(seller && seller.agreement_status);
+    const spread = distribution(biz);
+    const research = present(biz && biz.pre_research) || present(seller && seller.pre_research);
+    const website = present(biz && biz.website) || present(seller && seller.website);
+    const description = present(biz && biz.short_description);
+    const callFacts = [];
+    const pushCall = text => {
+      const line = present(text);
+      if (!line || callFacts.length >= 3) return;
+      callFacts.push(line.length > 220 ? line.slice(0, 220) + "…" : line);
+    };
+    if (place && cardAddress && place !== cardAddress) pushCall(`מקום ביומן (${place}) שונה מכתובת הכרטיס (${cardAddress}).`);
+    present((biz && biz.notes) || (seller && seller.notes)).split(/\n+/).forEach(pushCall);
+    (meetings || []).forEach(item => pushCall(item && item.summary_text ? `${item.meeting_date || ""} — ${item.summary_text}` : ""));
+    const blurbBits = [description ? description.replace(/\s+/g, " ") : "", uniqueSector, biz && biz.years_active ? biz.years_active + " שנים" : "", present(biz && biz.sale_reason) || present(seller && seller.sale_reason)].filter(Boolean);
+    const missing = [];
+    if (!money((biz && biz.asking_price) || (seller && seller.asking_price))) missing.push("מחיר מבוקש");
+    if (!profit(biz)) missing.push("רווח");
+    if (!(biz && biz.employees_count != null && biz.employees_count !== "")) missing.push("עובדים");
+    if (!legal(biz || seller)) missing.push("ח.פ.");
+    missing.push("עמלה", "חוזה שכירות");
     return {
       logo_src: logoSrc || "assets/meeting-prep-logo.png",
       person_name: person,
@@ -190,10 +220,14 @@
       phone,
       lead_code: leadCode,
       business_code: businessCode,
-      prepared_on: "הוכן ב-" + prepared,
-      history: historyText((biz && biz.notes) || (seller && seller.notes), meetings),
+      prepared_on: "עודכן ב-" + prepared,
       purpose: "",
-      unverified,
+      missing_fields: missing.join(", "),
+      call_facts: callFacts,
+      business_blurb: blurbBits.join(", ").slice(0, 240),
+      online_presence: website ? ["אתר בכרטיס: " + website] : [],
+      market_research: research ? research.split(/\n+/).map(line => present(line)).filter(Boolean).slice(0, 3).map(line => line.length > 220 ? line.slice(0, 220) + "…" : line) : [],
+      market_sources: research ? "מקור: חקר מקדים בכרטיס" : "",
       questions: QUESTIONS,
       documents: DOCUMENTS,
       note_sections: NOTE_SECTIONS,
@@ -201,27 +235,15 @@
         fact("איש קשר", person ? person + " · מוכר" : ""),
         fact("מייל", email),
         fact("ליד / עסק", codes),
-        fact("כתובת העסק (CRM)", cardAddress),
-        fact("תחום", uniqueSector),
-        fact("ותק / שטח", tenure(biz && biz.years_active)),
-        fact("מחזור שנתי", money(biz && biz.annual_revenue)),
-        fact("שכירות", ""),
-        fact("מחיר מבוקש", money((biz && biz.asking_price) || (seller && seller.asking_price))),
-        fact("רווח נקי / תפעולי", profit(biz)),
-        fact("עובדים", biz && biz.employees_count != null && biz.employees_count !== "" ? String(biz.employees_count) : ""),
-        fact("שם משפטי / ח.פ.", legal(biz || seller)),
-        fact("סיבת מכירה", present(biz && biz.sale_reason) || present(seller && seller.sale_reason)),
-        fact("לקוחות", ""),
-        fact("הסכם", present(biz && biz.agreement_status) || present(seller && seller.agreement_status)),
-        fact("הפצה", distribution(biz)),
-        fact("פתיחת תיק", ""),
-        fact("עמלה", "")
+        fact("כתובת CRM", cardAddress),
+        fact("הסכם / הפצה", [agreement, spread].filter(Boolean).join(" · ")),
+        fact("פתיחת תיק", "")
       ]
     };
   }
 
   function renderHtml(template, data) {
-    return fill(template, data, 2);
+    return fill(template, data, 1);
   }
 
   function logoUrl() {
