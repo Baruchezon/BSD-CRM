@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/digital-card-production-smoke.yml'
       - 'tests/digital_card_live_smoke.mjs'
+      - 'tests/validate_live_vcard.py'
       - 'c/**'
       - 'digital-card.html'
       - 'digital-cards.html'
@@ -27,3 +28,8 @@ jobs:
           persist-credentials: false
       - name: Verify actual production URLs and VCF endpoint
         run: node tests/digital_card_live_smoke.mjs
+      - name: Parse actual VCF through independent vCard library
+        run: |
+          python3 -m venv "$RUNNER_TEMP/vcard-check"
+          "$RUNNER_TEMP/vcard-check/bin/pip" install --disable-pip-version-check --quiet vobject==0.9.9
+          "$RUNNER_TEMP/vcard-check/bin/python" tests/validate_live_vcard.py
