@@ -21,7 +21,7 @@ function contextFor(href){
     location:{href,pathname:parsed.pathname,hash:parsed.hash,search:parsed.search,origin:parsed.origin}
   };
   runInNewContext(extract(main).replace(/\bload\(\);\s*$/,"")+
-    "\nthis.api={cardLookup,cardUrl,makeVcard,vcardUrl,setCard:(v)=>{card=v}};",context,{timeout:1000});
+    "\nthis.api={cardLookup,cardUrl,vcardUrl,setCard:(v)=>{card=v}};",context,{timeout:1000});
   return context;
 }
 
@@ -47,23 +47,47 @@ test("Other agents get their own short link from immutable code",()=>{
   ctx.api.setCard({short_code:"c123abc456"});
   assert.equal(ctx.api.cardUrl(),other);
 });
-test("Contact file contains the core fields and CRLF delimiters",()=>{
-  const ctx=contextFor(ezon);
-  ctx.api.setCard({full_name:"ברוך איזון",company_name:"BSD",job_title:"מנהל",phone_mobile:"054-2424999",phone_office:"077-4446707",email:"baruch@bsd-bbi.co.il",website_url:"https://bsd-bbi.co.il/"});
-  const v=ctx.api.makeVcard();
-  assert.ok(v.startsWith("\ufeffBEGIN:VCARD\r\n"));
+function managerContactVcard(data){
+  const formatter=manager.match(/function formatPhone\(v\)\{[\s\S]*?^\}/m)?.[0];
+  const contact=manager.match(/function vEscape\(s\)\{[\s\S]*?\nfunction esc\(s\)\{/)?.[0];
+  assert.ok(formatter && contact);
+  const withoutEsc=contact.slice(0,contact.lastIndexOf("function esc(s){"));
+  const sandbox={TextEncoder};
+  runInNewContext('const tidy=s=>String(s||"").trim();\n'+formatter+'\n'+withoutEsc+
+    '\nthis.render=makeContactVcard;',sandbox,{timeout:1000});
+  return sandbox.render(data);
+}
+test("CRM contact exports are BOM-free vCard 3.0 with required name fields",()=>{
+  const card={
+    full_name:"ברוך איזון",company_name:"BSD",job_title:"מנהל",
+    phone_mobile:"054-2424999",phone_office:"077-4446707",
+    email:"baruch@bsd-bbi.co.il",website_url:"https://bsd-bbi.co.il/"
+  };
+  const v=managerContactVcard(card);
+  assert.ok(v.startsWith("BEGIN:VCARD\r\n"));
+  assert.ok(!v.startsWith("\ufeff"));
   for(const value of [
-    "VERSION:3.0", "FN:ברוך איזון", "N:;ברוך איזון;;;",
-    "TEL;TYPE=CELL:054-2424999","TEL;TYPE=WORK:077-4446707",
-    "EMAIL;TYPE=WORK:baruch@bsd-bbi.co.il","END:VCARD"
+    "VERSION:3.0", "FN:ברוך איזון", "N:איזון;ברוך;;;",
+    "TEL;TYPE=CELL:054-2424999","TEL;TYPE=WORK,VOICE:077-4446707",
+    "EMAIL;TYPE=INTERNET,WORK:baruch@bsd-bbi.co.il","END:VCARD"
   ])assert.ok(v.includes(value),value);
   assert.ok(v.endsWith("END:VCARD\r\n"));
 });
-test("Contact saving provides native file sharing and a reliable download fallback",()=>{
-  assert.ok(main.includes('navigator.canShare({files:[file]})'));
-  assert.ok(main.includes("directVcardDownload()"));
-  assert.ok(main.includes("קובץ איש הקשר ירד למכשיר"));
-  assert.ok(api.includes('"Content-Type":"text/vcard; charset=utf-8"'));
+test("Hebrew vCard lines are folded at 75 UTF-8 bytes",()=>{
+  const longName="ברוך איזון";
+  const v=managerContactVcard({full_name:longName,company_name:"חברה ".repeat(48),email:"test@example.com"});
+  const lines=v.split("\r\n").filter(Boolean);
+  for(const line of lines) assert.ok(Buffer.byteLength(line,"utf8")<=75,Buffer.byteLength(line,"utf8")+" octets");
+  assert.ok(lines.some(line=>line.startsWith(" ")));
+});
+test("Contact saving downloads the one server-generated VCF, not a shared in-memory file",()=>{
+  assert.ok(main.includes("function saveContact(){"));
+  assert.ok(main.includes("const source=vcardUrl()"));
+  assert.ok(!main.includes("navigator.canShare({files:[file]})"));
+  assert.ok(main.includes("להורדה נוספת של איש הקשר"));
+  assert.ok(api.includes('"Content-Type":"text/x-vcard; charset=utf-8"'));
+  assert.ok(api.includes('new TextEncoder().encode(vcard)'));
+  assert.ok(!api.includes('new Response("\\ufeff"'));
   assert.ok(api.includes('"Content-Disposition":'));
   assert.ok(api.includes('data.owner_user_id'));
   assert.ok(api.includes('is_published'));
