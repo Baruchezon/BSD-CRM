@@ -63,6 +63,7 @@ textarea{min-height:74px;resize:vertical}
 <div class="field"><label for="email">דוא״ל</label><input id="email" type="email" maxlength="200" inputmode="email"></div>
 <div class="field"><label for="phone_mobile">טלפון נייד</label><input id="phone_mobile" type="tel" maxlength="35" inputmode="tel"></div>
 <div class="field"><label for="phone_office">טלפון משרד</label><input id="phone_office" type="tel" maxlength="35" inputmode="tel"></div>
+<div class="field"><label for="office_address">כתובת משרד וניווט</label><input id="office_address" maxlength="250" placeholder="כתובת מלאה לניווט"></div>
 <div class="field"><label for="whatsapp_number">מספר וואטסאפ</label><input id="whatsapp_number" type="tel" maxlength="35" inputmode="tel"></div>
 <div class="field"><label for="website_url">כתובת אתר</label><input id="website_url" type="url" maxlength="500" placeholder="https://"></div>
 <div class="field"><label for="facebook_url">פייסבוק</label><input id="facebook_url" type="url" maxlength="500"></div>
@@ -89,7 +90,7 @@ textarea{min-height:74px;resize:vertical}
 "use strict";
 let CURRENT_PROFILE=null, cardRows=[], chosen=null, editing=null;
 const $=id=>document.getElementById(id);
-const FIELDS=['full_name','job_title','company_name','phone_mobile','phone_office','whatsapp_number','email','website_url','facebook_url','instagram_url','photo_url','logo_url','description'];
+const FIELDS=['full_name','job_title','company_name','phone_mobile','phone_office','office_address','whatsapp_number','email','website_url','facebook_url','instagram_url','photo_url','logo_url','description'];
 const allowedRoles=['admin','manager','agent','agent_authorized'];
 const admin=()=>CURRENT_PROFILE && CURRENT_PROFILE.role==='admin';
 const urlOf=c=>new URL('digital-card.html?card='+encodeURIComponent(c.public_token),location.href).href;
@@ -106,15 +107,39 @@ function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 function link(label,u){if(!u)return '';return '<a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(label)+'</a>'}
 function offlineHtml(c){
 const wa=ilPhone(c.whatsapp_number||c.phone_mobile);
-return '<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(c.full_name)+'</title><style>body{font:17px Arial;text-align:center;background:#edf3f8;color:#192f4b;margin:0}.box{max-width:440px;margin:20px auto;padding:22px;background:white;border-radius:22px}.head{background:linear-gradient(140deg,#132a46,#29527e);color:white;padding:26px;border-radius:18px}.head img{width:110px;height:110px;object-fit:cover;border-radius:50%;border:3px solid #d7ac6a}.buttons{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:17px}.buttons a{display:block;background:#164778;color:white;text-decoration:none;border-radius:12px;padding:14px 5px}h1{margin:10px 0 5px}p{line-height:1.5}</style><div class="box"><div class="head">'
-+(safeUrl(c.photo_url)?'<img alt="" src="'+esc(safeUrl(c.photo_url))+'">':'')
-+'<h1>'+esc(c.full_name)+'</h1><p>'+esc(c.job_title)+'</p><p>'+esc(c.company_name)+'</p></div><p>'+esc(c.description)+'</p><div class="buttons">'
-+link('טלפון נייד',c.phone_mobile?'tel:'+ilPhone(c.phone_mobile):'')
-+link('טלפון משרד',c.phone_office?'tel:'+ilPhone(c.phone_office):'')
-+link('וואטסאפ',wa?'https://wa.me/'+wa:'')
-+link('דוא״ל',c.email?'mailto:'+encodeURIComponent(c.email):'')
-+link('אתר',safeUrl(c.website_url))+link('פייסבוק',safeUrl(c.facebook_url))+link('אינסטגרם',safeUrl(c.instagram_url))
-+'</div></div></html>';
+const site=safeUrl(c.website_url),fb=safeUrl(c.facebook_url),ig=safeUrl(c.instagram_url),photo=safeUrl(c.photo_url),logo=safeUrl(c.logo_url);
+const detailLink=(label,value,url,cls='')=>!url?'':'<a class="'+cls+'" href="'+esc(url)+'"><strong>'+esc(label)+'</strong><small>'+esc(value)+'</small></a>';
+const addressUrl=c.office_address?'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(c.office_address):'';
+const services=String(c.company_name||'').toLowerCase().includes('bsd')?'<h2>איך אפשר לעזור לך?</h2><div class="links">'
++detailLink('אני רוצה למכור עסק','ליווי מקצועי במכירה','https://www.bsd-bbi.co.il/%D7%9E%D7%95%D7%9B%D7%A8-%D7%A2%D7%A1%D7%A7/')
++detailLink('מחפש עסק לרכישה','הזדמנויות ועסקים למכירה','https://www.bsd-bbi.co.il/%D7%A2%D7%A1%D7%A7%D7%99%D7%9D-%D7%9C%D7%9E%D7%9B%D7%99%D7%A8%D7%94/')+'</div>':'';
+return '<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(c.full_name)+' | כרטיס ביקור</title><style>'
++'*{box-sizing:border-box}body{font:15px Arial,sans-serif;margin:0;background:#eff3f9;color:#182c48;padding:14px}'
++'.card{max-width:470px;margin:auto;background:white;border-radius:22px;overflow:hidden;box-shadow:0 16px 40px #213d5e22}'
++'.head{background:linear-gradient(140deg,#16283f,#101c30);color:white;text-align:center;padding:23px 18px}'
++'.head img.photo{width:108px;height:113px;object-fit:cover;border:3px solid #ddb56c;border-radius:22px}'
++'.head img.logo{height:57px;max-width:100px;object-fit:contain;display:block;margin:0 auto 13px}'
++'.head h1{margin:10px 0;font-size:28px}.head p{margin:6px 0;color:#dbe5f3}'
++'.content{padding:16px}.links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:13px 0}'
++'.links a{min-height:77px;background:#f4f7fb;border:1px solid #dce5ef;border-radius:14px;padding:13px 7px;text-align:center;color:#1d385b;text-decoration:none;display:flex;flex-direction:column;gap:7px;justify-content:center}'
++'.links a strong{display:block;font-size:14px}.links a small{display:block;direction:ltr;unicode-bidi:plaintext;font-size:11px;line-height:1.3;overflow-wrap:anywhere;color:#60768d}'
++'.links a.call{background:linear-gradient(140deg,#3480cc,#1b54a0);color:white}.links a.wa{background:linear-gradient(140deg,#18ca94,#07986b);color:white}'
++'.links a.call small,.links a.wa small{color:white}h2{font-size:17px;margin:19px 0 10px}.desc{color:#60748c;font-size:13px;text-align:center;line-height:1.6}'
++'</style></head><body><main class="card"><div class="head">'
++(logo?'<img class="logo" alt="לוגו" src="'+esc(logo)+'">':'')
++(photo?'<img class="photo" alt="תמונה" src="'+esc(photo)+'">':'')
++'<h1>'+esc(c.full_name)+'</h1><p>'+esc(c.job_title)+'</p><p>'+esc(c.company_name)+'</p></div>'
++'<div class="content"><p class="desc">'+esc(c.description)+'</p><div class="links">'
++detailLink('התקשר אליי',c.phone_office||c.phone_mobile,c.phone_office?'tel:'+ilPhone(c.phone_office):c.phone_mobile?'tel:'+ilPhone(c.phone_mobile):'','call')
++detailLink('שלח וואטסאפ',c.whatsapp_number||c.phone_mobile,wa?'https://wa.me/'+wa:'','wa')+'</div>'
++'<h2>כל הדרכים להכיר ולהתחבר</h2><div class="links">'
++detailLink('אתר החברה',c.website_url.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,''),site)
++detailLink('פייסבוק',c.facebook_url.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,''),fb)
++detailLink('אינסטגרם',c.instagram_url.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,''),ig)
++detailLink('שלח אימייל',c.email,c.email?'mailto:'+encodeURIComponent(c.email):'')
++detailLink('נווט למשרד',c.office_address,addressUrl)
++detailLink('נייד אישי',c.phone_mobile,c.phone_mobile?'tel:'+ilPhone(c.phone_mobile):'')
++'</div>'+services+'<p class="desc">BSD Business Brokers Israel</p></div></main></body></html>';
 }
 function formData(){const data={};FIELDS.forEach(k=>data[k]=tidy($(k).value));['website_url','facebook_url','instagram_url','photo_url','logo_url'].forEach(k=>data[k]=safeUrl(data[k]));data.is_published=$('is_published').checked;if(data.full_name.length<2)throw Error('יש להזין שם מלא');return data}
 async function uploadPhoto(){
