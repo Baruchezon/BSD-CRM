@@ -1,8 +1,14 @@
 -- Rollback for 20261117070000_nexus_seller_portfolio_fixes.sql: restores seller_portfolio() as live before 17.11.2026.
 -- The column businesses.agreement_signed_date is kept (dates entered meanwhile are not deleted); to drop it only
 -- after confirming it is empty: alter table public.businesses drop column agreement_signed_date;
+-- Backfilled site_analytics_events.business_id values are kept (not reverted).
+-- business_facebook_posts.member_count values set to NULL are kept (not reverted).
+-- NOT NULL on member_count is not re-added, since rows may now be NULL.
 
 begin;
+
+drop trigger if exists site_analytics_fill_business_id on public.site_analytics_events;
+drop function if exists public.site_analytics_fill_business_id();
 
 CREATE OR REPLACE FUNCTION nexus_metrics.seller_portfolio()
  RETURNS jsonb

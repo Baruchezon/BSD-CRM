@@ -1,15 +1,64 @@
--- Nexus «ניהול מוכרים ועסקים» (17.11.2026, requested by Yossi): three fixes in nexus_metrics.seller_portfolio().
+-- Nexus «ניהול מוכרים ועסקים» (17.11.2026, requested by Yossi).
 -- 1. Signed-date fallback for businesses without a linked seller lead: new nullable column
 --    businesses.agreement_signed_date (manual entry), then the agreement PDF upload date. Adds signed_date_source.
--- 2. Site views/visitors also count page_view rows with no business_id when the page_path holds the case
---    number (e.g. .../bsd-b-2607-1015/). No data is changed.
+-- 2. Site views/visitors also count page_view rows with no business_id when the case number in
+--    page_path (bsd-b-YYYY-NNNN) equals the last 4 digits of the business number.
 -- 3. Adds 'email' (businesses.owner_email, else the seller lead email).
--- Read-only function; grants unchanged. Rollback: rollback_20261117070000_nexus_seller_portfolio_fixes.sql
+-- 4. Mirror posts (group_name ~* '^(mirror|profile)', or 'bsd page') are excluded from
+--    facebook_active_groups and facebook_group_members_potential. Logged posts, pending posts,
+--    and measured impressions are unchanged.
+-- 5. business_facebook_posts.member_count drops NOT NULL. Mirror rows with member_count 0 are set
+--    to NULL (mirrors have no member count); other 0 rows are left as-is.
+-- 6. BEFORE INSERT trigger public.site_analytics_fill_business_id() sets business_id from the case
+--    number in page_path. Revoke all on that function from public, anon, and authenticated.
+-- 7. Backfill existing page_view rows that have no business_id when the path case number matches.
+-- seller_portfolio() itself stays a read-only STABLE function; its grants are unchanged.
+-- Rollback: rollback_20261117070000_nexus_seller_portfolio_fixes.sql
 
 begin;
 
 alter table public.businesses add column if not exists agreement_signed_date date;
 comment on column public.businesses.agreement_signed_date is 'Agreement signing date entered on the business card (used when there is no linked seller lead)';
+
+alter table public.business_facebook_posts alter column member_count drop not null;
+
+-- Mirrors have no member count. Other 0 rows are left as-is.
+update public.business_facebook_posts
+   set member_count = null
+ where member_count = 0
+   and (group_name ~* '^(mirror|profile)' or lower(btrim(group_name)) = 'bsd page');
+
+create or replace function public.site_analytics_fill_business_id()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  if new.business_id is null and new.page_path is not null then
+    select b.id into new.business_id
+    from public.businesses b
+    where right(b.business_number, 4) = substring(lower(new.page_path) from 'bsd-b-\d{4}-(\d{4})')
+      and b.is_archived is distinct from true
+    limit 1;
+  end if;
+  return new;
+end
+$$;
+
+revoke all on function public.site_analytics_fill_business_id() from public, anon, authenticated;
+
+drop trigger if exists site_analytics_fill_business_id on public.site_analytics_events;
+create trigger site_analytics_fill_business_id
+  before insert on public.site_analytics_events
+  for each row execute function public.site_analytics_fill_business_id();
+
+update public.site_analytics_events e
+   set business_id = b.id
+  from public.businesses b
+ where e.business_id is null
+   and e.event_name = 'page_view'
+   and right(b.business_number, 4) = substring(lower(e.page_path) from 'bsd-b-\d{4}-(\d{4})');
 
 CREATE OR REPLACE FUNCTION nexus_metrics.seller_portfolio()
  RETURNS jsonb
@@ -53,7 +102,8 @@ WITH portfolio AS (
                   FROM public.business_distribution_channels d WHERE d.business_id=b.id AND d.enabled IS TRUE),'[]'::jsonb) AS channels,
         coalesce((SELECT count(DISTINCT p.group_name) FROM public.business_facebook_posts p
                   WHERE (p.business_id=b.id OR p.business_number=b.business_number)
-                  AND p.status='active' AND nullif(p.group_name,'') IS NOT NULL),0)::integer AS facebook_active_groups,
+                  AND p.status='active' AND nullif(p.group_name,'') IS NOT NULL
+                  AND NOT (p.group_name ~* '^(mirror|profile)' OR lower(btrim(p.group_name))='bsd page')),0)::integer AS facebook_active_groups,
         coalesce((SELECT count(*) FROM public.business_facebook_posts p
                   WHERE (p.business_id=b.id OR p.business_number=b.business_number)
                   AND p.status ILIKE 'pending%'),0)::integer AS facebook_pending_posts,
@@ -64,6 +114,7 @@ WITH portfolio AS (
            FROM public.business_facebook_posts p
            WHERE (p.business_id=b.id OR p.business_number=b.business_number)
              AND p.status='active' AND p.member_count IS NOT NULL
+             AND NOT (p.group_name ~* '^(mirror|profile)' OR lower(btrim(p.group_name))='bsd page')
            GROUP BY p.group_name
         ) x) AS facebook_group_members_potential,
         (SELECT sum(p.impressions)::bigint FROM public.business_facebook_posts p
@@ -73,12 +124,12 @@ WITH portfolio AS (
                   WHERE e.event_name='page_view'
                     AND (e.business_id=b.id
                          OR (e.business_id IS NULL AND nullif(b.business_number,'') IS NOT NULL
-                             AND strpos(lower(e.page_path),lower(b.business_number)||'/')>0))),0)::integer AS site_direct_views_all_time,
+                             AND substring(lower(e.page_path) from 'bsd-b-\d{4}-(\d{4})') = right(b.business_number,4)))),0)::integer AS site_direct_views_all_time,
         coalesce((SELECT count(DISTINCT e.visitor_id) FROM public.site_analytics_events e
                   WHERE e.event_name='page_view'
                     AND (e.business_id=b.id
                          OR (e.business_id IS NULL AND nullif(b.business_number,'') IS NOT NULL
-                             AND strpos(lower(e.page_path),lower(b.business_number)||'/')>0))),0)::integer AS site_direct_visitors_all_time,
+                             AND substring(lower(e.page_path) from 'bsd-b-\d{4}-(\d{4})') = right(b.business_number,4)))),0)::integer AS site_direct_visitors_all_time,
         (SELECT jsonb_build_object(
           'from',s.window_start,'to',s.window_end,
           'business_views',s.business_views,'business_visitors',s.business_visitors,
