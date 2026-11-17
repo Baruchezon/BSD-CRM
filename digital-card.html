@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>כרטיס ביקור דיגיטלי | BSD</title>
+<meta name="description" content="כרטיס ביקור דיגיטלי ודרכי התקשרות">
+<style>
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:linear-gradient(135deg,#e9f1fa,#f7f9fc);color:#1b3049;font-family:Arial,"Noto Sans Hebrew",sans-serif}
+main{max-width:470px;margin:16px auto 40px;padding:0 12px}
+.panel{background:white;border-radius:23px;box-shadow:0 15px 35px #1c34551a;overflow:hidden;padding-bottom:18px}
+.hero{background:linear-gradient(145deg,#142845,#285c8b);color:white;text-align:center;padding:30px 18px 25px}
+.logo{max-width:96px;max-height:64px;object-fit:contain;margin-bottom:12px}
+.photo{width:112px;height:112px;object-fit:cover;border:4px solid #d9ae66;background:#fff;border-radius:50%;display:block;margin:0 auto 13px}
+h1{font-size:29px;margin:10px 0 6px}.title{color:#e7c788;margin:0 0 7px;font-size:15px}.company{margin:0;font-size:14px;color:#cfe0f3}
+.desc{padding:14px 18px 3px;font-size:15px;line-height:1.7;text-align:center}
+.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:15px}
+.actions a,.actions button{border:1px solid #d9e2ee;border-radius:12px;background:#f3f7fb;color:#1a3556;text-decoration:none;padding:13px 5px;display:flex;align-items:center;justify-content:center;text-align:center;min-height:52px;font:700 14px Arial,sans-serif;cursor:pointer}
+.actions a.green{background:#0ba972;color:white;border:0}.actions a.gold,.actions button.gold{background:#d6ab65;color:#202131;border:0}
+#status{min-height:25px;text-align:center;font-size:13px;color:#516b88;padding:0 12px}
+footer{text-align:center;font-size:12px;color:#728196;margin-top:20px;line-height:1.7}
+@media(max-width:390px){h1{font-size:26px}.actions{gap:8px;padding:10px}.actions a,.actions button{font-size:13px;padding:11px 4px}}
+</style>
+
+</head>
+<body>
+<main>
+<div class="panel" id="cardPanel" hidden>
+<div class="hero">
+<img id="logo" class="logo" hidden alt="לוגו">
+<img id="photo" class="photo" hidden alt="תמונת איש קשר">
+<h1 id="name"></h1><p id="job" class="title"></p><p id="company" class="company"></p>
+</div>
+<p id="description" class="desc"></p>
+<div id="actions" class="actions"></div>
+<div id="status" role="status"></div>
+</div>
+<div id="loading" style="padding:65px 20px;text-align:center">טוען כרטיס ביקור...</div>
+<footer>BSD Business Brokers Israel</footer>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+let card=null;
+function clean(s){return String(s||'').trim()}
+function webUrl(s){try{const u=new URL(clean(s));return ['https:','http:'].includes(u.protocol)?u.href:''}catch(_){return ''}}
+function phone(s){s=clean(s).replace(/[^\d+]/g,'');if(s.startsWith('00'))s='+'+s.slice(2);if(s.startsWith('0'))s='+972'+s.slice(1);return s.replace(/[^\d]/g,'')}
+function action(label,url,kind){if(!url)return;const a=document.createElement('a');a.textContent=label;a.href=url;a.className=kind||'';if(/^https?:/.test(url)){a.target='_blank';a.rel='noopener noreferrer'}$('actions').append(a)}
+function button(label,fn){const b=document.createElement('button');b.type='button';b.className='gold';b.textContent=label;b.addEventListener('click',fn);$('actions').append(b)}
+function vEsc(s){return clean(s).replace(/\\/g,'\\\\').replace(/\r?\n/g,'\\n').replace(/[,;]/g,m=>'\\'+m)}
+function saveContact(){
+const ls=['BEGIN:VCARD','VERSION:3.0','FN:'+vEsc(card.full_name),'ORG:'+vEsc(card.company_name),'TITLE:'+vEsc(card.job_title)];
+if(card.phone_mobile)ls.push('TEL;TYPE=CELL:'+vEsc(card.phone_mobile));
+if(card.phone_office)ls.push('TEL;TYPE=WORK:'+vEsc(card.phone_office));
+if(card.email)ls.push('EMAIL:'+vEsc(card.email));
+if(card.website_url)ls.push('URL:'+vEsc(card.website_url));
+ls.push('END:VCARD');
+const blob=new Blob(['\ufeff'+ls.join('\r\n')+'\r\n'],{type:'text/vcard;charset=utf-8'});
+const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='BSD_Contact.vcf';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),12000);
+$('status').textContent='פתח את קובץ איש הקשר ואשר את השמירה בטלפון.';
+}
+async function shareCard(){
+try{if(navigator.share){await navigator.share({title:card.full_name,text:'כרטיס הביקור שלי',url:location.href});return}await navigator.clipboard.writeText(location.href);$('status').textContent='הקישור הועתק לשיתוף';}
+catch(e){if(e.name!=='AbortError')$('status').textContent='אפשר להעתיק את כתובת הכרטיס משורת הדפדפן'}
+}
+function show(c){
+card=c;$('name').textContent=clean(c.full_name);$('job').textContent=clean(c.job_title);$('company').textContent=clean(c.company_name);$('description').textContent=clean(c.description);
+if(webUrl(c.photo_url)){$('photo').src=webUrl(c.photo_url);$('photo').hidden=false}
+if(webUrl(c.logo_url)){$('logo').src=webUrl(c.logo_url);$('logo').hidden=false}
+const mobile=phone(c.phone_mobile),office=phone(c.phone_office),wa=phone(c.whatsapp_number||c.phone_mobile);
+action('חיוג לנייד',mobile?'tel:+'+mobile:'');
+action('חיוג למשרד',office?'tel:+'+office:'');
+action('שלח וואטסאפ',wa?'https://wa.me/'+wa:'','green');
+action('שלח דוא״ל',c.email?'mailto:'+encodeURIComponent(clean(c.email)):'');
+action('אתר החברה',webUrl(c.website_url));
+action('פייסבוק',webUrl(c.facebook_url));
+action('אינסטגרם',webUrl(c.instagram_url));
+button('שמור באנשי הקשר',saveContact);button('שתף כרטיס',shareCard);
+$('loading').hidden=true;$('cardPanel').hidden=false;
+}
+async function load(){
+const token=new URLSearchParams(location.search).get('card')||'';
+if(!/^[0-9a-f-]{36}$/i.test(token)){$('loading').textContent='קישור הכרטיס אינו תקין';return}
+try{
+const resp=await fetch('https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/public-digital-card?card='+encodeURIComponent(token),{cache:'no-store'});
+if(!resp.ok)throw Error('הכרטיס אינו זמין או אינו מפורסם');
+const data=await resp.json();if(!data.card)throw Error('לא נמצא כרטיס');show(data.card)
+}catch(e){$('loading').textContent=e.message}
+}
+load();
+</script>
+</body></html>

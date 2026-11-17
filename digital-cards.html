@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>כרטיסי ביקור דיגיטליים | BSD CRM</title>
+<link rel="icon" href="favicon.ico">
+<style>
+:root{color-scheme:light;--navy:#142747;--gold:#cda55e;--line:#dce3eb;--bg:#f3f6fa}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;font:16px Arial,"Noto Sans Hebrew",sans-serif;color:#1d2b3f;background:var(--bg)}
+header{background:linear-gradient(135deg,#11243d,#254f80);color:#fff;padding:19px 16px}
+.header{max-width:1050px;margin:auto;display:flex;justify-content:space-between;align-items:center;gap:12px}
+header a{color:#fff;text-decoration:none}header h1{font-size:22px;margin:0}header p{color:#d4e1f1;font-size:13px;margin:6px 0 0}
+main{max-width:1050px;margin:auto;padding:19px 14px 65px}
+.panel{background:white;border:1px solid var(--line);border-radius:17px;padding:19px;margin-bottom:17px;box-shadow:0 6px 25px #18335b0a}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h2{font-size:19px;margin:0 0 12px}h3{font-size:17px;margin:0 0 8px}
+button,.button{border:0;border-radius:10px;padding:12px 16px;font:700 14px Arial,sans-serif;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.primary{background:var(--navy);color:#fff}.gold{background:var(--gold);color:#171d2b}.secondary{background:#eaf0f7;color:#182e4a}.danger{background:#fff0ed;color:#9c2b20}
+button:disabled{opacity:.55;cursor:wait}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:13px;margin-top:16px}
+.card{border:1px solid var(--line);padding:15px;border-radius:13px;background:#fff}
+.card small{color:#54677e}.card .actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:13px}
+.card .actions button{font-size:12px;padding:9px 11px}
+.avatar{width:55px;height:55px;border-radius:50%;object-fit:cover;background:#e9edf3;flex-shrink:0}
+.row{display:flex;align-items:center;gap:11px}.flex{flex:1}
+form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+label{font-weight:700;font-size:13px}
+input,textarea,select{font:15px Arial,sans-serif;width:100%;background:#fff;color:#172a42;padding:11px;border:1px solid #cbd6e2;border-radius:9px;min-height:43px}
+textarea{min-height:74px;resize:vertical}
+.full{grid-column:1/-1}.check{display:flex;align-items:center;gap:9px;font-size:14px}
+.check input{width:20px;min-height:20px}
+.notice{font-size:13px;line-height:1.6;color:#54677e}
+#editor,#shareBox{display:none}
+#editor.show,#shareBox.show{display:block}
+#status{min-height:21px;color:#234e88;font-size:13px;line-height:1.6}
+#shareBox{position:fixed;inset:0;background:#091d36b8;z-index:20;overflow:auto;padding:30px 12px}
+#shareBox .inner{max-width:440px;margin:3vh auto;background:#fff;border-radius:18px;padding:23px}
+#shareActions{display:flex;gap:9px;flex-wrap:wrap;margin:15px 0}
+.pill{border-radius:100px;background:#e6f4e9;color:#266044;font-size:12px;padding:4px 9px;white-space:nowrap}
+.pill.draft{background:#f6ebd9;color:#8d5e21}
+@media(max-width:590px){main{padding:12px 9px 60px}.panel{padding:14px}form{grid-template-columns:1fr}header h1{font-size:19px}.bar button{flex-shrink:0}.cards{grid-template-columns:1fr}button,.button{min-height:42px}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
+</head>
+<body>
+<header><div class="header"><div><h1>כרטיסי ביקור דיגיטליים</h1><p>BSD CRM | יצירה, ניהול ושיתוף כרטיס אישי</p></div><a href="app.html">חזרה ל CRM</a></div></header>
+<main>
+<section class="panel">
+<div class="bar"><div><h2>הכרטיסים שלי</h2><div class="notice" id="welcome">מתבצעת בדיקת הרשאות</div></div><button class="primary" id="newBtn" disabled>✚ צור כרטיס</button></div>
+<div id="status" role="status"></div><div class="cards" id="cards"></div>
+</section>
+<section class="panel" id="editor">
+<div class="bar"><h2 id="editorTitle">כרטיס חדש</h2><button type="button" class="secondary" id="cancelBtn">סגור</button></div>
+<form id="cardForm" autocomplete="on">
+<div class="field full" id="ownerField" hidden><label for="owner">למי שייך הכרטיס?</label><select id="owner"></select></div>
+<div class="field"><label for="full_name">שם מלא *</label><input id="full_name" required maxlength="120"></div>
+<div class="field"><label for="job_title">תפקיד</label><input id="job_title" maxlength="120" placeholder="סוכן עסקי"></div>
+<div class="field"><label for="company_name">שם חברה</label><input id="company_name" maxlength="180"></div>
+<div class="field"><label for="email">דוא״ל</label><input id="email" type="email" maxlength="200" inputmode="email"></div>
+<div class="field"><label for="phone_mobile">טלפון נייד</label><input id="phone_mobile" type="tel" maxlength="35" inputmode="tel"></div>
+<div class="field"><label for="phone_office">טלפון משרד</label><input id="phone_office" type="tel" maxlength="35" inputmode="tel"></div>
+<div class="field"><label for="whatsapp_number">מספר וואטסאפ</label><input id="whatsapp_number" type="tel" maxlength="35" inputmode="tel"></div>
+<div class="field"><label for="website_url">כתובת אתר</label><input id="website_url" type="url" maxlength="500" placeholder="https://"></div>
+<div class="field"><label for="facebook_url">פייסבוק</label><input id="facebook_url" type="url" maxlength="500"></div>
+<div class="field"><label for="instagram_url">אינסטגרם</label><input id="instagram_url" type="url" maxlength="500"></div>
+<div class="field"><label for="photo_url">כתובת תמונה (אפשר גם להעלות)</label><input id="photo_url" type="url" maxlength="800"></div>
+<div class="field"><label for="uploadPhoto">העלאת תמונה מהטלפון</label><input id="uploadPhoto" type="file" accept="image/jpeg,image/png,image/webp"><span class="notice">עד 3MB. תמונת כרטיס מפורסם גלויה לכל מי שמקבל קישור.</span></div>
+<div class="field full"><label for="logo_url">כתובת לוגו (אופציונלי)</label><input id="logo_url" type="url" maxlength="800"></div>
+<div class="field full"><label for="description">תיאור קצר</label><textarea id="description" maxlength="500"></textarea></div>
+<label class="check full"><input type="checkbox" id="is_published"> פרסם את הכרטיס כך שכל מי שיש לו קישור יוכל לצפות בו</label>
+<div class="full bar"><span class="notice">עדכון כרטיס קיים שומר על הקישור שלו. סוכן רואה ועורך רק כרטיסים שבבעלותו.</span><button class="primary" type="submit" id="saveBtn">שמור כרטיס</button></div>
+</form>
+</section>
+</main>
+<div id="shareBox" role="dialog" aria-modal="true" aria-label="שליחת כרטיס">
+<div class="inner"><div class="bar"><h3>שליחת כרטיס ביקור</h3><button class="secondary" id="closeShare">סגור</button></div>
+<p class="notice">אפשר לשתף בקישור, לשלוח בוואטסאפ או לשמור קובץ HTML בטלפון ולשלוח אותו ידנית.</p>
+<div class="field"><label for="customerSearch">חפש לקוח לפי שם בתוך ה CRM</label><div class="bar"><input id="customerSearch" type="search" placeholder="הקלד לפחות שתי אותיות" aria-label="חיפוש לקוח" style="flex:1;min-width:160px"><button id="findCustomerBtn" class="secondary" type="button">חפש לקוח</button></div></div>
+<div class="field"><label for="customerResults">לקוחות שנמצאו</label><select id="customerResults"><option value="">בחר לקוח מתוך התוצאות</option></select></div>
+<div class="field"><label for="recipientPhone">מספר הלקוח לוואטסאפ</label><input id="recipientPhone" type="tel" inputmode="tel" placeholder="0501234567"></div>
+<div id="shareActions"><button id="waBtn" class="primary">שלח בוואטסאפ</button><button id="nativeShareBtn" class="secondary">שתף מהטלפון</button><button id="copyBtn" class="secondary">העתק קישור</button></div>
+<div id="shareStatus" class="notice" role="status"></div></div>
+</div>
+<script>
+"use strict";
+let CURRENT_PROFILE=null, cardRows=[], chosen=null, editing=null;
+const $=id=>document.getElementById(id);
+const FIELDS=['full_name','job_title','company_name','phone_mobile','phone_office','whatsapp_number','email','website_url','facebook_url','instagram_url','photo_url','logo_url','description'];
+const allowedRoles=['admin','manager','agent','agent_authorized'];
+const admin=()=>CURRENT_PROFILE && CURRENT_PROFILE.role==='admin';
+const urlOf=c=>new URL('digital-card.html?card='+encodeURIComponent(c.public_token),location.href).href;
+const tidy=s=>String(s||'').trim();
+function msg(s){$('status').textContent=s}
+function safeUrl(s){s=tidy(s);if(!s)return '';try{const u=new URL(s);if(['https:','http:'].includes(u.protocol))return u.href}catch(_){}throw Error('יש להזין כתובת אינטרנט מלאה שמתחילה ב https://')}
+function ilPhone(v){let p=tidy(v).replace(/[^\d+]/g,'');if(p.startsWith('00'))p='+'+p.slice(2);if(p.startsWith('0'))p='+972'+p.slice(1);return p.replace(/[^\d]/g,'')}
+function makeText(c){return 'שלום, מצורף כרטיס הביקור הדיגיטלי שלי: '+c.full_name+'\n'+urlOf(c)}
+function download(name,mime,text){const b=new Blob([text],{type:mime}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),15000)}
+function fileName(c){return tidy(c.full_name).replace(/[^\p{L}\p{N}]+/gu,'_').slice(0,50)||'BSD_Card'}
+function vEscape(s){return String(s||'').replace(/\\/g,'\\\\').replace(/\r?\n/g,'\\n').replace(/[,;]/g,m=>'\\'+m)}
+function downloadVcard(c){const vals=['BEGIN:VCARD','VERSION:3.0','FN:'+vEscape(c.full_name),'ORG:'+vEscape(c.company_name),'TITLE:'+vEscape(c.job_title)];if(c.phone_mobile)vals.push('TEL;TYPE=CELL:'+vEscape(c.phone_mobile));if(c.phone_office)vals.push('TEL;TYPE=WORK:'+vEscape(c.phone_office));if(c.email)vals.push('EMAIL:'+vEscape(c.email));if(c.website_url)vals.push('URL:'+vEscape(c.website_url));vals.push('END:VCARD');download(fileName(c)+'.vcf','text/vcard;charset=utf-8','\ufeff'+vals.join('\r\n')+'\r\n')}
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function link(label,u){if(!u)return '';return '<a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(label)+'</a>'}
+function offlineHtml(c){
+const wa=ilPhone(c.whatsapp_number||c.phone_mobile);
+return '<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(c.full_name)+'</title><style>body{font:17px Arial;text-align:center;background:#edf3f8;color:#192f4b;margin:0}.box{max-width:440px;margin:20px auto;padding:22px;background:white;border-radius:22px}.head{background:linear-gradient(140deg,#132a46,#29527e);color:white;padding:26px;border-radius:18px}.head img{width:110px;height:110px;object-fit:cover;border-radius:50%;border:3px solid #d7ac6a}.buttons{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:17px}.buttons a{display:block;background:#164778;color:white;text-decoration:none;border-radius:12px;padding:14px 5px}h1{margin:10px 0 5px}p{line-height:1.5}</style><div class="box"><div class="head">'
++(safeUrl(c.photo_url)?'<img alt="" src="'+esc(safeUrl(c.photo_url))+'">':'')
++'<h1>'+esc(c.full_name)+'</h1><p>'+esc(c.job_title)+'</p><p>'+esc(c.company_name)+'</p></div><p>'+esc(c.description)+'</p><div class="buttons">'
++link('טלפון נייד',c.phone_mobile?'tel:'+ilPhone(c.phone_mobile):'')
++link('טלפון משרד',c.phone_office?'tel:'+ilPhone(c.phone_office):'')
++link('וואטסאפ',wa?'https://wa.me/'+wa:'')
++link('דוא״ל',c.email?'mailto:'+encodeURIComponent(c.email):'')
++link('אתר',safeUrl(c.website_url))+link('פייסבוק',safeUrl(c.facebook_url))+link('אינסטגרם',safeUrl(c.instagram_url))
++'</div></div></html>';
+}
+function formData(){const data={};FIELDS.forEach(k=>data[k]=tidy($(k).value));['website_url','facebook_url','instagram_url','photo_url','logo_url'].forEach(k=>data[k]=safeUrl(data[k]));data.is_published=$('is_published').checked;if(data.full_name.length<2)throw Error('יש להזין שם מלא');return data}
+async function uploadPhoto(){
+const file=$('uploadPhoto').files[0];if(!file)return '';
+if(file.size>3145728||!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('אפשר להעלות תמונת JPG, PNG או WEBP עד 3MB');
+const ext={'image/png':'png','image/jpeg':'jpg','image/webp':'webp'}[file.type];
+const path=CURRENT_PROFILE.id+'/'+crypto.randomUUID()+'.'+ext;
+const {error}=await supabaseClient.storage.from('agent-card-assets').upload(path,file,{contentType:file.type,upsert:false});
+if(error)throw Error('העלאת התמונה נכשלה: '+error.message);
+return supabaseClient.storage.from('agent-card-assets').getPublicUrl(path).data.publicUrl;
+}
+function defaults(){
+$('cardForm').reset();FIELDS.forEach(k=>$(k).value='');
+$('company_name').value='BSD Business Brokers Israel';
+$('website_url').value='https://bsd-bbi.co.il/';
+$('logo_url').value=new URL('bsd_logo.png',location.href).href;
+$('full_name').value=tidy(CURRENT_PROFILE.full_name);
+$('job_title').value=tidy(CURRENT_PROFILE.job_title);
+$('email').value=tidy(CURRENT_PROFILE.email);
+$('phone_mobile').value=tidy(CURRENT_PROFILE.phone);
+if(CURRENT_PROFILE.photo_url && /^https?:\/\//.test(CURRENT_PROFILE.photo_url))$('photo_url').value=CURRENT_PROFILE.photo_url;
+$('is_published').checked=false;
+$('owner').value=CURRENT_PROFILE.id;
+}
+function openEditor(c){
+editing=c||null;
+if(c){$('cardForm').reset();FIELDS.forEach(k=>$(k).value=c[k]||'');$('is_published').checked=!!c.is_published;$('editorTitle').textContent='עריכת כרטיס: '+c.full_name;$('owner').value=c.owner_user_id}
+else {defaults();$('editorTitle').textContent='יצירת כרטיס ביקור'}
+$('owner').disabled=!!c;$('editor').classList.add('show');$('editor').scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function loadCards(){
+const {data,error}=await supabaseClient.from('agent_digital_cards').select('*').order('created_at',{ascending:false});
+if(error)throw error;cardRows=data||[];render();
+}
+function action(label,cls,fn){const b=document.createElement('button');b.type='button';b.className=cls;b.textContent=label;b.addEventListener('click',fn);return b}
+function render(){
+const root=$('cards');root.replaceChildren();
+if(!cardRows.length){const p=document.createElement('p');p.className='notice';p.textContent='אין עדיין כרטיסים. לחץ על צור כרטיס כדי להתחיל.';root.append(p);return}
+for(const c of cardRows){
+const e=document.createElement('article');e.className='card';
+const head=document.createElement('div');head.className='row';
+const av=document.createElement('img');av.className='avatar';av.alt='';av.onerror=()=>{av.style.display='none'};if(/^https?:\/\//.test(c.photo_url||''))av.src=c.photo_url;else av.style.display='none';
+const text=document.createElement('div');text.className='flex';const nm=document.createElement('h3');nm.textContent=c.full_name;const sub=document.createElement('small');sub.textContent=[c.job_title,c.company_name].filter(Boolean).join(' | ');text.append(nm,sub);head.append(av,text);
+const tag=document.createElement('span');tag.className='pill'+(c.is_published?'':' draft');tag.textContent=c.is_published?'מפורסם':'טיוטה';
+const acts=document.createElement('div');acts.className='actions';
+acts.append(action('ערוך','secondary',()=>openEditor(c)),action('שלח כרטיס','primary',()=>openShare(c)),action('הורד HTML','secondary',()=>{try{download(fileName(c)+'.html','text/html;charset=utf-8',offlineHtml(c))}catch(e){msg(e.message)}}),action('שמור איש קשר','secondary',()=>downloadVcard(c)));
+if(c.is_published)acts.append(action('הצג כרטיס','secondary',()=>window.open(urlOf(c),'_blank','noopener')));
+if(admin())acts.append(action('מחק','danger',()=>removeCard(c)));
+e.append(head,tag,acts);root.append(e);
+}
+}
+async function removeCard(c){
+if(!confirm('למחוק את הכרטיס של '+c.full_name+'? הקישור שלו יפסיק לעבוד.'))return;
+const {error}=await supabaseClient.from('agent_digital_cards').delete().eq('id',c.id);
+if(error){msg(error.message);return}await loadCards();msg('הכרטיס נמחק');
+}
+async function saveCard(e){
+e.preventDefault();$('saveBtn').disabled=true;msg('שומר...');
+try{
+const payload=formData(),img=await uploadPhoto();if(img)payload.photo_url=img;
+let response;
+if(editing)response=await supabaseClient.from('agent_digital_cards').update({...payload,updated_at:new Date().toISOString()}).eq('id',editing.id).select('id').single();
+else response=await supabaseClient.from('agent_digital_cards').insert({...payload,owner_user_id:admin()&&$('owner').value?$('owner').value:CURRENT_PROFILE.id}).select('id').single();
+if(response.error)throw response.error;
+$('editor').classList.remove('show');await loadCards();msg('הכרטיס נשמר. הקישור הקבוע לא משתנה בעריכות.');
+}catch(e){msg('לא ניתן לשמור: '+(e.message||e))}finally{$('saveBtn').disabled=false}
+}
+function openShare(c){chosen=c;$('customerSearch').value='';$('customerResults').replaceChildren(new Option('בחר לקוח מתוך התוצאות',''));$('shareStatus').textContent=c.is_published?'הכרטיס מוכן לשליחה':'הכרטיס בטיוטה. יש לפרסם אותו כדי שהקישור ייפתח אצל הלקוח.';$('recipientPhone').value='';$('shareBox').classList.add('show')}
+function closeShare(){$('shareBox').classList.remove('show')}
+function requirePublished(){if(!chosen||!chosen.is_published)throw Error('יש לפרסם את הכרטיס לפני שליחת קישור')}
+async function findCustomer(){
+  const term=tidy($('customerSearch').value),select=$('customerResults');
+  select.replaceChildren(new Option('בחר לקוח מתוך התוצאות',''));
+  if(term.length<2){$('shareStatus').textContent='יש להקליד לפחות שתי אותיות בחיפוש לקוח';return}
+  $('findCustomerBtn').disabled=true;
+  try{
+    // Query the existing customer table through its existing RLS. Never use service role.
+    // Non-admin agents are further restricted to their own created customers.
+    let q=supabaseClient.from('leads').select('id,full_name,first_name,last_name,phone,phone2,created_by')
+      .ilike('full_name','%'+term.replace(/[%_]/g,'')+'%').limit(30);
+    if(!admin())q=q.eq('created_by',CURRENT_PROFILE.id);
+    const {data,error}=await q;if(error)throw error;
+    let valid=0;
+    for(const c of data||[]){
+      const name=tidy(c.full_name)||[c.first_name,c.last_name].filter(Boolean).join(' ');
+      const p=tidy(c.phone)||tidy(c.phone2);
+      if(!p)continue;
+      const opt=new Option(name+' | '+p,p);select.append(opt);valid++;
+    }
+    $('shareStatus').textContent=valid?'נמצאו '+valid+' לקוחות עם מספר טלפון':'לא נמצאו לקוחות מתאימים';
+  }catch(e){$('shareStatus').textContent='חיפוש לקוח נכשל: '+(e.message||e)}
+  finally{$('findCustomerBtn').disabled=false}
+}
+function whatsappSend(){
+try{requirePublished();const raw=tidy($('recipientPhone').value),p=ilPhone(raw);
+if(!/^[1-9]\d{8,14}$/.test(p))throw Error('יש להזין מספר סלולרי תקין כולל קידומת מדינה');
+window.open('https://wa.me/'+p+'?text='+encodeURIComponent(makeText(chosen)),'_blank','noopener');
+$('shareStatus').textContent='הודעת וואטסאפ נפתחה. יש ללחוץ שלח בתוך וואטסאפ.';
+}catch(e){$('shareStatus').textContent=e.message}
+}
+async function nativeShare(){
+try{requirePublished();if(navigator.share){await navigator.share({title:chosen.full_name,text:makeText(chosen),url:urlOf(chosen)});}
+else await copyLink();}catch(e){if(e.name!=='AbortError')$('shareStatus').textContent=e.message}
+}
+async function copyLink(){try{requirePublished();await navigator.clipboard.writeText(urlOf(chosen));$('shareStatus').textContent='קישור הכרטיס הועתק';}catch(e){$('shareStatus').textContent=e.message}}
+async function ownersList(){
+if(!admin())return;
+$('ownerField').hidden=false;
+const {data,error}=await supabaseClient.from('profiles').select('id,full_name,email,role,status').eq('status','active').order('full_name');
+if(error)return;
+$('owner').replaceChildren();
+for(const p of data||[]){if(!allowedRoles.includes(p.role))continue;const o=document.createElement('option');o.value=p.id;o.textContent=tidy(p.full_name)||tidy(p.email);$('owner').append(o)}
+}
+async function init(){
+try{
+CURRENT_PROFILE=await requireAuth();
+if(!CURRENT_PROFILE)return;
+if(CURRENT_PROFILE.status!=='active'||!allowedRoles.includes(CURRENT_PROFILE.role)){location.replace('app.html');return}
+$('welcome').textContent='שלום '+(CURRENT_PROFILE.full_name||CURRENT_PROFILE.email)+'. כל סוכן רואה רק את הכרטיסים שלו.';
+$('newBtn').disabled=false;await ownersList();await loadCards();msg('');
+}catch(e){msg('טעינת הכרטיסים נכשלה: '+(e.message||e))}
+}
+$('newBtn').addEventListener('click',()=>openEditor(null));
+$('cancelBtn').addEventListener('click',()=>$('editor').classList.remove('show'));
+$('cardForm').addEventListener('submit',saveCard);
+$('closeShare').addEventListener('click',closeShare);
+$('findCustomerBtn').addEventListener('click',findCustomer);
+$('customerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();findCustomer()}});
+$('customerResults').addEventListener('change',()=>{if($('customerResults').value)$('recipientPhone').value=$('customerResults').value});
+$('waBtn').addEventListener('click',whatsappSend);
+$('nativeShareBtn').addEventListener('click',nativeShare);
+$('copyBtn').addEventListener('click',copyLink);
+init();
+</script>
+</body></html>
