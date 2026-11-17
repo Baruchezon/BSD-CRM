@@ -79,6 +79,8 @@ textarea{min-height:74px;resize:vertical}
 <div id="shareBox" role="dialog" aria-modal="true" aria-label="שליחת כרטיס">
 <div class="inner"><div class="bar"><h3>שליחת כרטיס ביקור</h3><button class="secondary" id="closeShare">סגור</button></div>
 <p class="notice">אפשר לשתף בקישור, לשלוח בוואטסאפ או לשמור קובץ HTML בטלפון ולשלוח אותו ידנית.</p>
+<div class="field"><label for="customerSearch">חפש לקוח לפי שם בתוך ה CRM</label><div class="bar"><input id="customerSearch" type="search" placeholder="הקלד לפחות שתי אותיות" aria-label="חיפוש לקוח" style="flex:1;min-width:160px"><button id="findCustomerBtn" class="secondary" type="button">חפש לקוח</button></div></div>
+<div class="field"><label for="customerResults">לקוחות שנמצאו</label><select id="customerResults"><option value="">בחר לקוח מתוך התוצאות</option></select></div>
 <div class="field"><label for="recipientPhone">מספר הלקוח לוואטסאפ</label><input id="recipientPhone" type="tel" inputmode="tel" placeholder="0501234567"></div>
 <div id="shareActions"><button id="waBtn" class="primary">שלח בוואטסאפ</button><button id="nativeShareBtn" class="secondary">שתף מהטלפון</button><button id="copyBtn" class="secondary">העתק קישור</button></div>
 <div id="shareStatus" class="notice" role="status"></div></div>
@@ -174,15 +176,38 @@ e.preventDefault();$('saveBtn').disabled=true;msg('שומר...');
 try{
 const payload=formData(),img=await uploadPhoto();if(img)payload.photo_url=img;
 let response;
-if(editing)response=await supabaseClient.from('agent_digital_cards').update(payload).eq('id',editing.id).select('id').single();
+if(editing)response=await supabaseClient.from('agent_digital_cards').update({...payload,updated_at:new Date().toISOString()}).eq('id',editing.id).select('id').single();
 else response=await supabaseClient.from('agent_digital_cards').insert({...payload,owner_user_id:admin()&&$('owner').value?$('owner').value:CURRENT_PROFILE.id}).select('id').single();
 if(response.error)throw response.error;
 $('editor').classList.remove('show');await loadCards();msg('הכרטיס נשמר. הקישור הקבוע לא משתנה בעריכות.');
 }catch(e){msg('לא ניתן לשמור: '+(e.message||e))}finally{$('saveBtn').disabled=false}
 }
-function openShare(c){chosen=c;$('shareStatus').textContent=c.is_published?'הכרטיס מוכן לשליחה':'הכרטיס בטיוטה. יש לפרסם אותו כדי שהקישור ייפתח אצל הלקוח.';$('recipientPhone').value='';$('shareBox').classList.add('show')}
+function openShare(c){chosen=c;$('customerSearch').value='';$('customerResults').replaceChildren(new Option('בחר לקוח מתוך התוצאות',''));$('shareStatus').textContent=c.is_published?'הכרטיס מוכן לשליחה':'הכרטיס בטיוטה. יש לפרסם אותו כדי שהקישור ייפתח אצל הלקוח.';$('recipientPhone').value='';$('shareBox').classList.add('show')}
 function closeShare(){$('shareBox').classList.remove('show')}
 function requirePublished(){if(!chosen||!chosen.is_published)throw Error('יש לפרסם את הכרטיס לפני שליחת קישור')}
+async function findCustomer(){
+  const term=tidy($('customerSearch').value),select=$('customerResults');
+  select.replaceChildren(new Option('בחר לקוח מתוך התוצאות',''));
+  if(term.length<2){$('shareStatus').textContent='יש להקליד לפחות שתי אותיות בחיפוש לקוח';return}
+  $('findCustomerBtn').disabled=true;
+  try{
+    // Query the existing customer table through its existing RLS. Never use service role.
+    // Non-admin agents are further restricted to their own created customers.
+    let q=supabaseClient.from('leads').select('id,full_name,first_name,last_name,phone,phone2,created_by')
+      .ilike('full_name','%'+term.replace(/[%_]/g,'')+'%').limit(30);
+    if(!admin())q=q.eq('created_by',CURRENT_PROFILE.id);
+    const {data,error}=await q;if(error)throw error;
+    let valid=0;
+    for(const c of data||[]){
+      const name=tidy(c.full_name)||[c.first_name,c.last_name].filter(Boolean).join(' ');
+      const p=tidy(c.phone)||tidy(c.phone2);
+      if(!p)continue;
+      const opt=new Option(name+' | '+p,p);select.append(opt);valid++;
+    }
+    $('shareStatus').textContent=valid?'נמצאו '+valid+' לקוחות עם מספר טלפון':'לא נמצאו לקוחות מתאימים';
+  }catch(e){$('shareStatus').textContent='חיפוש לקוח נכשל: '+(e.message||e)}
+  finally{$('findCustomerBtn').disabled=false}
+}
 function whatsappSend(){
 try{requirePublished();const raw=tidy($('recipientPhone').value),p=ilPhone(raw);
 if(!/^[1-9]\d{8,14}$/.test(p))throw Error('יש להזין מספר סלולרי תקין כולל קידומת מדינה');
@@ -216,6 +241,9 @@ $('newBtn').addEventListener('click',()=>openEditor(null));
 $('cancelBtn').addEventListener('click',()=>$('editor').classList.remove('show'));
 $('cardForm').addEventListener('submit',saveCard);
 $('closeShare').addEventListener('click',closeShare);
+$('findCustomerBtn').addEventListener('click',findCustomer);
+$('customerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();findCustomer()}});
+$('customerResults').addEventListener('change',()=>{if($('customerResults').value)$('recipientPhone').value=$('customerResults').value});
 $('waBtn').addEventListener('click',whatsappSend);
 $('nativeShareBtn').addEventListener('click',nativeShare);
 $('copyBtn').addEventListener('click',copyLink);
