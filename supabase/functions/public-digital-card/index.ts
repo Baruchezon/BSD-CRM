@@ -11,7 +11,7 @@ const headers = {
 const columns = [
   "full_name","job_title","company_name","phone_mobile","phone_office",
   "whatsapp_number","email","website_url","facebook_url","instagram_url",
-  "photo_url","logo_url","description","office_address"
+  "photo_url","logo_url","description","office_address","short_code"
 ].join(",");
 function result(body: unknown, status=200) {
   return new Response(JSON.stringify(body), {
