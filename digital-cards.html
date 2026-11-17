@@ -111,21 +111,49 @@ function formatPhone(v){
 function makeText(c){return 'שלום, מצורף כרטיס הביקור הדיגיטלי שלי: '+c.full_name+'\n'+urlOf(c)}
 function download(name,mime,text){const b=new Blob([text],{type:mime}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),15000)}
 function fileName(c){return tidy(c.full_name).replace(/[^\p{L}\p{N}]+/gu,'_').slice(0,50)||'BSD_Card'}
-function vEscape(s){return String(s||'').replace(/\\/g,'\\\\').replace(/\r?\n/g,'\\n').replace(/[,;]/g,m=>'\\'+m)}
-function downloadVcard(c){const vals=['BEGIN:VCARD','VERSION:3.0','FN:'+vEscape(c.full_name),'ORG:'+vEscape(c.company_name),'TITLE:'+vEscape(c.job_title)];if(c.phone_mobile)vals.push('TEL;TYPE=CELL:'+vEscape(formatPhone(c.phone_mobile)));if(c.phone_office)vals.push('TEL;TYPE=WORK:'+vEscape(formatPhone(c.phone_office)));if(c.email)vals.push('EMAIL:'+vEscape(c.email));if(c.website_url)vals.push('URL:'+vEscape(c.website_url));vals.push('END:VCARD');download(fileName(c)+'.vcf','text/vcard;charset=utf-8','\ufeff'+vals.join('\r\n')+'\r\n')}
+function vEscape(s){
+ return String(s||'').replace(/\\/g,'\\\\').replace(/\r\n|\r|\n/g,'\\n')
+   .replace(/[,;]/g,m=>'\\'+m);
+}
+function foldVcardLine(line){
+ const encoder=new TextEncoder(),out=[];
+ let value='',bytes=0;
+ for(const point of line){
+   const length=encoder.encode(point).length;
+   if(bytes+length>75){out.push(value);value=' ';bytes=1;}
+   value+=point;bytes+=length;
+ }
+ out.push(value);
+ return out.join('\r\n');
+}
+function makeContactVcard(c){
+ const name=tidy(c.full_name);
+ const tokens=name.split(/\s+/).filter(Boolean);
+ const family=tokens.length>1?tokens[tokens.length-1]:'';
+ const given=tokens.length>1?tokens.slice(0,-1).join(' '):name;
+ const lines=['BEGIN:VCARD','VERSION:3.0',
+  'N:'+vEscape(family)+';'+vEscape(given)+';;;',
+  'FN:'+vEscape(name)];
+ if(c.company_name)lines.push('ORG:'+vEscape(c.company_name));
+ if(c.job_title)lines.push('TITLE:'+vEscape(c.job_title));
+ if(c.phone_mobile)lines.push('TEL;TYPE=CELL:'+vEscape(formatPhone(c.phone_mobile)));
+ if(c.phone_office)lines.push('TEL;TYPE=WORK,VOICE:'+vEscape(formatPhone(c.phone_office)));
+ if(c.email)lines.push('EMAIL;TYPE=INTERNET,WORK:'+vEscape(c.email));
+ if(c.website_url)lines.push('URL:'+vEscape(c.website_url));
+ if(c.office_address)lines.push('ADR;TYPE=WORK:;;'+vEscape(c.office_address)+';;;;');
+ lines.push('END:VCARD');
+ return lines.map(foldVcardLine).join('\r\n')+'\r\n';
+}
+function downloadVcard(c){
+ download(fileName(c)+'.vcf','text/x-vcard;charset=utf-8',makeContactVcard(c));
+}
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function link(label,u){if(!u)return '';return '<a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(label)+'</a>'}
 function offlineHtml(c){
 const wa=ilPhone(c.whatsapp_number||c.phone_mobile);
 const site=safeUrl(c.website_url),fb=safeUrl(c.facebook_url),ig=safeUrl(c.instagram_url),photo=safeUrl(c.photo_url),logo=safeUrl(c.logo_url);
 const detailLink=(label,value,url,cls='')=>!url?'':'<a class="'+cls+'" href="'+esc(url)+'"><strong>'+esc(label)+'</strong><small>'+esc(value)+'</small></a>';
-const vcard=['BEGIN:VCARD','VERSION:3.0','FN:'+vEscape(c.full_name),'ORG:'+vEscape(c.company_name),'TITLE:'+vEscape(c.job_title)];
-if(c.phone_mobile)vcard.push('TEL;TYPE=CELL:'+vEscape(formatPhone(c.phone_mobile)));
-if(c.phone_office)vcard.push('TEL;TYPE=WORK:'+vEscape(formatPhone(c.phone_office)));
-if(c.email)vcard.push('EMAIL:'+vEscape(c.email));
-if(c.website_url)vcard.push('URL:'+vEscape(c.website_url));
-vcard.push('END:VCARD');
-const contactDownload='data:text/vcard;charset=utf-8,'+encodeURIComponent('\ufeff'+vcard.join('\r\n')+'\r\n');
+const contactDownload='data:text/x-vcard;charset=utf-8,'+encodeURIComponent(makeContactVcard(c));
 const shareWhatsApp='https://api.whatsapp.com/send?text='+encodeURIComponent('כרטיס הביקור הדיגיטלי שלי: '+c.full_name+'\n'+urlOf(c));
 
 const services=String(c.company_name||'').toLowerCase().includes('bsd')?'<h2>איך אפשר לעזור לך?</h2><div class="round-actions">'

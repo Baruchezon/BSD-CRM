@@ -196,42 +196,32 @@ function vcardUrl(){
  query.set("format","vcard");
  return CARD_API+"?"+query.toString();
 }
-function makeVcard(){
- const parts=["BEGIN:VCARD","VERSION:3.0","N:;"+vEscape(card.full_name)+";;;",
-   "FN:"+vEscape(card.full_name),"ORG:"+vEscape(card.company_name),"TITLE:"+vEscape(card.job_title)];
- if(card.phone_mobile)parts.push("TEL;TYPE=CELL:"+vEscape(formatPhone(card.phone_mobile)));
- if(card.phone_office)parts.push("TEL;TYPE=WORK:"+vEscape(formatPhone(card.phone_office)));
- if(card.email)parts.push("EMAIL;TYPE=WORK:"+vEscape(card.email));
- if(card.website_url)parts.push("URL:"+vEscape(card.website_url));
- if(card.office_address)parts.push("ADR;TYPE=WORK:;;"+vEscape(card.office_address)+";;;;");
- parts.push("END:VCARD");
- return "\ufeff"+parts.join("\r\n")+"\r\n";
-}
-function directVcardDownload(){
- const source=vcardUrl();
- if(!source){$("status").textContent="לא ניתן להוריד כרגע. נסה לרענן את הכרטיס.";return;}
- const a=el("a");a.href=source;a.download="BSD_Contact.vcf";
- document.body.append(a);a.click();a.remove();
- $("status").textContent="קובץ איש הקשר ירד למכשיר. פתח את BSD_Contact.vcf מתוך ההורדות או הקבצים, בחר ייבוא לאנשי הקשר ואשר שמירה.";
-}
 function saveContact(){
  if(!card)return;
+ const source=vcardUrl();
  const status=$("status");
- status.textContent="כדי לסיים שמירה, בחר באנשי קשר במסך שייפתח ואשר שמירה.";
- let file;
- try{file=new File([makeVcard()],"BSD_Contact.vcf",{type:"text/vcard;charset=utf-8"});}catch(_){directVcardDownload();return;}
- if(typeof navigator.share==="function" && typeof navigator.canShare==="function"){
-   try{
-     if(navigator.canShare({files:[file]})){
-       // Must be called synchronously from the click to retain user activation.
-       navigator.share({files:[file],title:"איש קשר: "+card.full_name})
-        .then(()=>{status.textContent="הקובץ הועבר לאפליקציה שבחרת. אם בחרת אנשי קשר, אשר שמירה. אם אינך רואה את איש הקשר, אפשר להוריד אותו שוב מהכרטיס.";})
-        .catch(e=>{if(e.name==="AbortError")status.textContent="פעולת הייבוא בוטלה. אפשר ללחוץ שוב על הוסף לאנשי הקשר.";else directVcardDownload();});
-       return;
-     }
-   }catch(_){}
+ if(!source){
+   status.textContent="לא ניתן לייצא את איש הקשר כרגע. רענן את הכרטיס ונסה שוב.";
+   return;
  }
- directVcardDownload();
+ // Download the server-validated VCF. Do not hand an in-memory File to
+ // Android's share chooser: that path can yield an unimportable attachment.
+ const name="BSD_"+(card.short_code||"Contact")+".vcf";
+ const a=el("a");
+ a.href=source;
+ a.download=name;
+ a.textContent="להורדה נוספת של איש הקשר";
+ status.replaceChildren(
+   document.createTextNode("נפתח קובץ איש קשר "+name+". לאחר ההורדה פתח אותו באפליקציית אנשי הקשר ובחר שמירה. "),
+   a
+ );
+ // Keep a visible fallback link when the browser blocks an automatic download.
+ const download=el("a");
+ download.href=source;
+ download.download=name;
+ document.body.append(download);
+ download.click();
+ download.remove();
 }
 async function shareCard(){
  try{if(navigator.share){await navigator.share({title:card.full_name+" | BSD",text:"כרטיס הביקור הדיגיטלי שלי",url:cardUrl()});return;}

@@ -19,6 +19,49 @@ function result(body: unknown, status=200) {
     headers:{...headers,"Content-Type":"application/json; charset=utf-8"}
   });
 }
+// Use strictly encoded RFC 2426 (vCard 3.0) content for Android/iOS import.
+// Never prepend the UTF-8 BOM: Android contact importers can reject it.
+function escapeVcardText(value: unknown): string {
+  return String(value??"").replace(/\\/g,"\\\\").replace(/\r\n|\r|\n/g,"\\n")
+    .replace(/[,;]/g,(char)=>"\\"+char);
+}
+function foldLine(line: string): string {
+  const encoder=new TextEncoder();
+  const sections: string[]=[];
+  let current="",bytes=0;
+  for(const codepoint of line){
+    const size=encoder.encode(codepoint).length;
+    if(bytes+size>75){
+      sections.push(current);
+      current=" "; bytes=1;
+    }
+    current+=codepoint;
+    bytes+=size;
+  }
+  sections.push(current);
+  return sections.join("\r\n");
+}
+function buildVcard(data: Record<string,unknown>): string {
+  const name=String(data.full_name??"").trim();
+  const tokens=name.split(/\s+/).filter(Boolean);
+  const family=tokens.length>1 ? tokens[tokens.length-1] : "";
+  const given=tokens.length>1 ? tokens.slice(0,-1).join(" ") : name;
+  const fields=[
+    "BEGIN:VCARD","VERSION:3.0",
+    "N:"+escapeVcardText(family)+";"+escapeVcardText(given)+";;;",
+    "FN:"+escapeVcardText(name)
+  ];
+  if(data.company_name)fields.push("ORG:"+escapeVcardText(data.company_name));
+  if(data.job_title)fields.push("TITLE:"+escapeVcardText(data.job_title));
+  if(data.phone_mobile)fields.push("TEL;TYPE=CELL:"+escapeVcardText(data.phone_mobile));
+  if(data.phone_office)fields.push("TEL;TYPE=WORK,VOICE:"+escapeVcardText(data.phone_office));
+  if(data.email)fields.push("EMAIL;TYPE=INTERNET,WORK:"+escapeVcardText(data.email));
+  if(data.website_url)fields.push("URL:"+escapeVcardText(data.website_url));
+  if(data.office_address)fields.push("ADR;TYPE=WORK:;;"+escapeVcardText(data.office_address)+";;;;");
+  fields.push("END:VCARD");
+  return fields.map(foldLine).join("\r\n")+"\r\n";
+}
+
 Deno.serve(async (req: Request) => {
   if(req.method==="OPTIONS") return new Response(null,{status:204,headers});
   if(req.method!=="GET") return result({error:"Method not allowed"},405);
@@ -52,27 +95,18 @@ Deno.serve(async (req: Request) => {
     }
     const {owner_user_id: _privateOwnerId, ...publicCard}=data;
     if (wantsVcard) {
-      const v=(s: unknown)=>String(s??"").replace(/\\/g,"\\\\")
-        .replace(/\r?\n/g,"\\n").replace(/[,;]/g,m=>"\\"+m);
-      const record=[
-        "BEGIN:VCARD","VERSION:3.0",
-        "N:;"+v(data.full_name)+";;;",
-        "FN:"+v(data.full_name),
-        "ORG:"+v(data.company_name),
-        "TITLE:"+v(data.job_title)
-      ];
-      if(data.phone_mobile) record.push("TEL;TYPE=CELL:"+v(data.phone_mobile));
-      if(data.phone_office) record.push("TEL;TYPE=WORK:"+v(data.phone_office));
-      if(data.email) record.push("EMAIL;TYPE=WORK:"+v(data.email));
-      if(data.website_url) record.push("URL:"+v(data.website_url));
-      if(data.office_address) record.push("ADR;TYPE=WORK:;;"+v(data.office_address)+";;;;");
-      record.push("END:VCARD");
-      return new Response("\ufeff"+record.join("\r\n")+"\r\n",{
+      const code=String(data.short_code||"card").replace(/[^a-z0-9-]/g,"");
+      const filename="BSD_"+code+".vcf";
+      // No leading BOM. CRLF lines, valid N and FN, and octet-safe line folding.
+      const vcard=buildVcard(data);
+      return new Response(new TextEncoder().encode(vcard), {
         status:200,
-        headers:{...headers,
-          "Content-Type":"text/vcard; charset=utf-8",
-          "Content-Disposition":'attachment; filename="BSD_Contact.vcf"',
-          "X-Content-Type-Options":"nosniff"}
+        headers:{
+          ...headers,
+          "Content-Type":"text/x-vcard; charset=utf-8",
+          "Content-Disposition":'attachment; filename="'+filename+'"',
+          "X-Content-Type-Options":"nosniff"
+        }
       });
     }
     return result({card:publicCard});
