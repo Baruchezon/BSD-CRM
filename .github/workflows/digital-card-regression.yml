@@ -1,0 +1,32 @@
+name: BSD Digital Card Regression
+on:
+  pull_request:
+    paths:
+      - 'digital-card.html'
+      - 'digital-cards.html'
+      - 'c/**'
+      - 'supabase/functions/public-digital-card/**'
+      - 'tests/digital_card_short_url_contact_import.test.mjs'
+  push:
+    branches:
+      - main
+    paths:
+      - 'digital-card.html'
+      - 'digital-cards.html'
+      - 'c/**'
+      - 'supabase/functions/public-digital-card/**'
+      - 'tests/digital_card_short_url_contact_import.test.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  contact-and-short-link-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test mobile digital card URLs and contact files
+        run: node --test tests/digital_card_short_url_contact_import.test.mjs
