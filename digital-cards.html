@@ -82,6 +82,7 @@ textarea{min-height:74px;resize:vertical}
 <p class="notice">אפשר לשתף בקישור, לשלוח בוואטסאפ או לשמור קובץ HTML בטלפון ולשלוח אותו ידנית.</p>
 <div class="field"><label for="customerSearch">חפש לקוח לפי שם בתוך ה CRM</label><div class="bar"><input id="customerSearch" type="search" placeholder="הקלד לפחות שתי אותיות" aria-label="חיפוש לקוח" style="flex:1;min-width:160px"><button id="findCustomerBtn" class="secondary" type="button">חפש לקוח</button></div></div>
 <div class="field"><label for="customerResults">לקוחות שנמצאו</label><select id="customerResults"><option value="">בחר לקוח מתוך התוצאות</option></select></div>
+<div class="field"><label for="shortCardLink">הקישור הקצר שנשלח ללקוח</label><input id="shortCardLink" dir="ltr" readonly aria-label="קישור הכרטיס הקצר"></div>
 <div class="field"><label for="recipientPhone">מספר הלקוח לוואטסאפ</label><input id="recipientPhone" type="tel" inputmode="tel" placeholder="050-1234567" dir="ltr"></div>
 <div id="shareActions"><button id="waBtn" class="primary">שלח בוואטסאפ</button><button id="nativeShareBtn" class="secondary">שתף מהטלפון</button><button id="copyBtn" class="secondary">העתק קישור</button></div>
 <div id="shareStatus" class="notice" role="status"></div></div>
@@ -93,7 +94,7 @@ const $=id=>document.getElementById(id);
 const FIELDS=['full_name','job_title','company_name','phone_mobile','phone_office','office_address','whatsapp_number','email','website_url','facebook_url','instagram_url','photo_url','logo_url','description'];
 const allowedRoles=['admin','manager','agent','agent_authorized'];
 const admin=()=>CURRENT_PROFILE && CURRENT_PROFILE.role==='admin';
-const urlOf=c=>new URL('digital-card.html?card='+encodeURIComponent(c.public_token),location.href).href;
+const urlOf=c=>c.short_code?new URL('c/#'+encodeURIComponent(c.short_code),location.href).href:new URL('digital-card.html?card='+encodeURIComponent(c.public_token),location.href).href;
 const tidy=s=>String(s||'').trim();
 function msg(s){$('status').textContent=s}
 function safeUrl(s){s=tidy(s);if(!s)return '';try{const u=new URL(s);if(['https:','http:'].includes(u.protocol))return u.href}catch(_){}throw Error('יש להזין כתובת אינטרנט מלאה שמתחילה ב https://')}
@@ -211,6 +212,7 @@ const head=document.createElement('div');head.className='row';
 const av=document.createElement('img');av.className='avatar';av.alt='';av.onerror=()=>{av.style.display='none'};if(/^https?:\/\//.test(c.photo_url||''))av.src=c.photo_url;else av.style.display='none';
 const text=document.createElement('div');text.className='flex';const nm=document.createElement('h3');nm.textContent=c.full_name;const sub=document.createElement('small');sub.textContent=[c.job_title,c.company_name].filter(Boolean).join(' | ');text.append(nm,sub);head.append(av,text);
 const tag=document.createElement('span');tag.className='pill'+(c.is_published?'':' draft');tag.textContent=c.is_published?'מפורסם':'טיוטה';
+const tiny=document.createElement('small');tiny.dir='ltr';tiny.style.cssText='display:block;overflow-wrap:anywhere;margin-top:8px;color:#60758b';tiny.textContent=c.short_code?'קישור קצר: '+urlOf(c):'';if(c.short_code)e.append(tiny);
 const acts=document.createElement('div');acts.className='actions';
 acts.append(action('ערוך','secondary',()=>openEditor(c)),action('שלח כרטיס','primary',()=>openShare(c)),action('הורד HTML','secondary',()=>{try{download(fileName(c)+'.html','text/html;charset=utf-8',offlineHtml(c))}catch(e){msg(e.message)}}),action('שמור איש קשר','secondary',()=>downloadVcard(c)));
 if(c.is_published)acts.append(action('הצג כרטיס','secondary',()=>window.open(urlOf(c),'_blank','noopener')));
@@ -234,7 +236,7 @@ if(response.error)throw response.error;
 $('editor').classList.remove('show');await loadCards();msg('הכרטיס נשמר. הקישור הקבוע לא משתנה בעריכות.');
 }catch(e){msg('לא ניתן לשמור: '+(e.message||e))}finally{$('saveBtn').disabled=false}
 }
-function openShare(c){chosen=c;$('customerSearch').value='';$('customerResults').replaceChildren(new Option('בחר לקוח מתוך התוצאות',''));$('shareStatus').textContent=c.is_published?'הכרטיס מוכן לשליחה':'הכרטיס בטיוטה. יש לפרסם אותו כדי שהקישור ייפתח אצל הלקוח.';$('recipientPhone').value='';$('shareBox').classList.add('show')}
+function openShare(c){chosen=c;$('shortCardLink').value=urlOf(c);$('customerSearch').value='';$('customerResults').replaceChildren(new Option('בחר לקוח מתוך התוצאות',''));$('shareStatus').textContent=c.is_published?'הכרטיס מוכן לשליחה':'הכרטיס בטיוטה. יש לפרסם אותו כדי שהקישור ייפתח אצל הלקוח.';$('recipientPhone').value='';$('shareBox').classList.add('show')}
 function closeShare(){$('shareBox').classList.remove('show')}
 function requirePublished(){if(!chosen||!chosen.is_published)throw Error('יש לפרסם את הכרטיס לפני שליחת קישור')}
 async function findCustomer(){
