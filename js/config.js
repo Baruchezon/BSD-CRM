@@ -666,3 +666,24 @@ window.BSDDataCache = (() => {
   }
 })();
 
+
+
+// Agent digital business cards: discoverable by all active card-owning roles.
+// This is navigation only. Database RLS decides who can see/edit which card.
+(function bsdDigitalCardMenu(){
+  function install(){
+    const host=document.querySelector('.bsd-header .nav-rows .nav:first-child .bsd-forms-menu');
+    if(!host || host.querySelector('[data-digital-card-menu]'))return;
+    let p=null;
+    try { const v=JSON.parse(localStorage.getItem('bsd-crm-profile-v2')||'null');p=v&&v.profile; } catch(_) {}
+    if(!p || p.status!=='active' || !['admin','manager','agent','agent_authorized'].includes(p.role))return;
+    const a=document.createElement('a');
+    a.href='digital-cards.html';
+    a.dataset.digitalCardMenu='1';
+    a.textContent='💳 כרטיס ביקור דיגיטלי';
+    a.style.cssText='display:block;color:#f5df9d;text-decoration:none;padding:11px 16px;font-weight:700;border-top:1px solid rgba(255,255,255,.1)';
+    host.appendChild(a);
+  }
+  window.BSDDigitalCardMenuRefresh=install;
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true}); else install();
+})();
