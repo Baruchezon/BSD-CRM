@@ -163,7 +163,9 @@ function urlLabel(value){
 }
 function vEscape(s){return clean(s).replace(/\\/g,"\\\\").replace(/\r?\n/g,"\\n").replace(/[,;]/g,m=>"\\"+m)}
 function cardLookup(){
- const alias=location.hash.slice(1).trim().toLowerCase();
+ const fragment=location.hash.slice(1).trim().toLowerCase();
+ const routeMatch=location.pathname.match(/\/c\/([a-z][a-z0-9-]{2,23})\/?$/);
+ const alias=routeMatch?routeMatch[1]:fragment;
  if(/^[a-z][a-z0-9-]{2,23}$/.test(alias))return new URLSearchParams({short:alias});
  const token=new URLSearchParams(location.search).get("card")||"";
  if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token))return new URLSearchParams({card:token});
@@ -175,7 +177,8 @@ function cardUrl(){
  const root=location.pathname.includes("/c/")
   ?location.pathname.slice(0,location.pathname.indexOf("/c/")+1)
   :new URL("./",location.href).pathname;
- return new URL(root+"c/#"+encodeURIComponent(short),location.origin).href;
+ const route=short==="ezon"?"c/ezon/":"c/#"+encodeURIComponent(short);
+ return new URL(root+route,location.origin).href;
 }
 function vcardUrl(){
  const query=cardLookup();
