@@ -209,7 +209,8 @@ function saveContact(){
  if(!card)return;
  const status=$("status");
  status.textContent="כדי לסיים שמירה, בחר באנשי קשר במסך שייפתח ואשר שמירה.";
- const file=new File([makeVcard()],"BSD_Contact.vcf",{type:"text/vcard;charset=utf-8"});
+ let file;
+ try{file=new File([makeVcard()],"BSD_Contact.vcf",{type:"text/vcard;charset=utf-8"});}catch(_){directVcardDownload();return;}
  if(typeof navigator.share==="function" && typeof navigator.canShare==="function"){
    try{
      if(navigator.canShare({files:[file]})){
