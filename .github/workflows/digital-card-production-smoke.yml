@@ -1,0 +1,29 @@
+name: BSD Digital Card Production Smoke
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/digital-card-production-smoke.yml'
+      - 'tests/digital_card_live_smoke.mjs'
+      - 'c/**'
+      - 'digital-card.html'
+      - 'digital-cards.html'
+      - 'supabase/functions/public-digital-card/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-check:
+    name: Check published cards and contact import
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify actual production URLs and VCF endpoint
+        run: node tests/digital_card_live_smoke.mjs
