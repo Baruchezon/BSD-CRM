@@ -21,7 +21,7 @@ function contextFor(href){
     location:{href,pathname:parsed.pathname,hash:parsed.hash,search:parsed.search,origin:parsed.origin}
   };
   runInNewContext(extract(main).replace(/\bload\(\);\s*$/,"")+
-    "\nthis.api={cardLookup,cardUrl,makeVcard,vcardUrl};",context,{timeout:1000});
+    "\nthis.api={cardLookup,cardUrl,makeVcard,vcardUrl,setCard:(v)=>{card=v}};",context,{timeout:1000});
   return context;
 }
 
@@ -37,19 +37,19 @@ test("Vanity URL resolves the intended published public alias",()=>{
 test("Legacy UUID address remains functional and shares new short link",()=>{
   const ctx=contextFor(legacy);
   assert.equal(ctx.api.cardLookup().get("card"),"c0a5b39e-7943-42fb-84dd-5ba812dfb172");
-  runInNewContext('card={short_code:"ezon"};',ctx);
+  ctx.api.setCard({short_code:"ezon"});
   assert.equal(ctx.api.cardUrl(),ezon);
   assert.ok(ezon.length<legacy.length/2);
 });
 test("Other agents get their own short link from immutable code",()=>{
   const ctx=contextFor(other);
   assert.equal(ctx.api.cardLookup().get("short"),"c123abc456");
-  runInNewContext('card={short_code:"c123abc456"};',ctx);
+  ctx.api.setCard({short_code:"c123abc456"});
   assert.equal(ctx.api.cardUrl(),other);
 });
 test("Contact file contains the core fields and CRLF delimiters",()=>{
   const ctx=contextFor(ezon);
-  runInNewContext('card={full_name:"ברוך איזון",company_name:"BSD",job_title:"מנהל",phone_mobile:"054-2424999",phone_office:"077-4446707",email:"baruch@bsd-bbi.co.il",website_url:"https://bsd-bbi.co.il/"};',ctx);
+  ctx.api.setCard({full_name:"ברוך איזון",company_name:"BSD",job_title:"מנהל",phone_mobile:"054-2424999",phone_office:"077-4446707",email:"baruch@bsd-bbi.co.il",website_url:"https://bsd-bbi.co.il/"});
   const v=ctx.api.makeVcard();
   assert.ok(v.startsWith("\ufeffBEGIN:VCARD\r\n"));
   for(const value of [
