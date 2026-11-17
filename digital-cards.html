@@ -94,7 +94,7 @@ const $=id=>document.getElementById(id);
 const FIELDS=['full_name','job_title','company_name','phone_mobile','phone_office','office_address','whatsapp_number','email','website_url','facebook_url','instagram_url','photo_url','logo_url','description'];
 const allowedRoles=['admin','manager','agent','agent_authorized'];
 const admin=()=>CURRENT_PROFILE && CURRENT_PROFILE.role==='admin';
-const urlOf=c=>c.short_code?new URL('c/#'+encodeURIComponent(c.short_code),location.href).href:new URL('digital-card.html?card='+encodeURIComponent(c.public_token),location.href).href;
+const urlOf=c=>c.short_code?new URL(c.short_code==='ezon'?'c/ezon/':'c/#'+encodeURIComponent(c.short_code),location.href).href:new URL('digital-card.html?card='+encodeURIComponent(c.public_token),location.href).href;
 const tidy=s=>String(s||'').trim();
 function msg(s){$('status').textContent=s}
 function safeUrl(s){s=tidy(s);if(!s)return '';try{const u=new URL(s);if(['https:','http:'].includes(u.protocol))return u.href}catch(_){}throw Error('יש להזין כתובת אינטרנט מלאה שמתחילה ב https://')}
@@ -212,12 +212,12 @@ const head=document.createElement('div');head.className='row';
 const av=document.createElement('img');av.className='avatar';av.alt='';av.onerror=()=>{av.style.display='none'};if(/^https?:\/\//.test(c.photo_url||''))av.src=c.photo_url;else av.style.display='none';
 const text=document.createElement('div');text.className='flex';const nm=document.createElement('h3');nm.textContent=c.full_name;const sub=document.createElement('small');sub.textContent=[c.job_title,c.company_name].filter(Boolean).join(' | ');text.append(nm,sub);head.append(av,text);
 const tag=document.createElement('span');tag.className='pill'+(c.is_published?'':' draft');tag.textContent=c.is_published?'מפורסם':'טיוטה';
-const tiny=document.createElement('small');tiny.dir='ltr';tiny.style.cssText='display:block;overflow-wrap:anywhere;margin-top:8px;color:#60758b';tiny.textContent=c.short_code?'קישור קצר: '+urlOf(c):'';if(c.short_code)e.append(tiny);
+const tiny=document.createElement('small');tiny.dir='ltr';tiny.style.cssText='display:block;overflow-wrap:anywhere;margin-top:8px;color:#60758b';tiny.textContent=c.short_code?'קישור קצר: '+urlOf(c):'';
 const acts=document.createElement('div');acts.className='actions';
 acts.append(action('ערוך','secondary',()=>openEditor(c)),action('שלח כרטיס','primary',()=>openShare(c)),action('הורד HTML','secondary',()=>{try{download(fileName(c)+'.html','text/html;charset=utf-8',offlineHtml(c))}catch(e){msg(e.message)}}),action('שמור איש קשר','secondary',()=>downloadVcard(c)));
 if(c.is_published)acts.append(action('הצג כרטיס','secondary',()=>window.open(urlOf(c),'_blank','noopener')));
 if(admin())acts.append(action('מחק','danger',()=>removeCard(c)));
-e.append(head,tag,acts);root.append(e);
+e.append(head,tag);if(c.short_code)e.append(tiny);e.append(acts);root.append(e);
 }
 }
 async function removeCard(c){
