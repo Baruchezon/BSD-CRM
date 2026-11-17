@@ -4,88 +4,197 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>כרטיס ביקור דיגיטלי | BSD</title>
-<meta name="description" content="כרטיס ביקור דיגיטלי ודרכי התקשרות">
+<meta name="description" content="כרטיס ביקור דיגיטלי מלא של סוכן BSD, תמונה, התקשרות, וואטסאפ, דוא״ל ופרטי קשר">
 <style>
-*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:linear-gradient(135deg,#e9f1fa,#f7f9fc);color:#1b3049;font-family:Arial,"Noto Sans Hebrew",sans-serif}
-main{max-width:470px;margin:16px auto 40px;padding:0 12px}
-.panel{background:white;border-radius:23px;box-shadow:0 15px 35px #1c34551a;overflow:hidden;padding-bottom:18px}
-.hero{background:linear-gradient(145deg,#142845,#285c8b);color:white;text-align:center;padding:30px 18px 25px}
-.logo{max-width:96px;max-height:64px;object-fit:contain;margin-bottom:12px}
-.photo{width:112px;height:112px;object-fit:cover;border:4px solid #d9ae66;background:#fff;border-radius:50%;display:block;margin:0 auto 13px}
-h1{font-size:29px;margin:10px 0 6px}.title{color:#e7c788;margin:0 0 7px;font-size:15px}.company{margin:0;font-size:14px;color:#cfe0f3}
-.desc{padding:14px 18px 3px;font-size:15px;line-height:1.7;text-align:center}
-.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:15px}
-.actions a,.actions button{border:1px solid #d9e2ee;border-radius:12px;background:#f3f7fb;color:#1a3556;text-decoration:none;padding:13px 5px;display:flex;align-items:center;justify-content:center;text-align:center;min-height:52px;font:700 14px Arial,sans-serif;cursor:pointer}
-.actions a.green{background:#0ba972;color:white;border:0}.actions a.gold,.actions button.gold{background:#d6ab65;color:#202131;border:0}
-#status{min-height:25px;text-align:center;font-size:13px;color:#516b88;padding:0 12px}
-footer{text-align:center;font-size:12px;color:#728196;margin-top:20px;line-height:1.7}
-@media(max-width:390px){h1{font-size:26px}.actions{gap:8px;padding:10px}.actions a,.actions button{font-size:13px;padding:11px 4px}}
+:root{--ink:#14243a;--muted:#63738b;--gold:#d0a65f;--green:#0dad79;--shadow:0 17px 46px #152c4f24;font-family:Arial,"Noto Sans Hebrew",sans-serif;color-scheme:light}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:radial-gradient(ellipse at 6% -10%,#ddeaf7 0,transparent 54%),radial-gradient(ellipse at 95% 30%,#f0e6d9 0,transparent 36%),#f4f7fb;color:var(--ink);font-size:15px;-webkit-font-smoothing:antialiased}
+a,button{-webkit-tap-highlight-color:transparent}button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:none}
+.frame{width:min(100%,480px);margin:auto;padding:16px 12px 26px}
+.shell{background:#fff;border:1px solid #e7ebf1;border-radius:25px;box-shadow:var(--shadow);overflow:hidden}
+.hero{background:radial-gradient(ellipse at 12% 8%,#e8b57230,transparent 45%),linear-gradient(145deg,#182a43 0%,#101929 63%,#202b3e 100%);color:#fff;padding:20px 22px 29px;position:relative;overflow:hidden}
+.hero:before{content:"";position:absolute;top:17px;left:-64px;width:172px;height:172px;border:1px solid #e8bf7138;border-radius:50%;box-shadow:0 0 0 33px #ddb7770b,0 0 0 70px #ddb77709;pointer-events:none}
+.brand,.hero-profile{display:flex;align-items:center;justify-content:space-between;gap:15px;position:relative}
+.brand .kicker{font-weight:800;color:#e9c98d;font-size:11px;letter-spacing:1.2px;direction:ltr;text-align:right}
+.brand .sub{font-size:10px;color:#bdcce0;letter-spacing:.5px;margin-top:5px;direction:ltr;text-align:right}
+.logo{width:71px;height:71px;object-fit:contain;filter:drop-shadow(0 6px 8px #0004)}
+.hero-profile{margin-top:18px;justify-content:flex-start}
+.portrait-wrap{width:112px;height:133px;border:3px solid #e8bc72;border-radius:24px;overflow:hidden;flex:none;background:#73859b;box-shadow:0 12px 25px #0005;display:grid;place-items:center}
+.portrait-wrap img{width:100%;height:100%;object-fit:cover;object-position:center 28%;display:block}
+.portrait-fallback{font-size:37px}
+.person-info{min-width:0;flex:1}.hello{color:#e9c58b;font-size:11px;font-weight:700}
+h1{font-size:30px;line-height:1.17;letter-spacing:-.5px;margin:7px 0 8px}
+.title{font-size:14px;font-weight:700;margin:0 0 7px;color:#fff}
+.company{font-size:12px;color:#cbd6e4;line-height:1.5;margin:0;overflow-wrap:anywhere}
+.hero-bottom{border-top:1px solid #ffffff2b;margin-top:21px;padding-top:17px;display:flex;justify-content:space-between;align-items:center;gap:15px;position:relative}
+.hero-tagline{font-size:14px;font-weight:800}.hero-caption{font-size:11px;color:#d3dfeb;display:block;margin-top:5px;font-weight:400;line-height:1.55}
+.spark{border:1px solid #d9b27666;color:#ecc487;width:39px;height:39px;display:grid;place-items:center;border-radius:12px;font-size:20px;flex:none}
+.content{padding:20px 19px 16px}
+.main-actions{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:20px}
+.big{min-height:74px;border:0;border-radius:18px;color:white;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;box-shadow:0 6px 0 #0002,0 12px 20px #00000011;padding:9px 7px;text-align:center;transition:transform .12s}
+.big.call{background:linear-gradient(135deg,#367fd0,#1854a1)}.big.whatsapp{background:linear-gradient(135deg,#19c690,#05996a)}
+.big .top{font-size:15px;font-weight:800;display:flex;gap:8px;align-items:center}.big .detail{font-size:12px;color:#f6ffff;font-weight:600;direction:ltr;unicode-bidi:plaintext}
+.heading{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:4px 0 12px}.heading h2{font-size:16px;margin:0}.heading small{font-size:11px;color:#8290a4}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:22px}
+.tile{min-height:105px;padding:10px 5px;border-radius:17px;border:1px solid #e4eaf1;box-shadow:0 4px 0 #e8edf2;background:#f9fbfd;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;text-align:center;min-width:0;transition:transform .12s}
+.tile .iconbox{width:39px;height:39px;border-radius:13px;display:grid;place-items:center;background:#e7effb;color:#2b69bc;margin-bottom:1px}
+.tile.mail .iconbox{background:#f2eafb;color:#9255ad}.tile.map .iconbox{background:#fff0e9;color:#d16d50}
+.tile.phone .iconbox{background:#fbf2e1;color:#a27b37}.tile.facebook .iconbox{background:#e8eefb;color:#235ca9}
+.tile.instagram .iconbox{background:#f9eaf4;color:#ad6090}
+.tile .label{font-size:12px;font-weight:800}.tile .value{font-size:10px;font-weight:600;color:#68788e;direction:ltr;unicode-bidi:plaintext;max-width:100%;overflow-wrap:anywhere;line-height:1.32}
+.tile.disabled{opacity:.6;box-shadow:none;cursor:default}
+.services{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:19px}
+.service{min-height:98px;padding:14px 11px;border-radius:16px;border:1px solid #dee6f0;background:linear-gradient(140deg,#f6faff,#edf2f9);box-shadow:0 4px 0 #e0e8f0;display:flex;flex-direction:column;justify-content:center;gap:7px;transition:transform .12s}
+.service:nth-child(2){background:linear-gradient(140deg,#fffdf6,#f7f1e4);border-color:#ede2cb;box-shadow:0 4px 0 #e8ddc8}
+.service .label{font-size:13.5px;font-weight:800}.service .value{font-size:11px;color:#62748b}
+.details{border:1px solid #e5ebf1;border-radius:15px;background:#fbfcfe;overflow:hidden}
+.detailrow{display:flex;gap:10px;align-items:center;padding:12px 13px;border-top:1px solid #e7edf3;font-size:12px;color:#66768b;min-width:0}
+.detailrow:first-child{border-top:0}.detailrow .detailtext{color:#24374e;font-weight:700;direction:ltr;unicode-bidi:plaintext;overflow-wrap:anywhere;flex:1}
+.detailrow .detailicon{color:#a78b5a}
+.bottom{display:grid;grid-template-columns:1.2fr 1fr;gap:10px;margin:18px 0 4px}
+.bottom button{border:0;border-radius:15px;min-height:67px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;transition:transform .12s}
+.bottom .save{background:linear-gradient(135deg,#e6c589,#c09247);box-shadow:0 5px 0 #ab7e39;color:#2d2519}
+.bottom .share{background:#192e4a;box-shadow:0 5px 0 #102035;color:white}
+.bottom .label{font-size:13px;font-weight:800}.bottom .value{font-size:10.5px;opacity:.85}
+.big:active,.tile:active,.service:active,.bottom button:active{transform:translateY(3px);box-shadow:none}
+.footer{text-align:center;color:#77889d;font-size:11px;line-height:1.7;margin:18px 0 2px}
+#status{font-size:12px;line-height:1.6;color:#5c7190;text-align:center;margin:9px 0 3px;min-height:17px}
+#loading{text-align:center;padding:75px 22px;color:#53677e}
+.icon{width:22px;height:22px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.icon.sm{width:17px;height:17px}.icon.lg{width:26px;height:26px}
+a:focus-visible,button:focus-visible{outline:3px solid #e1b16d;outline-offset:3px}
+@media(max-width:365px){.frame{padding:9px 7px}.hero{padding:16px 16px 24px}h1{font-size:25px}.portrait-wrap{width:91px;height:111px}.content{padding:15px 11px}.tiles{gap:7px}.tile{min-height:98px}.tile .value{font-size:9px}.big .top{font-size:13px}}
 </style>
 
 </head>
 <body>
-<main>
-<div class="panel" id="cardPanel" hidden>
-<div class="hero">
-<img id="logo" class="logo" hidden alt="לוגו">
-<img id="photo" class="photo" hidden alt="תמונת איש קשר">
-<h1 id="name"></h1><p id="job" class="title"></p><p id="company" class="company"></p>
+
+<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden">
+<symbol id="ic-phone" viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.7 19.7 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.8L7.2 10a16 16 0 0 0 6.8 6.8l1.5-1.8a2 2 0 0 1 1.8-.6l3 .5A2 2 0 0 1 22 16.9Z"/></symbol>
+<symbol id="ic-whatsapp" viewBox="0 0 24 24"><path d="M21 11.7a9 9 0 0 1-13.4 7.9L3 21l1.5-4.6a9 9 0 1 1 16.6-4.7Z"/><path d="M8 8c.8 3.8 3.5 6.5 7.4 7.5l1-1.5-2.2-1.2-1 .9c-1.1-.6-2-1.5-2.7-2.7l.9-.9-1.4-2.2Z"/></symbol>
+<symbol id="ic-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></symbol>
+<symbol id="ic-email" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+<symbol id="ic-map" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+<symbol id="ic-facebook" viewBox="0 0 24 24"><path d="M14 21v-8h3l.5-3H14V7.5c0-1 .3-1.8 1.7-1.8H18V2.6a17 17 0 0 0-3-.3C12 2.3 10.2 4 10.2 7.2V10H7.5v3h2.7v8"/></symbol>
+<symbol id="ic-instagram" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/></symbol>
+<symbol id="ic-share" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></symbol>
+<symbol id="ic-save" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4"/><path d="M5 17v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3"/></symbol>
+</svg>
+<div class="frame"><main class="shell" id="cardPanel" hidden>
+<header class="hero">
+<div class="brand"><div><div class="kicker">BSD BUSINESS BROKERS</div><div class="sub">ISRAEL · YOUR BUSINESS CONNECTION</div></div><img id="logo" class="logo" alt="לוגו החברה" hidden></div>
+<div class="hero-profile">
+<div class="portrait-wrap"><img id="photo" alt="תמונת בעל הכרטיס" hidden><span id="portraitFallback" class="portrait-fallback">✦</span></div>
+<div class="person-info"><div class="hello">נעים להכיר, אני</div><h1 id="name"></h1><p id="job" class="title"></p><p id="company" class="company"></p></div>
 </div>
-<p id="description" class="desc"></p>
-<div id="actions" class="actions"></div>
-<div id="status" role="status"></div>
-</div>
-<div id="loading" style="padding:65px 20px;text-align:center">טוען כרטיס ביקור...</div>
-<footer>BSD Business Brokers Israel</footer>
-</main>
+<div class="hero-bottom"><div><div class="hero-tagline">מחברים עסקים להזדמנויות</div><span class="hero-caption" id="description"></span></div><span class="spark">✦</span></div>
+</header>
+<div class="content">
+<div class="main-actions" id="mainActions"></div>
+<div class="heading"><h2>כל הדרכים להכיר ולהתחבר</h2><small>בלחיצה אחת</small></div>
+<div class="tiles" id="tiles"></div>
+<div id="servicesSection" hidden>
+<div class="heading"><h2>איך אפשר לעזור לך?</h2><small>BSD בשבילך</small></div>
+<div class="services" id="services"></div></div>
+<div class="details" id="details"></div>
+<div class="bottom" id="bottom"></div>
+<p id="status" role="status"></p>
+<div class="footer">BSD Business Brokers Israel<br>לא רק מתווכים עסקים. מכינים אותם לעסקה.</div>
+</div></main></div><div id="loading">טוען כרטיס ביקור...</div>
+
 <script>
 "use strict";
-const $=id=>document.getElementById(id);
-let card=null;
-function clean(s){return String(s||'').trim()}
-function webUrl(s){try{const u=new URL(clean(s));return ['https:','http:'].includes(u.protocol)?u.href:''}catch(_){return ''}}
-function phone(s){s=clean(s).replace(/[^\d+]/g,'');if(s.startsWith('00'))s='+'+s.slice(2);if(s.startsWith('0'))s='+972'+s.slice(1);return s.replace(/[^\d]/g,'')}
-function action(label,url,kind){if(!url)return;const a=document.createElement('a');a.textContent=label;a.href=url;a.className=kind||'';if(/^https?:/.test(url)){a.target='_blank';a.rel='noopener noreferrer'}$('actions').append(a)}
-function button(label,fn){const b=document.createElement('button');b.type='button';b.className='gold';b.textContent=label;b.addEventListener('click',fn);$('actions').append(b)}
-function vEsc(s){return clean(s).replace(/\\/g,'\\\\').replace(/\r?\n/g,'\\n').replace(/[,;]/g,m=>'\\'+m)}
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+let card = null;
+function clean(v){return String(v||"").trim()}
+function webUrl(v){try{const u=new URL(clean(v));return ["https:","http:"].includes(u.protocol)?u.href:""}catch(_){return ""}}
+function phone(v){let p=clean(v).replace(/[^\d+]/g,"");if(p.startsWith("00"))p="+"+p.slice(2);if(p.startsWith("0"))p="+972"+p.slice(1);return p.replace(/[^\d]/g,"")}
+function icon(name,size=""){const el=document.createElementNS(NS,"svg");el.classList.add("icon");if(size)el.classList.add(size);el.setAttribute("aria-hidden","true");const u=document.createElementNS(NS,"use");u.setAttribute("href","#ic-"+name);el.append(u);return el}
+function el(tag,cls,text){const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=clean(text);return node}
+function spanWithIcon(name,label){const s=el("span","top");s.append(icon(name,"lg"),el("span","",label));return s}
+function makeBig(label,value,href,iconName,cls){
+ if(!href)return;
+ const a=el("a","big "+cls);a.href=href;a.append(spanWithIcon(iconName,label),el("span","detail",value));
+ if(href.startsWith("https:")){a.target="_blank";a.rel="noopener noreferrer"}
+ $("mainActions").append(a);
+}
+function makeTile(label,value,href,iconName,cls=""){
+ const a=el(href?"a":"div","tile "+cls+(href?"":" disabled"));
+ if(href){a.href=href;if(href.startsWith("https:")){a.target="_blank";a.rel="noopener noreferrer"}}
+ const bg=el("span","iconbox");bg.append(icon(iconName));a.append(bg,el("span","label",label),el("span","value",value||""));
+ if(href)a.title=value||label;
+ $("tiles").append(a);
+}
+function makeService(label,detail,href){
+ if(!href)return;const a=el("a","service");a.href=href;a.target="_blank";a.rel="noopener noreferrer";a.append(el("span","label",label),el("span","value",detail));$("services").append(a);
+}
+function makeDetail(label,value,iconName){
+ if(!value)return;const row=el("div","detailrow");const ico=el("span","detailicon");ico.append(icon(iconName,"sm"));row.append(ico,el("span","",label),el("span","detailtext",value));$("details").append(row);
+}
+function bottomButton(label,detail,fn,cls,iconName){
+ const b=el("button",cls);b.type="button";b.append(icon(iconName),el("span","label",label),el("span","value",detail));b.addEventListener("click",fn);$("bottom").append(b);
+}
+function urlLabel(value){
+ try{const u=new URL(value);return u.hostname.replace(/^www\./,"")+(u.pathname&&u.pathname!=="/" ? u.pathname:"")+(u.search||"")}catch(_){return value}
+}
+function vEscape(s){return clean(s).replace(/\\/g,"\\\\").replace(/\r?\n/g,"\\n").replace(/[,;]/g,m=>"\\"+m)}
 function saveContact(){
-const ls=['BEGIN:VCARD','VERSION:3.0','FN:'+vEsc(card.full_name),'ORG:'+vEsc(card.company_name),'TITLE:'+vEsc(card.job_title)];
-if(card.phone_mobile)ls.push('TEL;TYPE=CELL:'+vEsc(card.phone_mobile));
-if(card.phone_office)ls.push('TEL;TYPE=WORK:'+vEsc(card.phone_office));
-if(card.email)ls.push('EMAIL:'+vEsc(card.email));
-if(card.website_url)ls.push('URL:'+vEsc(card.website_url));
-ls.push('END:VCARD');
-const blob=new Blob(['\ufeff'+ls.join('\r\n')+'\r\n'],{type:'text/vcard;charset=utf-8'});
-const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='BSD_Contact.vcf';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),12000);
-$('status').textContent='פתח את קובץ איש הקשר ואשר את השמירה בטלפון.';
+ if(!card)return;
+ const v=["BEGIN:VCARD","VERSION:3.0","FN:"+vEscape(card.full_name),"ORG:"+vEscape(card.company_name),"TITLE:"+vEscape(card.job_title)];
+ if(card.phone_mobile)v.push("TEL;TYPE=CELL:"+vEscape(card.phone_mobile));
+ if(card.phone_office)v.push("TEL;TYPE=WORK:"+vEscape(card.phone_office));
+ if(card.email)v.push("EMAIL;TYPE=WORK:"+vEscape(card.email));
+ if(card.website_url)v.push("URL:"+vEscape(card.website_url));
+ if(card.office_address)v.push("ADR;TYPE=WORK:;;"+vEscape(card.office_address)+";;;;");
+ v.push("END:VCARD");
+ const blob=new Blob(["\ufeff"+v.join("\r\n")+"\r\n"],{type:"text/vcard;charset=utf-8"});
+ const u=URL.createObjectURL(blob),a=el("a");a.href=u;a.download="BSD_Contact_"+clean(card.full_name).replace(/[^\p{L}\p{N}]+/gu,"_")+".vcf";
+ document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),20000);
+ $("status").textContent="כרטיס איש הקשר הוכן. פתח אותו ואשר שמירה בטלפון.";
 }
 async function shareCard(){
-try{if(navigator.share){await navigator.share({title:card.full_name,text:'כרטיס הביקור שלי',url:location.href});return}await navigator.clipboard.writeText(location.href);$('status').textContent='הקישור הועתק לשיתוף';}
-catch(e){if(e.name!=='AbortError')$('status').textContent='אפשר להעתיק את כתובת הכרטיס משורת הדפדפן'}
+ try{if(navigator.share){await navigator.share({title:card.full_name+" | BSD",text:"כרטיס הביקור הדיגיטלי שלי",url:location.href});return;}
+ await navigator.clipboard.writeText(location.href);$("status").textContent="קישור הכרטיס הועתק לשיתוף.";}
+ catch(e){if(e.name!=="AbortError")$("status").textContent="ניתן לשתף באמצעות העתקת הקישור משורת הדפדפן."}
 }
 function show(c){
-card=c;$('name').textContent=clean(c.full_name);$('job').textContent=clean(c.job_title);$('company').textContent=clean(c.company_name);$('description').textContent=clean(c.description);
-if(webUrl(c.photo_url)){$('photo').src=webUrl(c.photo_url);$('photo').hidden=false}
-if(webUrl(c.logo_url)){$('logo').src=webUrl(c.logo_url);$('logo').hidden=false}
-const mobile=phone(c.phone_mobile),office=phone(c.phone_office),wa=phone(c.whatsapp_number||c.phone_mobile);
-action('חיוג לנייד',mobile?'tel:+'+mobile:'');
-action('חיוג למשרד',office?'tel:+'+office:'');
-action('שלח וואטסאפ',wa?'https://wa.me/'+wa:'','green');
-action('שלח דוא״ל',c.email?'mailto:'+encodeURIComponent(clean(c.email)):'');
-action('אתר החברה',webUrl(c.website_url));
-action('פייסבוק',webUrl(c.facebook_url));
-action('אינסטגרם',webUrl(c.instagram_url));
-button('שמור באנשי הקשר',saveContact);button('שתף כרטיס',shareCard);
-$('loading').hidden=true;$('cardPanel').hidden=false;
+ card=c;document.title=clean(c.full_name)+" | כרטיס ביקור דיגיטלי | BSD";
+ $("name").textContent=clean(c.full_name);$("job").textContent=clean(c.job_title);$("company").textContent=clean(c.company_name);
+ $("description").textContent=clean(c.description)||"מכירה, רכישה והשקעות בעסקים בדיסקרטיות";
+ const photo=webUrl(c.photo_url),logo=webUrl(c.logo_url);
+ if(photo){$("photo").src=photo;$("photo").hidden=false;$("portraitFallback").hidden=true;$("photo").onerror=()=>{$("photo").hidden=true;$("portraitFallback").hidden=false}}
+ if(logo){$("logo").src=logo;$("logo").hidden=false;$("logo").onerror=()=>{$("logo").hidden=true}}
+ const mobile=phone(c.phone_mobile),office=phone(c.phone_office),wa=phone(c.whatsapp_number||c.phone_mobile);
+ makeBig("התקשר אליי",c.phone_office||c.phone_mobile,office?"tel:+"+office:(mobile?"tel:+"+mobile:""),"phone","call");
+ makeBig("שלח וואטסאפ",c.whatsapp_number||c.phone_mobile,wa?"https://wa.me/"+wa:"","whatsapp","whatsapp");
+ const site=webUrl(c.website_url),fb=webUrl(c.facebook_url),ig=webUrl(c.instagram_url);
+ if(site)makeTile("אתר החברה",urlLabel(site),site,"globe");
+ if(fb)makeTile("פייסבוק",urlLabel(fb),fb,"facebook","facebook");
+ if(ig)makeTile("אינסטגרם",urlLabel(ig),ig,"instagram","instagram");
+ else makeTile("אינסטגרם","טרם חובר",null,"instagram","instagram");
+ if(c.email)makeTile("שלח אימייל",c.email,"mailto:"+encodeURIComponent(clean(c.email)),"email","mail");
+ if(c.office_address)makeTile("נווט למשרד",c.office_address,"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(c.office_address),"map","map");
+ if(mobile)makeTile("נייד אישי",c.phone_mobile,"tel:+"+mobile,"phone","phone");
+ if(clean(c.company_name).toLowerCase().includes("bsd") || clean(c.website_url).includes("bsd-bbi.co.il")){
+   $("servicesSection").hidden=false;
+   makeService("אני רוצה למכור עסק","ליווי והכנה מקצועית למכירה","https://www.bsd-bbi.co.il/%D7%9E%D7%95%D7%9B%D7%A8-%D7%A2%D7%A1%D7%A7/");
+   makeService("מחפש עסק לרכישה","הזדמנויות עסקיות ועסקים למכירה","https://www.bsd-bbi.co.il/%D7%A2%D7%A1%D7%A7%D7%99%D7%9D-%D7%9C%D7%9E%D7%9B%D7%99%D7%A8%D7%94/");
+ }
+ makeDetail("משרד",c.phone_office,"phone");makeDetail("נייד",c.phone_mobile,"phone");
+ makeDetail("דוא״ל",c.email,"email");makeDetail("כתובת משרד",c.office_address,"map");
+ bottomButton("הוסף לאנשי הקשר","שם, טלפונים, אימייל ואתר",saveContact,"save","save");
+ bottomButton("שתף כרטיס","קישור לכרטיס המעוצב",shareCard,"share","share");
+ $("loading").hidden=true;$("cardPanel").hidden=false;
 }
 async function load(){
-const token=new URLSearchParams(location.search).get('card')||'';
-if(!/^[0-9a-f-]{36}$/i.test(token)){$('loading').textContent='קישור הכרטיס אינו תקין';return}
-try{
-const resp=await fetch('https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/public-digital-card?card='+encodeURIComponent(token),{cache:'no-store'});
-if(!resp.ok)throw Error('הכרטיס אינו זמין או אינו מפורסם');
-const data=await resp.json();if(!data.card)throw Error('לא נמצא כרטיס');show(data.card)
-}catch(e){$('loading').textContent=e.message}
+ const token=new URLSearchParams(location.search).get("card")||"";
+ if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)){$("loading").textContent="קישור הכרטיס אינו תקין";return}
+ try{
+ const resp=await fetch("https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/public-digital-card?card="+encodeURIComponent(token),{cache:"no-store"});
+ if(!resp.ok)throw Error("הכרטיס אינו זמין או אינו מפורסם");
+ const data=await resp.json();if(!data.card)throw Error("לא נמצא כרטיס");show(data.card);
+ }catch(e){$("loading").textContent=e.message}
 }
 load();
 </script>
