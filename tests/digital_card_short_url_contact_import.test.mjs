@@ -62,7 +62,7 @@ test("Contact file contains the core fields and CRLF delimiters",()=>{
 test("Contact saving provides native file sharing and a reliable download fallback",()=>{
   assert.ok(main.includes('navigator.canShare({files:[file]})'));
   assert.ok(main.includes("directVcardDownload()"));
-  assert.ok(main.includes("כרטיס איש הקשר ירד למכשיר"));
+  assert.ok(main.includes("קובץ איש הקשר ירד למכשיר"));
   assert.ok(api.includes('"Content-Type":"text/vcard; charset=utf-8"'));
   assert.ok(api.includes('"Content-Disposition":'));
   assert.ok(api.includes('data.owner_user_id'));
