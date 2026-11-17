@@ -69,7 +69,7 @@ h1{font-size:30px;line-height:1.17;letter-spacing:-.5px;margin:7px 0 8px}
 .bottom .label{font-size:14px;font-weight:900}.bottom .value{font-size:10.5px;opacity:.86;line-height:1.35}
 .big:active,.tile:active,.bottom button:active{transform:translateY(3px);box-shadow:none}
 .footer{text-align:center;color:#77889d;font-size:11px;line-height:1.7;margin:18px 0 2px}
-#status{font-size:12px;line-height:1.6;color:#5c7190;text-align:center;margin:9px 0 3px;min-height:17px}
+#status{font-size:12px;line-height:1.7;color:#4d5b2c;text-align:center;margin:0 0 14px}#status:not(:empty){background:#fff6db;border:1px solid #e3c990;border-radius:12px;padding:10px 12px}
 #loading{text-align:center;padding:75px 22px;color:#53677e}
 .icon{width:22px;height:22px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .icon.sm{width:17px;height:17px}.icon.lg{width:26px;height:26px}
@@ -103,6 +103,7 @@ a:focus-visible,button:focus-visible{outline:3px solid #e1b16d;outline-offset:3p
 </header>
 <div class="content">
 <div class="bottom" id="bottom"></div>
+<p id="status" role="status" aria-live="polite"></p>
 <div class="main-actions" id="mainActions"></div>
 <p id="description" class="card-intro" hidden></p>
 <div class="heading"><h2>כל הדרכים להכיר ולהתחבר</h2><small>בלחיצה אחת</small></div>
@@ -111,7 +112,6 @@ a:focus-visible,button:focus-visible{outline:3px solid #e1b16d;outline-offset:3p
 <div class="heading"><h2>איך אפשר לעזור לך?</h2><small>BSD בשבילך</small></div>
 <div class="services" id="services"></div></div>
 <div class="details" id="details"></div>
-<p id="status" role="status"></p>
 <div class="footer">BSD Business Brokers Israel<br>לא רק מתווכים עסקים. מכינים אותם לעסקה.</div>
 </div></main></div><div id="loading">טוען כרטיס ביקור...</div>
 
@@ -119,6 +119,7 @@ a:focus-visible,button:focus-visible{outline:3px solid #e1b16d;outline-offset:3p
 "use strict";
 const $ = id => document.getElementById(id);
 const NS = "http://www.w3.org/2000/svg";
+const CARD_API="https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/public-digital-card";
 let card = null;
 function clean(v){return String(v||"").trim()}
 function webUrl(v){try{const u=new URL(clean(v));return ["https:","http:"].includes(u.protocol)?u.href:""}catch(_){return ""}}
@@ -161,23 +162,70 @@ function urlLabel(value){
  try{const u=new URL(value);return u.hostname.replace(/^www\./,"")+(u.pathname&&u.pathname!=="/" ? u.pathname:"")+(u.search||"")}catch(_){return value}
 }
 function vEscape(s){return clean(s).replace(/\\/g,"\\\\").replace(/\r?\n/g,"\\n").replace(/[,;]/g,m=>"\\"+m)}
+function cardLookup(){
+ const alias=location.hash.slice(1).trim().toLowerCase();
+ if(/^[a-z][a-z0-9-]{2,23}$/.test(alias))return new URLSearchParams({short:alias});
+ const token=new URLSearchParams(location.search).get("card")||"";
+ if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token))return new URLSearchParams({card:token});
+ return null;
+}
+function cardUrl(){
+ const short=clean(card?.short_code);
+ if(!/^[a-z][a-z0-9-]{2,23}$/.test(short))return location.href;
+ const root=location.pathname.includes("/c/")
+  ?location.pathname.slice(0,location.pathname.indexOf("/c/")+1)
+  :new URL("./",location.href).pathname;
+ return new URL(root+"c/#"+encodeURIComponent(short),location.origin).href;
+}
+function vcardUrl(){
+ const query=cardLookup();
+ if(!query && card?.short_code){
+   const p=new URLSearchParams({short:card.short_code,format:"vcard"});
+   return CARD_API+"?"+p.toString();
+ }
+ if(!query)return "";
+ query.set("format","vcard");
+ return CARD_API+"?"+query.toString();
+}
+function makeVcard(){
+ const parts=["BEGIN:VCARD","VERSION:3.0","N:;"+vEscape(card.full_name)+";;;",
+   "FN:"+vEscape(card.full_name),"ORG:"+vEscape(card.company_name),"TITLE:"+vEscape(card.job_title)];
+ if(card.phone_mobile)parts.push("TEL;TYPE=CELL:"+vEscape(formatPhone(card.phone_mobile)));
+ if(card.phone_office)parts.push("TEL;TYPE=WORK:"+vEscape(formatPhone(card.phone_office)));
+ if(card.email)parts.push("EMAIL;TYPE=WORK:"+vEscape(card.email));
+ if(card.website_url)parts.push("URL:"+vEscape(card.website_url));
+ if(card.office_address)parts.push("ADR;TYPE=WORK:;;"+vEscape(card.office_address)+";;;;");
+ parts.push("END:VCARD");
+ return "\ufeff"+parts.join("\r\n")+"\r\n";
+}
+function directVcardDownload(){
+ const source=vcardUrl();
+ if(!source){$("status").textContent="לא ניתן להוריד כרגע. נסה לרענן את הכרטיס.";return;}
+ const a=el("a");a.href=source;a.download="BSD_Contact.vcf";
+ document.body.append(a);a.click();a.remove();
+ $("status").textContent="קובץ איש הקשר ירד למכשיר. פתח את BSD_Contact.vcf מתוך ההורדות או הקבצים, בחר ייבוא לאנשי הקשר ואשר שמירה.";
+}
 function saveContact(){
  if(!card)return;
- const v=["BEGIN:VCARD","VERSION:3.0","FN:"+vEscape(card.full_name),"ORG:"+vEscape(card.company_name),"TITLE:"+vEscape(card.job_title)];
- if(card.phone_mobile)v.push("TEL;TYPE=CELL:"+vEscape(formatPhone(card.phone_mobile)));
- if(card.phone_office)v.push("TEL;TYPE=WORK:"+vEscape(formatPhone(card.phone_office)));
- if(card.email)v.push("EMAIL;TYPE=WORK:"+vEscape(card.email));
- if(card.website_url)v.push("URL:"+vEscape(card.website_url));
- if(card.office_address)v.push("ADR;TYPE=WORK:;;"+vEscape(card.office_address)+";;;;");
- v.push("END:VCARD");
- const blob=new Blob(["\ufeff"+v.join("\r\n")+"\r\n"],{type:"text/vcard;charset=utf-8"});
- const u=URL.createObjectURL(blob),a=el("a");a.href=u;a.download="BSD_Contact_"+clean(card.full_name).replace(/[^\p{L}\p{N}]+/gu,"_")+".vcf";
- document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),20000);
- $("status").textContent="כרטיס איש הקשר הוכן. פתח אותו ואשר שמירה בטלפון.";
+ const status=$("status");
+ status.textContent="כדי לסיים שמירה, בחר באנשי קשר במסך שייפתח ואשר שמירה.";
+ const file=new File([makeVcard()],"BSD_Contact.vcf",{type:"text/vcard;charset=utf-8"});
+ if(typeof navigator.share==="function" && typeof navigator.canShare==="function"){
+   try{
+     if(navigator.canShare({files:[file]})){
+       // Must be called synchronously from the click to retain user activation.
+       navigator.share({files:[file],title:"איש קשר: "+card.full_name})
+        .then(()=>{status.textContent="הקובץ הועבר לאפליקציה שבחרת. אם בחרת אנשי קשר, אשר שמירה. אם אינך רואה את איש הקשר, אפשר להוריד אותו שוב מהכרטיס.";})
+        .catch(e=>{if(e.name==="AbortError")status.textContent="פעולת הייבוא בוטלה. אפשר ללחוץ שוב על הוסף לאנשי הקשר.";else directVcardDownload();});
+       return;
+     }
+   }catch(_){}
+ }
+ directVcardDownload();
 }
 async function shareCard(){
- try{if(navigator.share){await navigator.share({title:card.full_name+" | BSD",text:"כרטיס הביקור הדיגיטלי שלי",url:location.href});return;}
- await navigator.clipboard.writeText(location.href);$("status").textContent="קישור הכרטיס הועתק לשיתוף.";}
+ try{if(navigator.share){await navigator.share({title:card.full_name+" | BSD",text:"כרטיס הביקור הדיגיטלי שלי",url:cardUrl()});return;}
+ await navigator.clipboard.writeText(cardUrl());$("status").textContent="קישור הכרטיס הועתק לשיתוף.";}
  catch(e){if(e.name!=="AbortError")$("status").textContent="ניתן לשתף באמצעות העתקת הקישור משורת הדפדפן."}
 }
 function show(c){
@@ -210,12 +258,12 @@ function show(c){
  $("loading").hidden=true;$("cardPanel").hidden=false;
 }
 async function load(){
- const token=new URLSearchParams(location.search).get("card")||"";
- if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)){$("loading").textContent="קישור הכרטיס אינו תקין";return}
+ const query=cardLookup();
+ if(!query){$("loading").textContent="קישור הכרטיס אינו תקין";return;}
  try{
- const resp=await fetch("https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/public-digital-card?card="+encodeURIComponent(token),{cache:"no-store"});
- if(!resp.ok)throw Error("הכרטיס אינו זמין או אינו מפורסם");
- const data=await resp.json();if(!data.card)throw Error("לא נמצא כרטיס");show(data.card);
+   const resp=await fetch(CARD_API+"?"+query.toString(),{cache:"no-store"});
+   if(!resp.ok)throw Error("הכרטיס אינו זמין או אינו מפורסם");
+   const data=await resp.json();if(!data.card)throw Error("לא נמצא כרטיס");show(data.card);
  }catch(e){$("loading").textContent=e.message}
 }
 load();
