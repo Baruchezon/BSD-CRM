@@ -32,11 +32,19 @@ Deno.serve(async (req: Request) => {
     const secret = namedSecrets ? JSON.parse(namedSecrets).default : Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if(!url || !secret) return result({error:"Service unavailable"},503);
     const db = createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}});
-    const {data,error}=await db.from("agent_digital_cards").select(columns)
+    const {data,error}=await db.from("agent_digital_cards").select(columns + ",owner_user_id")
        .eq("public_token",token).eq("is_published",true).maybeSingle();
     if(error) { console.error("Digital card lookup failed:",error.code); return result({error:"Service unavailable"},503); }
     if(!data) return result({error:"Card not found"},404);
-    return result({card:data});
+    // Do not keep distributing an ex-agent's card after their CRM access is blocked.
+    const owner = await db.from("profiles").select("status,role").eq("id",data.owner_user_id).maybeSingle();
+    if(owner.error) return result({error:"Service unavailable"},503);
+    if(!owner.data || owner.data.status!=="active" ||
+      !["admin","manager","agent","agent_authorized"].includes(owner.data.role)) {
+      return result({error:"Card not found"},404);
+    }
+    const {owner_user_id: _privateOwnerId, ...publicCard}=data;
+    return result({card:publicCard});
   } catch(e) {
     console.error("Digital card lookup exception",String(e));
     return result({error:"Service unavailable"},503);
