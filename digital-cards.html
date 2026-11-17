@@ -61,10 +61,10 @@ textarea{min-height:74px;resize:vertical}
 <div class="field"><label for="job_title">תפקיד</label><input id="job_title" maxlength="120" placeholder="סוכן עסקי"></div>
 <div class="field"><label for="company_name">שם חברה</label><input id="company_name" maxlength="180"></div>
 <div class="field"><label for="email">דוא״ל</label><input id="email" type="email" maxlength="200" inputmode="email"></div>
-<div class="field"><label for="phone_mobile">טלפון נייד</label><input id="phone_mobile" type="tel" maxlength="35" inputmode="tel"></div>
-<div class="field"><label for="phone_office">טלפון משרד</label><input id="phone_office" type="tel" maxlength="35" inputmode="tel"></div>
+<div class="field"><label for="phone_mobile">טלפון נייד</label><input id="phone_mobile" type="tel" maxlength="35" inputmode="tel" dir="ltr" placeholder="054-2424999"></div>
+<div class="field"><label for="phone_office">טלפון משרד</label><input id="phone_office" type="tel" maxlength="35" inputmode="tel" dir="ltr" placeholder="077-4446707"></div>
 <div class="field"><label for="office_address">כתובת משרד וניווט</label><input id="office_address" maxlength="250" placeholder="כתובת מלאה לניווט"></div>
-<div class="field"><label for="whatsapp_number">מספר וואטסאפ</label><input id="whatsapp_number" type="tel" maxlength="35" inputmode="tel"></div>
+<div class="field"><label for="whatsapp_number">מספר וואטסאפ</label><input id="whatsapp_number" type="tel" maxlength="35" inputmode="tel" dir="ltr" placeholder="054-2424999"></div>
 <div class="field"><label for="website_url">כתובת אתר</label><input id="website_url" type="url" maxlength="500" placeholder="https://"></div>
 <div class="field"><label for="facebook_url">פייסבוק</label><input id="facebook_url" type="url" maxlength="500"></div>
 <div class="field"><label for="instagram_url">אינסטגרם</label><input id="instagram_url" type="url" maxlength="500"></div>
@@ -82,7 +82,7 @@ textarea{min-height:74px;resize:vertical}
 <p class="notice">אפשר לשתף בקישור, לשלוח בוואטסאפ או לשמור קובץ HTML בטלפון ולשלוח אותו ידנית.</p>
 <div class="field"><label for="customerSearch">חפש לקוח לפי שם בתוך ה CRM</label><div class="bar"><input id="customerSearch" type="search" placeholder="הקלד לפחות שתי אותיות" aria-label="חיפוש לקוח" style="flex:1;min-width:160px"><button id="findCustomerBtn" class="secondary" type="button">חפש לקוח</button></div></div>
 <div class="field"><label for="customerResults">לקוחות שנמצאו</label><select id="customerResults"><option value="">בחר לקוח מתוך התוצאות</option></select></div>
-<div class="field"><label for="recipientPhone">מספר הלקוח לוואטסאפ</label><input id="recipientPhone" type="tel" inputmode="tel" placeholder="0501234567"></div>
+<div class="field"><label for="recipientPhone">מספר הלקוח לוואטסאפ</label><input id="recipientPhone" type="tel" inputmode="tel" placeholder="050-1234567" dir="ltr"></div>
 <div id="shareActions"><button id="waBtn" class="primary">שלח בוואטסאפ</button><button id="nativeShareBtn" class="secondary">שתף מהטלפון</button><button id="copyBtn" class="secondary">העתק קישור</button></div>
 <div id="shareStatus" class="notice" role="status"></div></div>
 </div>
@@ -98,11 +98,20 @@ const tidy=s=>String(s||'').trim();
 function msg(s){$('status').textContent=s}
 function safeUrl(s){s=tidy(s);if(!s)return '';try{const u=new URL(s);if(['https:','http:'].includes(u.protocol))return u.href}catch(_){}throw Error('יש להזין כתובת אינטרנט מלאה שמתחילה ב https://')}
 function ilPhone(v){let p=tidy(v).replace(/[^\d+]/g,'');if(p.startsWith('00'))p='+'+p.slice(2);if(p.startsWith('0'))p='+972'+p.slice(1);return p.replace(/[^\d]/g,'')}
+function formatPhone(v){
+ const original=tidy(v);if(!original)return '';
+ let digits=original.replace(/[\s().-]/g,'');
+ const local=digits.match(/^(?:\+972|00972|972)0?([1-9]\d{7,8})$/);
+ if(local)digits='0'+local[1];
+ if(/^0(?:5\d|7\d)\d{7}$/.test(digits))return digits.slice(0,3)+'-'+digits.slice(3);
+ if(/^0[2-9]\d{7}$/.test(digits))return digits.slice(0,2)+'-'+digits.slice(2);
+ return original;
+}
 function makeText(c){return 'שלום, מצורף כרטיס הביקור הדיגיטלי שלי: '+c.full_name+'\n'+urlOf(c)}
 function download(name,mime,text){const b=new Blob([text],{type:mime}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),15000)}
 function fileName(c){return tidy(c.full_name).replace(/[^\p{L}\p{N}]+/gu,'_').slice(0,50)||'BSD_Card'}
 function vEscape(s){return String(s||'').replace(/\\/g,'\\\\').replace(/\r?\n/g,'\\n').replace(/[,;]/g,m=>'\\'+m)}
-function downloadVcard(c){const vals=['BEGIN:VCARD','VERSION:3.0','FN:'+vEscape(c.full_name),'ORG:'+vEscape(c.company_name),'TITLE:'+vEscape(c.job_title)];if(c.phone_mobile)vals.push('TEL;TYPE=CELL:'+vEscape(c.phone_mobile));if(c.phone_office)vals.push('TEL;TYPE=WORK:'+vEscape(c.phone_office));if(c.email)vals.push('EMAIL:'+vEscape(c.email));if(c.website_url)vals.push('URL:'+vEscape(c.website_url));vals.push('END:VCARD');download(fileName(c)+'.vcf','text/vcard;charset=utf-8','\ufeff'+vals.join('\r\n')+'\r\n')}
+function downloadVcard(c){const vals=['BEGIN:VCARD','VERSION:3.0','FN:'+vEscape(c.full_name),'ORG:'+vEscape(c.company_name),'TITLE:'+vEscape(c.job_title)];if(c.phone_mobile)vals.push('TEL;TYPE=CELL:'+vEscape(formatPhone(c.phone_mobile)));if(c.phone_office)vals.push('TEL;TYPE=WORK:'+vEscape(formatPhone(c.phone_office)));if(c.email)vals.push('EMAIL:'+vEscape(c.email));if(c.website_url)vals.push('URL:'+vEscape(c.website_url));vals.push('END:VCARD');download(fileName(c)+'.vcf','text/vcard;charset=utf-8','\ufeff'+vals.join('\r\n')+'\r\n')}
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function link(label,u){if(!u)return '';return '<a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(label)+'</a>'}
 function offlineHtml(c){
@@ -136,17 +145,17 @@ return '<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><me
 +(photo?'<img class="photo" alt="תמונה" src="'+esc(photo)+'">':'')
 +'<h1>'+esc(c.full_name)+'</h1><p>'+esc(c.job_title)+'</p><p>'+esc(c.company_name)+'</p></div>'
 +'<div class="content"><div class="tagline">מחברים עסקים להזדמנויות</div><p class="desc">'+esc(c.description)+'</p><div class="links">'
-+detailLink('התקשר אליי',c.phone_office||c.phone_mobile,c.phone_office?'tel:'+ilPhone(c.phone_office):c.phone_mobile?'tel:'+ilPhone(c.phone_mobile):'','call')
-+detailLink('שלח וואטסאפ',c.whatsapp_number||c.phone_mobile,wa?'https://wa.me/'+wa:'','wa')+'</div>'
++detailLink('התקשר אליי',formatPhone(c.phone_office||c.phone_mobile),c.phone_office?'tel:'+ilPhone(c.phone_office):c.phone_mobile?'tel:'+ilPhone(c.phone_mobile):'','call')
++detailLink('שלח וואטסאפ',formatPhone(c.whatsapp_number||c.phone_mobile),wa?'https://wa.me/'+wa:'','wa')+'</div>'
 +'<h2>כל הדרכים להכיר ולהתחבר</h2><div class="links">'
 +detailLink('אתר החברה',c.website_url.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,''),site)
 +detailLink('פייסבוק',c.facebook_url.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,''),fb)
 +detailLink('אינסטגרם',c.instagram_url.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,''),ig)
 +detailLink('שלח אימייל',c.email,c.email?'mailto:'+encodeURIComponent(c.email):'')
-+detailLink('נייד אישי',c.phone_mobile,c.phone_mobile?'tel:'+ilPhone(c.phone_mobile):'')
++detailLink('נייד אישי',formatPhone(c.phone_mobile),c.phone_mobile?'tel:'+ilPhone(c.phone_mobile):'')
 +'</div>'+services+'<p class="desc">BSD Business Brokers Israel</p></div></main></body></html>';
 }
-function formData(){const data={};FIELDS.forEach(k=>data[k]=tidy($(k).value));['website_url','facebook_url','instagram_url','photo_url','logo_url'].forEach(k=>data[k]=safeUrl(data[k]));data.is_published=$('is_published').checked;if(data.full_name.length<2)throw Error('יש להזין שם מלא');return data}
+function formData(){const data={};FIELDS.forEach(k=>data[k]=tidy($(k).value));['phone_mobile','phone_office','whatsapp_number'].forEach(k=>data[k]=formatPhone(data[k]));['website_url','facebook_url','instagram_url','photo_url','logo_url'].forEach(k=>data[k]=safeUrl(data[k]));data.is_published=$('is_published').checked;if(data.full_name.length<2)throw Error('יש להזין שם מלא');return data}
 async function uploadPhoto(){
 const file=$('uploadPhoto').files[0];if(!file)return '';
 if(file.size>3145728||!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('אפשר להעלות תמונת JPG, PNG או WEBP עד 3MB');
@@ -164,14 +173,14 @@ $('logo_url').value=new URL('bsd_logo.png',location.href).href;
 $('full_name').value=tidy(CURRENT_PROFILE.full_name);
 $('job_title').value=tidy(CURRENT_PROFILE.job_title);
 $('email').value=tidy(CURRENT_PROFILE.email);
-$('phone_mobile').value=tidy(CURRENT_PROFILE.phone);
+$('phone_mobile').value=formatPhone(CURRENT_PROFILE.phone);
 if(CURRENT_PROFILE.photo_url && /^https?:\/\//.test(CURRENT_PROFILE.photo_url))$('photo_url').value=CURRENT_PROFILE.photo_url;
 $('is_published').checked=false;
 $('owner').value=CURRENT_PROFILE.id;
 }
 function openEditor(c){
 editing=c||null;
-if(c){$('cardForm').reset();FIELDS.forEach(k=>$(k).value=c[k]||'');$('is_published').checked=!!c.is_published;$('editorTitle').textContent='עריכת כרטיס: '+c.full_name;$('owner').value=c.owner_user_id}
+if(c){$('cardForm').reset();FIELDS.forEach(k=>$(k).value=['phone_mobile','phone_office','whatsapp_number'].includes(k)?formatPhone(c[k]):c[k]||'');$('is_published').checked=!!c.is_published;$('editorTitle').textContent='עריכת כרטיס: '+c.full_name;$('owner').value=c.owner_user_id}
 else {defaults();$('editorTitle').textContent='יצירת כרטיס ביקור'}
 $('owner').disabled=!!c;$('editor').classList.add('show');$('editor').scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -232,7 +241,7 @@ async function findCustomer(){
       const name=tidy(c.full_name)||[c.first_name,c.last_name].filter(Boolean).join(' ');
       const p=tidy(c.phone)||tidy(c.phone2);
       if(!p)continue;
-      const opt=new Option(name+' | '+p,p);select.append(opt);valid++;
+      const opt=new Option(name+' | '+formatPhone(p),p);select.append(opt);valid++;
     }
     $('shareStatus').textContent=valid?'נמצאו '+valid+' לקוחות עם מספר טלפון':'לא נמצאו לקוחות מתאימים';
   }catch(e){$('shareStatus').textContent='חיפוש לקוח נכשל: '+(e.message||e)}
@@ -273,7 +282,8 @@ $('cardForm').addEventListener('submit',saveCard);
 $('closeShare').addEventListener('click',closeShare);
 $('findCustomerBtn').addEventListener('click',findCustomer);
 $('customerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();findCustomer()}});
-$('customerResults').addEventListener('change',()=>{if($('customerResults').value)$('recipientPhone').value=$('customerResults').value});
+$('customerResults').addEventListener('change',()=>{if($('customerResults').value)$('recipientPhone').value=formatPhone($('customerResults').value)});
+['phone_mobile','phone_office','whatsapp_number','recipientPhone'].forEach(id=>$(id).addEventListener('blur',()=>{$(id).value=formatPhone($(id).value)}));
 $('waBtn').addEventListener('click',whatsappSend);
 $('nativeShareBtn').addEventListener('click',nativeShare);
 $('copyBtn').addEventListener('click',copyLink);
