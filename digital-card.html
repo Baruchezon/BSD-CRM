@@ -123,6 +123,15 @@ let card = null;
 function clean(v){return String(v||"").trim()}
 function webUrl(v){try{const u=new URL(clean(v));return ["https:","http:"].includes(u.protocol)?u.href:""}catch(_){return ""}}
 function phone(v){let p=clean(v).replace(/[^\d+]/g,"");if(p.startsWith("00"))p="+"+p.slice(2);if(p.startsWith("0"))p="+972"+p.slice(1);return p.replace(/[^\d]/g,"")}
+function formatPhone(v){
+ const original=clean(v);if(!original)return "";
+ let digits=original.replace(/[\s().-]/g,"");
+ const local=digits.match(/^(?:\+972|00972|972)0?([1-9]\d{7,8})$/);
+ if(local)digits="0"+local[1];
+ if(/^0(?:5\d|7\d)\d{7}$/.test(digits))return digits.slice(0,3)+"-"+digits.slice(3);
+ if(/^0[2-9]\d{7}$/.test(digits))return digits.slice(0,2)+"-"+digits.slice(2);
+ return original;
+}
 function icon(name,size=""){const el=document.createElementNS(NS,"svg");el.classList.add("icon");if(size)el.classList.add(size);el.setAttribute("aria-hidden","true");const u=document.createElementNS(NS,"use");u.setAttribute("href","#ic-"+name);el.append(u);return el}
 function el(tag,cls,text){const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=clean(text);return node}
 function spanWithIcon(name,label){const s=el("span","top");s.append(icon(name,"lg"),el("span","",label));return s}
@@ -155,8 +164,8 @@ function vEscape(s){return clean(s).replace(/\\/g,"\\\\").replace(/\r?\n/g,"\\n"
 function saveContact(){
  if(!card)return;
  const v=["BEGIN:VCARD","VERSION:3.0","FN:"+vEscape(card.full_name),"ORG:"+vEscape(card.company_name),"TITLE:"+vEscape(card.job_title)];
- if(card.phone_mobile)v.push("TEL;TYPE=CELL:"+vEscape(card.phone_mobile));
- if(card.phone_office)v.push("TEL;TYPE=WORK:"+vEscape(card.phone_office));
+ if(card.phone_mobile)v.push("TEL;TYPE=CELL:"+vEscape(formatPhone(card.phone_mobile)));
+ if(card.phone_office)v.push("TEL;TYPE=WORK:"+vEscape(formatPhone(card.phone_office)));
  if(card.email)v.push("EMAIL;TYPE=WORK:"+vEscape(card.email));
  if(card.website_url)v.push("URL:"+vEscape(card.website_url));
  if(card.office_address)v.push("ADR;TYPE=WORK:;;"+vEscape(card.office_address)+";;;;");
@@ -179,21 +188,21 @@ function show(c){
  if(photo){$("photo").src=photo;$("photo").hidden=false;$("portraitFallback").hidden=true;$("photo").onerror=()=>{$("photo").hidden=true;$("portraitFallback").hidden=false}}
  if(logo){$("logo").src=logo;$("logo").hidden=false;$("logo").onerror=()=>{$("logo").hidden=true}}
  const mobile=phone(c.phone_mobile),office=phone(c.phone_office),wa=phone(c.whatsapp_number||c.phone_mobile);
- makeBig("התקשר אליי",c.phone_office||c.phone_mobile,office?"tel:+"+office:(mobile?"tel:+"+mobile:""),"phone","call");
- makeBig("שלח וואטסאפ",c.whatsapp_number||c.phone_mobile,wa?"https://wa.me/"+wa:"","whatsapp","whatsapp");
+ makeBig("התקשר אליי",formatPhone(c.phone_office||c.phone_mobile),office?"tel:+"+office:(mobile?"tel:+"+mobile:""),"phone","call");
+ makeBig("שלח וואטסאפ",formatPhone(c.whatsapp_number||c.phone_mobile),wa?"https://wa.me/"+wa:"","whatsapp","whatsapp");
  const site=webUrl(c.website_url),fb=webUrl(c.facebook_url),ig=webUrl(c.instagram_url);
  if(site)makeTile("אתר החברה",urlLabel(site),site,"globe");
  if(fb)makeTile("פייסבוק",urlLabel(fb),fb,"facebook","facebook");
  if(ig)makeTile("אינסטגרם",urlLabel(ig),ig,"instagram","instagram");
  else makeTile("אינסטגרם","טרם חובר",null,"instagram","instagram");
  if(c.email)makeTile("שלח אימייל",c.email,"mailto:"+encodeURIComponent(clean(c.email)),"email","mail");
- if(mobile)makeTile("נייד אישי",c.phone_mobile,"tel:+"+mobile,"phone","phone");
+ if(mobile)makeTile("נייד אישי",formatPhone(c.phone_mobile),"tel:+"+mobile,"phone","phone");
  if(clean(c.company_name).toLowerCase().includes("bsd") || clean(c.website_url).includes("bsd-bbi.co.il")){
    $("servicesSection").hidden=false;
    makeService("אני רוצה למכור עסק","ליווי והכנה מקצועית למכירה","https://www.bsd-bbi.co.il/%D7%9E%D7%95%D7%9B%D7%A8-%D7%A2%D7%A1%D7%A7/");
    makeService("מחפש עסק לרכישה","הזדמנויות עסקיות ועסקים למכירה","https://www.bsd-bbi.co.il/%D7%A2%D7%A1%D7%A7%D7%99%D7%9D-%D7%9C%D7%9E%D7%9B%D7%99%D7%A8%D7%94/");
  }
- makeDetail("משרד",c.phone_office,"phone");makeDetail("נייד",c.phone_mobile,"phone");
+ makeDetail("משרד",formatPhone(c.phone_office),"phone");makeDetail("נייד",formatPhone(c.phone_mobile),"phone");
  makeDetail("דוא״ל",c.email,"email");makeDetail("כתובת משרד",c.office_address,"map");
  bottomButton("הוסף לאנשי הקשר","שם, טלפונים, אימייל ואתר",saveContact,"save","save");
  bottomButton("שתף כרטיס","קישור לכרטיס המעוצב",shareCard,"share","share");
