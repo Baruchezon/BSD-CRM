@@ -21,7 +21,7 @@ h1{font-size:29px;margin:10px 0 6px}.title{color:#e7c788;margin:0 0 7px;font-siz
 footer{text-align:center;font-size:12px;color:#728196;margin-top:20px;line-height:1.7}
 @media(max-width:390px){h1{font-size:26px}.actions{gap:8px;padding:10px}.actions a,.actions button{font-size:13px;padding:11px 4px}}
 </style>
-<script src="js/config.js"></script>
+
 </head>
 <body>
 <main>
@@ -82,7 +82,7 @@ async function load(){
 const token=new URLSearchParams(location.search).get('card')||'';
 if(!/^[0-9a-f-]{36}$/i.test(token)){$('loading').textContent='קישור הכרטיס אינו תקין';return}
 try{
-const resp=await fetch(window.BSD_CONFIG.SUPABASE_URL+'/functions/v1/public-digital-card?card='+encodeURIComponent(token),{cache:'no-store'});
+const resp=await fetch('https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/public-digital-card?card='+encodeURIComponent(token),{cache:'no-store'});
 if(!resp.ok)throw Error('הכרטיס אינו זמין או אינו מפורסם');
 const data=await resp.json();if(!data.card)throw Error('לא נמצא כרטיס');show(data.card)
 }catch(e){$('loading').textContent=e.message}
