@@ -19,7 +19,6 @@
   :root{
     --navy:#0e1b34; --navy-2:#16264a;
     --gold:#c9a24b; --gold-light:#e8cf8a;
-    --izun-teal:#0d3b3a; --izun-copper:#c76b3f; --izun-copper-light:#e79a6d;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   html,body{ height:100%; }
@@ -45,7 +44,6 @@
   }
   .group-label .dot{ width:7px; height:7px; border-radius:50%; }
   .group-label.bsd .dot{ background:var(--gold); }
-  .group-label.izun .dot{ background:var(--izun-copper); }
 
   a.card{
     display:flex; align-items:center; gap:16px;
@@ -62,8 +60,6 @@
   a.card::after{ content:""; position:absolute; inset:0; background:linear-gradient(120deg, rgba(255,255,255,.13), transparent 60%); pointer-events:none; }
 
   .card.crm{ background:linear-gradient(135deg,#16264a,#0a1530); border:1px solid rgba(201,162,75,.4); }
-  .card.contracts{ background:linear-gradient(135deg,#1c3560,#0e1b34); border:1px solid rgba(201,162,75,.4); }
-  .card.cashflow{ background:linear-gradient(135deg,#13453f,#0a2a26); border:1px solid rgba(231,154,109,.45); }
   .card.disabled{ opacity:.55; filter:grayscale(.3); }
 
   .card-icon{ flex:0 0 auto; width:56px; height:56px; border-radius:15px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.09); }
@@ -131,35 +127,6 @@
       <div class="card-text">
         <div class="name">שליחת כרטיס ביקור דיגיטלי</div>
         <div class="sub">צפייה, ניהול ושיתוף כרטיס אישי</div>
-      </div>
-      <div class="arrow">‹</div>
-    </a>
-
-    <a class="card contracts" href="https://baruchezon.github.io/bsd-contracts/bsd-admin-prep.html">
-      <div class="card-icon round">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#e8cf8a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M6 3.5h9l3.5 3.5V20a.7.7 0 0 1-.7.7H6.7A.7.7 0 0 1 6 20V3.5z"/>
-          <path d="M15 3.5V7h3.5"/><path d="M9 12.5l2 2 4.2-4.2"/>
-        </svg>
-      </div>
-      <div class="card-text">
-        <div class="name">אדמין הסכם</div>
-        <div class="sub">הכנת ושליחת הסכם התקשרות</div>
-      </div>
-      <div class="arrow">‹</div>
-    </a>
-
-    <div class="group-label izun"><span class="dot"></span> איזון תעשיות מתכת</div>
-
-    <a class="card cashflow" href="https://baruchezon.github.io/Ezon-Industries-CashFlow/">
-      <div class="card-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#e79a6d" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3.5 19.5V13l4-4 3.5 3 5.5-6 4 3.5"/><path d="M3.5 19.5h17"/>
-        </svg>
-      </div>
-      <div class="card-text">
-        <div class="name">תזרים מזומנים</div>
-        <div class="sub">ניהול הכנסות והוצאות</div>
       </div>
       <div class="arrow">‹</div>
     </a>
