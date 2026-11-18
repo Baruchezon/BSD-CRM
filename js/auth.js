@@ -72,7 +72,11 @@ async function bsdFullLogout() {
       entity_id: user.id
     });
   }
-  await window.supabaseClient.auth.signOut();
+  // 18.11.2026: scope 'local' - signs out THIS device/browser only. The supabase-js
+  // default is 'global', which revoked Baruch's refresh tokens on every other device
+  // (phone idle-logout -> desktop thrown to login minutes later). Blocked users below
+  // still get the global sign-out.
+  await window.supabaseClient.auth.signOut({ scope: 'local' });
   window.location.href = 'login.html';
 }
 
@@ -687,7 +691,21 @@ function translateAuthError(error) {
 
   const IDLE_LIMIT_MS = 30 * 60 * 1000;   // 30 minutes total
   const WARNING_MS = 60 * 1000;           // show warning in the last 60 seconds
+  // 18.11.2026: the last-activity time is shared by every CRM tab/page on this device
+  // (localStorage), so a background tab no longer counts as "idle" while the user works
+  // in another tab, and moving between screens never restarts or shortens the count.
+  const SHARED_KEY = 'bsd-last-activity-v1';
+  const WRITE_EVERY_MS = 5000;
+  let lastWritten = 0;
+  function readShared(){
+    try { const v = Number(localStorage.getItem(SHARED_KEY)); return isFinite(v) && v > 0 ? v : 0; } catch(_) { return 0; }
+  }
+  function writeShared(t){
+    try { localStorage.setItem(SHARED_KEY, String(t)); lastWritten = t; } catch(_) {}
+  }
   let lastActivity = Date.now();
+  // A fresh page load is itself activity (the user just navigated here).
+  writeShared(lastActivity);
   let warningShown = false;
   let countdownInterval = null;
 
@@ -707,12 +725,14 @@ function translateAuthError(error) {
     return overlay;
   }
 
-  function dismissWarning(){
+  function dismissWarning(fromOtherTab){
     const overlay = document.getElementById('idleWarningOverlay');
     if (overlay) overlay.remove();
     if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
     warningShown = false;
+    if (fromOtherTab === true) return; // lastActivity already taken from the shared clock
     lastActivity = Date.now();
+    writeShared(lastActivity);
   }
 
   function showWarning(){
@@ -750,7 +770,7 @@ function translateAuthError(error) {
       errEl.textContent = '';
       try {
         const ok = await verifyFingerprint();
-        if (ok){ overlay.remove(); lastActivity = Date.now(); }
+        if (ok){ overlay.remove(); lastActivity = Date.now(); writeShared(lastActivity); }
         else { errEl.textContent = 'האימות נכשל, נסה שוב'; }
       } catch(e){
         errEl.textContent = 'האימות בוטל או נכשל';
@@ -760,6 +780,12 @@ function translateAuthError(error) {
   }
 
   function checkIdle(){
+    const shared = readShared();
+    if (shared > lastActivity){
+      lastActivity = shared;
+      // Activity in another tab while this one shows the warning: close the warning.
+      if (warningShown) dismissWarning(true);
+    }
     const idleFor = Date.now() - lastActivity;
     if (idleFor >= IDLE_LIMIT_MS){
       if (countdownInterval) clearInterval(countdownInterval);
@@ -768,6 +794,9 @@ function translateAuthError(error) {
       if (isFingerprintRegistered()){
         showLockScreen();
       } else {
+        // An unsaved business card must not block the automatic logout with the
+        // browser's "leave page?" prompt; the card keeps a local draft instead.
+        window.__bsdSkipUnloadGuard = true;
         bsdLogout();
       }
       return;
@@ -783,10 +812,21 @@ function translateAuthError(error) {
     // keyboard doesn't create a false sense of continued presence.
     if (warningShown) return;
     lastActivity = Date.now();
+    if (lastActivity - lastWritten >= WRITE_EVERY_MS) writeShared(lastActivity);
   }
 
-  ['mousemove','mousedown','keydown','scroll','touchstart'].forEach(evt=>{
-    document.addEventListener(evt, markActivity, { passive:true });
+  // capture:true so scrolling inside inner panes (the full-page business card scrolls
+  // inside its own container, not the document) also counts as activity.
+  ['mousemove','mousedown','pointerdown','keydown','input','wheel','scroll','touchstart','touchmove'].forEach(evt=>{
+    document.addEventListener(evt, markActivity, { passive:true, capture:true });
+  });
+  document.addEventListener('visibilitychange', function(){
+    // Coming back to the tab: count it as activity only if the shared clock says the
+    // user was active within the limit; otherwise let checkIdle apply the real rule.
+    if (document.visibilityState === 'visible') checkIdle();
+  });
+  window.addEventListener('storage', function(e){
+    if (e && e.key === SHARED_KEY) checkIdle();
   });
 
   setInterval(checkIdle, 1000);
@@ -922,3 +962,73 @@ async function bsdUploadFile(bucket, path, file, opts){
   }
   return { data: null, error: lastError };
 }
+
+// ============================================================================
+// bsdSaveFlash - הודעת «נשמר בהצלחה ✓» / «השמירה נכשלה» ברורה וגדולה (18.11.2026, בקשת ברוך).
+// kind: 'ok' | 'error' | 'warn'. הצלחה נעלמת אחרי 4 שניות, שגיאה נשארת עד סגירה.
+// opts.carry=true שומר את ההודעה ל-sessionStorage כדי שתוצג גם אם הדף עובר מסך מיד אחרי השמירה.
+// ============================================================================
+(function(){
+  var FLASH_KEY = 'bsd-save-flash-v1';
+  function host(){
+    var el = document.getElementById('bsdSaveFlash');
+    if (el) return el;
+    if (!document.getElementById('bsdSaveFlashStyle')){
+      var st = document.createElement('style');
+      st.id = 'bsdSaveFlashStyle';
+      st.textContent =
+        '#bsdSaveFlash{position:fixed;top:18px;left:50%;transform:translateX(-50%) translateY(-20px);opacity:0;z-index:2147483600;' +
+        'min-width:260px;max-width:calc(100vw - 28px);box-sizing:border-box;padding:16px 22px 16px 48px;border-radius:16px;direction:rtl;text-align:right;' +
+        'font-family:Heebo,Rubik,Arial,sans-serif;font-size:1.15rem;font-weight:800;line-height:1.45;color:#fff;transition:opacity .25s,transform .25s,visibility 0s linear .25s;pointer-events:none;visibility:hidden;}' +
+        '#bsdSaveFlash.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto;visibility:visible;transition:opacity .25s,transform .25s;}' +
+        '#bsdSaveFlash.ok{background:linear-gradient(180deg,#34c46a 0%,#1e9e4f 55%,#17803f 100%);border:1px solid #127234;' +
+        'box-shadow:0 6px 0 #0f5f2b,0 14px 30px rgba(15,95,43,.45),inset 0 1px 0 rgba(255,255,255,.45);text-shadow:0 1px 1px rgba(0,0,0,.25);}' +
+        '#bsdSaveFlash.error{background:linear-gradient(180deg,#e2504a 0%,#c0262b 55%,#9d1a20 100%);border:1px solid #861419;' +
+        'box-shadow:0 6px 0 #6e0f13,0 14px 30px rgba(110,15,19,.45),inset 0 1px 0 rgba(255,255,255,.35);text-shadow:0 1px 1px rgba(0,0,0,.3);}' +
+        '#bsdSaveFlash.warn{background:linear-gradient(180deg,#f5b342 0%,#e0921c 55%,#c47a0f 100%);border:1px solid #a9690c;' +
+        'box-shadow:0 6px 0 #8a5608,0 14px 30px rgba(138,86,8,.4),inset 0 1px 0 rgba(255,255,255,.4);text-shadow:0 1px 1px rgba(0,0,0,.25);}' +
+        '#bsdSaveFlash .sub{display:block;font-size:.88rem;font-weight:500;margin-top:3px;opacity:.95;}' +
+        '#bsdSaveFlash button{position:absolute;top:8px;left:12px;background:rgba(255,255,255,.2);border:none;border-radius:50%;width:28px;height:28px;color:#fff;font-size:1.1rem;line-height:28px;cursor:pointer;padding:0;}';
+      (document.head || document.documentElement).appendChild(st);
+    }
+    el = document.createElement('div');
+    el.id = 'bsdSaveFlash';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'assertive');
+    (document.body || document.documentElement).appendChild(el);
+    return el;
+  }
+  var hideTimer = null;
+  function esc_(s){ return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  function show(kind, text, sub){
+    var el = host();
+    el.className = '';
+    el.classList.add(kind === 'error' ? 'error' : kind === 'warn' ? 'warn' : 'ok');
+    el.innerHTML = esc_(text) + (sub ? '<span class="sub">' + esc_(sub) + '</span>' : '') +
+      '<button type="button" aria-label="סגירה">×</button>';
+    el.lastChild.addEventListener('click', function(){ el.classList.remove('show'); });
+    void el.offsetWidth;
+    el.classList.add('show');
+    clearTimeout(hideTimer);
+    if (kind === 'ok') hideTimer = setTimeout(function(){ el.classList.remove('show'); }, 4000);
+    else if (kind === 'warn') hideTimer = setTimeout(function(){ el.classList.remove('show'); }, 9000);
+  }
+  window.bsdSaveFlash = function(kind, text, sub, opts){
+    try { show(kind, text, sub); } catch(_) {}
+    if (opts && opts.carry){
+      try { sessionStorage.setItem(FLASH_KEY, JSON.stringify({ kind: kind, text: text, sub: sub || '', at: Date.now() })); } catch(_) {}
+    }
+  };
+  function showCarried(){
+    var raw = null;
+    try { raw = sessionStorage.getItem(FLASH_KEY); sessionStorage.removeItem(FLASH_KEY); } catch(_) {}
+    if (!raw) return;
+    try {
+      var f = JSON.parse(raw);
+      if (f && f.text && Date.now() - f.at < 15000) show(f.kind, f.text, f.sub);
+    } catch(_) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showCarried);
+  else setTimeout(showCarried, 0);
+  window.addEventListener('pageshow', function(e){ if (e.persisted) showCarried(); });
+})();
