@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611181930';
+    var PAGE_BUILD = '202611181945';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -560,8 +560,8 @@
 <div id="toastBox"></div>
 
 <script src="js/config.js?v=202611131000"></script>
-<script src="js/supabaseClient.js?v=202611181930"></script>
-<script src="js/auth.js?v=202611181930"></script>
+<script src="js/supabaseClient.js?v=202611181945"></script>
+<script src="js/auth.js?v=202611181945"></script>
 <script src="js/whatsapp-api.js?v=202610111200"></script>
 <script src="js/whatsapp-card.js?v=202610111200"></script>
 <script src="js/sessionExpired.js?v=202610071530"></script>
@@ -2589,7 +2589,15 @@ async function sendBusinessDistributionNotices(bizId, bizName, facebook, pending
   const users = await window.supabaseClient.rpc('get_active_users_basic');
   if (users.error) throw new Error(users.error.message);
   const matches = (users.data || []).filter(user => /^(אלדד|eldad)(?:\s|$)/i.test((user.full_name || '').trim()));
-  if (matches.length !== 1) throw new Error('לא זוהה חשבון CRM פעיל יחיד של אלדד');
+  if (matches.length !== 1){
+    // 18.11.2026: אלדד (מנהל המערכת) אינו משתמש CRM. שינויי האתר הציבורי וההפצה
+    // האנונימית כבר נשמרו בכרטיס עצמו (public_listing_active / distribution_status),
+    // ובדיקת ההפצה השעתית קוראת אותם משם. לכן אין לחסום את השמירה בגלל משימה.
+    pending.delete('portal');
+    const status = document.getElementById('bizDistributionSaveStatus');
+    if (status) status.textContent = 'ההפצה נשמרה בכרטיס ותטופל בבדיקת ההפצה הקרובה.';
+    return;
+  }
   const now = new Date();
   const dueDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jerusalem', year:'numeric', month:'2-digit', day:'2-digit' }).format(now);
   const dueTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', hour:'2-digit', minute:'2-digit', hourCycle:'h23' }).format(now);
