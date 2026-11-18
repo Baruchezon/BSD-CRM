@@ -1,6 +1,8 @@
 -- Site-only listing photo. Apply before merging the website and CRM feature branches.
 BEGIN;
 ALTER TABLE public.businesses ADD COLUMN IF NOT EXISTS public_listing_image_path text;
+ALTER TABLE public.businesses ADD COLUMN IF NOT EXISTS public_listing_marketing_title text;
+ALTER TABLE public.businesses ADD COLUMN IF NOT EXISTS public_listing_marketing_text text;
 
 DO $$
 BEGIN
@@ -51,7 +53,9 @@ CREATE OR REPLACE VIEW public.public_business_listings AS
     (EXISTS ( SELECT 1
            FROM business_sale_files sf
           WHERE sf.business_id = b.id AND sf.status = 'active'::text AND (sf.category = 'valuation'::text OR sf.document_type = 'valuation'::text OR sf.file_name ~~* '%הערכת שווי%'::text OR sf.file_name ~~* '%valuation%'::text))) AS has_valuation,
-    b.public_listing_image_path AS public_image_path
+    b.public_listing_image_path AS public_image_path,
+    b.public_listing_marketing_title AS public_marketing_title,
+    b.public_listing_marketing_text AS public_marketing_text
    FROM businesses b
   WHERE public_listing_active = true AND anon_card_active = true AND listing_status = 'active'::text AND NOT is_archived AND crm_stage IS NULL;
 
