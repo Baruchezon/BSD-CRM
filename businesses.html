@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611161130';
+    var PAGE_BUILD = '202611181930';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -560,8 +560,8 @@
 <div id="toastBox"></div>
 
 <script src="js/config.js?v=202611131000"></script>
-<script src="js/supabaseClient.js?v=202608111530"></script>
-<script src="js/auth.js?v=202609241200"></script>
+<script src="js/supabaseClient.js?v=202611181930"></script>
+<script src="js/auth.js?v=202611181930"></script>
 <script src="js/whatsapp-api.js?v=202610111200"></script>
 <script src="js/whatsapp-card.js?v=202610111200"></script>
 <script src="js/sessionExpired.js?v=202610071530"></script>
@@ -688,8 +688,143 @@ function openBizFormFromDup(id){
 }
 
 function cancelBizForm(){
-  closeModal();
+  bsdBizRequestExit(() => closeModal(), null);
 }
+
+// ============================================================================
+// 18.11.2026 (בקשת ברוך): שינויים שלא נשמרו בכרטיס העסק.
+// יציאה מהכרטיס (ביטול / חזרה בדפדפן / קישור למסך אחר) כשיש שינויים שלא נשמרו
+// שואלת: «שמור וצא» / «צא בלי לשמור» / «ביטול». סגירת לשונית/רענון - beforeunload.
+// שדה נחשב "שונה" רק אם המשתמש עצמו נגע בו (focus/input) וערכו שונה ממה שהיה
+// לפני שנגע - כך טעינות רקע של הכרטיס לא יוצרות התראות שווא.
+// ============================================================================
+const BIZ_TRACKED_FIELDS = ['address','agreement_status','annual_revenue','anon_card_active','anon_card_show_price',
+  'anon_card_show_reason','anon_display_name','anon_summary','anonymous_name','asking_price','bizAllAgents','bizSelective',
+  'bizFacebook','category','city','discretion_level','employees_count','entity_type','field','handled_by','id_number',
+  'internal_business_summary','internal_name','legal_name','listing_status','net_profit','notes','operating_profit',
+  'owner_email','owner_name','owner_phone','pre_research','public_listing_active','referred_by_broker_id','region',
+  'removal_reason','sale_reason','sellerPortalEnabled','short_description','sold_to','status','subcategory','website','years_active'];
+let BIZ_DIRTY_BASE = {};      // { fieldId: value before the user first touched it }
+let BIZ_EXIT_AFTER_SAVE = null; // what to do after a successful «שמור וצא»
+let BIZ_LEAVE_DIALOG_OPEN = false;
+function bsdBizFieldVal(el){
+  if (!el) return '';
+  if (el.type === 'checkbox' || el.type === 'radio') return el.checked ? '1' : '0';
+  return String(el.value === undefined || el.value === null ? '' : el.value);
+}
+function bsdBizTrackedEl(t){
+  if (!t || !t.id || BIZ_TRACKED_FIELDS.indexOf(t.id) < 0) return null;
+  const form = document.getElementById('bizForm');
+  return form && form.contains(t) ? t : null;
+}
+function bsdBizResetDirty(){ BIZ_DIRTY_BASE = {}; }
+document.addEventListener('focusin', e => {
+  const el = bsdBizTrackedEl(e.target);
+  if (el && !Object.prototype.hasOwnProperty.call(BIZ_DIRTY_BASE, el.id)) BIZ_DIRTY_BASE[el.id] = bsdBizFieldVal(el);
+}, true);
+['input','change'].forEach(type => document.addEventListener(type, e => {
+  if (!e.isTrusted) return;
+  const el = bsdBizTrackedEl(e.target);
+  if (!el || Object.prototype.hasOwnProperty.call(BIZ_DIRTY_BASE, el.id)) return;
+  // לא נקלט focus לפני השינוי (למשל לחיצה על תווית של תיבת סימון בספארי)
+  BIZ_DIRTY_BASE[el.id] = (el.type === 'checkbox' || el.type === 'radio') ? (el.checked ? '0' : '1') : '\u0000changed';
+}, true));
+function bsdBizIsDirty(){
+  const overlay = document.getElementById('overlay');
+  const form = document.getElementById('bizForm');
+  if (!form || !overlay || !overlay.classList.contains('open')) return false;
+  if (typeof AI_EDIT_PENDING === 'object' && AI_EDIT_PENDING && Object.keys(AI_EDIT_PENDING).length) return true;
+  if (typeof AI_EDIT_REVERTED === 'object' && AI_EDIT_REVERTED && Object.keys(AI_EDIT_REVERTED).length) return true;
+  if (form.dataset.distributionEdited === 'true' && Object.keys(BIZ_DIRTY_BASE).length) return true;
+  return Object.keys(BIZ_DIRTY_BASE).some(id => {
+    const el = document.getElementById(id);
+    return el && form.contains(el) && bsdBizFieldVal(el) !== BIZ_DIRTY_BASE[id];
+  });
+}
+// מחזיר 'save' | 'discard' | 'cancel'
+function bsdBizAskLeave(){
+  return new Promise(resolve => {
+    BIZ_LEAVE_DIALOG_OPEN = true;
+    const wrap = document.createElement('div');
+    wrap.id = 'bizLeaveDialog';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.dir = 'rtl';
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(14,27,52,.62);display:flex;align-items:center;justify-content:center;z-index:2147483500;padding:16px;';
+    const btn = (bg, shadow, color) => `font-family:inherit;font-size:1rem;font-weight:800;border:none;border-radius:12px;padding:13px 18px;cursor:pointer;color:${color};background:${bg};box-shadow:0 5px 0 ${shadow},0 10px 20px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.4);flex:1 1 150px;`;
+    wrap.innerHTML = `
+      <div style="background:linear-gradient(180deg,#ffffff,#f4f1e8);border-radius:18px;padding:26px 24px 22px;max-width:460px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.45),inset 0 1px 0 #fff;font-family:Heebo,Rubik,Arial,sans-serif;text-align:center;">
+        <div style="font-size:2.3rem;line-height:1;margin-bottom:8px;">📝</div>
+        <div style="font-weight:800;color:#0e1b34;font-size:1.2rem;margin-bottom:6px;">יש שינויים שלא נשמרו</div>
+        <div style="color:#5b6478;font-size:.95rem;margin-bottom:20px;">מה לעשות עם השינויים בכרטיס העסק?</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;">
+          <button type="button" data-a="save" style="${btn('linear-gradient(180deg,#34c46a,#1e9e4f)','#127234','#fff')}">💾 שמור וצא</button>
+          <button type="button" data-a="discard" style="${btn('linear-gradient(180deg,#f06a5f,#c62f2f)','#8f1d1d','#fff')}">צא בלי לשמור</button>
+          <button type="button" data-a="cancel" style="${btn('linear-gradient(180deg,#f3f4f7,#d9dce4)','#a9aebb','#0e1b34')}">ביטול</button>
+        </div>
+      </div>`;
+    function done(a){
+      document.removeEventListener('keydown', onKey, true);
+      wrap.remove();
+      BIZ_LEAVE_DIALOG_OPEN = false;
+      resolve(a);
+    }
+    function onKey(e){ if (e.key === 'Escape'){ e.preventDefault(); done('cancel'); } }
+    wrap.addEventListener('click', e => {
+      const b = e.target.closest('button[data-a]');
+      if (b) done(b.dataset.a);
+      else if (e.target === wrap) done('cancel');
+    });
+    document.addEventListener('keydown', onKey, true);
+    document.body.appendChild(wrap);
+    const first = wrap.querySelector('button[data-a="save"]');
+    if (first) first.focus();
+  });
+}
+// exitFn: היציאה עצמה (בלי שמירה). afterSaveFn: מה לעשות אחרי שמירה מוצלחת
+// (null = saveBiz כבר סוגר את הכרטיס בעצמו).
+async function bsdBizRequestExit(exitFn, afterSaveFn){
+  if (BIZ_LEAVE_DIALOG_OPEN) return;
+  if (!bsdBizIsDirty()){ exitFn(); return; }
+  const choice = await bsdBizAskLeave();
+  if (choice === 'cancel') return;
+  if (choice === 'discard'){
+    bsdBizResetDirty();
+    AI_EDIT_PENDING = {}; AI_EDIT_REVERTED = {};
+    const form = document.getElementById('bizForm');
+    if (form) delete form.dataset.distributionEdited;
+    exitFn();
+    return;
+  }
+  const form = document.getElementById('bizForm');
+  if (!form){ exitFn(); return; }
+  BIZ_EXIT_AFTER_SAVE = afterSaveFn || null;
+  if (typeof form.requestSubmit === 'function') form.requestSubmit();
+  else form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+}
+// קישורים למסכים אחרים (תפריט עליון וכו') כשהכרטיס פתוח עם שינויים
+document.addEventListener('click', e => {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const a = e.target.closest && e.target.closest('a[href]');
+  if (!a || (a.target && a.target !== '_self') || a.hasAttribute('download')) return;
+  const href = a.getAttribute('href') || '';
+  if (!href || href.charAt(0) === '#' || /^(javascript|mailto|tel|sms|whatsapp):/i.test(href)) return;
+  if (!bsdBizIsDirty()) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const go = () => { window.location.href = a.href; };
+  bsdBizRequestExit(go, go);
+}, true);
+// סגירת לשונית / רענון / מעבר חיצוני: אזהרת הדפדפן הרגילה.
+// בניתוק אוטומטי אחרי 30 דקות לא חוסמים - שומרים טיוטה במכשיר ויוצאים.
+window.addEventListener('beforeunload', function(e){
+  if (!bsdBizIsDirty()) return;
+  if (window.__bsdSkipUnloadGuard){
+    try { if (typeof bsdSaveBizCardDraft === 'function') bsdSaveBizCardDraft(); } catch(_) {}
+    return;
+  }
+  e.preventDefault(); e.returnValue = ''; return '';
+});
 
 function closeModal(){
   const st = history.state;
@@ -698,8 +833,12 @@ function closeModal(){
   document.getElementById('overlay').classList.remove('biz-fullpage'); // ניקוי מצב "עמוד מלא" של כרטיס העסק (bsdTabifyBizForm),
   document.getElementById('modalBox').classList.remove('biz-fullpage-modal'); // כדי ששאר המודאלים (ליד/התאמה וכו') ייפתחו כרגיל בפעם הבאה
   document.getElementById('modalBox').innerHTML = '';
+  const carry = window.__bsdBizSavedFlash; window.__bsdBizSavedFlash = null;
   // Opened from another screen: Back returns there, not to the businesses list.
-  if (backToCaller){ history.back(); return; }
+  if (backToCaller){
+    if (carry && window.bsdSaveFlash) window.bsdSaveFlash(carry.kind, carry.text, carry.sub, { carry: true });
+    history.back(); return;
+  }
   if (!bizSuppressHistoryBack && st && st.bsdCardType === 'business'){
     history.replaceState({ bsdListType:'businesses' }, '', location.pathname);
   }
@@ -718,20 +857,30 @@ function enterBusinessCardHistory(id){
       listType: 'businesses',
       recordId: id || null
     }));
+    BIZ_CARD_HISTORY = history.state && history.state.bsdCardType === 'business' ? { state: history.state, url: location.pathname + location.search } : null;
     return;
   }
   const cardState = { bsdCardType:'business', recordId:id || null };
+  const cardUrl = location.pathname + (id ? '?card=' + encodeURIComponent(id) : '?new=1');
+  BIZ_CARD_HISTORY = { state: cardState, url: cardUrl };
   if (history.state && history.state.bsdCardType === 'business'){
-    history.replaceState(cardState, '', location.pathname + (id ? '?card=' + encodeURIComponent(id) : '?new=1'));
+    history.replaceState(cardState, '', cardUrl);
     return;
   }
   history.replaceState({ bsdListType:'businesses' }, '', location.pathname);
-  history.pushState(cardState, '', location.pathname + (id ? '?card=' + encodeURIComponent(id) : '?new=1'));
+  history.pushState(cardState, '', cardUrl);
 }
 
+let BIZ_CARD_HISTORY = null; // { state, url } of the open business card, to restore it if «ביטול»
 window.addEventListener('popstate', function(event){
   const overlay = document.getElementById('overlay');
   if (overlay && overlay.classList.contains('open') && (!event.state || event.state.bsdCardType !== 'business')){
+    // 18.11.2026: חזרה בדפדפן עם שינויים שלא נשמרו - מחזירים את הכרטיס להיסטוריה ושואלים.
+    if (bsdBizIsDirty() && BIZ_CARD_HISTORY){
+      history.pushState(BIZ_CARD_HISTORY.state, '', BIZ_CARD_HISTORY.url);
+      bsdBizRequestExit(() => { history.back(); }, null);
+      return;
+    }
     bizSuppressHistoryBack = true;
     try { closeModal(); } finally { bizSuppressHistoryBack = false; }
   }
@@ -1884,6 +2033,7 @@ function openBizForm(id){
   AI_TEXT_ORIGINAL = {}; // איפוס בין פתיחות טופס שונות - כל עסק מתחיל "נקי" מבחינת שחזור AI
   AI_EDIT_PENDING = {};
   AI_EDIT_REVERTED = {};
+  bsdBizResetDirty(); BIZ_EXIT_AFTER_SAVE = null;
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>${biz ? 'עריכת עסק' : 'עסק חדש'}${biz?.internal_name ? ` <span class="biz-name-big">${esc(biz.internal_name)}</span>` : ''}${biz?.business_number ? ` <span class="biz-number-badge">${esc(biz.business_number)}</span>` : ''}</h3>
@@ -5732,6 +5882,7 @@ async function saveBiz(e){
   const form = e.target;
   const submitBtn = form.querySelector('button[type="submit"]');
   bsdSetButtonLoading(submitBtn, true, 'שומר...');
+  let bizSaveOk = false;
   try {
   const bizId = form.dataset.bizId;
   const g = id => document.getElementById(id) ? document.getElementById(id).value : null;
@@ -5795,7 +5946,9 @@ async function saveBiz(e){
   const showFormError = msg => {
     const el = document.getElementById('bizFormError');
     if (el){ el.textContent = msg; el.style.display = 'block'; el.scrollIntoView({behavior:'smooth', block:'nearest'}); }
-    toast(msg);
+    // 18.11.2026: הודעה גדולה וברורה - השמירה לא בוצעה
+    if (window.bsdSaveFlash) window.bsdSaveFlash('error', '✖ השמירה לא בוצעה', String(msg || '').replace(/^❌\s*/, ''));
+    else toast(msg);
   };
   const existingBiz = ALL_BIZ.find(b => b.id === bizId) || ARCHIVED_BIZ.find(b => b.id === bizId);
   const wasAnonActive = !!existingBiz?.anon_card_active;
@@ -5976,6 +6129,7 @@ async function saveBiz(e){
     const serverMatches = bsdParseServerDupError(error);
     if (serverMatches){
       toast('⚠️ קיים כבר במערכת עסק שעשוי להתאים לפרטים שהוזנו');
+      if (window.bsdSaveFlash) window.bsdSaveFlash('warn', '⚠️ השמירה לא בוצעה', 'קיים כבר במערכת עסק שעשוי להתאים לפרטים שהוזנו');
       bsdRenderDupBanner('bizFormError', serverMatches, 'openBizFormFromDup');
       document.getElementById('bizFormError').scrollIntoView({behavior:'smooth', block:'nearest'});
       return;
@@ -5995,6 +6149,7 @@ async function saveBiz(e){
       bsdActivateBizTab('access');
       const status = document.getElementById('bizDistributionSaveStatus');
       if (status) status.textContent = 'כרטיס העסק נשמר. השלמת ההפצה או ההתראה נכשלה: ' + error.message + '. לחץ שוב על ״שמירה״ כדי להשלים.';
+      if (window.bsdSaveFlash) window.bsdSaveFlash('warn', '✓ כרטיס העסק נשמר, אבל ההפצה לא הושלמה', 'לחץ שוב על «שמירה» כדי להשלים את ההפצה.');
       if (anonTextSent) bsdQueueAnonPdfSync(bizId);
       for (const field of BIZ_GUARDED_TEXT_FIELDS){
         if (payload[field] !== undefined) bsdSetBizBaselineField(bizId, field, payload[field], payload[field]);
@@ -6020,15 +6175,26 @@ async function saveBiz(e){
   // עסק אחר. ה"תיקון" הקודם (הפניה ל-leads-hub עם הודעה) הוסר - הוא היה
   // מבוסס על הנחה שגויה שהסינון-לפי-הסכם הוא עיצוב תקין; זו בדיוק ההנחה
   // שהתבררה כשגויה ותוקנה בשורש.
+  // 18.11.2026 (בקשת ברוך): הודעת הצלחה גדולה וירוקה, שנשארת גלויה גם כשהכרטיס נסגר
+  // וגם כשחוזרים למסך שממנו נפתח הכרטיס.
+  let savedFlash;
   if (!wasAnonActive && nowAnonActive){
-    toast('🪪 העסק הופץ אנונימית בהצלחה');
+    savedFlash = { kind:'ok', text:'✓ נשמר בהצלחה', sub:'העסק הופץ אנונימית' };
   } else if (wasAnonActive && !nowAnonActive){
-    toast('העסק הוסר מההפצה האנונימית');
+    savedFlash = { kind:'ok', text:'✓ נשמר בהצלחה', sub:'העסק הוסר מההפצה האנונימית' };
   } else if (anonBlocked){
-    toast('✅ שאר הטופס נשמר בהצלחה (השדות האנונימיים לא עודכנו - ראה הודעה למעלה)');
+    savedFlash = { kind:'warn', text:'✓ שאר הכרטיס נשמר בהצלחה', sub:'השדות האנונימיים לא עודכנו, ראה הודעה בכרטיס' };
   } else {
-    toast('✅ נשמר בהצלחה');
+    savedFlash = { kind:'ok', text:'✓ נשמר בהצלחה', sub:(payload.internal_name || '') };
   }
+  if (window.bsdSaveFlash){
+    window.bsdSaveFlash(savedFlash.kind, savedFlash.text, savedFlash.sub);
+    window.__bsdBizSavedFlash = savedFlash;
+  } else {
+    toast(savedFlash.text + (savedFlash.sub ? ' - ' + savedFlash.sub : ''));
+  }
+  bizSaveOk = true;
+  bsdBizResetDirty();
   if (window.BSDSession) BSDSession.clearDraft(bsdBizDraftKey(bizId));
   closeModal();
   await loadBusinesses();
@@ -6038,8 +6204,25 @@ async function saveBiz(e){
     try { await BSDSellerPortal.afterSave(savedBizId, true); }
     catch (error) { toast('העסק נשמר. חשבון הפורטל לא נוצר: ' + error.message); }
   }
+  } catch (err) {
+    // 18.11.2026: עד היום תקלה לא צפויה (רשת, התחברות שפגה) עצרה את השמירה בשקט.
+    console.error('saveBiz failed:', err);
+    const msg = (err && err.message) || 'שגיאת תקשורת';
+    const expired = window.BSDSession && BSDSession.isAuthExpiredError(err);
+    if (expired){
+      try { bsdSaveBizCardDraft(); } catch(_) {}
+      BSDSession.showExpired();
+    }
+    if (!bizSaveOk){
+      const el = document.getElementById('bizFormError');
+      if (el){ el.textContent = '❌ השמירה לא בוצעה: ' + msg; el.style.display = 'block'; }
+      if (window.bsdSaveFlash) window.bsdSaveFlash('error', '✖ השמירה לא בוצעה', expired ? 'ההתחברות פגה. הטקסט נשמר במכשיר, התחבר מחדש ולחץ שוב על «שמירה».' : msg);
+      else toast('❌ השמירה לא בוצעה: ' + msg);
+    }
   } finally {
     bsdSetButtonLoading(submitBtn, false);
+    const after = BIZ_EXIT_AFTER_SAVE; BIZ_EXIT_AFTER_SAVE = null;
+    if (bizSaveOk && typeof after === 'function') after();
   }
 }
 
