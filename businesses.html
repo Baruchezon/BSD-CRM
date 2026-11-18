@@ -2261,6 +2261,17 @@ function openBizForm(id){
           ${['admin','manager'].includes(CURRENT_PROFILE?.role) ? `
           <section id="bsdSitePublisher" style="display:${biz.public_listing_active?'block':'none'};padding:14px;margin:12px 0;background:#fff;border:1px solid #d8d3c4;border-radius:12px;">
             <div style="font-weight:800;font-size:.95rem;color:#0e1b34;">🌐 עריכת הפרסום באתר BSD בלבד</div>
+            <div style="padding:12px;margin-top:12px;background:#f6f8fc;border-radius:10px;border:1px solid #d7e0ef;">
+              <div style="font-weight:700;color:#102954;margin-bottom:8px;">🎨 יצירת תמונת פרסום אוטומטית</div>
+              <div style="font-size:.78rem;color:#526273;margin-bottom:8px;">תמונה אנונימית עם הלוגו הרשמי של BSD, הסלוגן, כותרת ״למכירה״, תחום העסק, מסרים מאומתים ופרטי יצירת קשר. אין חיתוך של התמונה. תמונה שנוצרת היא טיוטה בלבד.</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button type="button" data-bsd-image-create class="btn btn-primary" onclick="window.BSDSitePoster.generate('${biz.id}',1)">✨ צור תמונת פרסום</button>
+                <button type="button" data-bsd-image-create class="btn btn-ghost" onclick="window.BSDSitePoster.generate('${biz.id}',4)">🖼️ צור 4 וריאציות</button>
+              </div>
+              <div style="font-size:.72rem;color:#80622d;margin-top:8px;">יצירת תמונה משתמשת בחשבון OpenAI API ועשויה להיות כרוכה בעלות נוספת לכל תמונה. רק לחיצה על הכפתור מפעילה את היצירה.</div>
+              <div id="bsdPosterGenerationStatus" role="status" style="font-size:.78rem;min-height:20px;margin-top:8px;"></div>
+              <div id="bsdPosterGallery" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:10px;"></div>
+            </div>
             <p style="font-size:.78rem;color:#665;margin:8px 0;">התוכן כאן מיועד רק לאתר ואינו מחליף את התקציר האנונימי הכללי. ניתן להעלות תמונה ולערוך כותרת ומסר לפני שמירתם. סימון הפרסום נשמר בשמירה הכללית של כרטיס העסק.</p>
             <div style="margin-top:12px;font-weight:700;">תמונת העסק באתר</div>
             <img id="bsdPublicPhotoPreview" alt="תמונת הפרסום שנבחרה לאתר" style="display:none;width:100%;height:280px;object-fit:contain;background:#eef1f6;border-radius:8px;margin-top:8px;" />
@@ -6813,6 +6824,7 @@ window.addEventListener('bsd:vip-publication-changed', event => {
   saveBusinessPageCache();
 });
 </script>
+<script src="js/site-poster-generator.js?v=20261118" defer></script>
 </body>
 </html>
 
