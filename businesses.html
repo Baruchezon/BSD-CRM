@@ -2255,9 +2255,45 @@ function openBizForm(id){
             הפצה אנונימית לכל הסוכנים המורשים
           </label>
           <label>
-            <input type="checkbox" id="public_listing_active" ${biz.public_listing_active?'checked':''}>
+            <input type="checkbox" id="public_listing_active" ${biz.public_listing_active?'checked':''} onchange="bsdToggleSitePublisher()">
             הפצה ציבורית (פרסום באתר)
           </label>
+          ${['admin','manager'].includes(CURRENT_PROFILE?.role) ? `
+          <section id="bsdSitePublisher" style="display:${biz.public_listing_active?'block':'none'};padding:14px;margin:12px 0;background:#fff;border:1px solid #d8d3c4;border-radius:12px;">
+            <div style="font-weight:800;font-size:.95rem;color:#0e1b34;">🌐 עריכת הפרסום באתר BSD בלבד</div>
+            <div style="padding:12px;margin-top:12px;background:#f6f8fc;border-radius:10px;border:1px solid #d7e0ef;">
+              <div style="font-weight:700;color:#102954;margin-bottom:8px;">🎨 יצירת תמונת פרסום אוטומטית</div>
+              <div style="font-size:.78rem;color:#526273;margin-bottom:8px;">תמונה אנונימית עם הלוגו הרשמי של BSD, הסלוגן, כותרת ״למכירה״, תחום העסק, מסרים מאומתים ופרטי יצירת קשר. אין חיתוך של התמונה. תמונה שנוצרת היא טיוטה בלבד.</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button type="button" data-bsd-image-create class="btn btn-primary" onclick="window.BSDSitePoster.generate('${biz.id}',1)">✨ צור תמונת פרסום</button>
+                <button type="button" data-bsd-image-create class="btn btn-ghost" onclick="window.BSDSitePoster.generate('${biz.id}',4)">🖼️ צור 4 וריאציות</button>
+              </div>
+              <div style="font-size:.72rem;color:#80622d;margin-top:8px;">יצירת תמונה משתמשת בחשבון OpenAI API ועשויה להיות כרוכה בעלות נוספת לכל תמונה. רק לחיצה על הכפתור מפעילה את היצירה.</div>
+              <div id="bsdPosterGenerationStatus" role="status" style="font-size:.78rem;min-height:20px;margin-top:8px;"></div>
+              <div id="bsdPosterGallery" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:10px;"></div>
+            </div>
+            <p style="font-size:.78rem;color:#665;margin:8px 0;">התוכן כאן מיועד רק לאתר ואינו מחליף את התקציר האנונימי הכללי. ניתן להעלות תמונה ולערוך כותרת ומסר לפני שמירתם. סימון הפרסום נשמר בשמירה הכללית של כרטיס העסק.</p>
+            <div style="margin-top:12px;font-weight:700;">תמונת העסק באתר</div>
+            <img id="bsdPublicPhotoPreview" alt="תמונת הפרסום שנבחרה לאתר" style="display:none;width:100%;height:280px;object-fit:contain;background:#eef1f6;border-radius:8px;margin-top:8px;" />
+            <div id="bsdPublicPhotoEmpty" style="padding:22px;background:#f4f6f9;border-radius:8px;text-align:center;color:#667;margin-top:8px;">לא נבחרה תמונה ייחודית. האתר משתמש בתמונת תחום קיימת.</div>
+            <label style="font-size:.8rem;display:block;margin:10px 0;">
+              <input type="checkbox" id="bsdPublicPhotoApproved" style="width:auto;"> בדקתי שהתמונה מתאימה לפרסום אנונימי ואינה חושפת מידע מזהה
+            </label>
+            <input type="file" accept="image/png,image/jpeg,image/webp" onchange="bsdUploadPublicSiteImage('${biz.id}',this)" style="width:100%;font-size:.8rem;">
+            <div style="color:#667;font-size:.72rem;margin-top:4px;">PNG, JPG או WebP עד 10MB. התמונה תוצג בשלמותה ללא חיתוך. מומלצת תמונה באיכות 1200 פיקסלים לפחות לרוחב.</div>
+            <div id="bsdPublicPhotoStatus" role="status" style="min-height:20px;font-size:.78rem;margin:6px 0;"></div>
+            <div style="margin-top:14px;font-weight:700;">כותרת שיווקית באתר</div>
+            <input type="text" id="bsdSitePublishTitle" maxlength="180" value="${esc(biz.public_listing_marketing_title || biz.anon_display_name || '')}" style="width:100%;box-sizing:border-box;margin-top:5px;">
+            <div style="margin-top:12px;font-weight:700;">תיאור שיווקי באתר</div>
+            <textarea id="bsdSitePublishText" maxlength="6000" rows="8" style="width:100%;box-sizing:border-box;margin-top:5px;white-space:pre-wrap;resize:vertical;">${esc(biz.public_listing_marketing_text || biz.anon_summary || '')}</textarea>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+              <button type="button" class="btn btn-ghost" onclick="bsdProposeSiteMarketing('${biz.id}')">✨ הצעת מלל שיווקי ב AI</button>
+              <button type="button" class="btn btn-primary" style="background:#0b7454;border-color:#0b7454;" onclick="bsdPublishToWebsite('${biz.id}')">🚀 הפץ לאתר</button>
+            </div>
+            <div id="bsdSiteMarketingStatus" role="status" style="font-size:.78rem;color:#667;margin-top:8px;min-height:20px;">אפשר לערוך את המלל כרצונך. השינויים אינם מתפרסמים לפני אישור ושמירה.</div>
+            <div style="font-size:.74rem;color:#7a5e23;margin-top:10px;">האתר מתעדכן באמצעות מנגנון הסנכרון. ייתכן עיכוב עד העדכון הבא של האתר.</div>
+          </section>` : ''}
+
           <div class="dch-head">ערוצי הפצה - סמן V בכל ערוץ שבו העסק מופץ</div>
           <div class="dch-sub">כל סימון נשמר מיד (בלי «שמירה») עם שמך והשעה. זה סימון ב-CRM בלבד - שום הודעה לא נשלחת ללקוחות.</div>
           <div id="bizChannelChecks" class="dch-grid"></div>
@@ -2352,6 +2388,7 @@ function openBizForm(id){
   if (window.BSDSellerPortal) BSDSellerPortal.mount(biz);
   if (biz && document.getElementById('bizFacebook')) loadFacebookRequest(biz.id);
   if (biz && document.getElementById('public_listing_active')) syncPublicDistribution();
+  if (biz && document.getElementById('bsdPublicPhotoPreview')) bsdShowPublicPhoto(biz.public_listing_image_draft_path || biz.public_listing_image_path);
   syncSelectedUsersPanel();
   // בדיקת כפילות בזמן הקלדה - רק בפתיחת עסק חדש (לא בעריכת עסק קיים)
   if (!biz){
@@ -3512,6 +3549,158 @@ async function invokeAnonCardFn(body){
     throw new Error(anonFunctionErrorMessage(error, ctx));
   }
   return data;
+}
+
+// Website-only publication controls. Never mutate anon_summary or its shared channels.
+function bsdToggleSitePublisher(){
+  const panel = document.getElementById('bsdSitePublisher');
+  const checked = document.getElementById('public_listing_active')?.checked;
+  if (panel) panel.style.display = checked ? 'block' : 'none';
+}
+function bsdShowPublicPhoto(path){
+  const preview = document.getElementById('bsdPublicPhotoPreview');
+  const empty = document.getElementById('bsdPublicPhotoEmpty');
+  if (!preview || !empty) return;
+  const valid = /^public-listings\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(png|jpe?g|webp)$/i.test(String(path || ''));
+  preview.style.display = valid ? 'block' : 'none';
+  empty.style.display = valid ? 'none' : 'block';
+  if (valid) preview.src = window.supabaseClient.storage.from('site-content-images').getPublicUrl(path).data.publicUrl;
+  else preview.removeAttribute('src');
+}
+async function bsdUploadPublicSiteImage(bizId, input){
+  const status = document.getElementById('bsdPublicPhotoStatus');
+  const file = input?.files?.[0];
+  if (!file) return;
+  const setStatus = (message, error = false) => {
+    if (status){ status.style.color = error ? '#ae3123' : '#305d47'; status.textContent = message; }
+  };
+  if (!document.getElementById('bsdPublicPhotoApproved')?.checked){
+    setStatus('יש לאשר שהתמונה מתאימה לפרסום אנונימי לפני העלאה.', true); input.value = ''; return;
+  }
+  const ext = {'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}[file.type];
+  if (!ext || file.size > 10 * 1024 * 1024 || file.size === 0){
+    setStatus('נדרש קובץ PNG, JPG או WebP עד 10MB.', true); input.value = ''; return;
+  }
+  input.disabled = true;
+  setStatus('מעלה את התמונה...');
+  try {
+    const path = 'public-listings/' + bizId + '/' + crypto.randomUUID() + '.' + ext;
+    const { error: uploadError } = await window.supabaseClient.storage
+      .from('site-content-images').upload(path, file, {contentType:file.type, upsert:false});
+    if (uploadError) throw uploadError;
+    const { data, error: updateError } = await window.supabaseClient.from('businesses')
+      .update({ public_listing_image_draft_path: path }).eq('id', bizId)
+      .select('public_listing_image_draft_path').single();
+    if (updateError || !data) throw updateError || new Error('לא התקבל אישור לשמירת התמונה');
+    const b = (typeof bsdFindCachedBiz === 'function') ? bsdFindCachedBiz(bizId) : null;
+    if (b) b.public_listing_image_draft_path = path;
+    bsdShowPublicPhoto(path);
+    setStatus('התמונה הועלתה כטיוטה. היא לא תחליף את תמונת האתר עד שתלחץ על ״הפץ לאתר״.');
+  } catch(e) {
+    setStatus('לא ניתן לשמור את התמונה: ' + (e?.message || String(e)), true);
+  } finally {
+    input.disabled = false;
+    input.value = '';
+  }
+}
+async function bsdProposeSiteMarketing(bizId){
+  const status = document.getElementById('bsdSiteMarketingStatus');
+  const setStatus = (message, error = false) => {
+    if(status){ status.style.color = error ? '#ae3123' : '#305d47'; status.textContent = message; }
+  };
+  setStatus('מנסח הצעה על בסיס הנתונים האנונימיים של העסק...');
+  try {
+    const draft = await invokeAnonCardFn({ business_id: bizId, form: bsdCollectAnonAiForm() });
+    if (draft?.concerns?.length) {
+      setStatus('יש חשש לחשיפת פרטים מזהים: ' + draft.concerns.join(' · ') + '. ההצעה לא הוחלה.', true);
+      return;
+    }
+    if (!draft?.anon_display_name || !draft?.anon_summary) {
+      setStatus('אין מספיק נתונים ליצירת הצעה. ניתן להקליד מלל ידנית.', true);
+      return;
+    }
+    document.getElementById('bsdSitePublishTitle').value = draft.anon_display_name;
+    document.getElementById('bsdSitePublishText').value = draft.anon_summary;
+    setStatus('זוהי הצעה בלבד. אפשר לערוך כל מילה, או לבקש הצעה נוספת. שמירה תתבצע רק בלחיצה על אישור.');
+  } catch(e) {
+    setStatus('יצירת ההצעה נכשלה: ' + (e?.message || String(e)), true);
+  }
+}
+async function bsdPublishToWebsite(bizId){
+  const status = document.getElementById('bsdSiteMarketingStatus');
+  const photo = document.getElementById('bsdPublicPhotoStatus');
+  const message = (msg, error = false) => {
+    if (status){ status.style.color = error ? '#ae3123' : '#305d47'; status.textContent = msg; }
+  };
+  const title = document.getElementById('bsdSitePublishTitle')?.value.trim();
+  const marketing_text = document.getElementById('bsdSitePublishText')?.value.trim();
+  if (!document.getElementById('bsdPublicPhotoApproved')?.checked) {
+    message('אשר תחילה שהתמונה אינה חושפת מידע מזהה.', true);
+    return;
+  }
+  if (!title || !marketing_text) { message('יש למלא כותרת ומסר שיווקי.', true); return; }
+  const publishButton = [...document.querySelectorAll('#bsdSitePublisher button')]
+    .find(btn => btn.textContent?.includes('הפץ לאתר'));
+  if (publishButton) publishButton.disabled = true;
+  message('בודק את הפרסום ומעביר אותו לאתר...');
+  try {
+    const { data, error } = await bsdInvokeAiFn('site-publication-content', {body:{
+      business_id: bizId, action:'publish', title, marketing_text, accepted_image_anonymity:true
+    }});
+    if (error) {
+      let details = null;
+      try { details = await error.context?.json?.(); } catch (_e){}
+      throw new Error(details?.issues?.join(' · ') || details?.error || error.message);
+    }
+    if (!data?.published) throw new Error('לא התקבל אישור הפצה מהשרת');
+    const checkbox = document.getElementById('public_listing_active');
+    if (checkbox) checkbox.checked = true;
+    const b = typeof bsdFindCachedBiz === 'function' ? bsdFindCachedBiz(bizId) : null;
+    if (b) {
+      b.public_listing_active = true;
+      b.anon_card_active = true;
+      b.public_listing_marketing_title = title;
+      b.public_listing_marketing_text = marketing_text;
+      if (b.public_listing_image_draft_path) b.public_listing_image_path = b.public_listing_image_draft_path;
+      b.public_listing_image_draft_path = null;
+    }
+    if (photo) photo.textContent = 'התמונה והמלל אושרו לפרסום.';
+    if (data.refresh === 'workflow_queued') {
+      message('הפרסום אושר. עדכון האתר הופעל אוטומטית. יש לוודא שהבנייה הסתיימה לפני בדיקת האתר.');
+    } else {
+      message('הפרסום אושר ונשמר, אך אין כרגע הפעלת עדכון מיידי של האתר. הוא יופיע בעדכון המתוזמן הבא. יש להגדיר חיבור מאובטח לעדכון מיידי.');
+    }
+  } catch(e) {
+    message('הפרסום לא הושלם: ' + (e?.message || String(e)), true);
+  } finally {
+    if (publishButton) publishButton.disabled = false;
+  }
+}
+
+async function bsdSaveSiteMarketing(bizId){
+  const status = document.getElementById('bsdSiteMarketingStatus');
+  const setStatus = (message, error = false) => {
+    if(status){ status.style.color = error ? '#ae3123' : '#305d47'; status.textContent = message; }
+  };
+  const title = document.getElementById('bsdSitePublishTitle')?.value.trim();
+  const marketing_text = document.getElementById('bsdSitePublishText')?.value.trim();
+  if (!title || !marketing_text){ setStatus('יש למלא כותרת ותיאור לפני השמירה.', true); return; }
+  setStatus('בודק אנונימיות ושומר את הפרסום...');
+  try {
+    const { data, error } = await bsdInvokeAiFn('site-publication-content', {body:{
+      business_id:bizId, action:'save', title, marketing_text
+    }});
+    if(error){
+      let details = null;
+      try { details = await error.context?.json?.(); } catch(_e){}
+      throw new Error(details?.issues?.join(' · ') || details?.error || error.message);
+    }
+    const b = (typeof bsdFindCachedBiz === 'function') ? bsdFindCachedBiz(bizId) : null;
+    if (b){ b.public_listing_marketing_title = data.title; b.public_listing_marketing_text = data.marketing_text; }
+    setStatus('המלל הציבורי נשמר. הוא יופיע באתר בעדכון הבא. התקציר האנונימי הכללי לא שונה.');
+  } catch(e) {
+    setStatus('שמירת הפרסום נכשלה: ' + (e?.message || String(e)), true);
+  }
 }
 
 // ============================================================================
@@ -5982,6 +6171,11 @@ async function saveBiz(e){
     // ישקף את המצב האמיתי ולא יטעה).
     const listingStatusVal = g('listing_status');
     payload.public_listing_active = (payload.anon_card_active && (listingStatusVal === 'active' || !listingStatusVal)) ? cb('public_listing_active') : false;
+    // New public listings are activated ONLY by the explicit “הפץ לאתר” action.
+    // The ordinary business save cannot bypass curated photo + marketing approval.
+    if (!existingBiz?.public_listing_active && payload.public_listing_active) {
+      payload.public_listing_active = false;
+    }
 
     if (document.getElementById('anon_summary')){
       const manualDisplayName = g('anon_display_name');
@@ -6630,6 +6824,7 @@ window.addEventListener('bsd:vip-publication-changed', event => {
   saveBusinessPageCache();
 });
 </script>
+<script src="js/site-poster-generator.js?v=20261118" defer></script>
 </body>
 </html>
 

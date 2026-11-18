@@ -1,0 +1,34 @@
+name: BSD public site publishing checks
+on:
+  pull_request:
+    paths:
+      - 'businesses.html'
+      - 'js/site-poster-generator.js'
+      - 'supabase/functions/generate-site-listing-image/**'
+      - 'supabase/functions/site-publication-content/**'
+      - 'supabase/migrations/20261118225000_public_listing_curated_photos.sql'
+      - 'tests/public_site_publishing.test.mjs'
+      - '.github/workflows/public-site-publishing-checks.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate poster code and feature wiring
+        run: |
+          node --check js/site-poster-generator.js
+          node --test tests/public_site_publishing.test.mjs
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 'v2.x'
+      - name: Validate Edge Function TypeScript
+        run: |
+          deno check supabase/functions/generate-site-listing-image/index.ts
+          deno check supabase/functions/site-publication-content/index.ts
