@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+
+const html = readFileSync('businesses.html', 'utf8');
+const poster = readFileSync('js/site-poster-generator.js', 'utf8');
+const generation = readFileSync('supabase/functions/generate-site-listing-image/index.ts', 'utf8');
+const publishing = readFileSync('supabase/functions/site-publication-content/index.ts', 'utf8');
+const migration = readFileSync('supabase/migrations/20261118225000_public_listing_curated_photos.sql', 'utf8');
+
+assert.doesNotThrow(() => new vm.Script(poster), 'Poster generator JS must parse');
+assert.ok(html.includes('BSDSitePoster.generate'), 'Image generation controls missing');
+assert.ok(html.includes('צור 4 וריאציות'), 'Four-variant control missing');
+assert.ok(html.includes('🚀 הפץ לאתר'), 'Explicit publication action missing');
+assert.ok(html.includes('bsdPublicPhotoApproved'), 'Anonymous photo approval missing');
+assert.ok(html.includes('public_listing_image_draft_path'), 'Draft image upload missing');
+assert.ok(html.includes('site-publication-content'), 'Publishing endpoint missing');
+assert.ok(html.includes('src="js/site-poster-generator.js?'), 'Image generator JS not loaded');
+assert.ok(!poster.includes('public_listing_active: true'), 'Image creation must never publish automatically');
+assert.ok(poster.includes('object-fit:contain'), 'Image preview must not crop');
+assert.ok(poster.includes('משביחים עסקים.'), 'BSD slogan missing');
+assert.ok(poster.includes('למכירה'), 'Required sale heading missing');
+assert.ok(poster.includes('bsd-bbi.co.il'), 'Business CTA website missing');
+assert.ok(poster.includes('077-4446707') && poster.includes('054-2424999'), 'Business CTA phone numbers missing');
+assert.ok(generation.includes("OPENAI_API_KEY"), 'Server must use API key from secrets');
+assert.ok(generation.includes('gpt-image-2.6-flare'), 'Current image model missing');
+assert.ok(generation.includes('Authorization'), 'Image endpoint authorization missing');
+assert.ok(generation.includes('No fabricated branded products'), 'Anonymous prompt missing');
+assert.ok(publishing.includes("action === 'publish'"), 'Explicit publishing branch missing');
+assert.ok(publishing.includes('accepted_image_anonymity'), 'Server-side image approval missing');
+assert.ok(publishing.includes('public_listing_image_draft_path: null'), 'Publish action must promote and clear draft');
+assert.ok(migration.includes('CREATE OR REPLACE VIEW public.public_business_listings'), 'Public site view migration missing');
+assert.ok(migration.includes("CREATE POLICY bsd_public_listing_photo_upload"), 'Photo upload policy missing');
+assert.ok(!migration.includes('public_listing_image_draft_path AS public_image_path'), 'Draft photos must not leak into public view');
+console.log('BSD CRM public listing composer static checks passed');
