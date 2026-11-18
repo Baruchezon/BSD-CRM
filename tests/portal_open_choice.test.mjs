@@ -49,3 +49,58 @@ test('WhatsApp text when the password went by email: same template, no password 
   const m = W.BSDPortalInvite.message(P.mailNoticeData(d, 'owner@example.com'));
   assert.ok(m.includes('שם משתמש: 23456') && m.includes('סיסמה: נשלחה אליך במייל (owner@example.com)') && !m.includes('SECRET-PW'));
 });
+
+test('an existing account loads its count and management actions without waiting for email history', async () => {
+  const elements = new Map([
+    '#sellerPortalEnabled', '[data-portal-opening]', '[data-portal-summary]',
+    '[data-portal-error]', '[data-portal-controls]', '[data-portal-credentials]',
+    '[data-portal-email-list]'
+  ].map(selector => [selector, {
+    querySelector: () => null,
+    querySelectorAll: () => []
+  }]));
+  let click;
+  const root = {
+    querySelector: selector => elements.get(selector),
+    addEventListener(event, callback) { if (event === 'click') click = callback; }
+  };
+  const signed = { id: 'business', agreement_status: 'יש הסכם חתום' };
+  let detailAvailable = false;
+  const actions = [];
+  const ctx = {
+    document: { getElementById: () => root },
+    window: {
+      BSD_CONFIG: { SELLER_PORTAL_API_URL: '/portal' },
+      supabaseClient: {
+        auth: { getSession: async () => ({ data: { session: { access_token: 'test' } } }) },
+        from: () => ({ select: () => ({ in: () => ({ eq: () => ({
+          order: () => ({ limit: () => new Promise(() => {}) })
+        }) }) }) })
+      }
+    },
+    async fetch(_url, request) {
+      actions.push(JSON.parse(request.body).action);
+      return detailAvailable
+        ? { ok: true, json: async () => ({
+          business: signed,
+          account: { username: '12345', status: 'active', pending: false, login_count: 6 }
+        }) }
+        : { ok: false, json: async () => ({ error: 'unavailable' }) };
+    }
+  };
+  vm.runInNewContext(card, ctx);
+  const mounted = ctx.window.BSDSellerPortal.mount({ id: signed.id, agreement_status: 'אין הסכם' });
+  assert.equal(elements.get('#sellerPortalEnabled').disabled, true);
+  await mounted;
+  const controls = elements.get('[data-portal-controls]');
+  assert.match(controls.innerHTML, /data-portal-retry/);
+  detailAvailable = true;
+  const retry = { hasAttribute: name => name === 'data-portal-retry' };
+  await click({ target: { closest: selector => selector === '[data-portal-controls] button' ? retry : null } });
+  assert.equal(elements.get('[data-portal-opening]').hidden, true);
+  assert.match(elements.get('[data-portal-summary]').textContent, /מספר כניסות: 6/);
+  assert.match(controls.innerHTML, /data-portal-preview/);
+  assert.match(controls.innerHTML, /data-portal-block/);
+  assert.match(controls.innerHTML, /data-portal-open\s*>/);
+  assert.deepEqual(actions, ['admin_detail', 'admin_detail']);
+});

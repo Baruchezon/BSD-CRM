@@ -6,7 +6,7 @@
 (()=>{'use strict';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const when=v=>v?new Date(v).toLocaleString('he-IL',{timeZone:'Asia/Jerusalem',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
-const ERRORS={email_missing:'אין מייל תקין בכרטיס העסק',sender_not_ready:'שליחת מיילים מהכתובת info@bsd-bbi.co.il עדיין לא הופעלה. המייל לא נשלח והסיסמה לא השתנתה',send_failed:'המייל לא נשלח והסיסמה לא השתנתה. אפשר לנסות שוב או לשלוח ב-WhatsApp',sent_not_saved:'המייל נשלח אבל הסיסמה החדשה לא נשמרה. הסיסמה הקודמת עדיין עובדת. יש ללחוץ שוב על «שליחה במייל»',try_later:'נשלחו כמה מיילים ברצף. אפשר לנסות שוב בעוד רבע שעה',invalid_action:'הפעולה עדיין לא הופעלה בשרת. המייל לא נשלח',signed_agreement_required:'נדרש עסק פעיל עם הסכם חתום',account_required:'אין חשבון פורטל לעסק זה',status_unavailable:'לא הצלחנו לבדוק כרגע את מצב המסירה. אפשר לנסות שוב בעוד רגע',no_resend_id:'למייל הזה אין מספר שליחה, ולכן אין מצב מסירה',not_found:'הרשומה לא נמצאה',preview_unavailable:'החשבון אינו פתוח לצפייה. נדרש חשבון פורטל פעיל לעסק עם הסכם חתום'};
+const ERRORS={unauthorized:'החיבור למערכת פג. יש להתחבר מחדש',forbidden:'ניהול הפורטל זמין למנהלי המערכת בלבד',email_missing:'אין מייל תקין בכרטיס העסק',sender_not_ready:'שליחת מיילים מהכתובת info@bsd-bbi.co.il עדיין לא הופעלה. המייל לא נשלח והסיסמה לא השתנתה',send_failed:'המייל לא נשלח והסיסמה לא השתנתה. אפשר לנסות שוב או לשלוח ב-WhatsApp',sent_not_saved:'המייל נשלח אבל הסיסמה החדשה לא נשמרה. הסיסמה הקודמת עדיין עובדת. יש ללחוץ שוב על «שליחה במייל»',try_later:'נשלחו כמה מיילים ברצף. אפשר לנסות שוב בעוד רבע שעה',invalid_action:'הפעולה עדיין לא הופעלה בשרת. המייל לא נשלח',signed_agreement_required:'נדרש עסק פעיל עם הסכם חתום',account_required:'אין חשבון פורטל לעסק זה',status_unavailable:'לא הצלחנו לבדוק כרגע את מצב המסירה. אפשר לנסות שוב בעוד רגע',no_resend_id:'למייל הזה אין מספר שליחה, ולכן אין מצב מסירה',not_found:'הרשומה לא נמצאה',preview_unavailable:'החשבון אינו פתוח לצפייה. נדרש חשבון פורטל פעיל לעסק עם הסכם חתום'};
 async function api(action,payload={}){
  const url=window.BSD_CONFIG.SELLER_PORTAL_API_URL;if(!url)throw Error('שירות הפורטל טרם הופעל. פרטי העסק נשמרים כרגיל');
  const {data:{session}}=await window.supabaseClient.auth.getSession();if(!session)throw Error('יש להתחבר למערכת');
@@ -187,7 +187,7 @@ function mailSentHtml(d,to,wa){
  <p style="margin:0;line-height:1.6">פרטי הכניסה (שם משתמש וסיסמה) נשלחו במייל אל <b dir="ltr">${esc(to)}</b> מהכתובת <span dir="ltr">info@bsd-bbi.co.il</span>.</p>
  ${wa?`<p style="margin:8px 0 0">${link?`<a data-portal-wa href="${esc(link)}" target="_blank" rel="noopener" style="display:inline-block;padding:8px 14px;border-radius:8px;background:#128c4a;color:#fff;text-decoration:none;font-weight:700">פתיחה ב-WhatsApp לשליחה</a>`:'<span style="color:#a33">אין בכרטיס טלפון ישראלי תקין לשליחה ב-WhatsApp.</span>'}</p>`:''}</div>`;
 }
-function markup(biz){return `<section id="sellerPortalCard" class="field full" style="padding:14px;border:1px solid #c9a854;border-radius:10px;background:#fffdf5"><h3 class="section-h">פורטל בעלי עסקים</h3><label style="display:flex;gap:8px;align-items:center;font-weight:700"><input type="checkbox" id="sellerPortalEnabled" style="width:auto">פתח חשבון בפורטל</label><p data-portal-summary role="status" style="margin:6px 0">${biz?'טוען את מצב חשבון הפורטל...':'לאחר שמירת עסק פעיל עם הסכם חתום תופיע בחירה: שליחת פרטי הכניסה בוואטסאפ, במייל או בשניהם.'}</p><div data-portal-credentials></div><div data-portal-controls style="display:flex;gap:8px;flex-wrap:wrap"></div><div data-portal-email-list></div><small>מחיקת חשבון הפורטל משאירה את כרטיס העסק ואת הקבצים שלו. העברה לארכיון או ביטול ההסכם חוסמים את הגישה אוטומטית.</small></section>`;}
+function markup(biz){return `<section id="sellerPortalCard" class="field full" style="padding:14px;border:1px solid #c9a854;border-radius:10px;background:#fffdf5"><h3 class="section-h">פורטל בעלי עסקים</h3><label data-portal-opening hidden style="font-weight:700"><input type="checkbox" id="sellerPortalEnabled" disabled style="width:auto"> פתח חשבון בפורטל</label><p data-portal-summary role="status" style="margin:6px 0">${biz?'טוען את מצב חשבון הפורטל...':'לאחר שמירת עסק פעיל עם הסכם חתום תופיע בחירה: שליחת פרטי הכניסה בוואטסאפ, במייל או בשניהם.'}</p><p data-portal-error role="alert" hidden style="margin:6px 0;color:#a33"></p><div data-portal-credentials></div><div data-portal-controls style="display:flex;gap:8px;flex-wrap:wrap"></div><div data-portal-email-list></div>${biz?'<p style="margin:8px 0"><a href="portal-admin.html?business_id='+encodeURIComponent(biz.id)+'">ניהול הפורטל של העסק ←</a></p>':''}<small>מחיקת חשבון הפורטל משאירה את כרטיס העסק ואת הקבצים שלו. העברה לארכיון או ביטול ההסכם חוסמים את הגישה אוטומטית.</small></section>`;}
 // Opens a blank tab synchronously (inside the click) so the browser allows it,
 // then points it at wa.me once the server answered.
 function reserveTab(){const w=window.open('about:blank','_blank');if(w){try{w.opener=null;w.document.body.innerHTML='<p dir="rtl" style="font-family:Arial;padding:30px">מכין את הודעת ה-WhatsApp...</p>';}catch(_){}}return w;}
@@ -211,19 +211,27 @@ async function openAsOwner(businessId){
 function sendTo(tab,d){const wa=invite().waUrl(d);if(tab&&wa){tab.location.replace(wa);return true;}if(tab)tab.close();return false;}
 async function mount(biz){
  const root=document.getElementById('sellerPortalCard');if(!root)return;
- const checkbox=root.querySelector('#sellerPortalEnabled');
- if(!biz){const agreement=document.getElementById('agreement_status');const sync=()=>{checkbox.disabled=agreement?.value!=='יש הסכם חתום';if(checkbox.disabled)checkbox.checked=false;};agreement?.addEventListener('change',sync);sync();return;}
- let account=null,busy=false,lastError='',emailRows=[],autoChecked=false;
- const listBox=root.querySelector('[data-portal-email-list]'),summary=root.querySelector('[data-portal-summary]'),controls=root.querySelector('[data-portal-controls]'),credBox=root.querySelector('[data-portal-credentials]');
- const eligible=()=>!biz.is_archived&&biz.agreement_status==='יש הסכם חתום';
+ const checkbox=root.querySelector('#sellerPortalEnabled'),opening=root.querySelector('[data-portal-opening]');
+ if(!biz){opening.hidden=false;const agreement=document.getElementById('agreement_status');const sync=()=>{checkbox.disabled=agreement?.value!=='יש הסכם חתום';if(checkbox.disabled)checkbox.checked=false;};agreement?.addEventListener('change',sync);sync();return;}
+ let account=null,savedBusiness=biz,loaded=false,busy=false,lastError='',emailRows=[],autoChecked=false;
+ const listBox=root.querySelector('[data-portal-email-list]'),summary=root.querySelector('[data-portal-summary]'),errorBox=root.querySelector('[data-portal-error]'),controls=root.querySelector('[data-portal-controls]'),credBox=root.querySelector('[data-portal-credentials]');
+ const eligible=()=>!savedBusiness.is_archived&&savedBusiness.agreement_status==='יש הסכם חתום';
  const exists=()=>!!account&&account.status!=='deleted';
  const draw=()=>{
-  if(!busy)checkbox.checked=exists()&&account.status==='active';checkbox.disabled=busy||!eligible();
+  opening.hidden=!loaded||(exists()&&(!account.pending||account.status!=='active'));
+  checkbox.disabled=!loaded||busy||!eligible();
+  if(!busy)checkbox.checked=false;
+  errorBox.hidden=!lastError;errorBox.textContent=lastError;
+  if(!loaded){
+   summary.textContent=lastError?'מצב חשבון הפורטל אינו זמין כרגע':'טוען את מצב חשבון הפורטל...';
+   controls.innerHTML=lastError?'<button type="button" data-portal-retry>נסה לטעון שוב</button>':'';
+   return;
+  }
   let s='לא קיים חשבון פורטל. סימון V פותח בחירה: שליחת פרטי הכניסה בוואטסאפ, במייל או בשניהם.';
-  if(exists()){s='שם משתמש: '+account.username+' · '+(account.status==='active'?(account.pending?'ממתין לסיסמה (נפתח בשיטה הקודמת)':'פעיל'):account.status==='archived'?'חסום עקב ארכיון':'חסום');if(!account.pending)s+=' · '+(account.last_login_at?'כניסה אחרונה '+when(account.last_login_at)+' · '+account.login_count+' כניסות':'טרם נכנס');}
+  if(exists()){s='שם משתמש: '+account.username+' · '+(account.status==='active'?(account.pending?'ממתין לסיסמה (נפתח בשיטה הקודמת)':'פעיל'):account.status==='archived'?'חסום עקב ארכיון':'חסום');s+=' · מספר כניסות: '+account.login_count;if(account.last_login_at)s+=' · כניסה אחרונה '+when(account.last_login_at);}
   if(!eligible())s+=' · הגישה אפשרית רק לעסק פעיל עם הסכם חתום';
-  summary.textContent=lastError||s;summary.style.color=lastError?'#a33':'';
-  controls.innerHTML=exists()?`${account.status==='active'&&eligible()?`<button type="button" data-portal-preview>צפייה כבעל העסק</button>`:''}${account.status==='active'?`<button type="button" data-portal-open>${account.pending?'יצירת סיסמה ושליחה ב-WhatsApp':'איפוס סיסמה ושליחה ב-WhatsApp'}</button>${(m=>m.show?`<button type="button" data-portal-email ${m.enabled?'':'disabled aria-describedby="portalEmailNote"'}>שליחה במייל</button>${m.enabled?'':`<span id="portalEmailNote" data-portal-email-note style="align-self:center;font-size:.85rem;color:#a33">${esc(m.note)}</span>`}`:'')(emailState(biz,eligible()?account:null))}<button type="button" data-portal-block>חסימת החשבון</button>`:`<button type="button" data-portal-unblock ${!eligible()?'disabled':''}>הפעלת החשבון</button>`}<button type="button" data-portal-delete>מחיקת חשבון הפורטל</button><a href="portal-admin.html?business_id=${encodeURIComponent(biz.id)}" style="align-self:center">ניהול הפורטל של העסק ←</a>`:'';
+  summary.textContent=s;
+  controls.innerHTML=exists()?`${account.status==='active'&&eligible()?`<button type="button" data-portal-preview>צפייה כבעל העסק</button>`:''}${account.status==='active'?`<button type="button" data-portal-open ${eligible()?'':'disabled'}>${account.pending?'יצירת סיסמה ושליחה ב-WhatsApp':'איפוס סיסמה ושליחה ב-WhatsApp'}</button>${(m=>m.show?`<button type="button" data-portal-email ${m.enabled?'':'disabled aria-describedby="portalEmailNote"'}>שליחה במייל</button>${m.enabled?'':`<span id="portalEmailNote" data-portal-email-note style="align-self:center;font-size:.85rem;color:#a33">${esc(m.note)}</span>`}`:'')(emailState(biz,eligible()?account:null))}<button type="button" data-portal-block>חסימת החשבון</button>`:`<button type="button" data-portal-unblock ${!eligible()?'disabled':''}>הפעלת החשבון</button>`}<button type="button" data-portal-delete>מחיקת חשבון הפורטל</button>`:'';
   if(busy)controls.querySelectorAll('button').forEach(b=>b.disabled=true);
   drawList();
  };
@@ -237,10 +245,11 @@ async function mount(biz){
  // Once per card: recent sends (48h) without a final delivery status are checked automatically.
  const autoCheck=async()=>{if(autoChecked)return;autoChecked=true;const recent=emailRows.filter(r=>r.details?.status==='sent'&&r.details?.resend_id&&(!r.delivery||PENDING_EVENTS.includes(r.delivery))&&Date.now()-Date.parse(r.occurred_at)<48*3600000).slice(0,3);
   for(const r of recent){try{await api('admin_email_status',{business_id:biz.id,log_id:r.id});}catch(_){}}if(recent.length)await refreshList();};
- const reload=async()=>{const d=await api('admin_detail',{business_id:biz.id});account=d.account;await loadEmailLog();draw();autoCheck();
+ const reload=async()=>{const d=await api('admin_detail',{business_id:biz.id});account=d.account;savedBusiness=d.business||biz;loaded=true;draw();
   // 08.10.2026: lets the business list update its «מחובר לפורטל» tag (display only).
   try{window.dispatchEvent(new CustomEvent('bsd:seller-portal-changed',{detail:{businessId:biz.id,active:!!account&&account.status==='active'&&!account.pending}}));}catch(_){}
  };
+ const loadEmailHistory=async()=>{await refreshList();autoCheck();};
  const open=async tab=>{const d=await api('admin_open',{business_id:biz.id});credBox.innerHTML=credentialsHtml(d);if(!sendTo(tab,d)&&invite().waUrl(d))credBox.querySelector('[data-portal-wa]')?.focus();await reload();};
  // «מייל» chosen (after the email preview was approved): open the account, then the existing email action
  // sends the login details with the ✅/❌ result window. If the email fails, the password from the opening
@@ -255,19 +264,18 @@ async function mount(biz){
   await reload();if(BAD_EVENTS.includes(sent.event))lastError='המייל נדחה ולא נמסר. אפשר ללחוץ «איפוס סיסמה ושליחה ב-WhatsApp»';
  };
  const run=async(fn,tab=null)=>{lastError='';busy=true;draw();try{await fn();}catch(e){tab?.close();lastError=e.message;}finally{busy=false;draw();}};
- checkbox.onchange=async()=>{if(busy)return;const on=checkbox.checked;
+ checkbox.onchange=async()=>{if(opening.hidden||checkbox.disabled)return;const on=checkbox.checked;
   if(on&&(!exists()||account.pending)){checkbox.checked=false;const pick=await chooseChannels(biz,{reserve:true});if(!pick){draw();return;}
    if(pick.mail){const ok=await previewAndConfirm(biz.id,biz,{reserve:pick.wa});if(!ok){draw();return;}pick.tab=ok.tab;}
-   checkbox.checked=true;run(()=>openWith(pick),pick.tab);}
-  else if(on)run(async()=>{await api('admin_status',{business_id:biz.id,status:'active'});await reload();});
-  else run(async()=>{await api('admin_status',{business_id:biz.id,status:'blocked'});credBox.replaceChildren();await reload();});
+   run(()=>openWith(pick),pick.tab);}
  };
  root.addEventListener('click',async e=>{
   const refresh=e.target.closest('[data-mail-refresh]');if(refresh){refreshStatus(refresh.getAttribute('data-mail-refresh'),refresh);return;}
   const view=e.target.closest('[data-mail-view]');if(view){const r=emailRows.find(x=>x.id===view.getAttribute('data-mail-view'));if(r)showMailView(r);return;}
   const copy=e.target.closest('[data-portal-copy]');if(copy){const t=root.querySelector('[data-portal-invite]');try{await navigator.clipboard.writeText(t.value);copy.textContent='ההודעה הועתקה';}catch(_){t.select();}return;}
   const button=e.target.closest('[data-portal-controls] button');if(!button||busy)return;
-  if(button.hasAttribute('data-portal-preview')){run(()=>openAsOwner(biz.id));}
+  if(button.hasAttribute('data-portal-retry')){await run(reload);if(loaded)loadEmailHistory();}
+  else if(button.hasAttribute('data-portal-preview')){run(()=>openAsOwner(biz.id));}
   else if(button.hasAttribute('data-portal-open')){if(!account.pending&&!confirm('ליצור סיסמה חדשה? הסיסמה הקודמת תפסיק לעבוד מיד.'))return;const tab=reserveTab();run(()=>open(tab),tab);}
   else if(button.hasAttribute('data-portal-email')){const m=emailState(biz,account);if(!m.enabled)return;
    if(!await previewAndConfirm(biz.id,biz))return;
@@ -276,7 +284,8 @@ async function mount(biz){
   else if(button.hasAttribute('data-portal-unblock'))run(async()=>{await api('admin_status',{business_id:biz.id,status:'active'});await reload();});
   else if(button.hasAttribute('data-portal-delete')){if(!confirm('למחוק את חשבון הפורטל בלבד? כרטיס העסק וכל הקבצים יישארו.'))return;run(async()=>{await api('admin_delete',{business_id:biz.id});credBox.replaceChildren();await reload();});}
  });
- try{await reload();}catch(error){checkbox.disabled=true;summary.textContent=error.message;}
+ await run(reload);
+ if(loaded)loadEmailHistory();
 }
 // New business saved with the box checked: open the account and show the ready message.
 async function afterSave(id,requested){
