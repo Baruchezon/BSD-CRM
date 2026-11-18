@@ -2277,7 +2277,7 @@ function openBizForm(id){
             <textarea id="bsdSitePublishText" maxlength="6000" rows="8" style="width:100%;box-sizing:border-box;margin-top:5px;white-space:pre-wrap;resize:vertical;">${esc(biz.public_listing_marketing_text || biz.anon_summary || '')}</textarea>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
               <button type="button" class="btn btn-ghost" onclick="bsdProposeSiteMarketing('${biz.id}')">✨ הצעת מלל שיווקי ב AI</button>
-              <button type="button" class="btn btn-primary" onclick="bsdSaveSiteMarketing('${biz.id}')">✅ אישור ושמירת המלל לאתר</button>
+              <button type="button" class="btn btn-primary" style="background:#0b7454;border-color:#0b7454;" onclick="bsdPublishToWebsite('${biz.id}')">🚀 הפץ לאתר</button>
             </div>
             <div id="bsdSiteMarketingStatus" role="status" style="font-size:.78rem;color:#667;margin-top:8px;min-height:20px;">אפשר לערוך את המלל כרצונך. השינויים אינם מתפרסמים לפני אישור ושמירה.</div>
             <div style="font-size:.74rem;color:#7a5e23;margin-top:10px;">האתר מתעדכן באמצעות מנגנון הסנכרון. ייתכן עיכוב עד העדכון הבא של האתר.</div>
@@ -2377,7 +2377,7 @@ function openBizForm(id){
   if (window.BSDSellerPortal) BSDSellerPortal.mount(biz);
   if (biz && document.getElementById('bizFacebook')) loadFacebookRequest(biz.id);
   if (biz && document.getElementById('public_listing_active')) syncPublicDistribution();
-  if (biz && document.getElementById('bsdPublicPhotoPreview')) bsdShowPublicPhoto(biz.public_listing_image_path);
+  if (biz && document.getElementById('bsdPublicPhotoPreview')) bsdShowPublicPhoto(biz.public_listing_image_draft_path || biz.public_listing_image_path);
   syncSelectedUsersPanel();
   // בדיקת כפילות בזמן הקלדה - רק בפתיחת עסק חדש (לא בעריכת עסק קיים)
   if (!biz){
@@ -3578,13 +3578,13 @@ async function bsdUploadPublicSiteImage(bizId, input){
       .from('site-content-images').upload(path, file, {contentType:file.type, upsert:false});
     if (uploadError) throw uploadError;
     const { data, error: updateError } = await window.supabaseClient.from('businesses')
-      .update({ public_listing_image_path: path }).eq('id', bizId)
-      .select('public_listing_image_path').single();
+      .update({ public_listing_image_draft_path: path }).eq('id', bizId)
+      .select('public_listing_image_draft_path').single();
     if (updateError || !data) throw updateError || new Error('לא התקבל אישור לשמירת התמונה');
     const b = (typeof bsdFindCachedBiz === 'function') ? bsdFindCachedBiz(bizId) : null;
-    if (b) b.public_listing_image_path = path;
+    if (b) b.public_listing_image_draft_path = path;
     bsdShowPublicPhoto(path);
-    setStatus('התמונה נשמרה בכרטיס העסק. היא תופיע באתר לאחר סנכרון הפרסום.');
+    setStatus('התמונה הועלתה כטיוטה. היא לא תחליף את תמונת האתר עד שתלחץ על ״הפץ לאתר״.');
   } catch(e) {
     setStatus('לא ניתן לשמור את התמונה: ' + (e?.message || String(e)), true);
   } finally {
@@ -3615,6 +3615,57 @@ async function bsdProposeSiteMarketing(bizId){
     setStatus('יצירת ההצעה נכשלה: ' + (e?.message || String(e)), true);
   }
 }
+async function bsdPublishToWebsite(bizId){
+  const status = document.getElementById('bsdSiteMarketingStatus');
+  const photo = document.getElementById('bsdPublicPhotoStatus');
+  const message = (msg, error = false) => {
+    if (status){ status.style.color = error ? '#ae3123' : '#305d47'; status.textContent = msg; }
+  };
+  const title = document.getElementById('bsdSitePublishTitle')?.value.trim();
+  const marketing_text = document.getElementById('bsdSitePublishText')?.value.trim();
+  if (!document.getElementById('bsdPublicPhotoApproved')?.checked) {
+    message('אשר תחילה שהתמונה אינה חושפת מידע מזהה.', true);
+    return;
+  }
+  if (!title || !marketing_text) { message('יש למלא כותרת ומסר שיווקי.', true); return; }
+  const publishButton = [...document.querySelectorAll('#bsdSitePublisher button')]
+    .find(btn => btn.textContent?.includes('הפץ לאתר'));
+  if (publishButton) publishButton.disabled = true;
+  message('בודק את הפרסום ומעביר אותו לאתר...');
+  try {
+    const { data, error } = await bsdInvokeAiFn('site-publication-content', {body:{
+      business_id: bizId, action:'publish', title, marketing_text, accepted_image_anonymity:true
+    }});
+    if (error) {
+      let details = null;
+      try { details = await error.context?.json?.(); } catch (_e){}
+      throw new Error(details?.issues?.join(' · ') || details?.error || error.message);
+    }
+    if (!data?.published) throw new Error('לא התקבל אישור הפצה מהשרת');
+    const checkbox = document.getElementById('public_listing_active');
+    if (checkbox) checkbox.checked = true;
+    const b = typeof bsdFindCachedBiz === 'function' ? bsdFindCachedBiz(bizId) : null;
+    if (b) {
+      b.public_listing_active = true;
+      b.anon_card_active = true;
+      b.public_listing_marketing_title = title;
+      b.public_listing_marketing_text = marketing_text;
+      if (b.public_listing_image_draft_path) b.public_listing_image_path = b.public_listing_image_draft_path;
+      b.public_listing_image_draft_path = null;
+    }
+    if (photo) photo.textContent = 'התמונה והמלל אושרו לפרסום.';
+    if (data.refresh === 'workflow_queued') {
+      message('הפרסום אושר. עדכון האתר הופעל אוטומטית. יש לוודא שהבנייה הסתיימה לפני בדיקת האתר.');
+    } else {
+      message('הפרסום אושר ונשמר, אך אין כרגע הפעלת עדכון מיידי של האתר. הוא יופיע בעדכון המתוזמן הבא. יש להגדיר חיבור מאובטח לעדכון מיידי.');
+    }
+  } catch(e) {
+    message('הפרסום לא הושלם: ' + (e?.message || String(e)), true);
+  } finally {
+    if (publishButton) publishButton.disabled = false;
+  }
+}
+
 async function bsdSaveSiteMarketing(bizId){
   const status = document.getElementById('bsdSiteMarketingStatus');
   const setStatus = (message, error = false) => {
@@ -6109,6 +6160,11 @@ async function saveBiz(e){
     // ישקף את המצב האמיתי ולא יטעה).
     const listingStatusVal = g('listing_status');
     payload.public_listing_active = (payload.anon_card_active && (listingStatusVal === 'active' || !listingStatusVal)) ? cb('public_listing_active') : false;
+    // New public listings are activated ONLY by the explicit “הפץ לאתר” action.
+    // The ordinary business save cannot bypass curated photo + marketing approval.
+    if (!existingBiz?.public_listing_active && payload.public_listing_active) {
+      payload.public_listing_active = false;
+    }
 
     if (document.getElementById('anon_summary')){
       const manualDisplayName = g('anon_display_name');
