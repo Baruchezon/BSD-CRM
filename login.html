@@ -55,6 +55,14 @@
 <script src="js/supabaseClient.js?v=202608111530"></script>
 <script src="js/auth.js?v=202609241200"></script>
 <script>
+function continueAfterLogin(){
+  if (new URLSearchParams(location.search).get('next') === 'digital-card-hub'){
+    location.replace('digital-cards.html?from=hub');
+  } else {
+    location.href = 'app.html';
+  }
+}
+
 (async function checkExistingSession(){
   const { data: { session } } = await window.supabaseClient.auth.getSession();
   if (!session) return;
@@ -72,7 +80,7 @@
   if (showGate){
     showQuickUnlockGate();
   } else {
-    window.location.href = 'app.html';
+    continueAfterLogin();
   }
 })();
 
@@ -93,7 +101,7 @@ function showQuickUnlockGate(){
     errEl.textContent = '';
     try {
       const ok = await verifyFingerprint();
-      if (ok) window.location.href = 'app.html';
+      if (ok) continueAfterLogin();
       else errEl.textContent = 'האימות נכשל, נסה שוב';
     } catch(e){
       errEl.textContent = 'האימות בוטל או נכשל, נסה שוב';
@@ -186,7 +194,7 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
   if (showFpOffer){
     showFingerprintOfferModal(email);
   } else {
-    window.location.href = 'app.html';
+    continueAfterLogin();
   }
 });
 
@@ -205,10 +213,10 @@ function showFingerprintOfferModal(email){
   document.getElementById('fpEnableBtn').addEventListener('click', async function(){
     try { await registerFingerprint(email); }
     catch(e){ console.error(e); }
-    window.location.href = 'app.html';
+    continueAfterLogin();
   });
   document.getElementById('fpSkipBtn').addEventListener('click', function(){
-    window.location.href = 'app.html';
+    continueAfterLogin();
   });
 }
 </script>

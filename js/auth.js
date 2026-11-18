@@ -77,7 +77,7 @@ async function bsdFullLogout() {
 }
 
 // שומר על כל מסך פנימי - מפנה ל-login אם אין session פעיל, ומחזיר את הפרופיל
-async function requireAuth() {
+async function requireAuth({returnToHubCards = false} = {}) {
   let session = null;
   try {
     const result = window.bsdDeadline
@@ -105,7 +105,8 @@ async function requireAuth() {
   }
 
   if (!session) {
-    window.location.href = 'login.html';
+    if (returnToHubCards) window.location.replace('login.html?next=digital-card-hub');
+    else window.location.href = 'login.html';
     return null;
   }
   async function readProfile(timeoutMs){

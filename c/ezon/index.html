@@ -79,6 +79,7 @@ h1{font-size:30px;line-height:1.17;letter-spacing:-.5px;margin:7px 0 8px}
 #loading{text-align:center;padding:75px 22px;color:#53677e}
 .icon{width:22px;height:22px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .icon.sm{width:17px;height:17px}.icon.lg{width:26px;height:26px}
+.preview-back{position:sticky;top:8px;z-index:2;display:flex;align-items:center;justify-content:center;width:max-content;min-height:44px;margin:0 0 10px;padding:0 15px;background:#192e4a;color:#fff;border-radius:12px;font-weight:800}
 a:focus-visible,button:focus-visible{outline:3px solid #e1b16d;outline-offset:3px}
 @media(max-width:365px){.frame{padding:9px 7px}.hero{padding:16px 16px 24px}h1{font-size:25px}.portrait-wrap{width:91px;height:111px}.content{padding:15px 11px}.tiles{gap:7px}.tile{min-height:98px}.tile .value{font-size:9px}.big .top{font-size:13px}}
 </style>
@@ -98,7 +99,7 @@ a:focus-visible,button:focus-visible{outline:3px solid #e1b16d;outline-offset:3p
 <symbol id="ic-share" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></symbol>
 <symbol id="ic-save" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4"/><path d="M5 17v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3"/></symbol>
 </svg>
-<div class="frame"><main class="shell" id="cardPanel" hidden>
+<div class="frame"><a id="previewBack" class="preview-back" hidden>→ חזרה לניהול הכרטיסים</a><main class="shell" id="cardPanel" hidden>
 <header class="hero">
 <div class="brand"><div><div class="kicker">BSD BUSINESS BROKERS</div><div class="sub">ISRAEL · YOUR BUSINESS CONNECTION</div></div><img id="logo" class="logo" alt="לוגו החברה" hidden></div>
 <div class="hero-profile">
@@ -177,14 +178,33 @@ function cardLookup(){
  if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token))return new URLSearchParams({card:token});
  return null;
 }
-function cardUrl(){
- const short=clean(card?.short_code);
- if(!/^[a-z][a-z0-9-]{2,23}$/.test(short))return location.href;
- const root=location.pathname.includes("/c/")
+function cardRoot(){
+ return location.pathname.includes("/c/")
   ?location.pathname.slice(0,location.pathname.indexOf("/c/")+1)
   :new URL("./",location.href).pathname;
+}
+function cardUrl(){
+ const short=clean(card?.short_code);
+ if(!/^[a-z][a-z0-9-]{2,23}$/.test(short)){
+   const url=new URL(location.href);
+   url.searchParams.delete("preview");
+   return url.href;
+ }
  const route=short==="ezon"?"c/ezon/":"c/#"+encodeURIComponent(short);
- return new URL(root+route,location.origin).href;
+ return new URL(cardRoot()+route,location.origin).href;
+}
+function showPreviewBack(){
+ const source=new URLSearchParams(location.search).get("preview");
+ if(source!=="hub" && source!=="crm")return;
+ const back=$("previewBack");
+ back.href=new URL(cardRoot()+"digital-cards.html",location.origin).href;
+ if(source==="hub")back.href+="?from=hub";
+ back.hidden=false;
+ back.addEventListener("click",event=>{
+   if(document.referrer!==back.href || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
+   event.preventDefault();
+   history.back();
+ });
 }
 function vcardUrl(){
  const query=cardLookup();
@@ -266,6 +286,7 @@ async function load(){
    const data=await resp.json();if(!data.card)throw Error("לא נמצא כרטיס");show(data.card);
  }catch(e){$("loading").textContent=e.message}
 }
+showPreviewBack();
 load();
 </script>
 </body></html>

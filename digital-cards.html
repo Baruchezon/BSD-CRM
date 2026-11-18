@@ -31,11 +31,12 @@ textarea{min-height:74px;resize:vertical}
 .full{grid-column:1/-1}.check{display:flex;align-items:center;gap:9px;font-size:14px}
 .check input{width:20px;min-height:20px}
 .notice{font-size:13px;line-height:1.6;color:#54677e}
-#editor,#shareBox{display:none}
-#editor.show,#shareBox.show{display:block}
+#editor{display:none}
+#editor.show{display:block}
 #status{min-height:21px;color:#234e88;font-size:13px;line-height:1.6}
-#shareBox{position:fixed;inset:0;background:#091d36b8;z-index:20;overflow:auto;padding:30px 12px}
-#shareBox .inner{max-width:440px;margin:3vh auto;background:#fff;border-radius:18px;padding:23px}
+#shareBox{width:min(calc(100% - 24px),440px);max-height:calc(100% - 24px);border:0;border-radius:18px;padding:20px;color:inherit}
+#shareBox::backdrop{background:#091d36b8}
+#shareBox .bar:first-child{position:sticky;top:0;background:#fff;z-index:1;padding:4px 0}
 #shareActions{display:flex;gap:9px;flex-wrap:wrap;margin:15px 0}
 .pill{border-radius:100px;background:#e6f4e9;color:#266044;font-size:12px;padding:4px 9px;white-space:nowrap}
 .pill.draft{background:#f6ebd9;color:#8d5e21}
@@ -44,10 +45,10 @@ textarea{min-height:74px;resize:vertical}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
 <script src="js/config.js"></script>
 <script src="js/supabaseClient.js"></script>
-<script src="js/auth.js"></script>
+<script src="js/auth.js?v=20261118-card-return"></script>
 </head>
 <body>
-<header><div class="header"><div><h1>כרטיסי ביקור דיגיטליים</h1><p>BSD CRM | יצירה, ניהול ושיתוף כרטיס אישי</p></div><a href="app.html">חזרה ל CRM</a></div></header>
+<header><div class="header"><div><h1>כרטיסי ביקור דיגיטליים</h1><p>BSD CRM | יצירה, ניהול ושיתוף כרטיס אישי</p></div><a href="app.html" id="backToEntry" class="button">→ חזרה ל CRM</a></div></header>
 <main>
 <section class="panel">
 <div class="bar"><div><h2>הכרטיסים שלי</h2><div class="notice" id="welcome">מתבצעת בדיקת הרשאות</div></div><button class="primary" id="newBtn" disabled>✚ צור כרטיס</button></div>
@@ -77,16 +78,16 @@ textarea{min-height:74px;resize:vertical}
 </form>
 </section>
 </main>
-<div id="shareBox" role="dialog" aria-modal="true" aria-label="שליחת כרטיס">
-<div class="inner"><div class="bar"><h3>שליחת כרטיס ביקור</h3><button class="secondary" id="closeShare">סגור</button></div>
-<p class="notice">אפשר לשתף בקישור, לשלוח בוואטסאפ או לשמור קובץ HTML בטלפון ולשלוח אותו ידנית.</p>
+<dialog id="shareBox" aria-labelledby="shareTitle">
+<div class="bar"><h3 id="shareTitle">שליחת כרטיס ביקור</h3><button type="button" class="secondary" id="closeShare" autofocus>→ חזרה</button></div>
+<p class="notice">אפשר לשתף בקישור או לשלוח בוואטסאפ וב SMS.</p>
 <div class="field"><label for="customerSearch">חפש לקוח לפי שם בתוך ה CRM</label><div class="bar"><input id="customerSearch" type="search" placeholder="הקלד לפחות שתי אותיות" aria-label="חיפוש לקוח" style="flex:1;min-width:160px"><button id="findCustomerBtn" class="secondary" type="button">חפש לקוח</button></div></div>
 <div class="field"><label for="customerResults">לקוחות שנמצאו</label><select id="customerResults"><option value="">בחר לקוח מתוך התוצאות</option></select></div>
 <div class="field"><label for="shortCardLink">הקישור הקצר שנשלח ללקוח</label><input id="shortCardLink" dir="ltr" readonly aria-label="קישור הכרטיס הקצר"></div>
-<div class="field"><label for="recipientPhone">מספר הלקוח לוואטסאפ</label><input id="recipientPhone" type="tel" inputmode="tel" placeholder="050-1234567" dir="ltr"></div>
-<div id="shareActions"><button id="waBtn" class="primary">שלח בוואטסאפ</button><button id="nativeShareBtn" class="secondary">שתף מהטלפון</button><button id="copyBtn" class="secondary">העתק קישור</button></div>
-<div id="shareStatus" class="notice" role="status"></div></div>
-</div>
+<div class="field"><label for="recipientPhone">מספר הטלפון של הלקוח</label><input id="recipientPhone" type="tel" inputmode="tel" placeholder="050-1234567" dir="ltr"></div>
+<div id="shareActions"><button id="waBtn" class="primary">שלח בוואטסאפ</button><button id="smsBtn" class="secondary">שלח ב SMS</button><button id="nativeShareBtn" class="secondary">שתף מהטלפון</button><button id="copyBtn" class="secondary">העתק קישור</button></div>
+<div id="shareStatus" class="notice" role="status"></div>
+</dialog>
 <script>
 "use strict";
 let CURRENT_PROFILE=null, cardRows=[], chosen=null, editing=null;
@@ -94,6 +95,12 @@ const $=id=>document.getElementById(id);
 const FIELDS=['full_name','job_title','company_name','phone_mobile','phone_office','office_address','whatsapp_number','email','website_url','facebook_url','instagram_url','photo_url','logo_url','description'];
 const allowedRoles=['admin','manager','agent','agent_authorized'];
 const admin=()=>CURRENT_PROFILE && CURRENT_PROFILE.role==='admin';
+const fromHub=new URLSearchParams(location.search).get('from')==='hub';
+const shareBox=$('shareBox');
+if(fromHub){
+  $('backToEntry').href='hub.html';
+  $('backToEntry').textContent='→ חזרה להאב';
+}
 const urlOf=c=>c.short_code?new URL(c.short_code==='ezon'?'c/ezon/':'c/#'+encodeURIComponent(c.short_code),location.href).href:new URL('digital-card.html?card='+encodeURIComponent(c.public_token),location.href).href;
 const tidy=s=>String(s||'').trim();
 function msg(s){$('status').textContent=s}
@@ -243,7 +250,11 @@ const tag=document.createElement('span');tag.className='pill'+(c.is_published?''
 const tiny=document.createElement('small');tiny.dir='ltr';tiny.style.cssText='display:block;overflow-wrap:anywhere;margin-top:8px;color:#60758b';tiny.textContent=c.short_code?'קישור קצר: '+urlOf(c):'';
 const acts=document.createElement('div');acts.className='actions';
 acts.append(action('ערוך','secondary',()=>openEditor(c)),action('שלח כרטיס','primary',()=>openShare(c)),action('הורד HTML','secondary',()=>{try{download(fileName(c)+'.html','text/html;charset=utf-8',offlineHtml(c))}catch(e){msg(e.message)}}),action('שמור איש קשר','secondary',()=>downloadVcard(c)));
-if(c.is_published)acts.append(action('הצג כרטיס','secondary',()=>window.open(urlOf(c),'_blank','noopener')));
+if(c.is_published)acts.append(action('הצג כרטיס','secondary',()=>{
+  const preview=new URL(urlOf(c));
+  preview.searchParams.set('preview',fromHub?'hub':'crm');
+  location.assign(preview.href);
+}));
 if(admin())acts.append(action('מחק','danger',()=>removeCard(c)));
 e.append(head,tag);if(c.short_code)e.append(tiny);e.append(acts);root.append(e);
 }
@@ -264,8 +275,27 @@ if(response.error)throw response.error;
 $('editor').classList.remove('show');await loadCards();msg('הכרטיס נשמר. הקישור הקבוע לא משתנה בעריכות.');
 }catch(e){msg('לא ניתן לשמור: '+(e.message||e))}finally{$('saveBtn').disabled=false}
 }
-function openShare(c){chosen=c;$('shortCardLink').value=urlOf(c);$('customerSearch').value='';$('customerResults').replaceChildren(new Option('בחר לקוח מתוך התוצאות',''));$('shareStatus').textContent=c.is_published?'הכרטיס מוכן לשליחה':'הכרטיס בטיוטה. יש לפרסם אותו כדי שהקישור ייפתח אצל הלקוח.';$('recipientPhone').value='';$('shareBox').classList.add('show')}
-function closeShare(){$('shareBox').classList.remove('show')}
+function openShare(c){
+  chosen=c;
+  $('shortCardLink').value=urlOf(c);
+  $('customerSearch').value='';
+  $('customerResults').replaceChildren(new Option('בחר לקוח מתוך התוצאות',''));
+  $('shareStatus').textContent=c.is_published?'הכרטיס מוכן לשליחה':'הכרטיס בטיוטה. יש לפרסם אותו כדי שהקישור ייפתח אצל הלקוח.';
+  $('recipientPhone').value='';
+  if(!history.state?.digitalCardShare)history.pushState({digitalCardShare:true},'');
+  shareBox.showModal();
+}
+function closeShare(){
+  shareBox.close();
+  if(history.state?.digitalCardShare)history.back();
+}
+window.addEventListener('popstate',()=>{
+  if(history.state?.digitalCardShare && chosen){
+    if(!shareBox.open)shareBox.showModal();
+  }else if(shareBox.open){
+    shareBox.close();
+  }
+});
 function requirePublished(){if(!chosen||!chosen.is_published)throw Error('יש לפרסם את הכרטיס לפני שליחת קישור')}
 async function findCustomer(){
   const term=tidy($('customerSearch').value),select=$('customerResults');
@@ -297,6 +327,18 @@ window.open('https://wa.me/'+p+'?text='+encodeURIComponent(makeText(chosen)),'_b
 $('shareStatus').textContent='הודעת וואטסאפ נפתחה. יש ללחוץ שלח בתוך וואטסאפ.';
 }catch(e){$('shareStatus').textContent=e.message}
 }
+function smsSend(){
+  try{
+    requirePublished();
+    const recipient=ilPhone($('recipientPhone').value);
+    if(!/^[1-9]\d{8,14}$/.test(recipient))throw Error('יש להזין מספר סלולרי תקין כולל קידומת מדינה');
+    const ios=/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+    const separator=ios?'&':'?';
+    $('shareStatus').textContent='לחץ על שלח באפליקציית ההודעות. אם היא לא נפתחה, אפשר להעתיק את הקישור.';
+    location.href='sms:+'+recipient+separator+'body='+encodeURIComponent(makeText(chosen));
+  }catch(e){$('shareStatus').textContent=e.message}
+}
 async function nativeShare(){
 try{requirePublished();if(navigator.share){await navigator.share({title:chosen.full_name,text:makeText(chosen),url:urlOf(chosen)});}
 else await copyLink();}catch(e){if(e.name!=='AbortError')$('shareStatus').textContent=e.message}
@@ -312,7 +354,7 @@ for(const p of data||[]){if(!allowedRoles.includes(p.role))continue;const o=docu
 }
 async function init(){
 try{
-CURRENT_PROFILE=await requireAuth();
+CURRENT_PROFILE=await requireAuth({returnToHubCards:fromHub});
 if(!CURRENT_PROFILE)return;
 if(CURRENT_PROFILE.status!=='active'||!allowedRoles.includes(CURRENT_PROFILE.role)){location.replace('app.html');return}
 $('welcome').textContent='שלום '+(CURRENT_PROFILE.full_name||CURRENT_PROFILE.email)+'. כל סוכן רואה רק את הכרטיסים שלו.';
@@ -323,11 +365,16 @@ $('newBtn').addEventListener('click',()=>openEditor(null));
 $('cancelBtn').addEventListener('click',()=>$('editor').classList.remove('show'));
 $('cardForm').addEventListener('submit',saveCard);
 $('closeShare').addEventListener('click',closeShare);
+shareBox.addEventListener('cancel',e=>{
+  e.preventDefault();
+  closeShare();
+});
 $('findCustomerBtn').addEventListener('click',findCustomer);
 $('customerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();findCustomer()}});
 $('customerResults').addEventListener('change',()=>{if($('customerResults').value)$('recipientPhone').value=formatPhone($('customerResults').value)});
 ['phone_mobile','phone_office','whatsapp_number','recipientPhone'].forEach(id=>$(id).addEventListener('blur',()=>{$(id).value=formatPhone($(id).value)}));
 $('waBtn').addEventListener('click',whatsappSend);
+$('smsBtn').addEventListener('click',smsSend);
 $('nativeShareBtn').addEventListener('click',nativeShare);
 $('copyBtn').addEventListener('click',copyLink);
 init();
