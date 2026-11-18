@@ -1,0 +1,54 @@
+name: BSD public publishing production smoke
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "businesses.html"
+      - "js/site-poster-generator.js"
+      - ".github/workflows/public-publishing-production-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Validate published CRM UI and poster script
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://baruchezon.github.io/BSD-CRM"
+          cache="$(date +%s)"
+          for attempt in 1 2 3 4 5 6 7 8; do
+            if curl -fsSL --max-time 20 "$base/businesses.html?v=$cache" -o /tmp/bsd-businesses.html &&
+               grep -Fq 'צור 4 וריאציות' /tmp/bsd-businesses.html &&
+               grep -Fq 'הפץ לאתר' /tmp/bsd-businesses.html &&
+               curl -fsSL --max-time 20 "$base/js/site-poster-generator.js?v=$cache" -o /tmp/poster.js &&
+               grep -Fq 'משביחים עסקים.' /tmp/poster.js; then
+              echo "CRM deployed, poster controls and exact branding present"
+              break
+            fi
+            if [[ "$attempt" -eq 8 ]]; then
+              echo "CRM deployment missing expected feature"
+              exit 1
+            fi
+            sleep 8
+          done
+      - name: Ensure public Edge endpoints reject unauthenticated writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for function in generate-site-listing-image site-publication-content; do
+            code="$(curl -sSL -o /tmp/bsd-edge.json -w '%{http_code}' --max-time 25               -X POST "https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/$function"               -H 'Content-Type: application/json' -d '{}' || true)"
+            echo "$function unauthenticated status $code"
+            test "$code" = "401"
+          done
+      - name: Check BSD public website is reachable
+        run: |
+          curl -fsSL --max-time 25 'https://www.bsd-bbi.co.il/%D7%A2%D7%A1%D7%A7%D7%99%D7%9D-%D7%9C%D7%9E%D7%9B%D7%99%D7%A8%D7%94/' -o /tmp/site-listings.html
+          grep -Fq 'business-card' /tmp/site-listings.html
+          echo "Public business catalogue reachable"
