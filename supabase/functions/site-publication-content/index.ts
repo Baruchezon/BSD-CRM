@@ -35,14 +35,14 @@ Deno.serve(async (req: Request) => {
       return reply({ error: 'מספר עסק לא תקין' }, 400);
     }
     const action = body.action || 'save';
-    if (!['save', 'reset'].includes(action)) return reply({ error: 'פעולה לא מוכרת' }, 400);
+    if (!['save', 'reset', 'publish'].includes(action)) return reply({ error: 'פעולה לא מוכרת' }, 400);
 
     const { data: business, error: readError } = await supabase.from('businesses').select('*').eq('id', businessId).maybeSingle();
     if (readError || !business) return reply({ error: 'העסק לא נמצא' }, 404);
     let title: string | null = null;
     let marketingText: string | null = null;
 
-    if (action === 'save') {
+    if (action === 'save' || action === 'publish') {
       title = typeof body.title === 'string' ? body.title.trim() : '';
       marketingText = typeof body.marketing_text === 'string' ? body.marketing_text.trim() : '';
       if (!title || !marketingText || title.length > 180 || marketingText.length > 6000) {
@@ -52,6 +52,57 @@ Deno.serve(async (req: Request) => {
       if (issues.length) {
         return reply({ error: 'זוהו פרטים שעלולים לחשוף את העסק. יש לערוך את המלל.', issues }, 422);
       }
+    }
+
+    if (action === 'publish') {
+      if (business.listing_status !== 'active' || business.is_archived || business.crm_stage !== null) {
+        return reply({ error: 'לא ניתן לפרסם עסק שאינו פעיל במאגר העסקים' }, 409);
+      }
+      if (!String(business.anon_summary || '').trim() || !String(business.anon_display_name || '').trim()) {
+        return reply({ error: 'חסר תקציר אנונימי מאושר. יש לאשר אותו לפני הפרסום.' }, 409);
+      }
+      if (body.accepted_image_anonymity !== true) {
+        return reply({ error: 'יש לאשר שהתמונה אינה מזהה את העסק לפני הפרסום' }, 400);
+      }
+      const path = String(business.public_listing_image_draft_path || business.public_listing_image_path || '');
+      if (!/^public-listings\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(?:png|jpe?g|webp)$/i.test(path) ||
+          !path.startsWith('public-listings/' + businessId + '/')) {
+        return reply({ error: 'חסרה תמונה מאושרת עבור הפרסום באתר' }, 409);
+      }
+      // Only this explicit action promotes a staged image and activates publication.
+      const { data: published, error: publishError } = await supabase.from('businesses').update({
+        public_listing_marketing_title: title,
+        public_listing_marketing_text: marketingText,
+        public_listing_image_path: path,
+        public_listing_image_draft_path: null,
+        anon_card_active: true,
+        public_listing_active: true,
+      }).eq('id', businessId).select('public_listing_active,public_listing_published_at').single();
+      if (publishError || !published) return reply({ error: 'שמירת הפרסום נכשלה; לא בוצע עדכון לאתר' }, 500);
+
+      // The website is static. Dispatch an immediate safe rebuild if the secret is configured.
+      // Never expose this token in the browser. Otherwise next scheduled refresh applies.
+      let refresh = 'next_scheduled_refresh';
+      const token = (Deno.env.get('BSD_WEBSITE_GITHUB_WORKFLOW_TOKEN') || '').trim();
+      if (token) {
+        try {
+          const response = await fetch('https://api.github.com/repos/Baruchezon/bsd-bbi-website/actions/workflows/daily-public-listings.yml/dispatches', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + token,
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ref: 'main' }),
+            signal: AbortSignal.timeout(10000),
+          });
+          refresh = response.ok ? 'workflow_queued' : 'next_scheduled_refresh';
+        } catch (_e) {
+          refresh = 'next_scheduled_refresh';
+        }
+      }
+      return reply({ ok: true, published: true, refresh, published_at: published.public_listing_published_at });
     }
 
     const { data: saved, error: saveError } = await supabase.from('businesses')
