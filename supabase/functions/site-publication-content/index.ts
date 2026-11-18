@@ -1,7 +1,7 @@
 // Website-only marketing copy for a public BSD business listing.
 // This function never changes the shared anonymous summary used by other channels.
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { localSafetyScan } from '../generate-anonymous-card/lib.ts';
+import { localSafetyScan } from './lib.ts';
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 const headers = {
