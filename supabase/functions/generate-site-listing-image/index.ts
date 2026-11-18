@@ -53,7 +53,7 @@ Deno.serve(async (req: Request) => {
     if (biz.listing_status !== 'active' || biz.is_archived) {
       return reply({ error: 'אפשר ליצור תמונת פרסום רק לעסק פעיל' }, 409);
     }
-    const industry = safeIndustry(biz.category || biz.field || '');
+    const industry = safeIndustry((biz.field && biz.field !== 'עסק' ? biz.field : '') || (biz.category && biz.category !== 'עסק' ? biz.category : '') || 'עסק');
     if (!industry) return reply({ error: 'יש למלא תחום פעילות לפני יצירת תמונה' }, 400);
     const key = (Deno.env.get('OPENAI_API_KEY') || '').trim();
     if (!key) return reply({ error: 'מפתח OpenAI API אינו מוגדר בשרת. יצירת התמונות אינה זמינה כרגע.' }, 503);
