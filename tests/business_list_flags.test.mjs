@@ -198,6 +198,7 @@ test('openAsOwner is admin_preview into #preview and closes the tab on failure',
     location: { assign(u){ assigned.push(u); } },
     document: {},
     console,
+    setTimeout, clearTimeout,
   };
   vm.createContext(ctx);
   vm.runInContext(portalCard, ctx);
