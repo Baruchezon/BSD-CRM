@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611181945';
+    var PAGE_BUILD = '202611190833';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -4766,11 +4766,18 @@ async function loadBizMatchesModule(bizId){
   if (error){ box.innerHTML = `<span style="color:#a02c1d;">שגיאה בטעינת ההתאמות: ${esc(error.message)}</span>`; return; }
   const rows = matches || [];
   const buyerIds = [...new Set(rows.map(m=>m.buyer_id))];
-  let buyers = [];
+  let buyers = [], anonymousSendStatus;
   if (buyerIds.length){
-    const { data } = await window.supabaseClient.from('leads').select('id,full_name,client_number,agreement_status').in('id', buyerIds);
-    buyers = data || [];
+    const [buyersResult, sendsResult] = await Promise.all([
+      window.supabaseClient.from('leads')
+        .select('id,full_name,client_number,agreement_status,requested_field,requested_categories,requested_area').in('id', buyerIds),
+      window.supabaseClient.from('anon_distributions').select('buyer_id')
+        .eq('business_id', bizId).eq('delivery_status', 'sent').in('buyer_id', buyerIds)
+    ]);
+    buyers = buyersResult.data || [];
+    if (!sendsResult.error) anonymousSendStatus = new Set((sendsResult.data || []).map(send => send.buyer_id));
   }
+  if (document.getElementById('bizMatchesModuleBox') !== box) return;
   const buyerById = {}; buyers.forEach(b=>buyerById[b.id]=b);
   const activeCount = rows.filter(m=>!BIZ_MATCH_CLOSED_STATUSES.includes(m.status)).length;
   const closedCount = rows.length - activeCount;
@@ -4795,6 +4802,7 @@ async function loadBizMatchesModule(bizId){
         <th style="padding:6px 8px;text-align:right;">קונה</th>
         <th style="padding:6px 8px;text-align:right;">נוצרה</th>
         <th style="padding:6px 8px;text-align:right;">הסכם סודיות</th>
+        <th style="padding:6px 8px;text-align:right;">תקציר אנונימי</th>
         <th style="padding:6px 8px;text-align:right;">הועבר</th>
         <th style="padding:6px 8px;text-align:right;">סטטוס</th>
         <th style="padding:6px 8px;text-align:right;">פעילות אחרונה</th>
@@ -4805,11 +4813,16 @@ async function loadBizMatchesModule(bizId){
       </tr></thead><tbody>
       ${rows.map(m=>{
         const buyer = buyerById[m.buyer_id];
-        const searchHay = [buyer?.full_name, buyer?.client_number, m.status, userName(m.current_handler), m.buyer_response, m.notes].filter(Boolean).join(' ').toLowerCase();
+        const looking = [buyer?.requested_field || buyer?.requested_categories, buyer?.requested_area]
+          .map(value => String(value || '').trim()).filter(Boolean).join(' · ');
+        const anonStatus = !anonymousSendStatus ? 'לא ניתן לאמת' :
+          anonymousSendStatus.has(m.buyer_id) ? 'נשלח' : 'אין תיעוד שליחה';
+        const searchHay = [buyer?.full_name, buyer?.client_number, looking, buyer?.agreement_status, anonStatus, m.status, userName(m.current_handler), m.buyer_response, m.notes].filter(Boolean).join(' ').toLowerCase();
         return `<tr data-hay="${esc(searchHay)}" style="border-bottom:1px solid #eee;cursor:pointer;" onclick="location.href='match-detail.html?id=${m.id}'">
-          <td style="padding:6px 8px;" onclick="event.stopPropagation();location.href='leads.html?open=${m.buyer_id}'"><span style="color:#1d4e89;font-weight:700;text-decoration:underline;">${esc(buyer?.full_name||'—')}</span>${buyer?.client_number?` <span style="color:#999;">(${esc(buyer.client_number)})</span>`:''}</td>
+          <td style="padding:6px 8px;" onclick="event.stopPropagation();location.href='leads.html?open=${m.buyer_id}'"><span style="color:#1d4e89;font-weight:700;text-decoration:underline;">${esc(buyer?.full_name||'—')}</span> <span style="color:#5d6577;">(${looking ? 'מחפש ' + esc(looking) : 'מה מחפש טרם עודכן'})</span>${buyer?.client_number?` <small style="color:#5d6577;">${esc(buyer.client_number)}</small>`:''}</td>
           <td style="padding:6px 8px;">${fmtDate(m.created_at)}</td>
           <td style="padding:6px 8px;">${esc(buyer?.agreement_status||'אין הסכם')}</td>
+          <td style="padding:6px 8px;">${esc(anonStatus)}</td>
           <td style="padding:6px 8px;">${esc(m.material_type||'—')}</td>
           <td style="padding:6px 8px;"><span style="background:#eef1f8;border-radius:10px;padding:2px 8px;">${esc(m.status||'—')}</span></td>
           <td style="padding:6px 8px;">${fmtDate(m.updated_at)}</td>

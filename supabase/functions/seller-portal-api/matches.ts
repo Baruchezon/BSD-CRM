@@ -75,6 +75,14 @@ export function authorOf(n: any): string {
 }
 const contactOnly = (s: string) => s.includes('@') || ((s.match(/\d/g) || []).length >= 6 && /^[\d+\-().\s]+$/.test(s));
 const publicField = (v: string) => contactOnly(v) ? '' : v;
+function buyerLookingFor(buyer: any): string {
+  const criterion = (v: unknown) => {
+    const value = String(v ?? '').replace(/\s+/g, ' ').trim();
+    return value.includes('@') || /\d(?:[\s().+-]*\d){6}/.test(value) ? '' : value.slice(0, 160);
+  };
+  return [criterion(buyer?.requested_field) || criterion(buyer?.requested_categories), criterion(buyer?.requested_area)]
+    .filter(Boolean).join(' · ');
+}
 // Owner-facing narrative only. A buyer name, a bare phone/email, or anything under 15 characters is not a useful update.
 export function portalNarrative(text: string, names: string[] = []): string {
   if (!text) return '';
@@ -182,14 +190,17 @@ export function buildOwnerMatches(i: Input) {
       const last = contacts[0] || null;
       const followUp = contacts.find(c => c.follow_up)?.follow_up ?? null;
       const updated = latest(m.created_at, m.status_changed_at, m.last_action_at, materials.date, ...notes.map(n => n.date));
-      return {ref: num.get(m.id)!, buyer_key: m.buyer_id, buyer: nameOf.get(m.id)!, named: true, status: m.status, last_contact: last, contacts, follow_up: followUp, source: srcOf.get(m.id) ?? null, agreement, stage: {label: stageLabel, step, closed: !!closed}, materials, updated_at: updated, notes};
+      const aiRegistration = m.match_source === 'התאמות AI' && m.status === 'התאמה חדשה';
+      const contacted = !aiRegistration || anon.length > 0 || fullEvidence || contacts.some(c => c.type === CALL_TYPE);
+      return {ref: num.get(m.id)!, buyer_key: m.buyer_id, buyer: nameOf.get(m.id)!, named: true, status: m.status, last_contact: last, contacts, follow_up: followUp, source: srcOf.get(m.id) ?? null, agreement, stage: {label: stageLabel, step, closed: !!closed}, materials, updated_at: updated, notes,
+        looking_for: buyerLookingFor(l), anonymous_sent: anon.length > 0, contacted};
     })
     .sort((a, b) => Number(a.stage.closed) - Number(b.stage.closed) || b.stage.step - a.stage.step || t(b.updated_at) - t(a.updated_at));
-  // Metrics count DISTINCT buyers (Baruch 20.10.2026: every visible match = a buyer we spoke with).
+  // Count distinct buyers. A new AI registration alone is not evidence of contact.
   const distinct = (f: (r: any) => boolean) => new Set(rows.filter(f).map(r => r.buyer_key)).size;
   const summary = {
     total: distinct(() => true),
-    contacted: distinct(() => true),
+    contacted: distinct(r => r.contacted),
     active: distinct(r => !r.stage.closed),
     signed: distinct(r => r.agreement.key === 'signed'),
     full: distinct(r => r.materials.level === 'full'),
@@ -199,7 +210,7 @@ export function buildOwnerMatches(i: Input) {
   };
   // buyer_key (internal id) is used only for counting; it is removed before leaving the server.
   return {
-    rows: rows.map(({buyer_key: _k, status: _s, ...r}) => ({...r, negotiation: _s === 'במשא ומתן'})),
+    rows: rows.map(({buyer_key: _k, status: _s, contacted: _c, ...r}) => ({...r, negotiation: _s === 'במשא ומתן'})),
     activity,
     summary,
   };

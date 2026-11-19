@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202611092340';
+    var PAGE_BUILD = '202611190833';
     window.PAGE_BUILD = PAGE_BUILD;
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -118,6 +118,8 @@
   .chip{font-size:.72rem;background:#f4f1e8;color:#5a5240;border-radius:999px;padding:3px 9px;white-space:nowrap;}
   .chip.blue{background:#e6f0fb;color:#1d5fa8;} .chip.green{background:#e6f4ea;color:#1e7b34;} .chip.orange{background:#fff1dc;color:#9a5a00;} .chip.gray{background:#eceef2;color:#5d6577;}
   .sm-contact{display:flex;flex-direction:column;gap:6px;align-items:flex-end;}
+  .ic.sm-register{font-family:inherit;font-weight:700;color:#174a84;border-color:#b8cee8;cursor:pointer;}
+  .ic.sm-register:disabled{opacity:.65;cursor:default;}
   .sm-contact .line{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
   .ic{display:inline-flex;align-items:center;gap:4px;border:1px solid #e1dccb;border-radius:8px;padding:5px 9px;font-size:.76rem;color:var(--navy);text-decoration:none;background:#fff;white-space:nowrap;}
   .ic:hover{background:#f7f4ea;} .ic.wa{color:#128c4b;border-color:#bfe5cf;}
@@ -141,7 +143,6 @@
   .how-total{border-top:1px solid #d8e2f1;margin-top:8px;padding-top:7px;font-weight:800;color:var(--navy);font-size:.85rem;}
   .sm-facts{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;font-size:.8rem;color:#4b5263;}
   .sm-facts b{color:var(--navy);}
-  .sm-note{margin-top:10px;font-size:.75rem;color:#7b8293;}
   .sm-empty,.sm-loading,.sm-error{background:#fff;border-radius:14px;padding:40px 20px;text-align:center;color:#5d6577;border:1px solid #efeadb;}
   .sm-loading .spin{width:36px;height:36px;border:4px solid #eee4c8;border-top-color:var(--gold);border-radius:50%;margin:0 auto 12px;animation:smspin 1s linear infinite;}
   @keyframes smspin{to{transform:rotate(360deg);}}
@@ -241,7 +242,7 @@
 <script src="js/listReturn.js?v=202611092100"></script>
 <script>
 // 05.10.2026 (בקשת ברוך): מסך מלא לכפתור «התאמות AI חכמות» (שדרוג "קבל הצעות התאמה חכמות").
-// הדף רק קורא - לא יוצר התאמות ולא משנה שום נתון. הנתונים מגיעים מהפונקציה match-suggestions-report (v6).
+// ההצעות מגיעות מהפונקציה match-suggestions-report ונשמרות רק בעקבות לחיצה מפורשת.
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function toast(msg, isError){
   const el = document.createElement('div');
@@ -257,6 +258,8 @@ function siteHref(u){ u=String(u||'').trim(); return /^https?:\/\//i.test(u) ? u
 const LEVEL_LABEL = { high:'גבוהה', good:'טובה', mid:'בינונית', low:'חלשה' };
 const BUCKET_CLASS = { high:'high', good:'good', mid:'check', low:'low' };
 
+let profileId;
+const pendingMatches = new Set();
 let DATA = null, STATE = { bucket:'high', group:'list' };
 let TARGETS = { buyers: [], businesses: [] }, TARGET_TYPE = 'business', requestId = 0;
 function resetResults(){
@@ -695,6 +698,49 @@ function selectBucket(id){
   rememberResults();
 }
 
+const matchPairKey = (businessId, buyerId) => businessId + '|' + buyerId;
+
+async function saveSuggestedMatch(button){
+  const {businessId, buyerId} = button.dataset;
+  const key = matchPairKey(businessId, buyerId);
+  if (pendingMatches.has(key)) return;
+  pendingMatches.add(key);
+  button.disabled = true;
+  button.textContent = 'שומר…';
+  const db = window.supabaseClient;
+  try {
+    let {data: match, error} = await db.from('matches').insert({
+      business_id: businessId, buyer_id: buyerId, counterparty_type: 'buyer',
+      status: 'התאמה חדשה', match_source: 'התאמות AI', created_by: profileId
+    }).select('id,status,created_at').single();
+    const alreadySaved = error?.code === '23505';
+    if (alreadySaved) {
+      ({data: match, error} = await db.from('matches').select('id,status,created_at')
+        .eq('business_id', businessId).eq('buyer_id', buyerId).maybeSingle());
+    }
+    if (error) throw error;
+    if (!match) throw new Error('לא נמצאה ההתאמה');
+    const suggestion = DATA?.suggestions?.find(s => s.business_id === businessId && s.buyer_id === buyerId);
+    if (suggestion) {
+      DATA.suggestions = DATA.suggestions.filter(s => s !== suggestion);
+      DATA.already_matched = [...(DATA.already_matched || []), {...suggestion, existing_match: match}];
+      render();
+      saveView();
+    }
+    toast(alreadySaved ? 'הקונה כבר מופיע בהתאמות של העסק' : 'ההתאמה נשמרה בכרטיס העסק');
+  } catch (error) {
+    console.warn('Could not save suggested match', error);
+    toast(error?.code === '42501' ? 'אין הרשאה לרשום התאמה זו' : 'לא ניתן לשמור את ההתאמה. נסו שוב.', true);
+  } finally {
+    pendingMatches.delete(key);
+    for (const item of document.querySelectorAll('button[data-register-match]')){
+      if (matchPairKey(item.dataset.businessId, item.dataset.buyerId) !== key) continue;
+      item.disabled = false;
+      item.textContent = 'רשום כהתאמה';
+    }
+  }
+}
+
 function cardHtml(s, idx){
   const b = s.buyer_info || {}, z = s.business_info || {};
   const chips = [];
@@ -704,12 +750,16 @@ function cardHtml(s, idx){
   if (s.mentioned) chips.push(`<span class="chip green">⭐ הקונה הזכיר את העסק</span>`);
   if (s.online) chips.push(`<span class="chip blue">🌐 עסק אונליין</span>`);
   if (s.relocatable) chips.push(`<span class="chip blue">🏭 מפעל - אולי אפשר להעביר</span>`);
-  if (s.distributed_at) chips.push(`<span class="chip orange">📨 נשלח תקציר בעבר</span>`);
+  if (s.distributed_at) chips.push(`<span class="chip orange">📨 יש תיעוד הפצה קודם</span>`);
   if (s._existing) chips.push(`<span class="chip gray">✔ כבר קיימת כהתאמה${s.existing_match?.status ? ' · ' + esc(s.existing_match.status) : ''}</span>`);
   if (b.city) chips.push(`<span class="chip gray">👤 גר ב${esc(b.city)}</span>`);
   const stop = 'onclick="event.stopPropagation()"';
   const contacts = [];
   if (b.phone) contacts.push(`<a class="ic" href="${telHref(b.phone)}" ${stop}>📞 ${esc(b.phone)}</a><a class="ic wa" href="${waHref(b.phone)}" target="_blank" rel="noopener" ${stop}>WhatsApp</a>`);
+  if (!s._existing) {
+    const saving = pendingMatches.has(matchPairKey(s.business_id, s.buyer_id));
+    contacts.push(`<button type="button" class="ic sm-register" data-register-match data-business-id="${esc(s.business_id)}" data-buyer-id="${esc(s.buyer_id)}"${saving?' disabled':''} onclick="event.stopPropagation();saveSuggestedMatch(this)">${saving?'שומר…':'רשום כהתאמה'}</button>`);
+  }
   if (b.phone2) contacts.push(`<a class="ic" href="${telHref(b.phone2)}" ${stop}>📞 ${esc(b.phone2)}</a>`);
   if (b.email) contacts.push(`<a class="ic" href="mailto:${esc(b.email)}" ${stop}>✉️ מייל</a>`);
   const bizLinks = [];
@@ -723,7 +773,7 @@ function cardHtml(s, idx){
     return `<div class="how-row"><div class="top"><span>${esc(h.label)}</span><span>${h.pts>0?'+':''}${h.pts} מתוך ${h.max}</span></div><div class="how-bar ${h.pts<0?'neg':''}"><i style="width:${pct}%"></i></div><div class="txt">${esc(h.text)}</div></div>`;
   }).join('');
   return `<div class="sm-card ${s._existing?'existing':''}" data-i="${idx}">
-    <div class="sm-row" onclick="toggleCard(this)" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleCard(this);}" aria-expanded="false">
+    <div class="sm-row" onclick="toggleCard(this)" role="button" tabindex="0" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();toggleCard(this);}" aria-expanded="false">
       <div class="sm-score lvl-${BUCKET_CLASS[window.BSDSmartPick.scoreBucket(s.score)]||'low'}">${s.score}%<small>${LEVEL_LABEL[window.BSDSmartPick.scoreBucket(s.score)]||''}</small></div>
       <div style="min-width:0;">
         <div class="sm-names">
@@ -753,7 +803,7 @@ function cardHtml(s, idx){
         ${z.net_profit?`<span>רווח שנתי: <b>${esc(money(z.net_profit))}</b></span>`:''}
         ${b.agreement_status?`<span>הסכם עם הקונה: <b>${esc(b.agreement_status)}</b></span>`:''}
       </div>
-      <div class="sm-note">זו המלצה בלבד - שום דבר לא נשמר. כדי לפתוח התאמה, פתח את כרטיס הקונה או העסק כרגיל.</div>
+
     </div>
   </div>`;
 }
@@ -820,6 +870,7 @@ document.querySelectorAll('#fGroup button').forEach(b => b.addEventListener('cli
   if (!profile) return;
   const fullAccess = profile.role === 'admin' || profile.role === 'manager';
   if (!fullAccess && !profile.can_use_ai_match){ document.getElementById('noAccess').style.display = 'block'; return; }
+  profileId = profile.id;
   document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email);
   document.getElementById('mainWrap').style.display = 'block';
   if (window.BSDListReturn) BSDListReturn.armScrollRestoration();
