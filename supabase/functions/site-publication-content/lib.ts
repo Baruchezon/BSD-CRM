@@ -234,7 +234,6 @@ ${input.sourceText}
 export function localSafetyScan(text: string, biz: Record<string, unknown>): string[] {
   const hits: string[] = [];
   if (!text) return hits;
-  const lower = text.toLowerCase();
 
   // דפוסים כלליים: טלפון ישראלי, אימייל, URL
   if (/0\d{1,2}[-\s]?\d{7}/.test(text)) hits.push('נמצא דפוס שנראה כמספר טלפון');
@@ -243,7 +242,7 @@ export function localSafetyScan(text: string, biz: Record<string, unknown>): str
 
   // התאמה ישירה לזיהויים אמיתיים של העסק (רק מזהים בני 3+ תווים, כדי לא ליפול על מילים כלליות)
   const identifiers: Array<[string, unknown]> = [
-    ['שם העסק', biz.internal_name], ['שם משפטי', biz.legal_name], ['שם אנונימי קיים', biz.anonymous_name],
+    ['שם העסק', biz.internal_name], ['שם משפטי', biz.legal_name],
     ['שם הבעלים', biz.owner_name], ['כתובת', biz.address], ['אתר', biz.website],
     ['ח.פ', biz.id_number], ['טלפון בעלים', biz.owner_phone], ['אימייל בעלים', biz.owner_email],
   ];
@@ -253,7 +252,13 @@ export function localSafetyScan(text: string, biz: Record<string, unknown>): str
   ownerNameTokens(biz.owner_name).forEach(w => identifiers.push(['שם הבעלים (מילה)', w]));
   identifiers.forEach(([label, val]) => {
     const v = typeof val === 'string' ? val.trim() : '';
-    if (v.length >= 3 && lower.includes(v.toLowerCase())) hits.push(`"${v}" (${label}) מופיע בטקסט`);
+    if (v.length < 3) return;
+    // Only match a complete word or phrase, including Hebrew and Latin text.
+    const pattern = escapeRe(v).replace(/\s+/g, '\\s+');
+    const boundary = '[\\p{L}\\p{N}\\p{M}]';
+    if (new RegExp(`(?<!${boundary})${pattern}(?!${boundary})`, 'iu').test(text)) {
+      hits.push(`"${v}" (${label}) מופיע בטקסט`);
+    }
   });
 
   // 06.10.2026: עיר העסק - מותר רק אזור. אם שם העיר הוא חלק מהאזור המותר
@@ -271,9 +276,6 @@ export function localSafetyScan(text: string, biz: Record<string, unknown>): str
   }
   if (/(^|[^\u0590-\u05FF])(ב|ו|וב)?שכונת\s+(?!מגורים)[\u0590-\u05FF]/.test(text)) {
     hits.push('נמצא שם שכונה ("שכונת ...") - יש להשאיר רק אזור');
-  }
-  if (/(^|[^\u0590-\u05FF])(ב|ו|וב|ה)?כתובת(?=$|[^\u0590-\u05FF])/.test(text)) {
-    hits.push('נמצאה המילה "כתובת" - אסור לציין כתובת');
   }
 
   // רווח / רווחיות - לא מפרסמים בכלל (מחזור מותר)
