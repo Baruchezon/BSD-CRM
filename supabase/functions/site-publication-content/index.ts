@@ -69,16 +69,35 @@ Deno.serve(async (req: Request) => {
           !path.startsWith('public-listings/' + businessId + '/')) {
         return reply({ error: 'חסרה תמונה מאושרת עבור הפרסום באתר' }, 409);
       }
-      // Only this explicit action promotes a staged image and activates publication.
-      const { data: published, error: publishError } = await supabase.from('businesses').update({
+      if (typeof body.expected_image_path === 'string' && body.expected_image_path !== path) {
+        return reply({ error: 'התמונה השתנתה מאז פתיחת הכרטיס. יש לפתוח אותו מחדש ולבדוק את התמונה לפני הפרסום.' }, 409);
+      }
+      const imageUrl = supabase.storage.from('site-content-images').getPublicUrl(path).data.publicUrl;
+      try {
+        const image = await fetch(imageUrl, { method: 'HEAD', signal: AbortSignal.timeout(6000) });
+        if ([400, 404].includes(image.status) || (image.ok && !/^image\/(png|jpeg|webp)\b/i.test(image.headers.get('Content-Type') || ''))) {
+          return reply({ error: 'התמונה שנבחרה חסרה או אינה תקינה. יש להעלות אותה מחדש וללחוץ על ״הפץ לאתר״.' }, 422);
+        }
+        if (!image.ok) throw new Error('Image check failed');
+      } catch {
+        return reply({ error: 'בדיקת התמונה לא זמינה כרגע. יש לנסות לפרסם שוב בעוד רגע.' }, 503);
+      }
+      // Promote only the image that was checked, even if another tab tries to replace it.
+      let publication = supabase.from('businesses').update({
         public_listing_marketing_title: title,
         public_listing_marketing_text: marketingText,
         public_listing_image_path: path,
         public_listing_image_draft_path: null,
         anon_card_active: true,
         public_listing_active: true,
-      }).eq('id', businessId).select('public_listing_active,public_listing_published_at').single();
-      if (publishError || !published) return reply({ error: 'שמירת הפרסום נכשלה; לא בוצע עדכון לאתר' }, 500);
+      }).eq('id', businessId);
+      for (const column of ['public_listing_image_draft_path', 'public_listing_image_path']) {
+        const savedPath = business[column];
+        publication = savedPath === null ? publication.is(column, null) : publication.eq(column, savedPath);
+      }
+      const { data: published, error: publishError } = await publication.select('public_listing_active,public_listing_published_at').maybeSingle();
+      if (publishError) return reply({ error: 'שמירת הפרסום נכשלה. אפשר לנסות שוב.' }, 500);
+      if (!published) return reply({ error: 'התמונה השתנתה בזמן הפרסום. יש לפתוח את הכרטיס מחדש ולבדוק את התמונה.' }, 409);
 
       // The website is static. Dispatch an immediate safe rebuild if the secret is configured.
       // Never expose this token in the browser. Otherwise next scheduled refresh applies.

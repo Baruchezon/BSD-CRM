@@ -2275,9 +2275,9 @@ function openBizForm(id){
             <p style="font-size:.78rem;color:#665;margin:8px 0;">התוכן כאן מיועד רק לאתר ואינו מחליף את התקציר האנונימי הכללי. ניתן להעלות תמונה ולערוך כותרת ומסר לפני שמירתם. סימון הפרסום נשמר בשמירה הכללית של כרטיס העסק.</p>
             <div style="margin-top:12px;font-weight:700;">תמונת העסק באתר</div>
             <img id="bsdPublicPhotoPreview" alt="תמונת הפרסום שנבחרה לאתר" style="display:none;width:100%;height:280px;object-fit:contain;background:#eef1f6;border-radius:8px;margin-top:8px;" />
-            <div id="bsdPublicPhotoEmpty" style="padding:22px;background:#f4f6f9;border-radius:8px;text-align:center;color:#667;margin-top:8px;">לא נבחרה תמונה ייחודית. האתר משתמש בתמונת תחום קיימת.</div>
+            <div id="bsdPublicPhotoEmpty" style="padding:22px;background:#f4f6f9;border-radius:8px;text-align:center;color:#667;margin-top:8px;">יש לבחור תמונה כדי לפרסם את הכרטיס באתר.</div>
             <label style="font-size:.8rem;display:block;margin:10px 0;">
-              <input type="checkbox" id="bsdPublicPhotoApproved" style="width:auto;"> בדקתי שהתמונה מתאימה לפרסום אנונימי ואינה חושפת מידע מזהה
+              <input type="checkbox" id="bsdPublicPhotoApproved" style="width:auto;"> בדקתי שהתמונה מתאימה לפרסום אנונימי ושהמחיר שמופיע בה, אם יש כזה, נכון
             </label>
             <input type="file" accept="image/png,image/jpeg,image/webp" onchange="bsdUploadPublicSiteImage('${biz.id}',this)" style="width:100%;font-size:.8rem;">
             <div style="color:#667;font-size:.72rem;margin-top:4px;">PNG, JPG או WebP עד 10MB. התמונה תוצג בשלמותה ללא חיתוך. מומלצת תמונה באיכות 1200 פיקסלים לפחות לרוחב.</div>
@@ -3562,6 +3562,7 @@ function bsdShowPublicPhoto(path){
   const empty = document.getElementById('bsdPublicPhotoEmpty');
   if (!preview || !empty) return;
   const valid = /^public-listings\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(png|jpe?g|webp)$/i.test(String(path || ''));
+  preview.dataset.imagePath = valid ? path : '';
   preview.style.display = valid ? 'block' : 'none';
   empty.style.display = valid ? 'none' : 'block';
   if (valid) preview.src = window.supabaseClient.storage.from('site-content-images').getPublicUrl(path).data.publicUrl;
@@ -3570,8 +3571,9 @@ function bsdShowPublicPhoto(path){
 async function bsdUploadPublicSiteImage(bizId, input){
   const status = document.getElementById('bsdPublicPhotoStatus');
   const file = input?.files?.[0];
-  if (!file) return;
+  if (!file || status?.dataset.uploadState === 'uploading') return;
   const setStatus = (message, error = false) => {
+    if (status && error) status.dataset.uploadState = 'failed';
     if (status){ status.style.color = error ? '#ae3123' : '#305d47'; status.textContent = message; }
   };
   if (!document.getElementById('bsdPublicPhotoApproved')?.checked){
@@ -3582,6 +3584,7 @@ async function bsdUploadPublicSiteImage(bizId, input){
     setStatus('נדרש קובץ PNG, JPG או WebP עד 10MB.', true); input.value = ''; return;
   }
   input.disabled = true;
+  if (status) status.dataset.uploadState = 'uploading';
   setStatus('מעלה את התמונה...');
   try {
     const path = 'public-listings/' + bizId + '/' + crypto.randomUUID() + '.' + ext;
@@ -3595,6 +3598,7 @@ async function bsdUploadPublicSiteImage(bizId, input){
     const b = (typeof bsdFindCachedBiz === 'function') ? bsdFindCachedBiz(bizId) : null;
     if (b) b.public_listing_image_draft_path = path;
     bsdShowPublicPhoto(path);
+    if (status) delete status.dataset.uploadState;
     setStatus('התמונה הועלתה כטיוטה. היא לא תחליף את תמונת האתר עד שתלחץ על ״הפץ לאתר״.');
   } catch(e) {
     setStatus('לא ניתן לשמור את התמונה: ' + (e?.message || String(e)), true);
@@ -3639,13 +3643,23 @@ async function bsdPublishToWebsite(bizId){
     return;
   }
   if (!title || !marketing_text) { message('יש למלא כותרת ומסר שיווקי.', true); return; }
+  if (photo?.dataset.uploadState === 'uploading') {
+    message('התמונה עדיין בהעלאה. יש להמתין שתופיע בתצוגה המקדימה וללחוץ שוב.', true);
+    return;
+  }
+  const preview = document.getElementById('bsdPublicPhotoPreview');
+  const expected_image_path = preview?.dataset.imagePath;
+  if (photo?.dataset.uploadState === 'failed' || !expected_image_path || (preview.complete && !preview.naturalWidth)) {
+    message('התמונה שנבחרה אינה זמינה לפרסום. יש להעלות אותה שוב ולבדוק שהיא מופיעה בתצוגה המקדימה.', true);
+    return;
+  }
   const publishButton = [...document.querySelectorAll('#bsdSitePublisher button')]
     .find(btn => btn.textContent?.includes('הפץ לאתר'));
   if (publishButton) publishButton.disabled = true;
   message('בודק את הפרסום ומעביר אותו לאתר...');
   try {
     const { data, error } = await bsdInvokeAiFn('site-publication-content', {body:{
-      business_id: bizId, action:'publish', title, marketing_text, accepted_image_anonymity:true
+      business_id: bizId, action:'publish', title, marketing_text, expected_image_path, accepted_image_anonymity:true
     }});
     if (error) {
       let details = null;
