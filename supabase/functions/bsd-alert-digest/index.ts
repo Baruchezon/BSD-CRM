@@ -124,8 +124,23 @@ async function makePdf(items){
  const page=pdf.addPage([595,842]);
  const navy=rgb(.055,.12,.21),blue=rgb(.08,.19,.31),gold=rgb(.82,.65,.33),grey=rgb(.38,.45,.53),white=rgb(1,1,1);
  page.drawRectangle({x:0,y:735,width:595,height:107,color:navy});
- page.drawCircle({x:58,y:783,size:27,borderWidth:1.8,borderColor:gold});
- page.drawText("BSD",{x:35,y:773,size:18,font:latin,color:gold});
+ let logoDrawn=false;
+ try {
+  const logoResponse=await fetch(LOGO,{signal:AbortSignal.timeout(8000)});
+  if(logoResponse.ok){
+    const logoBytes=new Uint8Array(await logoResponse.arrayBuffer());
+    if(logoBytes.length>=100 && logoBytes.length<3500000){
+      const embedded=await pdf.embedPng(logoBytes);
+      const fit=embedded.scaleToFit(68,68);
+      page.drawImage(embedded,{x:58-fit.width/2,y:787-fit.height/2,width:fit.width,height:fit.height});
+      logoDrawn=true;
+    }
+  }
+ } catch(error) {console.warn("PDF logo fallback",error instanceof Error?error.message:String(error));}
+ if(!logoDrawn){
+  page.drawCircle({x:58,y:783,size:27,borderWidth:1.8,borderColor:gold});
+  page.drawText("BSD",{x:35,y:773,size:18,font:latin,color:gold});
+ }
  drawText(page,f,"משביחים עסקים. מחברים הזדמנויות. מובילים עסקאות.",560,783,10,white);
  drawText(page,f,"שלוש הזדמנויות עסקיות עבורך",558,690,22,blue);
  drawText(page,f,"סקירה ראשונית אנונימית, בהתאם להעדפות החיפוש.",556,664,10,grey);
@@ -194,6 +209,11 @@ async function run(body){
   const minNeeded=first?3:1;
   const ready=pending.length>=minNeeded&&!tooSoon;
   const stat={subscriber_id:s.id,eligible_matches:matches.length,new_matches:pending.length,first_batch:first,ready,selected:pending.map(x=>x.business.business_number)};
+  if(!send && body?.pdf_stored_probe===true && matches.length>=3){
+    const bytes=await makePdf(matches.slice(0,3));
+    stat.pdf_probe_bytes=bytes.length;
+    stat.pdf_probe_valid=String.fromCharCode(...bytes.slice(0,4))==="%PDF";
+  }
   if(!send&&body?.pdf_probe===true&&ready){const bytes=await makePdf(pending);stat.pdf_bytes=bytes.length;stat.pdf_signature=String.fromCharCode(...bytes.slice(0,4));}
 
   if(!send&&body?.test_admin_email===true&&ready){
