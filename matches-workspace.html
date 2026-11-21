@@ -92,11 +92,12 @@
   .view-toggle-btn.active{background:var(--navy);color:#fff;border-color:var(--navy);}
   .search-row{display:flex;gap:8px;flex-wrap:wrap;}
   .search-row input, .search-row select{padding:10px 14px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:13.5px;background:#fff;}
-  .creator-filter{flex:0 1 280px;min-width:220px;}
+  .creator-filter{width:100%;max-width:280px;margin-bottom:12px;}
   .creator-filter label{display:block;font-size:13px;font-weight:700;margin-bottom:4px;}
-  .creator-filter .ss-input{width:100%;box-sizing:border-box;}
-  .search-row{align-items:flex-end;}
-  .search-row input#searchBox{flex:1;min-width:0;width:100%;font-size:16px;}
+  .creator-filter .ss-input{width:100%;box-sizing:border-box;padding:10px 14px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:16px;background:#fff;}
+  .search-row{flex-direction:column;align-items:stretch;}
+  .search-row label{font-size:14px;font-weight:700;}
+  .search-row input#searchBox{box-sizing:border-box;min-width:0;width:100%;font-size:16px;}
 
   .quickviews{display:flex;gap:7px;flex-wrap:wrap;}
   .qv-chip{padding:7px 14px;border-radius:20px;border:1px solid var(--line);background:#fff;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--text);white-space:nowrap;}
@@ -302,7 +303,7 @@
       <button class="view-toggle-btn active" data-view="business">🏢 לפי עסקים</button>
       <button class="view-toggle-btn" data-view="buyer">🧍 לפי קונים</button>
     </div>
-    <button class="ctrl-btn" id="filterToggleBtn" type="button">🔍 סינון מתקדם</button>
+    <button class="ctrl-btn" id="filterToggleBtn" type="button" aria-controls="filterPanel" aria-expanded="false">🔍 סינון מתקדם</button>
     <div class="sort-wrap">
       <label style="font-size:12px;color:var(--muted);font-weight:700;">סדר לפי:</label>
       <select id="sortModeSelect" class="ctrl-select">
@@ -313,13 +314,14 @@
     </div>
   </div>
   <div class="search-row">
-    <input type="text" id="searchBox" placeholder="חיפוש: שם עסק, מספר, שם קונה, מספר, טלפון, מטפל, סטטוס, הערה, משימה...">
+    <label for="searchBox">חיפוש עסק או קונה</label>
+    <input type="search" id="searchBox" placeholder="הקלד שם עסק או שם קונה...">
+  </div>
+  <div class="filter-panel" id="filterPanel" style="display:none;">
     <div class="creator-filter">
       <label for="matchCreatorSelect_input">נוצר על ידי</label>
       <div id="matchCreatorFilter"></div>
     </div>
-  </div>
-  <div class="filter-panel" id="filterPanel" style="display:none;">
     <div class="quickviews" id="quickviews"></div>
   </div>
 </div>
@@ -1276,6 +1278,7 @@ document.getElementById('searchBox').addEventListener('input', e=>{ searchTerm =
 document.getElementById('filterToggleBtn').addEventListener('click', ()=>{
   const p = document.getElementById('filterPanel');
   p.style.display = (p.style.display==='none') ? 'block' : 'none';
+  document.getElementById('filterToggleBtn').setAttribute('aria-expanded', String(p.style.display !== 'none'));
 });
 document.getElementById('sortModeSelect').addEventListener('change', e=>{ sortMode = e.target.value; render(); });
 
