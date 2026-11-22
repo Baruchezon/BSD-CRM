@@ -19,3 +19,8 @@ verify_jwt = false
 
 [functions.business-alert-invite-resolve]
 verify_jwt = false
+
+# Internal: called only by vip_file_stage_dispatch() (pg_net) with a single-use run token checked in the function,
+# the same as bsd-alert-digest and vip-draft-send (both deployed with verify_jwt = false).
+[functions.vip-file-stage-upload]
+verify_jwt = false
