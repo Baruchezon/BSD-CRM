@@ -18,6 +18,8 @@ button,.button{border:0;border-radius:10px;padding:12px 16px;font:700 14px Arial
 .primary{background:var(--navy);color:#fff}.gold{background:var(--gold);color:#171d2b}.secondary{background:#eaf0f7;color:#182e4a}.danger{background:#fff0ed;color:#9c2b20}
 button:disabled{opacity:.55;cursor:wait}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:13px;margin-top:16px}
+#cards{grid-template-columns:minmax(0,1fr)}
+#additionalCards summary{font-size:19px;font-weight:700;cursor:pointer}
 .card{border:1px solid var(--line);padding:15px;border-radius:13px;background:#fff}
 .card small{color:#54677e}.card .actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:13px}
 .card .actions button{font-size:12px;padding:9px 11px}
@@ -37,6 +39,9 @@ textarea{min-height:74px;resize:vertical}
 #shareBox{width:min(calc(100% - 24px),440px);max-height:calc(100% - 24px);border:0;border-radius:18px;padding:20px;color:inherit}
 #shareBox::backdrop{background:#091d36b8}
 #shareBox .bar:first-child{position:sticky;top:0;background:#fff;z-index:1;padding:4px 0}
+#shareBox .field{margin-top:10px}
+.link-actions{display:flex;flex-wrap:wrap;gap:8px}
+.link-actions input{flex:1;min-width:150px}
 #shareActions{display:flex;gap:9px;flex-wrap:wrap;margin:15px 0}
 .pill{border-radius:100px;background:#e6f4e9;color:#266044;font-size:12px;padding:4px 9px;white-space:nowrap}
 .pill.draft{background:#f6ebd9;color:#8d5e21}
@@ -51,9 +56,14 @@ textarea{min-height:74px;resize:vertical}
 <header><div class="header"><div><h1>כרטיסי ביקור דיגיטליים</h1><p>BSD CRM | יצירה, ניהול ושיתוף כרטיס אישי</p></div><a href="app.html" id="backToEntry" class="button">→ חזרה ל CRM</a></div></header>
 <main>
 <section class="panel">
-<div class="bar"><div><h2>הכרטיסים שלי</h2><div class="notice" id="welcome">מתבצעת בדיקת הרשאות</div></div><button class="primary" id="newBtn" disabled>✚ צור כרטיס</button></div>
+<div class="bar"><h2>כרטיס הביקור שלי</h2><button class="primary" id="newBtn" disabled>✚ צור כרטיס</button></div>
+<div class="notice" id="welcome">מתבצעת בדיקת הרשאות</div>
 <div id="status" role="status"></div><div class="cards" id="cards"></div>
 </section>
+<details class="panel" id="additionalCards" hidden>
+<summary>כרטיסי ביקור נוספים</summary>
+<div class="cards" id="otherCards"></div>
+</details>
 <section class="panel" id="editor">
 <div class="bar"><h2 id="editorTitle">כרטיס חדש</h2><button type="button" class="secondary" id="cancelBtn">סגור</button></div>
 <form id="cardForm" autocomplete="on">
@@ -80,17 +90,19 @@ textarea{min-height:74px;resize:vertical}
 </main>
 <dialog id="shareBox" aria-labelledby="shareTitle">
 <div class="bar"><h3 id="shareTitle">שליחת כרטיס ביקור</h3><button type="button" class="secondary" id="closeShare" autofocus>→ חזרה</button></div>
-<p class="notice">אפשר לשתף בקישור או לשלוח בוואטסאפ וב SMS.</p>
+<div class="field">
+<label for="shortCardLink">הקישור לשיתוף</label>
+<div class="link-actions"><input id="shortCardLink" dir="ltr" readonly><button id="copyBtn" class="primary" type="button">העתק קישור</button></div>
+</div>
+<div id="shareStatus" class="notice" role="status"></div>
 <div class="field"><label for="customerSearch">חפש לקוח לפי שם בתוך ה CRM</label><div class="bar"><input id="customerSearch" type="search" placeholder="הקלד לפחות שתי אותיות" aria-label="חיפוש לקוח" style="flex:1;min-width:160px"><button id="findCustomerBtn" class="secondary" type="button">חפש לקוח</button></div></div>
 <div class="field"><label for="customerResults">לקוחות שנמצאו</label><select id="customerResults"><option value="">בחר לקוח מתוך התוצאות</option></select></div>
-<div class="field"><label for="shortCardLink">הקישור הקצר שנשלח ללקוח</label><input id="shortCardLink" dir="ltr" readonly aria-label="קישור הכרטיס הקצר"></div>
 <div class="field"><label for="recipientPhone">מספר הטלפון של הלקוח</label><input id="recipientPhone" type="tel" inputmode="tel" placeholder="050-1234567" dir="ltr"></div>
-<div id="shareActions"><button id="waBtn" class="primary">שלח בוואטסאפ</button><button id="smsBtn" class="secondary">שלח ב SMS</button><button id="nativeShareBtn" class="secondary">שתף מהטלפון</button><button id="copyBtn" class="secondary">העתק קישור</button></div>
-<div id="shareStatus" class="notice" role="status"></div>
+<div id="shareActions"><button id="waBtn" class="primary">שלח בוואטסאפ</button><button id="smsBtn" class="secondary">שלח ב SMS</button><button id="nativeShareBtn" class="secondary">שתף מהטלפון</button></div>
 </dialog>
 <script>
 "use strict";
-let CURRENT_PROFILE=null, cardRows=[], chosen=null, editing=null;
+let CURRENT_PROFILE=null, chosen=null, editing=null;
 const $=id=>document.getElementById(id);
 const FIELDS=['full_name','job_title','company_name','phone_mobile','phone_office','office_address','whatsapp_number','email','website_url','facebook_url','instagram_url','photo_url','logo_url','description'];
 const allowedRoles=['admin','manager','agent','agent_authorized'];
@@ -100,6 +112,7 @@ const shareBox=$('shareBox');
 if(fromHub){
   $('backToEntry').href='hub.html';
   $('backToEntry').textContent='→ חזרה להאב';
+  $('newBtn').hidden=true;
 }
 const urlOf=c=>c.short_code?new URL(c.short_code==='ezon'?'c/ezon/':'c/#'+encodeURIComponent(c.short_code),location.href).href:new URL('digital-card.html?card='+encodeURIComponent(c.public_token),location.href).href;
 const tidy=s=>String(s||'').trim();
@@ -234,14 +247,25 @@ else {defaults();$('editorTitle').textContent='יצירת כרטיס ביקור'
 $('owner').disabled=!!c;$('editor').classList.add('show');$('editor').scrollIntoView({behavior:'smooth',block:'start'});
 }
 async function loadCards(){
-const {data,error}=await supabaseClient.from('agent_digital_cards').select('*').order('created_at',{ascending:false});
-if(error)throw error;cardRows=data||[];render();
+  let query=supabaseClient.from('agent_digital_cards').select('*').order('created_at',{ascending:false});
+  if(fromHub || !admin())query=query.eq('owner_user_id',CURRENT_PROFILE.id);
+  const {data,error}=await query;
+  if(error)throw error;
+  render(data||[]);
 }
 function action(label,cls,fn){const b=document.createElement('button');b.type='button';b.className=cls;b.textContent=label;b.addEventListener('click',fn);return b}
-function render(){
-const root=$('cards');root.replaceChildren();
-if(!cardRows.length){const p=document.createElement('p');p.className='notice';p.textContent='אין עדיין כרטיסים. לחץ על צור כרטיס כדי להתחיל.';root.append(p);return}
-for(const c of cardRows){
+function render(rows){
+  const ownCards=rows.filter(c=>c.owner_user_id===CURRENT_PROFILE.id);
+  const personal=ownCards.find(c=>c.short_code==='ezon') || ownCards.find(c=>c.is_published) || ownCards[0];
+  $('cards').replaceChildren(...(personal?[renderCard(personal)]:[]));
+  $('welcome').hidden=!!personal;
+  $('welcome').textContent=fromHub?'טרם נוצר כרטיס ביקור לחשבון שלך. אפשר ליצור כרטיס בהגדרות ה CRM.':'טרם נוצר כרטיס ביקור לחשבון שלך.';
+
+  const others=fromHub?[]:rows.filter(c=>c.id!==personal?.id);
+  $('otherCards').replaceChildren(...others.map(renderCard));
+  $('additionalCards').hidden=!others.length;
+}
+function renderCard(c){
 const e=document.createElement('article');e.className='card';
 const head=document.createElement('div');head.className='row';
 const av=document.createElement('img');av.className='avatar';av.alt='';av.onerror=()=>{av.style.display='none'};if(/^https?:\/\//.test(c.photo_url||''))av.src=c.photo_url;else av.style.display='none';
@@ -249,15 +273,17 @@ const text=document.createElement('div');text.className='flex';const nm=document
 const tag=document.createElement('span');tag.className='pill'+(c.is_published?'':' draft');tag.textContent=c.is_published?'מפורסם':'טיוטה';
 const tiny=document.createElement('small');tiny.dir='ltr';tiny.style.cssText='display:block;overflow-wrap:anywhere;margin-top:8px;color:#60758b';tiny.textContent=c.short_code?'קישור קצר: '+urlOf(c):'';
 const acts=document.createElement('div');acts.className='actions';
-acts.append(action('ערוך','secondary',()=>openEditor(c)),action('שלח כרטיס','primary',()=>openShare(c)),action('הורד HTML','secondary',()=>{try{download(fileName(c)+'.html','text/html;charset=utf-8',offlineHtml(c))}catch(e){msg(e.message)}}),action('שמור איש קשר','secondary',()=>downloadVcard(c)));
+if(!fromHub)acts.append(action('ערוך','secondary',()=>openEditor(c)));
+acts.append(action('שלח כרטיס','primary',()=>openShare(c)));
+if(!fromHub)acts.append(action('הורד HTML','secondary',()=>{try{download(fileName(c)+'.html','text/html;charset=utf-8',offlineHtml(c))}catch(e){msg(e.message)}}),action('שמור איש קשר','secondary',()=>downloadVcard(c)));
 if(c.is_published)acts.append(action('הצג כרטיס','secondary',()=>{
   const preview=new URL(urlOf(c));
   preview.searchParams.set('preview',fromHub?'hub':'crm');
   location.assign(preview.href);
 }));
-if(admin())acts.append(action('מחק','danger',()=>removeCard(c)));
-e.append(head,tag);if(c.short_code)e.append(tiny);e.append(acts);root.append(e);
-}
+if(!fromHub && admin())acts.append(action('מחק','danger',()=>removeCard(c)));
+e.append(head,tag);if(c.short_code)e.append(tiny);e.append(acts);
+return e;
 }
 async function removeCard(c){
 if(!confirm('למחוק את הכרטיס של '+c.full_name+'? הקישור שלו יפסיק לעבוד.'))return;
@@ -343,7 +369,25 @@ async function nativeShare(){
 try{requirePublished();if(navigator.share){await navigator.share({title:chosen.full_name,text:makeText(chosen),url:urlOf(chosen)});}
 else await copyLink();}catch(e){if(e.name!=='AbortError')$('shareStatus').textContent=e.message}
 }
-async function copyLink(){try{requirePublished();await navigator.clipboard.writeText(urlOf(chosen));$('shareStatus').textContent='קישור הכרטיס הועתק';}catch(e){$('shareStatus').textContent=e.message}}
+async function copyLink(){
+  const status=$('shareStatus');
+  try{requirePublished();}catch(e){status.textContent=e.message;return}
+  const input=$('shortCardLink');
+  try{
+    await navigator.clipboard.writeText(input.value);
+  }catch(_){
+    input.focus();
+    input.select();
+    input.setSelectionRange(0,input.value.length);
+    try{
+      if(!document.execCommand('copy'))throw Error();
+    }catch(_){
+      status.textContent='הקישור מסומן. אפשר להעתיק אותו באמצעות תפריט ההעתקה של המכשיר.';
+      return;
+    }
+  }
+  status.textContent='קישור הכרטיס הועתק. אפשר להדביק אותו בהודעה או בכל מקום אחר.';
+}
 async function ownersList(){
 if(!admin())return;
 $('ownerField').hidden=false;
@@ -357,8 +401,11 @@ try{
 CURRENT_PROFILE=await requireAuth({returnToHubCards:fromHub});
 if(!CURRENT_PROFILE)return;
 if(CURRENT_PROFILE.status!=='active'||!allowedRoles.includes(CURRENT_PROFILE.role)){location.replace('app.html');return}
-$('welcome').textContent='שלום '+(CURRENT_PROFILE.full_name||CURRENT_PROFILE.email)+'. כל סוכן רואה רק את הכרטיסים שלו.';
-$('newBtn').disabled=false;await ownersList();await loadCards();msg('');
+await loadCards();msg('');
+if(!fromHub){
+  await ownersList();
+  $('newBtn').disabled=false;
+}
 }catch(e){msg('טעינת הכרטיסים נכשלה: '+(e.message||e))}
 }
 $('newBtn').addEventListener('click',()=>openEditor(null));
