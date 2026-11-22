@@ -145,4 +145,5 @@ revoke all on function public.vip_file_stage_use_token(text), public.vip_file_st
   public.vip_file_stage_finish(uuid,boolean,text), public.vip_file_stage_dispatch(text) from public, anon, authenticated;
 grant execute on function public.vip_file_stage_use_token(text), public.vip_file_stage_claim_next(),
   public.vip_file_stage_finish(uuid,boolean,text) to service_role;
+revoke execute on function public.vip_file_stage_dispatch(text) from service_role;
 -- vip_file_stage_dispatch: no grant; only the postgres owner (execute_sql / migration) can run it.
