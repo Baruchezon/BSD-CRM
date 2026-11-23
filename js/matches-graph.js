@@ -5,15 +5,17 @@
 
   function create({ escape, formatDate, userName, selectView, database }) {
     const main = document.getElementById('mainContent');
-    const selected = {};
-    let detailKey = '';
+    const openDetails = new Map();
 
-    function select(view, key, matchId = '') {
-      selected[view] = key;
-      detailKey = matchId;
+    function select(groupKey, matchId) {
+      openDetails.set(groupKey, matchId);
     }
 
-    function close() { detailKey = ''; }
+    function close() { openDetails.clear(); }
+
+    function focusGroup(key) {
+      document.getElementById('match-graph-' + key)?.focus();
+    }
 
     function entityName(entity, className = '') {
       const name = '<strong>' + escape(entity.name) + '</strong>';
@@ -22,7 +24,7 @@
         : `<span class="${className}">${name}</span>`;
     }
 
-    function branch(match, view, index) {
+    function branch(match, view, index, detailsId) {
       const other = match.other;
       return `<li>
         <span class="vip-map-arrow" aria-hidden="true"></span>
@@ -33,7 +35,7 @@
             <span><b class="chip chip-${match.statusColor}">${escape(match.status || 'ללא סטטוס')}</b></span>
           </div>
           <div class="match-map-branch-actions">
-            <button type="button" class="vip-map-open" data-match-graph="${index}" aria-controls="matchGraphDetails">תהליך והערות</button>
+            <button type="button" class="vip-map-open" data-match-graph="${index}" aria-controls="${detailsId}">תהליך והערות</button>
             <button type="button" class="vip-map-open" data-match-pivot="${index}">${view === 'business' ? 'לפי ' + other.label : 'לפי עסק'}</button>
           </div>
         </div>
@@ -106,42 +108,42 @@
         main.innerHTML = '<div class="empty-state">לא נמצאו התאמות תואמות לסינון.</div>';
         return;
       }
-      const group = groups.find(item=>item.key === selected[view]) || groups[0];
-      selected[view] = group.key;
-      const matches = group.matches();
-      const byBusiness = view === 'business';
+      const diagrams = groups.map(group=>({ group, matches: group.matches() }));
       main.innerHTML = `<section class="panel vip-map match-map" aria-labelledby="matchGraphTitle">
-        <header class="vip-map-header">
-          <h2 id="matchGraphTitle">תרשים התאמות</h2>
-          <div class="vip-map-legend" aria-label="מקרא">
-            <span class="vip-map-business">עסק</span><span class="vip-map-buyer">קונה</span>
-            ${group.kind === 'broker' || matches.some(m=>m.buyer.kind === 'broker') ? '<span class="match-map-broker">מתווך</span>' : ''}
-          </div>
-        </header>
-        <div class="vip-map-controls">
-          <label for="matchGraphEntity">${byBusiness ? 'בחירת עסק' : 'בחירת קונה או מתווך'}</label>
-          <select id="matchGraphEntity">
-            ${groups.map(item=>`<option value="${escape(item.key)}"${item === group ? ' selected' : ''}>${escape([item.name, item.reference, item.kind === 'broker' ? 'מתווך' : ''].filter(Boolean).join(' · '))} (${item.count})</option>`).join('')}
-          </select>
-        </div>
+        <header class="vip-map-header"><h2 id="matchGraphTitle">תרשימי התאמות</h2></header>
+        <div class="match-graph-stack">${diagrams.map(diagram=>diagramHtml(view, diagram)).join('')}</div>
+      </section>`;
+      diagrams.forEach(diagram=>wireDiagram(view, diagram, wireMatch));
+      wireGroup(main);
+    }
+
+    function diagramHtml(view, { group, matches }) {
+      const byBusiness = view === 'business';
+      const groupId = 'match-graph-' + escape(group.key);
+      const detailsId = groupId + '-details';
+      return `<article class="match-graph-item" id="${groupId}" tabindex="-1" aria-label="${escape(group.name)}">
         <div class="vip-map-diagram ${byBusiness ? '' : 'vip-map-reverse'}">
           <div class="vip-map-anchor ${tone[group.kind]}">
             <span>${group.label}${group.reference ? ' · ' + escape(group.reference) : ''}</span>
             ${entityName(group)}
             ${group.summary ? '<span>' + escape(group.summary) + '</span>' : ''}
             <span>${matches.length} התאמות</span>
-            ${group.canReadNotes ? '<button type="button" class="vip-map-open" id="matchGraphBuyerNotes" aria-controls="matchGraphDetails">הערות הקונה</button>' : ''}
+            ${group.canReadNotes ? '<button type="button" class="vip-map-open" data-graph-buyer-notes aria-controls="' + detailsId + '">הערות הקונה</button>' : ''}
           </div>
-          ${matches.length ? `<ul class="vip-map-branches" aria-label="התאמות קשורות">${matches.map((match,index)=>branch(match,view,index)).join('')}</ul>`
+          ${matches.length ? `<ul class="vip-map-branches" aria-label="התאמות קשורות">${matches.map((match,index)=>branch(match,view,index,detailsId)).join('')}</ul>`
             : '<div class="empty-state">אין עדיין התאמות בכרטיס הזה.</div>'}
         </div>
         <div class="th-actions match-map-group-actions">${group.actions}</div>
-        <section class="vip-map-details" id="matchGraphDetails" aria-labelledby="matchGraphDetailsTitle" hidden></section>
-      </section>`;
-      const chooser = document.getElementById('matchGraphEntity');
-      const details = document.getElementById('matchGraphDetails');
-      const action = document.getElementById('matchGraphBuyerNotes');
-      const openButtons = [...main.querySelectorAll('[data-match-graph]')];
+        <section class="vip-map-details" id="${detailsId}" aria-label="פרטי התאמה" hidden></section>
+      </article>`;
+    }
+
+    function wireDiagram(view, { group, matches }, wireMatch) {
+      const diagram = document.getElementById('match-graph-' + group.key);
+      const details = diagram.querySelector('.vip-map-details');
+      const action = diagram.querySelector('[data-graph-buyer-notes]');
+      const openButtons = [...diagram.querySelectorAll('[data-match-graph]')];
+      let detailKey = openDetails.get(group.key);
 
       function closeDetails() {
         const trigger = detailKey === 'buyer-notes' ? action : openButtons[matches.findIndex(match=>match.id === detailKey)];
@@ -151,6 +153,8 @@
 
       function expand(key, focus) {
         detailKey = key;
+        if (key) openDetails.set(group.key, key);
+        else openDetails.delete(group.key);
         details.hidden = !key;
         openButtons.forEach((button,index)=>button.setAttribute('aria-expanded', matches[index].id === key));
         action?.setAttribute('aria-expanded', key === 'buyer-notes');
@@ -159,11 +163,11 @@
           return;
         }
         if (key === 'buyer-notes') {
-          details.innerHTML = `<h3 id="matchGraphDetailsTitle" tabindex="-1">הערות הקונה · ${escape(group.name)}</h3><div data-buyer-notes role="status">טוען הערות…</div>`;
+          details.innerHTML = `<h3 tabindex="-1">הערות הקונה · ${escape(group.name)}</h3><div data-buyer-notes role="status">טוען הערות…</div>`;
           loadNotes(details.querySelector('[data-buyer-notes]'), 'leads', group.id, true);
         } else {
           const match = matches.find(item=>item.id === key);
-          details.innerHTML = `<h3 id="matchGraphDetailsTitle" tabindex="-1">${escape(match.business.name)} · ${escape(match.buyer.name)}</h3>
+          details.innerHTML = `<h3 tabindex="-1">${escape(match.business.name)} · ${escape(match.buyer.name)}</h3>
             <div class="brn-facts">
               <span class="chip chip-${match.statusColor}">${escape(match.status || 'ללא סטטוס')}</span>
               · מטפל: ${escape(match.handler || 'לא שויך')}
@@ -183,7 +187,7 @@
           if (match.buyer.canReadNotes) loadNotes(details.querySelector('[data-buyer-notes]'), 'leads', match.buyer.id, true);
           wireMatch(details);
         }
-        const heading = document.getElementById('matchGraphDetailsTitle');
+        const heading = details.querySelector('h3');
         const closeButton = document.createElement('button');
         closeButton.type = 'button';
         closeButton.className = 'vip-map-open match-close';
@@ -199,21 +203,19 @@
       details.addEventListener('keydown', event=>{
         if (event.key === 'Escape') closeDetails();
       });
-      chooser.addEventListener('change', ()=>selectView(view, chooser.value));
       action?.addEventListener('click', ()=>expand(detailKey === 'buyer-notes' ? '' : 'buyer-notes', true));
       openButtons.forEach((button,index)=>button.addEventListener('click', ()=>{
         const id = matches[index].id;
         expand(detailKey === id ? '' : id, true);
       }));
-      main.querySelectorAll('[data-match-pivot]').forEach((button,index)=>button.addEventListener('click', ()=>{
-        selectView(byBusiness ? 'buyer' : 'business', matches[index].other.key, true);
+      diagram.querySelectorAll('[data-match-pivot]').forEach((button,index)=>button.addEventListener('click', ()=>{
+        selectView(view === 'business' ? 'buyer' : 'business', matches[index].other.key, true);
       }));
-      wireGroup(main);
       const validDetail = detailKey === 'buyer-notes' ? group.canReadNotes : matches.some(match=>match.id === detailKey);
       expand(validDetail ? detailKey : '', false);
     }
 
-    return { render, select, close };
+    return { render, select, close, focusGroup };
   }
 
   window.BSDMatchesGraph = { create };
