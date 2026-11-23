@@ -1,6 +1,9 @@
 .match-map { background: #fff; border: 1px solid #dde6ee; border-radius: 16px; box-shadow: 0 8px 20px #203d5a0e; }
 .match-map .vip-map-anchor a { font-weight: 800; color: inherit; overflow-wrap: anywhere; }
-.match-map .vip-map-controls { margin-block: 14px; }
+.match-graph-stack { display: grid; gap: 18px; margin-block-start: 16px; }
+.match-graph-item { min-width: 0; scroll-margin-block-start: 14px; }
+.match-graph-item + .match-graph-item { border-block-start: 1px solid #dce7ef; padding-block-start: 16px; }
+.match-graph-item:focus-visible { outline: 2px solid #1856a0; outline-offset: 4px; border-radius: 12px; }
 .match-map .vip-map-anchor { align-content: start; }
 .match-map .vip-map-anchor .vip-map-open { width: fit-content; }
 .match-map .vip-map-node-name { cursor: inherit; }
@@ -19,7 +22,6 @@
 .match-map :is(a, button, select, summary):focus-visible { outline: 2px solid #1856a0; outline-offset: 2px; }
 @media (max-width: 560px) {
   .match-map .vip-map-node-name { padding: 3px 0; }
-  .match-map .vip-map-controls select { flex: 1 1 100%; }
 }
 .match-map .vip-map-node-name:hover { background: transparent; }
 .match-map .vip-map-node-name a { color: inherit; }

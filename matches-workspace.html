@@ -42,7 +42,7 @@
 <script src="js/bsd-search.js?v=202610181400"></script>
 <script src="js/outreachModule.js?v=202610181800"></script>
 <link rel="stylesheet" href="css/vip-delivery-map.css?v=202611230635">
-<link rel="stylesheet" href="css/matches-graph.css?v=202611230930">
+<link rel="stylesheet" href="css/matches-graph.css?v=202611231015">
 <style>
   :root{
     --navy:#0e1b34; --navy-light:#16264a; --gold:#c9a24b; --gold-light:#e8cf8a;
@@ -340,7 +340,7 @@
 <div id="modalRoot"></div>
 <div id="toastRoot"></div>
 
-<script src="js/matches-graph.js?v=202611230930"></script>
+<script src="js/matches-graph.js?v=202611231015"></script>
 <script>
 let CURRENT_PROFILE = null;
 let ALL_LEADS = [], ALL_BROKERS = [], ALL_BUSINESSES = {}, ALL_MATCHES = [], ALL_PROFILES = {}, ALL_TASKS = [], ALL_ACTIVITY = [], ALL_OUTREACH = [];
@@ -899,9 +899,9 @@ function wireBranchActions(container){
     if (!match) return;
     const { isBroker } = counterpartyOf(match);
     const group = currentView === 'business' ? 'biz:' + match.business_id : isBroker ? 'broker:' + match.broker_id : 'buyer:' + match.buyer_id;
-    matchesGraph.select(currentView, group, match.id);
+    matchesGraph.select(group, match.id);
     setMatchLayout('graph');
-    document.getElementById('matchGraphDetailsTitle')?.focus();
+    document.getElementById('match-graph-' + group)?.querySelector('.vip-map-details h3')?.focus();
   }));
   container.querySelectorAll('[data-open]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='match-detail.html?id='+el.dataset.open; }));
   container.querySelectorAll('[data-task]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickTaskModal(el.dataset.task); }));
@@ -1447,14 +1447,13 @@ function setMatchView(view, focusKey, pivot = false){
     document.getElementById('searchBox').value = '';
     document.getElementById('matchSearchStatus').textContent = '';
   }
-  if (focusKey) matchesGraph.select(view, focusKey);
   document.querySelectorAll('[data-view]').forEach(button=>{
     const active = button.dataset.view === view;
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', active);
   });
   render();
-  if (focusKey) document.getElementById('matchGraphEntity')?.focus();
+  if (focusKey) matchesGraph.focusGroup(focusKey);
 }
 document.querySelectorAll('[data-view]').forEach(button=>{
   button.addEventListener('click', ()=>setMatchView(button.dataset.view));
@@ -1484,6 +1483,15 @@ document.getElementById('searchBox').addEventListener('input', e=>{
   clearTimeout(noteSearchTimer);
   if (!searchTerm.trim()) document.getElementById('matchSearchStatus').textContent = '';
   else noteSearchTimer = setTimeout(loadSearchNotes, 240);
+  const query = searchTerm.trim();
+  if (layout === 'graph' && query){
+    const buyerName = [...ALL_LEADS, ...ALL_BROKERS].some(person=>searchHit(query, [person.full_name]));
+    const businessName = Object.values(ALL_BUSINESSES).some(business=>searchHit(query, [business.internal_name]));
+    if (buyerName !== businessName){
+      setMatchView(buyerName ? 'buyer' : 'business');
+      return;
+    }
+  }
   render();
 });
 document.getElementById('filterToggleBtn').addEventListener('click', ()=>{
