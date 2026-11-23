@@ -305,8 +305,8 @@
       <button type="button" class="view-toggle-btn" data-view="buyer" aria-pressed="false">🧍 לפי קונים</button>
     </div>
     <div class="view-toggle" role="group" aria-label="סוג תצוגה">
-      <button type="button" class="view-toggle-btn" data-layout="graph" aria-pressed="false">תרשים</button>
-      <button type="button" class="view-toggle-btn active" data-layout="list" aria-pressed="true">רשימה</button>
+      <button type="button" class="view-toggle-btn active" data-layout="graph" aria-pressed="true">תרשים</button>
+      <button type="button" class="view-toggle-btn" data-layout="list" aria-pressed="false">רשימה</button>
     </div>
     <button class="ctrl-btn" id="filterToggleBtn" type="button">🔍 סינון מתקדם</button>
     <div class="sort-wrap">
@@ -346,7 +346,7 @@ let CURRENT_PROFILE = null;
 let ALL_LEADS = [], ALL_BROKERS = [], ALL_BUSINESSES = {}, ALL_MATCHES = [], ALL_PROFILES = {}, ALL_TASKS = [], ALL_ACTIVITY = [], ALL_OUTREACH = [];
 let searchTerm = "", activeQuickView = "", currentView = "business", createdByFilter = "";
 const OPEN_NODES = new Set();
-let layout = 'list';
+let layout = 'graph';
 let searchNotes = new Map(), notesSearchPending, notesSearchReady = false;
 const matchesGraph = window.BSDMatchesGraph.create({
   escape: esc, formatDate: fmtDateTime, userName, selectView: setMatchView,
