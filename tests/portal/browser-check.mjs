@@ -152,7 +152,7 @@ for(const [name,width,height] of [['desktop',1440,1000],['mobile-375',375,812]])
 for(const [name,width,height] of [['desktop',1200,800],['mobile-375',375,812]]){
  const calls=[];let account=null;
  const {context,page}=await newPage(width,height,async b=>{
-  if(b.action==='admin_detail')return {json:{ok:true,account,business:{id:BIZ},portal:{files:[]},files:[]}};
+  if(b.action==='admin_detail')return {json:{ok:true,account,business:{id:BIZ,agreement_status:'יש הסכם חתום',is_archived:false},portal:{files:[]},files:[]}};
   if(b.action==='admin_open'){account={id:'a1',business_id:BIZ,username:'23456',status:'active',pending:false,login_count:0,last_login_at:null};return {json:{ok:true,username:'23456',password:'Qa7Kd9mPx2',name:'בעלים א',phone:'050-0000000',contact_phone:'03-0000000',site:'www.bsd-bbi.co.il'}};}
   if(b.action==='admin_preview')return {json:{ok:true,token:'abcdefghjkmnpqrstuvwxyz23456789ABCDEFGHJKLMNPQRS',portal_url:'http://127.0.0.1:8766/portal/',preview:true,business_name:'עסק בדיקה'}};
   if(b.action==='dashboard')return {json:{ok:true,preview:true,business:{internal_name:'עסק בדיקה',owner_name:'בעלים',owner_phone:'050-0000000',city:''},files:[],matches:[],match_summary:{total:0,active:0,signed:0,full:0},update:null,contact:{phone:''}}};

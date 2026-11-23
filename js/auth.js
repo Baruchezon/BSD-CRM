@@ -128,8 +128,19 @@ async function requireAuth({returnToHubCards = false} = {}) {
     if (navFormsAll && profile.role !== 'admin' && profile.role !== 'manager') navFormsAll.style.display = 'none';
     const navTools = document.getElementById('navToolsWrap');
     if (navTools && profile.role !== 'admin' && profile.role !== 'manager') navTools.style.display = 'none';
+    if (profile.role === 'agent_authorized') {
+      const nav = document.querySelector('.bsd-header .nav-rows .nav');
+      if (nav && !nav.querySelector('[data-agent-vip]')) {
+        const vip = document.createElement('a'); vip.href = 'site-buyers.html'; vip.dataset.agentVip = '1';
+        vip.textContent = 'לקוחות VIP שלי'; vip.style.cssText = 'color:#fff;padding:8px 14px;text-decoration:none';
+        nav.appendChild(vip);
+      }
+    }
     if (persistProfile && window.BSDSessionCache) window.BSDSessionCache.write(session, profile);
     if (window.BSDDataCache){
+      // An agent's business grants can be revoked without changing their role.
+      // Re-read their data on navigation instead of restoring a daily full card.
+      if (profile.role === 'agent_authorized') window.BSDDataCache.reset();
       await window.BSDDataCache.activate(session, profile);
       window.BSDDataCache.observeWrites(window.supabaseClient);
       // Preload both large collections only on the dashboard. A list page
@@ -147,7 +158,7 @@ async function requireAuth({returnToHubCards = false} = {}) {
   }
 
   const cachedProfile = window.BSDSessionCache ? window.BSDSessionCache.read(session) : null;
-  if (cachedProfile){
+  if (cachedProfile && cachedProfile.role !== 'agent_authorized'){
     await activateProfile(cachedProfile, false);
     // The cached profile makes navigation immediate. Refresh permissions and
     // block status in the background without holding the page hostage to the

@@ -96,14 +96,17 @@ export function isTestSignup(row: Record<string, unknown> | null | undefined, bo
 // website lead for Baruch to classify). Never throws: signup must not fail because of it.
 async function linkSubscriberToCrm(subscriberId: string, row: Record<string, unknown>, isTest: boolean) {
   try {
-    const { data: sub } = await supabase.from(TABLE).select("crm_lead_id, buyer_id, lead_id").eq("id", subscriberId).maybeSingle();
+    const { data: sub } = await supabase.from(TABLE).select("crm_lead_id, buyer_id, lead_id, owner_id, referred_by_agent_id, referred_by_agent_name, original_source").eq("id", subscriberId).maybeSingle();
     if (!sub || sub.crm_lead_id) return;
     let leadId = (sub.buyer_id || sub.lead_id || null) as string | null;
     const p9 = String(row.phone9 || "").replace(/\D/g, "").slice(-9);
     if (!leadId && p9.length === 9) {
       const { data } = await supabase.rpc("website_lead_find_by_phone9", { p_phone9: p9, p_is_test: isTest });
       const hit = Array.isArray(data) ? data[0] : data;
-      if (hit?.id) leadId = hit.id;
+      if (hit?.id) {
+        const { data: candidate } = await supabase.from('leads').select('id,created_by,handled_by').eq('id',hit.id).maybeSingle();
+        if (!sub.owner_id || candidate?.created_by === sub.owner_id || candidate?.handled_by === sub.owner_id) leadId = hit.id;
+      }
     }
     if (!leadId && !isTest) {
       const { data: admin } = await supabase.from("profiles").select("id").eq("email", "baruch@bsd-bbi.co.il").maybeSingle();
@@ -124,8 +127,11 @@ async function linkSubscriberToCrm(subscriberId: string, row: Record<string, unk
         lead_side: "buyer",
         lead_side_source: "alert_signup",
         agreement_status: "אין הסכם",
-        created_by: admin?.id ?? null,
-        handled_by: admin?.id ?? null,
+        created_by: sub.owner_id || admin?.id || null,
+        handled_by: sub.owner_id || admin?.id || null,
+        referred_by_agent_id: sub.referred_by_agent_id,
+        referred_by_agent_name: sub.referred_by_agent_name,
+        original_source: sub.original_source || String(row.source || 'הרשמה לעדכונים באתר'),
         source_src: "business-alert-signup",
         notes: `[נרשם לעדכונים על עסקים למכירה]\n${interests ? `תחומים/אזורים: ${interests}\n` : ""}${row.budget_max ? `תקציב עד: ${row.budget_max}\n` : ""}${row.notes ? `הערות: ${row.notes}` : ""}`.trim(),
       }).select("id").single();
@@ -243,12 +249,13 @@ async function recordIdentityAudit(subscriberId: string, audit: { previous: unkn
   else console.log("business-alert signup kept the existing name and email", subscriberId);
 }
 
-async function writeSubscriber(row: Record<string, unknown>, consentIp: string, consentUserAgent: string) {
+async function writeSubscriber(row: Record<string, unknown>, consentIp: string, consentUserAgent: string, newOnly = false) {
   const now = new Date().toISOString();
   const emailRow = await findByEmail(String(row.email));
   const phoneRow = row.phone9 ? await findByPhone9(String(row.phone9)) : null;
   const plan = planSubscriberWrite({ emailRow, phoneRow });
   const target = [emailRow, phoneRow].find(item => item?.id && item.id === plan.targetId) || null;
+  if (newOnly && target?.id) return { id: target.id, unsubscribe_token: target.unsubscribe_token, signupKind: "already_registered", identityKept: true };
   const payload = writePayload(row, target, now, consentIp, consentUserAgent);
   if (payload.identity_kept && plan.targetId) {
     await recordIdentityAudit(String(plan.targetId), payload.identity_audit);
@@ -275,6 +282,7 @@ async function writeSubscriber(row: Record<string, unknown>, consentIp: string, 
   if (error?.code === "23505") {
     const again = (await findByEmail(String(row.email))) || (row.phone9 ? await findByPhone9(String(row.phone9)) : null);
     if (!again?.id) throw error;
+    if (newOnly) return { id: again.id, unsubscribe_token: again.unsubscribe_token, signupKind: "already_registered", identityKept: true };
     const retry = writePayload(row, again, now, consentIp, consentUserAgent);
     if (retry.identity_kept) {
       await recordIdentityAudit(String(again.id), retry.identity_audit);
@@ -523,7 +531,7 @@ Deno.serve(async req => {
     let invite: Record<string, unknown> | null = null;
     if (inviteSecret) {
       const lookup = supabase.from("business_alert_invites")
-        .select("id, lead_id, buyer_id, status, expires_at, opened_at");
+        .select("id, lead_id, buyer_id, status, expires_at, opened_at, created_by");
       const found = isShortCode(inviteSecret) && inviteSecret.length === 7
         ? await lookup.eq("short_code", inviteSecret).maybeSingle()
         : await lookup.eq("token_hash", hashInviteToken(inviteSecret)).maybeSingle();
@@ -531,12 +539,25 @@ Deno.serve(async req => {
       const open = inviteOpen(found.data, Date.now());
       if (!open.ok) return json({ ok: false, error: open.error, message: errorMessage(open.error) }, 400, origin);
       invite = found.data;
+      if (invite?.created_by) {
+        const { data: sender } = await supabase.from('profiles').select('id,full_name,role,status').eq('id',invite.created_by).maybeSingle();
+        if (sender?.role === 'agent_authorized' && sender.status === 'active') {
+          invite.agent_name = sender.full_name; invite.agent_id = sender.id;
+        }
+      }
     }
 
     const secret = updateTokenSecret();
     const phoneRow = signup.row.phone9 ? await findByPhone9(String(signup.row.phone9)) : null;
     const emailRow = await findByEmail(String(signup.row.email));
     const existing = (emailRow?.archived_at ? emailRow : null) || phoneRow || emailRow;
+    if (existing?.id && invite) {
+      // An invitation proves who referred someone, not permission to overwrite
+      // an existing subscriber's profile, ownership or consent preferences.
+      const { error } = await supabase.rpc("business_alert_complete_invite", { p_invite_id: invite.id, p_subscriber_id: existing.id });
+      if (error) throw error;
+      return json({ ok: true, status: "already_registered", duplicate: true }, 200, origin);
+    }
     if (existing?.id && !invite) {
       const now = new Date().toISOString();
       const fromArchive = archiveSignupPlan(existing, signup.row, now);
@@ -562,16 +583,14 @@ Deno.serve(async req => {
     }
 
     const invitedRow = { ...signup.row };
-    if (invite && !existing?.id) invitedRow.source = "invited_by_baruch";
-    const saved = await writeSubscriber(invitedRow, ip, cleanText(req.headers.get("user-agent"), 300));
+    if (invite && !existing?.id) invitedRow.source = invite.agent_id ? "invited_by_agent" : "invited_by_baruch";
+    const saved = await writeSubscriber(invitedRow, ip, cleanText(req.headers.get("user-agent"), 300), Boolean(invite));
     if (invite?.id) {
-      const link = invite.buyer_id ? { buyer_id: invite.buyer_id } : { lead_id: invite.lead_id };
-      await supabase.from(TABLE).update(link).eq("id", saved.id);
-      await supabase.from("business_alert_invites").update({
-        status: "joined",
-        joined_at: new Date().toISOString(),
-        subscriber_id: saved.id
-      }).eq("id", invite.id);
+      const { error: attributionError } = await supabase.rpc("business_alert_complete_invite", {
+        p_invite_id: invite.id, p_subscriber_id: saved.id, p_claim_new: saved.signupKind === "new"
+      });
+      if (attributionError) throw attributionError;
+      if (saved.signupKind !== "new") return json({ ok: true, status: "already_registered", duplicate: true }, 200, origin);
     }
     const test = isTestSignup(signup.row, body);
     if (test) await markTestSubscriber(String(saved.id));
@@ -595,7 +614,8 @@ Deno.serve(async req => {
       previousStatus: saved.previousStatus,
       consent_at: saved.consentAt,
       identityKept: saved.identityKept === true,
-      invited_by_baruch: Boolean(invite)
+      invited_by_baruch: Boolean(invite) && !invite?.agent_id,
+      invited_by_agent: invite?.agent_name || null
     });
     const internal = await sendEmail(test ? TEST_SINK : INTERNAL_TO, `${test ? "[בדיקה] " : ""}${alert.subject}`, alert.html, alert.text, undefined, alert.from);
     if (!internal.sent) console.error("Internal alert email was not sent", internal.error || "");

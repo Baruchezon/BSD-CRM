@@ -33,6 +33,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { evaluateSaleFileAccess, missingSaleFileEmailMessage } from '../_shared/sale-file-send-rules.js';
+import { authorizeSaleFiles } from '../_shared/authorize-sale-files.ts';
 
 function cleanEnv(v: string | undefined): string {
   return (v || '').trim();
@@ -146,6 +147,10 @@ Deno.serve(async (req: Request) => {
 
     if (!business_id || !recipientId || !Array.isArray(file_ids) || !file_ids.length) {
       return jsonResponse(400, { error: 'חסרים שדות חובה: business_id, buyer_id/broker_id, file_ids (רשימה לא ריקה)' });
+    }
+
+    if (!await authorizeSaleFiles(supabase, actorId!, business_id, recipientType, recipientId, file_ids)) {
+      return jsonResponse(403, { error: 'אין הרשאה לחומרים או לנמען שנבחר' });
     }
 
     // 2. שליפת פרטי הנמען מה-DB (לא מהלקוח) - כולל agreement_status האמיתי כרגע.

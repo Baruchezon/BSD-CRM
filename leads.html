@@ -286,10 +286,10 @@
 
 <script src="js/config.js?v=202610061550"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
-<script src="js/auth.js?v=202611181930"></script>
+<script src="js/auth.js?v=202611231240"></script>
 <script src="js/whatsapp-api.js?v=202610111200"></script>
 <script src="js/whatsapp-card.js?v=202610111200"></script>
-<script src="js/permissions.js?v=202608251709"></script>
+<script src="js/permissions.js?v=202611231240"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/push.js?v=202610051500"></script>
 <script src="js/standaloneRecording.js?v=20261012-1"></script>
@@ -303,7 +303,7 @@
 <script src="js/crmStage.js?v=202610221200"></script>
 <script src="js/phoneCalls.js?v=202610142200"></script>
 <script src="js/listReturn.js?v=202611092100"></script>
-<script src="js/business-alert-invite.js?v=202611230515"></script>
+<script src="js/business-alert-invite.js?v=202611231240"></script>
 <script src="js/meetingPrepSheet.js?v=202611151100"></script>
 <script>
 let ALL_LEADS = [];
@@ -1024,7 +1024,7 @@ function canManageLeadAccess(l){
 function isGrantOnlyViewer(l){
   if (!l || !CURRENT_PROFILE) return false;
   if (l.type !== 'buyer' && l.type !== 'partner') return false;
-  return CURRENT_PROFILE.role !== 'admin' && l.created_by !== CURRENT_PROFILE.id;
+  return CURRENT_PROFILE.role !== 'admin' && l.created_by !== CURRENT_PROFILE.id && l.handled_by !== CURRENT_PROFILE.id;
 }
 
 function canSendAgreement(){
@@ -1273,6 +1273,7 @@ function openLeadForm(id, forcedType, prefillData){
         <div class="field"><label>סוג המספר</label><select id="entity_type">${leadEntityTypeOptions(lead?.entity_type)}</select></div>
         ${fieldRow('company','חברה', lead?.company)}
         ${fieldRow('source','מקור הפנייה', lead?.source)}
+        ${lead ? `<div class="field"><label>הובא על ידי</label><div>${esc(lead.referred_by_agent_name || lead.original_source || lead.source || 'לא תועד')}</div></div>` : ''}
         ${fieldRow('status','סטטוס', lead?.status)}
         <div class="field"><label>סטטוס הסכם</label>
           <select id="agreement_status">

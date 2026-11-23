@@ -114,7 +114,7 @@ test('edge function: read-only, same auth, uses the engine; page + button wired'
   assert.match(fn, /from '\.\/engine\.js'/);
   assert.match(fn, /minScore: 0/);
   assert.match(fn, /s\.score >= MIN_SCORE/);
-  assert.match(fn, /callerProfile\.status === 'active' && \(fullAccess \|\| callerProfile\.can_use_ai_match === true\)/);
+  assert.match(fn, /callerProfile\.status === 'active' && \(fullAccess \|\| callerProfile\.role === 'agent_authorized' \|\| callerProfile\.can_use_ai_match === true\)/);
   assert.doesNotMatch(fn, /\.(insert|update|upsert|delete)\(/);
   assert.doesNotMatch(fn, /anthropic|openai|generativelanguage/i);
   const app = readFileSync(new URL('../app.html', import.meta.url), 'utf8');
@@ -124,7 +124,7 @@ test('edge function: read-only, same auth, uses the engine; page + button wired'
   assert.match(page, /functions\/v1\/match-suggestions-report/);
   assert.match(page, /leads\.html\?open=/); assert.match(page, /businesses\.html\?open=/);
   assert.match(page, /למה זה מתאים/); assert.match(page, /מה לא מתאים \/ לשים לב/); assert.match(page, /איך הגענו ל-/);
-  assert.match(page, /!fullAccess && !profile\.can_use_ai_match/);
+  assert.match(page, /!fullAccess && profile\.role !== 'agent_authorized' && !profile\.can_use_ai_match/);
   assert.match(page, /id="targetSearch"/);
   assert.match(page, /from=smart-matches/);
   assert.doesNotMatch(page, /<select id="targetId"/);

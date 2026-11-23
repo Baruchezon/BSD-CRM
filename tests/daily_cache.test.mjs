@@ -124,7 +124,7 @@ test('stalled browser storage cannot prevent dataset loading',async()=>{
 
 test('authentication returns without waiting for unrelated background datasets',async()=>{
  const auth=fs.readFileSync(new URL('../js/auth.js',import.meta.url),'utf8');
- const start=auth.indexOf('async function requireAuth()');const end=auth.indexOf('// ============================================================',start);
+ const start=auth.indexOf('async function requireAuth(');const end=auth.indexOf('// ============================================================',start);
  const session={user:{id:'u1'}},profile={id:'u1',role:'admin',status:'active'};
  const query={select(){return this},eq(){return this},single(){return Promise.resolve({data:profile,error:null})}};
  let calls=0;

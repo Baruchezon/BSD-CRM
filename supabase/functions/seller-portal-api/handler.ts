@@ -46,7 +46,7 @@ export function createHandler(db:any,opts:Options){
   // performed_by / created_by join profiles for full_name only. Phone and email stay out of the select.
   const noteSelect='match_id,action_type,description,buyer_response,follow_up_date,occurred_at,created_at,visible_to_client,deleted_at,performed_by,created_by,performer:profiles!performed_by(full_name),creator:profiles!created_by(full_name)';
   const [buyers,permissions,anonSends,fullSends,history,notesRaw]=await Promise.all([
-   query(db.from('leads').select('id,type,full_name,first_name,last_name,company,agreement_status,agreement_sent,agreement_signed_date,requested_field,requested_categories,requested_area').in('id',bids).eq('type','buyer')),
+   query(db.from('leads').select('id,type,full_name,first_name,last_name,company,agreement_status,agreement_sent,agreement_signed_date,requested_field,requested_categories,requested_area,referred_by_agent_name').in('id',bids).eq('type','buyer')),
    query(db.from('seller_portal_match_permissions').select('match_id,visible,disclose_identity').in('match_id',mids)),
    query(db.from('anon_distributions').select('business_id,buyer_id,distribution_type,delivery_status,sent_at,created_at').eq('business_id',id).in('buyer_id',bids)),
    query(db.from('audit_log').select('record_id,details,occurred_at').eq('action','send_sale_files_to_buyer').eq('record_id',id).limit(500)),

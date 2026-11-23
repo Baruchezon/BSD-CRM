@@ -92,7 +92,7 @@
     document.getElementById("inviteOpen").onclick = () => openModal(lead, cardType);
   }
   function menuItem(id, profile) {
-    if (!["admin", "manager"].includes(profile?.role)) return "";
+    if (!["admin", "manager", "agent_authorized"].includes(profile?.role)) return "";
     return `<a href="javascript:void(0)" onclick="openVipInviteFromRow(event, '${esc(id)}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">${VIP_TITLE}</a>`;
   }
   function openFromMenu(event, lead) {

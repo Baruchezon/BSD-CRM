@@ -236,7 +236,7 @@
 
 <script src="js/config.js?v=20260930archive1"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
-<script src="js/auth.js?v=202611181930"></script>
+<script src="js/auth.js?v=202611231240"></script>
 <script src="js/bsd-search.js?v=202611092100"></script>
 <script src="js/smart-match-picker.js?v=202611092340"></script>
 <script src="js/listReturn.js?v=202611092100"></script>
@@ -869,7 +869,7 @@ document.querySelectorAll('#fGroup button').forEach(b => b.addEventListener('cli
   const profile = await requireAuth();
   if (!profile) return;
   const fullAccess = profile.role === 'admin' || profile.role === 'manager';
-  if (!fullAccess && !profile.can_use_ai_match){ document.getElementById('noAccess').style.display = 'block'; return; }
+  if (!fullAccess && profile.role !== 'agent_authorized' && !profile.can_use_ai_match){ document.getElementById('noAccess').style.display = 'block'; return; }
   profileId = profile.id;
   document.getElementById('headerUserInfo').textContent = ((profile.full_name && profile.full_name.trim()) ? profile.full_name : profile.email);
   document.getElementById('mainWrap').style.display = 'block';
