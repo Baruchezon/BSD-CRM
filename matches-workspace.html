@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202611052310';
+    var PAGE_BUILD = '202611230520';
     window.PAGE_BUILD = PAGE_BUILD;
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -752,6 +752,7 @@ function branchRowHtml(m, otherPartyLabel){
       <span class="chip chip-${STATUS_COLOR[m.status]||'gray'}">${esc(m.status||'—')}</span>
     </div>
     <div class="brn-facts">
+      ${m.vip_email_sent_at ? `<span class="chip chip-blue" title="${esc(fmtDateTime(m.vip_email_sent_at))}">נשלח ללקוח VIP באימייל</span> · ` : ''}
       מטפל: ${handler?esc(handler):'<span class="chip chip-red">ללא מטפל</span>'}
       ${m.next_action_at?` · מעקב: <span class="${overdue?'overdue-flag':''}">${overdue?'⏰ ':''}${fmtDate(m.next_action_at)}</span>`:''}
       ${openTasks?` · ${openTasks} משימות פתוחות`:''}
