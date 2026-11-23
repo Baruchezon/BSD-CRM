@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611230420';
+    var PAGE_BUILD = '202611230510';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -157,6 +157,7 @@
   .wl-fs-bar button{ border:none; background:var(--gold,#c9a227); color:#0e1b34; border-radius:8px; padding:8px 14px; font-family:inherit; font-size:.9rem; font-weight:800; cursor:pointer; }
   .wl-fs-backdrop{ position:fixed; inset:0; z-index:208; background:rgba(14,27,52,.7); }
 </style>
+<link rel="stylesheet" href="css/lead-rows.css?v=202611230510">
 </head>
 <body>
 
@@ -264,9 +265,9 @@
         <input type="checkbox" id="y2026FilterNeedsReview" onchange="renderY2026ReviewTable()"> רק דורש בדיקה
       </label>
     </div>
-    <div class="table-scroll-wrap" style="position:relative;">
+    <div class="table-scroll-wrap lead-compact-wrap" style="position:relative;">
       <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-        <table>
+        <table class="lead-compact y2026">
           <thead>
             <tr>
               <th>שם / פרטים</th><th>סיווג</th><th>קיים במערכת</th><th>תאריך פנייה</th><th>סטטוס בדיקה</th>
@@ -290,9 +291,9 @@
     </select>
   </div>
 
-  <div class="table-scroll-wrap" style="position:relative;">
+  <div class="table-scroll-wrap lead-compact-wrap" style="position:relative;">
   <div class="table-scroll-inner" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-  <table>
+  <table class="lead-compact">
     <thead>
       <tr id="tableHead">
         <th>שם / עסק</th><th>טלפון</th><th>עיר</th><th>הוזן ע"י</th><th>נוצר</th><th>הערות</th>

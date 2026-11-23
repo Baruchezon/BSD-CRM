@@ -1,0 +1,260 @@
+/* Shared compact rows for every לידים category list and for קונים VIP נרשמים.
+   Desktop: one dense line, zebra, colored status pill, sticky header.
+   Mobile: two lines, no page-level horizontal scroll. */
+
+.lead-rows,
+table.lead-compact{
+  --lr-line:#efe8d6;
+  --lr-zebra:#f7f4ea;
+  --lr-ink:#142033;
+}
+
+/* ----- subscribers (div rows) ----- */
+.lead-rows{
+  background:#fff;
+  border-radius:12px;
+  overflow:hidden;
+  box-shadow:0 1px 0 rgba(255,255,255,.7) inset, 0 8px 18px rgba(14,27,52,.08);
+}
+.lead-rows-head,
+.lead-row{
+  display:grid;
+  grid-template-columns:minmax(0,1.5fr) minmax(92px,.8fr) auto auto minmax(0,1fr) auto auto;
+  gap:6px 8px;
+  align-items:center;
+  padding:4px 10px;
+  min-height:34px;
+}
+.lead-rows-head{
+  position:sticky;
+  top:0;
+  z-index:3;
+  background:var(--navy,#0e1b34);
+  color:#fff;
+  font-size:.72rem;
+  font-weight:800;
+  min-height:30px;
+}
+.lead-row{cursor:pointer;color:var(--lr-ink);border-top:1px solid var(--lr-line);}
+.lead-row:nth-child(even){background:var(--lr-zebra);}
+.lead-row:hover,.lead-row.on{background:#fff8e8;}
+.lead-row.on{box-shadow:inset 3px 0 0 #c9a24b;}
+.lr-name{font-weight:800;color:var(--navy,#0e1b34);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lr-phone,.lr-meta,.lr-date{font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.lr-phone{direction:ltr;text-align:right;unicode-bidi:isolate;color:#243044;}
+.lr-meta,.lr-date{color:#5d6b80;}
+.lr-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  max-width:100%;
+  border-radius:999px;
+  padding:1px 8px;
+  font-size:.7rem;
+  font-weight:800;
+  line-height:1.5;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.lr-ok{background:#e5f6ec;color:#14663a;}
+.lr-off{background:#fde8e4;color:#8d2d2d;}
+.lr-wait{background:#fff4c2;color:#6d5313;}
+.lr-actions{display:flex;gap:4px;justify-content:flex-end;}
+.lr-act{
+  border:0;
+  border-radius:999px;
+  padding:3px 8px;
+  min-height:26px;
+  font:inherit;
+  font-size:.7rem;
+  font-weight:800;
+  cursor:pointer;
+  background:#eef2f8;
+  color:#0e1b34;
+  box-shadow:0 2px 0 rgba(14,27,52,.12);
+}
+.lr-act-danger{background:#fde8e4;color:#8d2d2d;}
+
+/* ----- lead category tables ----- */
+.lead-compact-wrap{max-width:100%;}
+table.lead-compact{width:100%;border-collapse:separate;border-spacing:0;}
+table.lead-compact thead th{
+  position:sticky;
+  top:0;
+  z-index:3;
+  background:var(--navy,#0e1b34);
+  box-shadow:0 1px 0 rgba(0,0,0,.25);
+}
+table.lead-compact tbody td{
+  padding:4px 8px !important;
+  font-size:.8rem;
+  vertical-align:middle;
+  line-height:1.3;
+}
+table.lead-compact tbody tr:nth-child(even):not(.row-spoken):not(.row-meeting):not(.row-followup){background:var(--lr-zebra);}
+table.lead-compact tbody tr:nth-child(odd):not(.row-spoken):not(.row-meeting):not(.row-followup){background:#fff;}
+table.lead-compact tbody tr:hover:not(.empty-row){background:#fff8e8;}
+table.lead-compact .primary-name,
+table.lead-compact .sub-name{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+table.lead-compact .notes-preview{
+  height:1.3em;
+  max-height:1.3em;
+  min-height:0;
+  -webkit-line-clamp:1;
+  line-clamp:1;
+}
+table.lead-compact .row-menu-btn{padding:0 6px;font-size:.95rem;line-height:1.2;}
+table.lead-compact select.call-status-select,
+table.lead-compact .badge,
+table.lead-compact .side-badge{
+  border-radius:999px;
+  max-width:100%;
+}
+table.lead-compact select.call-status-select{
+  background:#fff8e6;
+  border:1px solid #e4d7a4;
+  font-weight:800;
+  padding:1px 6px;
+  height:24px;
+}
+table.lead-compact .phone-cell{min-width:0;}
+table.lead-compact td,
+table.lead-compact th{overflow:hidden;text-overflow:ellipsis;}
+
+@media (min-width:701px){
+  .lead-compact-wrap{
+    max-height:calc(100vh - 210px);
+    overflow:auto;
+  }
+  .lead-compact-wrap .table-scroll-inner{overflow:visible !important;}
+}
+
+@media (max-width:700px){
+  .lead-rows-head{display:none;}
+  .lead-rows{overflow:hidden;}
+  .lead-row{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:2px 8px;
+    max-height:3.35em;
+    overflow:hidden;
+    min-height:0;
+    padding:5px 8px;
+    max-width:100%;
+  }
+  .lead-row .lr-name{order:1;flex:1 1 42%;font-size:.82rem;}
+  .lead-row .lr-phone{order:2;flex:0 0 auto;font-size:.78rem;}
+  .lead-row .lr-actions{order:3;flex:0 0 auto;margin-inline-start:auto;}
+  .lead-row .lr-pill,
+  .lead-row .lr-meta,
+  .lead-row .lr-date{order:4;flex:0 1 auto;font-size:.72rem;}
+
+  .lead-compact-wrap,
+  .lead-compact-wrap .table-scroll-inner{
+    overflow:hidden !important;
+    max-height:none;
+    max-width:100%;
+  }
+  table.lead-compact thead{display:none !important;}
+  table.lead-compact,
+  table.lead-compact tbody{display:block;width:100%;max-width:100%;}
+  table.lead-compact tr{
+    display:grid !important;
+    width:100% !important;
+    max-width:100%;
+    margin:0 !important;
+    padding:5px 8px !important;
+    border:0 !important;
+    border-bottom:1px solid var(--lr-line) !important;
+    border-radius:0 !important;
+    box-sizing:border-box;
+    align-items:center;
+    column-gap:6px;
+    row-gap:1px;
+    overflow:hidden;
+  }
+  table.lead-compact td{
+    display:block !important;
+    width:auto !important;
+    min-width:0;
+    max-width:100%;
+    padding:0 !important;
+    border:0 !important;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  table.lead-compact td::before{content:none !important;}
+  table.lead-compact td:nth-child(1) > div{
+    display:flex !important;
+    flex-flow:row nowrap;
+    align-items:center;
+    gap:4px;
+    min-width:0;
+    overflow:hidden;
+  }
+  table.lead-compact.call-cols td:nth-child(1) div[style*="margin-top"]{display:none !important;}
+  table.lead-compact td:nth-child(1) .primary-name{
+    flex:1 1 auto;
+    min-width:0;
+    display:block;
+  }
+  table.lead-compact td.phone-cell{overflow:visible;white-space:nowrap;}
+  table.lead-compact select.call-status-select{max-width:108px;font-size:.68rem;}
+  table.lead-compact .notes-preview{
+    white-space:nowrap;
+    height:1.25em;
+    max-height:1.25em;
+  }
+  table.lead-compact .sub-name{display:inline;margin-inline-start:6px;}
+  table.lead-compact tr.empty-row,
+  table.lead-compact.y2026 tr.empty-row,
+  table.lead-compact.call-cols tr.empty-row{display:block !important;}
+  table.lead-compact tr.empty-row td{
+    display:block !important;
+    width:100% !important;
+    text-align:center;
+    white-space:normal;
+    padding:14px 8px !important;
+  }
+
+  /* 8 columns when call status is on: two lines, every field still present. */
+  table.lead-compact.call-cols tr{
+    grid-template-columns:minmax(72px,1.2fr) max-content minmax(0,7.2em) minmax(0,4.8em);
+  }
+  table.lead-compact.call-cols td:nth-child(1){grid-area:1 / 1;}
+  table.lead-compact.call-cols td:nth-child(2){grid-area:1 / 2;}
+  table.lead-compact.call-cols td:nth-child(4){grid-area:1 / 3;}
+  table.lead-compact.call-cols td:nth-child(7){grid-area:1 / 4;}
+  table.lead-compact.call-cols td:nth-child(3){grid-area:2 / 1;}
+  table.lead-compact.call-cols td:nth-child(6){grid-area:2 / 2;}
+  table.lead-compact.call-cols td:nth-child(5){grid-area:2 / 3;}
+  table.lead-compact.call-cols td:nth-child(8){grid-area:2 / 4;}
+
+  /* 6 columns on the other lead tabs. */
+  table.lead-compact:not(.call-cols):not(.y2026) tr{
+    grid-template-columns:minmax(0,1.4fr) auto minmax(0,.8fr);
+  }
+  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(1){grid-area:1 / 1;}
+  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(2){grid-area:1 / 2;}
+  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(5){grid-area:1 / 3;}
+  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(3){grid-area:2 / 1;}
+  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(4){grid-area:2 / 2;}
+  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(6){grid-area:2 / 3;}
+
+  /* לידים 2026: name, classification, exists, date, review status. */
+  table.lead-compact.y2026 tr{
+    grid-template-columns:minmax(0,1.4fr) auto auto;
+  }
+  table.lead-compact.y2026 td:nth-child(1){grid-area:1 / 1;}
+  table.lead-compact.y2026 td:nth-child(2){grid-area:1 / 2;}
+  table.lead-compact.y2026 td:nth-child(5){grid-area:1 / 3;}
+  table.lead-compact.y2026 td:nth-child(3){grid-area:2 / 1;}
+  table.lead-compact.y2026 td:nth-child(4){grid-area:2 / 2 / 2 / 4;}
+}

@@ -284,7 +284,9 @@ test('the tools menu points at the new screen and mail files use the sender cons
   assert.match(leads, /קונים VIP נרשמים/);
   assert.equal(/<a class="lead-tab"[^>]*>נרשמים</.test(leads), false);
   const buyers = fs.readFileSync(new URL('../site-buyers.html', import.meta.url), 'utf8');
-  assert.match(buyers, /class="person/);
+  assert.match(buyers, /class="lead-row/);
+  assert.match(buyers, /lead-rows\.css\?v=/);
+  assert.equal(/class="person[\s"]/.test(buyers), false);
   assert.equal(buyers.includes('<table>'), false);
   assert.match(buyers, /is_test !== true/);
   assert.match(buyers, /data-kind="/);
