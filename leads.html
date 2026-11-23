@@ -284,7 +284,8 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202610061550"></script>
+<script src="js/config.js?v=202611231330"></script>
+<script src="js/record-origin.js?v=202611231310"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
 <script src="js/auth.js?v=202611231240"></script>
 <script src="js/whatsapp-api.js?v=202610111200"></script>
@@ -727,6 +728,7 @@ function leadIdentityCell(l, personName, statusEmoji){
       <span class="record-number-slot">${numberBadge}</span>
     </div>
     ${subTitle ? `<div class="record-sub-line">${esc(subTitle)}</div>` : ''}
+    ${BSDOrigin.html(l)}
     <div class="record-meta-line">${releasedBadge}${noteBadge}</div>
     <div class="record-status-grid" onclick="event.stopPropagation()">
       <div class="record-status-slot">${rating}</div>
@@ -1273,7 +1275,7 @@ function openLeadForm(id, forcedType, prefillData){
         <div class="field"><label>סוג המספר</label><select id="entity_type">${leadEntityTypeOptions(lead?.entity_type)}</select></div>
         ${fieldRow('company','חברה', lead?.company)}
         ${fieldRow('source','מקור הפנייה', lead?.source)}
-        ${lead ? `<div class="field"><label>הובא על ידי</label><div>${esc(lead.referred_by_agent_name || lead.original_source || lead.source || 'לא תועד')}</div></div>` : ''}
+        ${lead ? `<div class="field"><label>שיוך ומקור</label><div>${esc(BSDOrigin.text(lead))}</div></div>` : ''}
         ${fieldRow('status','סטטוס', lead?.status)}
         <div class="field"><label>סטטוס הסכם</label>
           <select id="agreement_status">

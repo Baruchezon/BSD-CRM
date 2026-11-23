@@ -234,7 +234,8 @@
 
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=20260930archive1"></script>
+<script src="js/config.js?v=202611231330"></script>
+<script src="js/record-origin.js?v=202611231310"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
 <script src="js/auth.js?v=202611231240"></script>
 <script src="js/bsd-search.js?v=202611092100"></script>
@@ -325,7 +326,7 @@ function paintDrop(groups){
     if (g.label) html += `<div class="sm-drop-head">${esc(g.label)}</div>`;
     rows.forEach(r => {
       const extra = [r.number, r.detail, r.status, r.match_count ? (r.match_count + ' התאמות') : ''].filter(Boolean).join(' · ');
-      html += `<button type="button" class="sm-drop-item${cursor === PICK_HI ? ' on' : ''}" role="option" data-i="${cursor}"><b>${esc(r.name)}</b><small>${esc(extra)}</small></button>`;
+      html += `<button type="button" class="sm-drop-item${cursor === PICK_HI ? ' on' : ''}" role="option" data-i="${cursor}"><b>${esc(r.name)}</b>${BSDOrigin.html(r)}<small>${esc(extra)}</small></button>`;
       cursor++;
     });
   });
@@ -781,6 +782,7 @@ function cardHtml(s, idx){
           <span class="sm-arrow">⟷</span>
           <a href="${bizUrl}" ${stop} title="פתח את כרטיס העסק">🏪 ${esc(s.business)}</a>${z.number?`<span class="chip gray">${esc(z.number)}</span>`:''}
         </div>
+        ${BSDOrigin.html(b)}${BSDOrigin.html(z)}
         <div class="sm-sum">${esc(s.summary)}</div>
         ${briefHtml(TARGET_TYPE === 'business' ? s.buyer_brief : s.business_brief)}
         <div class="sm-chips">${chips.join('')}</div>

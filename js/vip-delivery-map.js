@@ -17,7 +17,7 @@
     for (const pair of pairs) {
       const id = business ? pair.business_number : pair.subscriber_id;
       if (!groups.has(id)) {
-        groups.set(id, { id, name: business ? pair.business_name : pair.buyer_name, pairs: [] });
+        groups.set(id, { id, name: business ? pair.business_name : pair.buyer_name, origin: business ? pair.business_origin : pair.buyer_origin, pairs: [] });
       }
       groups.get(id).pairs.push(pair);
     }
@@ -117,7 +117,7 @@
       graph.innerHTML = `<div class="vip-map-diagram ${byBusiness ? '' : 'vip-map-reverse'}">
         <div class="vip-map-anchor ${byBusiness ? 'vip-map-business' : 'vip-map-buyer'}">
           <span>${byBusiness ? 'עסק שנשלח' : 'קונה שקיבל'}</span>
-          <strong>${escape(group.name)}</strong>
+          <strong>${escape(group.name)}</strong>${window.BSDOrigin?.html(group.origin) || ''}
           <span>${byBusiness ? 'נשלח אל ' : 'קיבל '}${destinationCount}</span>
         </div>
         <ul class="vip-map-branches" aria-label="${byBusiness ? 'קונים שקיבלו' : 'עסקים שנשלחו'}">
@@ -125,7 +125,7 @@
             <span class="vip-map-arrow" aria-hidden="true"></span>
             <div class="vip-map-node ${byBusiness ? 'vip-map-buyer' : 'vip-map-business'}">
               <button type="button" class="vip-map-node-name" data-map-switch="${index}">
-                <strong>${escape(byBusiness ? pair.buyer_name : pair.business_name)}</strong>
+                <strong>${escape(byBusiness ? pair.buyer_name : pair.business_name)}</strong>${window.BSDOrigin?.html(byBusiness ? pair.buyer_origin : pair.business_origin) || ''}
                 <span>${byBusiness ? '' : escape(pair.business_number) + ' · '}${sendCount(pair.send_count)} · ${escape(dateLabel(pair.last_sent_at))}</span>
               </button>
               <button type="button" class="vip-map-open" data-map-details="${index}"
