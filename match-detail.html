@@ -11,7 +11,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610101234';
+    var PAGE_BUILD = '202611230520';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -1115,6 +1115,7 @@ function renderHero(){
       <div style="text-align:left;">
         <span class="status-pill" id="statusPillDisplay" style="background:#eef1f6;color:var(--navy);">${esc(MATCH.status)}</span>
         <span class="disclosure-badge disc-${dl}">${DISCLOSURE_LABELS[dl]}</span>
+        ${MATCH.vip_email_sent_at ? `<div class="hero-sub">נשלח ללקוח VIP באימייל · ${esc(fmtDateTime(MATCH.vip_email_sent_at))}</div>` : ''}
       </div>
     </div>
     <div id="matchNavBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid #eee;font-size:.78rem;"></div>

@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202611230510';
+    var PAGE_BUILD = '202611230520';
     window.PAGE_BUILD = PAGE_BUILD;
     var guardKey = 'bsd_ver_reload_guard:' + (location.pathname.split('/').pop() || 'index');
     function readGuard(){ try { return localStorage.getItem(guardKey); } catch(e){ try { return sessionStorage.getItem(guardKey); } catch(e2){ return 'storage-blocked'; } } }
@@ -40,27 +40,17 @@ body{margin:0;background:linear-gradient(180deg,#f7f1e4 0,#eef3f8 220px);color:#
 .top p{margin:6px 0 0;color:#5d6b80}
 .back{background:#0e1b34;color:#fff;border:0;border-radius:12px;padding:12px 18px;font:inherit;font-weight:800;cursor:pointer}
 .banner{background:#fff4c2;border:1px solid #e2c15a;color:#6d5313;border-radius:14px;padding:12px 14px;font-weight:800;margin-bottom:14px}
-.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}
 .card{border:0;border-radius:16px;padding:14px 16px;color:#fff;min-height:92px;text-align:right;font:inherit;cursor:pointer;box-shadow:0 7px 0 rgba(8,16,32,.28),0 14px 22px rgba(14,27,52,.16);transition:transform .12s ease,box-shadow .12s ease}
-.card:hover,.person:hover,.person-row:hover,button.bar:hover{transform:translateY(-3px)}
-.card:active,.person:active,.person-row:active,button.bar:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(8,16,32,.28)}
-.card.on,button.bar.on{outline:3px solid #f0d48a;outline-offset:2px}
+.card:hover,.person:hover,.person-row:hover{transform:translateY(-3px)}
+.card:active,.person:active,.person-row:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(8,16,32,.28)}
+.card.on{outline:3px solid #f0d48a;outline-offset:2px}
 .card b{display:block;font-size:1.8rem;line-height:1}
 .card span{display:block;margin-top:6px;font-size:.86rem;opacity:.95}
 .c1{background:linear-gradient(135deg,#0e1b34,#24507a)}
-.c2{background:linear-gradient(135deg,#1d6a8a,#3aa0b8)}
-.c3{background:linear-gradient(135deg,#1f7a4d,#49b07a)}
 .c4{background:linear-gradient(135deg,#a33b4a,#e07a62)}
-.c5{background:linear-gradient(135deg,#5a3d8a,#8b6bc4)}
-.c6{background:linear-gradient(135deg,#0f7a62,#2fbf8f)}
-.c7{background:linear-gradient(135deg,#8a4b12,#e0a15a)}
-.c8{background:linear-gradient(135deg,#7a1f4a,#d25b8a)}
-.c9{background:linear-gradient(135deg,#3d2a6d,#8a6ad4)}
-.splits{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
 .panel{background:#fff;border-radius:16px;padding:14px 16px;box-shadow:0 8px 22px rgba(14,27,52,.06)}
 .panel h2{margin:0 0 10px;font-size:1rem;color:#0e1b34}
-button.bar{display:grid;grid-template-columns:168px 1fr 28px;gap:8px;align-items:center;margin:6px 0;width:100%;border:0;border-radius:12px;padding:8px 10px;font:inherit;font-size:.84rem;color:inherit;text-align:right;cursor:pointer;background:linear-gradient(180deg,#fff,#f3f6fb);box-shadow:0 4px 0 #d5dbe6,0 8px 16px rgba(14,27,52,.08);transition:transform .12s ease,box-shadow .12s ease}
-.bar i{display:block;height:10px;border-radius:99px;background:linear-gradient(90deg,#c9a24b,#0e1b34)}
 .searchbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .searchbar input,.searchbar select{border:1px solid #d7deea;border-radius:12px;padding:12px 14px;font:inherit;background:#fff}
 .searchbar input{flex:1;min-width:220px;font-size:1rem}
@@ -118,8 +108,17 @@ tr.row:hover{background:#f8fbff}
 .tone-3{background:linear-gradient(135deg,#a33b4a,#e07a62)}
 .tone-4{background:linear-gradient(135deg,#5a3d8a,#8b6bc4)}
 .tone-5{background:linear-gradient(135deg,#8a4b12,#e0a15a)}
-@media(max-width:900px){.cards,.splits{grid-template-columns:1fr 1fr}.wrap{padding:12px}.person-row{grid-template-columns:1fr 1fr}}
-@media(max-width:640px){.cards,.splits{grid-template-columns:1fr}.person-row{grid-template-columns:1fr}}
+@media(max-width:900px){.wrap{padding:12px}.person-row{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.person-row{grid-template-columns:1fr}}
+.delivery-heading,.delivery-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.delivery-heading label{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.delivery-heading select{padding:7px;border:1px solid #d7deea;border-radius:8px;background:#fff;font:inherit;color:inherit}
+.delivery-footer{margin-top:10px}
+.delivery-footer button,#archiveBtn{border:0;border-radius:8px;background:#eef2f8;color:#0e1b34;padding:8px 12px;font:inherit;font-weight:700;cursor:pointer}
+.delivery-footer button:disabled{opacity:.5;cursor:default}
+.delivery-list .lead-row,.delivery-list .lead-rows-head{grid-template-columns:minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,.65fr) minmax(0,.55fr);cursor:default}
+.delivery-list .lead-row span{overflow-wrap:anywhere}
+@media(max-width:640px){.delivery-list .lead-rows-head{display:none}.delivery-list .lead-row{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px}}
 </style>
 </head>
 <body>
@@ -127,15 +126,35 @@ tr.row:hover{background:#f8fbff}
   <div class="top">
     <div>
       <h1 id="pageTitle">קונים VIP נרשמים</h1>
-      <p id="pageIntro">כאן רואים מי ביקש עדכונים, ומה מתאים לו. בלי להעמיס.</p>
+      <p>נרשמים לעדכונים ויומן השליחות של BSD</p>
     </div>
     <div class="actions">
+      <button class="soft" id="archiveBtn" type="button">ארכיון</button>
       <button class="soft" id="addBtn" type="button">הוסף נרשם</button>
       <button class="back" id="backBtn" type="button">חזרה</button>
     </div>
   </div>
   <div id="banner"></div>
   <div class="cards" id="cards"></div>
+  <section class="panel" id="deliveryPanel" hidden aria-labelledby="deliveryTitle">
+    <div class="delivery-heading">
+      <h2 id="deliveryTitle">יומן שליחות VIP</h2>
+      <label>מיון לפי
+        <select id="deliverySort">
+          <option value="date">תאריך שליחה</option>
+          <option value="business">עסק</option>
+          <option value="buyer">קונה פוטנציאלי</option>
+        </select>
+      </label>
+    </div>
+    <p class="muted" id="deliverySummary" role="status"></p>
+    <div class="lead-rows delivery-list" id="deliveryList"></div>
+    <div class="delivery-footer" id="deliveryPager" hidden>
+      <button type="button" id="deliveryPrev">הקודם</button>
+      <button type="button" id="deliveryNext">הבא</button>
+    </div>
+  </section>
+  <div id="subscriberPanel">
 
   <div class="channel-tabs" id="channelTabs">
     <button type="button" data-channel="all" class="on">הכל</button>
@@ -230,15 +249,6 @@ tr.row:hover{background:#f8fbff}
     <div id="leadNote" class="muted" style="margin-bottom:8px"></div>
     <div id="table"></div>
   </div>
-  <div class="splits">
-    <section class="panel"><h2>לפי אזור</h2><div id="regions"></div></section>
-    <section class="panel"><h2>לפי תחום עניין</h2><div id="sectors"></div></section>
-  </div>
-  <div class="splits">
-    <section class="panel"><h2 id="sourceTitle">לפי מקור</h2><div id="sources"></div></section>
-    <section class="panel"><h2 id="timeTitle">הרשמות לפי מקור לאורך זמן</h2><div id="months"></div></section>
-  </div>
-  <section class="panel" style="margin-bottom:14px"><h2>לפי קמפיין</h2><div id="campaigns"></div></section>
   <section class="panel" style="margin-top:12px" hidden>
     <h2>נרשמים לפי עסק</h2>
     <div class="searchbar">
@@ -247,6 +257,7 @@ tr.row:hover{background:#f8fbff}
     </div>
     <div id="byBusiness" class="muted">אחרי חישוב ההתאמות אפשר לראות, לכל עסק, מי מהנרשמים מתאים לו.</div>
   </section>
+  </div>
 </div>
 <div id="drawer"></div>
 <div id="toast"></div>
@@ -263,7 +274,11 @@ let sample = false;
 let websiteBuyerLeads = 0;
 let channel = 'all';
 let COPY = null;
-let statFilter = null;
+let view = 'total';
+const DELIVERY_PAGE_SIZE = 50;
+let deliveryOffset = 0;
+let deliveryRequest = 0;
+let deliveryHistory = null;
 
 function text(path, fallback){
   const value = String(path).split('.').reduce((obj, key) => obj && obj[key], COPY);
@@ -369,65 +384,85 @@ function liveRows(){
 function archivedRows(){
   return audience().filter(row => row.archived_at);
 }
-function statBars(map, kind){
-  const entries = Object.entries(map || {}).sort((a, b) => b[1] - a[1]);
-  if (!entries.length) return '<p class="muted">אין נתונים</p>';
-  const max = entries[0][1] || 1;
-  return entries.map(([label, count]) => {
-    const on = statFilter && statFilter.kind === kind && statFilter.value === label;
-    return `<button type="button" class="bar${on ? ' on' : ''}" data-kind="${kind}" data-value="${UI.esc(label)}" aria-pressed="${on ? 'true' : 'false'}"><span>${UI.esc(label)}</span><i style="width:${Math.max(8, Math.round(count / max * 100))}%"></i><b>${count}</b></button>`;
-  }).join('');
+function cardButton(cls, num, label, kind){
+  const on = view === kind;
+  return `<button type="button" class="card ${cls}${on ? ' on' : ''}" data-kind="${kind}" aria-pressed="${on}"><b>${num}</b><span>${label}</span></button>`;
 }
-function cardButton(cls, num, label, kind, value){
-  const on = statFilter && statFilter.kind === kind && String(statFilter.value) === String(value);
-  return `<button type="button" class="card ${cls}${on ? ' on' : ''}" data-kind="${kind}" data-value="${UI.esc(value)}" data-label="${UI.esc(label)}" aria-pressed="${on ? 'true' : 'false'}"><b>${num}</b><span>${UI.esc(label)}</span></button>`;
+
+function cards(){
+  const total = deliveryHistory ? deliveryHistory.total_messages : '…';
+  document.getElementById('cards').innerHTML =
+    cardButton('c1', liveRows().length, 'סה״כ נרשמים', 'total') +
+    cardButton('c4', total, 'שליחות', 'sends');
 }
-function cards(summary){
-  document.getElementById('cards').innerHTML = [
-    cardButton('c1', summary.total, 'סה״כ נרשמים', 'total', ''),
-    cardButton('c2', summary.sources['נרשם דרך האתר'] || 0, 'נרשם דרך האתר', 'source', 'נרשם דרך האתר'),
-    cardButton('c3', summary.sources['יזום שלנו'] || 0, 'יזום שלנו', 'source', 'יזום שלנו'),
-    cardButton('c4', summary.sends || 0, 'שליחות', 'sends', ''),
-    cardButton('c5', summary.calls || 0, 'שיחות', 'calls', ''),
-    cardButton('c6', UI.answerRateText(summary.answerRate), 'אחוז מענה', 'answer', ''),
-    cardButton('c7', summary.unknown || 0, 'לא ידוע', 'unknown', ''),
-    cardButton('c8', summary.unsubscribed, 'הוסרו', 'unsubscribed', ''),
-    cardButton('c9', archivedRows().length, 'ארכיון', 'archive', '')
-  ].join('');
-  document.getElementById('regions').innerHTML = statBars(summary.regions, 'region');
-  document.getElementById('sectors').innerHTML = statBars(summary.sectors, 'sector');
-  const campaigns = document.getElementById('campaigns');
-  if (campaigns) campaigns.innerHTML = statBars(summary.campaigns || {}, 'campaign');
-  const sources = document.getElementById('sources');
-  if (sources) sources.innerHTML = statBars(summary.sources || {}, 'source');
-  const months = document.getElementById('months');
-  if (months) months.innerHTML = statBars(summary.bySourceMonth || summary.months || {}, 'month');
-}
-function closedStatus(status){
-  return ['unsubscribed', 'unsubscribed_email', 'unsubscribed_whatsapp', 'unsubscribed_all'].includes(status);
-}
-function matchesStat(row, filter){
-  if (!filter) return true;
-  const badge = UI.sourceBadge(row);
-  if (filter.kind === 'total') return true;
-  if (filter.kind === 'source') return badge === filter.value;
-  if (filter.kind === 'sends') return Number(row.send_count || (Array.isArray(row.sends) ? row.sends.length : 0) || 0) > 0;
-  if (filter.kind === 'calls') return UI.contactStats(row).calls > 0;
-  if (filter.kind === 'answer'){
-    const contact = UI.contactStats(row);
-    return contact.answered + contact.noAnswer > 0;
+
+function paintDeliveryHistory(){
+  const summary = document.getElementById('deliverySummary');
+  const list = document.getElementById('deliveryList');
+  const pager = document.getElementById('deliveryPager');
+  if (!deliveryHistory || deliveryHistory.error){
+    summary.textContent = deliveryHistory?.error || 'טוען יומן שליחות…';
+    list.innerHTML = '';
+    pager.hidden = true;
+    return;
   }
-  if (filter.kind === 'unknown') return UI.contactStats(row).unknown > 0;
-  if (filter.kind === 'unsubscribed') return closedStatus(row.status);
-  if (filter.kind === 'archive') return Boolean(row.archived_at);
-  if (filter.kind === 'region') return UI.regionLabels(row).includes(filter.value);
-  if (filter.kind === 'sector') return UI.sectorLabels(row).includes(filter.value);
-  if (filter.kind === 'campaign') return (row.utm_campaign || 'בלי קמפיין') === filter.value;
-  if (filter.kind === 'month'){
-    const month = row.created_at ? String(row.created_at).slice(0, 7) : '—';
-    return (month + ' ' + badge) === filter.value || month === filter.value;
+  const { total_messages, total_deliveries, deliveries } = deliveryHistory;
+  summary.textContent = total_deliveries
+    ? `${total_messages} הודעות · ${total_deliveries} פריטי עסק שנשלחו`
+    : 'עדיין אין שליחות ביומן.';
+  const dateOptions = { timeZone: 'Asia/Jerusalem', dateStyle: 'short', timeStyle: 'short' };
+  const channelName = { email: 'אימייל', whatsapp: 'וואטסאפ' };
+  list.innerHTML = deliveries.length ? '<div class="lead-rows-head"><span>עסק</span><span>קונה פוטנציאלי</span><span>מועד שליחה</span><span>ערוץ</span><span>התאמה</span></div>' +
+    deliveries.map(send => `<div class="lead-row">
+      <span><b>${UI.esc(send.business_name)}</b> · ${UI.esc(send.business_number)}</span>
+      <span>${UI.esc(send.buyer_name)}</span>
+      <span>${UI.esc(new Date(send.sent_at).toLocaleString('he-IL', dateOptions))}</span>
+      <span>${UI.esc(channelName[send.channel] || 'לא צוין')}</span>
+      <span>${Number(send.match_pct) > 0 ? UI.esc(send.match_pct) + '%' : '—'}</span>
+    </div>`).join('') : '';
+  pager.hidden = total_deliveries <= DELIVERY_PAGE_SIZE;
+  document.getElementById('deliveryPrev').disabled = deliveryOffset === 0;
+  document.getElementById('deliveryNext').disabled = deliveryOffset + DELIVERY_PAGE_SIZE >= total_deliveries;
+}
+
+async function loadDeliveryHistory(){
+  const request = ++deliveryRequest;
+  const sort = document.getElementById('deliverySort').value;
+  document.getElementById('deliveryPrev').disabled = true;
+  document.getElementById('deliveryNext').disabled = true;
+  try {
+    let result;
+    if (sample){
+      const deliveries = liveRows().flatMap(row => (row.sends || []).map(send => ({
+        ...send, business_name: send.internal_name, buyer_name: [row.first_name, row.last_name].filter(Boolean).join(' ')
+      })));
+      const key = sort === 'business' ? 'business_name' : sort === 'buyer' ? 'buyer_name' : '';
+      deliveries.sort((a, b) => (key ? a[key].localeCompare(b[key], 'he') : 0) || b.sent_at.localeCompare(a.sent_at));
+      result = { total_messages: deliveries.length, total_deliveries: deliveries.length, deliveries: deliveries.slice(deliveryOffset, deliveryOffset + DELIVERY_PAGE_SIZE) };
+    } else {
+      const { data, error } = await window.supabaseClient.rpc('business_alert_vip_delivery_history', { p_sort: sort, p_offset: deliveryOffset });
+      if (error) throw error;
+      result = data;
+    }
+    if (request !== deliveryRequest) return;
+    deliveryHistory = result;
+  } catch (error) {
+    if (request !== deliveryRequest) return;
+    deliveryHistory = { total_messages: '—', error: 'יומן השליחות לא נטען. אפשר ללחוץ שוב על שליחות כדי לנסות שנית.' };
   }
-  return true;
+  cards();
+  paintDeliveryHistory();
+}
+
+function setView(next){
+  view = next;
+  document.getElementById('deliveryPanel').hidden = view !== 'sends';
+  document.getElementById('subscriberPanel').hidden = view === 'sends';
+  paint();
+  if (view === 'sends') {
+    paintDeliveryHistory();
+    loadDeliveryHistory();
+  }
 }
 
 function currentFilters(){
@@ -442,26 +477,23 @@ function currentFilters(){
 }
 
 function listed(){
-  if (statFilter && statFilter.kind === 'archive') return archivedRows();
+  if (view === 'archive') return archivedRows();
   return liveRows();
 }
 function visible(){
   const query = document.getElementById('q').value;
-  const base = listed().filter(row => matchesStat(row, statFilter));
-  if (statFilter) return UI.filterRows(base, query);
+  const base = listed();
+  if (view === 'archive') return UI.filterRows(base, query);
   const filters = currentFilters();
   filters.source = channel && channel !== 'all' ? channel : filters.source;
   return UI.filterRows(base, query).filter(row => UI.passesFilters(row, filters));
 }
 
 function paint(){
-  cards(UI.summarize(liveRows(), new Date()));
+  cards();
   const banner = document.getElementById('statBanner');
-  if (banner){
-    banner.hidden = !statFilter;
-    const label = document.getElementById('statLabel');
-    if (label && statFilter) label.textContent = 'מציג: ' + (statFilter.label || statFilter.value || 'הכל');
-  }
+  banner.hidden = view !== 'archive';
+  document.getElementById('statLabel').textContent = 'ארכיון נרשמים';
   const tabLabel = { all: text('tabs.all', 'הכל'), website: text('tabs.website', 'נרשם דרך האתר'), our_link: text('tabs.ourLink', 'יזום שלנו') };
   document.querySelectorAll('#channelTabs button').forEach(button => {
     button.classList.toggle('on', button.dataset.channel === channel);
@@ -517,14 +549,6 @@ function paint(){
     button.addEventListener('click', event => { event.stopPropagation(); askPurge(button.getAttribute('data-purge')); });
   });
 }
-function applyStat(kind, value, label){
-  if (statFilter && statFilter.kind === kind && String(statFilter.value) === String(value)) statFilter = null;
-  else statFilter = { kind, value, label: label || value || 'הכל' };
-  paint();
-  const banner = document.getElementById('statBanner');
-  if (banner && statFilter) banner.scrollIntoView({ block: 'nearest' });
-}
-
 function openRow(id){
   const row = rows.find(item => item.id === id);
   if (!row) return;
@@ -951,21 +975,29 @@ document.getElementById('manualForm').addEventListener('submit', async event => 
     await load();
   } catch (error) { toast(error.message); }
 });
-document.getElementById('statReset').addEventListener('click', () => {
-  statFilter = null;
-  paint();
+document.getElementById('statReset').addEventListener('click', () => setView('total'));
+document.getElementById('archiveBtn').addEventListener('click', () => setView('archive'));
+document.getElementById('cards').addEventListener('click', event => {
+  const button = event.target.closest('[data-kind]');
+  if (button) setView(button.dataset.kind);
 });
-document.addEventListener('click', event => {
-  const button = event.target.closest('#cards [data-kind], #regions [data-kind], #sectors [data-kind], #sources [data-kind], #months [data-kind], #campaigns [data-kind]');
-  if (!button) return;
-  applyStat(button.getAttribute('data-kind'), button.getAttribute('data-value') || '', button.getAttribute('data-label') || button.getAttribute('data-value') || '');
+document.getElementById('deliverySort').addEventListener('change', () => {
+  deliveryOffset = 0;
+  loadDeliveryHistory();
+});
+document.getElementById('deliveryPrev').addEventListener('click', () => {
+  deliveryOffset = Math.max(0, deliveryOffset - DELIVERY_PAGE_SIZE);
+  loadDeliveryHistory();
+});
+document.getElementById('deliveryNext').addEventListener('click', () => {
+  deliveryOffset += DELIVERY_PAGE_SIZE;
+  loadDeliveryHistory();
 });
 
 (async function start(){
   try { COPY = await fetch('copy/he.json?v=202611230420').then(res => res.json()); } catch (error) { COPY = null; }
   if (COPY){
     document.getElementById('pageTitle').textContent = text('list.title', 'קונים VIP נרשמים');
-    document.getElementById('pageIntro').textContent = text('list.intro', '');
     document.title = text('list.title', 'קונים VIP נרשמים');
   }
   sample = new URLSearchParams(location.search).get('sample') === '1' && UI.sampleAllowed();
@@ -974,10 +1006,10 @@ document.addEventListener('click', event => {
     await load();
     document.getElementById('byBusiness').innerHTML = '<div><b>מאפייה לדוגמה</b> · דנה לדוגמה, ציון 86 (תחום 38, תקציב 30, אזור 18)</div><div><b>מסעדה לדוגמה</b> · דנה לדוגמה, ציון 30, מחוץ לטווח התקציב</div>';
     const params = new URLSearchParams(location.search);
-    const stat = params.get('stat');
-    if (stat){
-      statFilter = { kind: stat, value: params.get('value') || '', label: params.get('label') || params.get('value') || 'הכל' };
-      paint();
+    if (params.get('stat') === 'sends') setView('sends');
+    else {
+      if (params.get('stat') === 'archive') setView('archive');
+      await loadDeliveryHistory();
     }
     const open = params.get('open');
     if (open) openRow(open);
@@ -988,7 +1020,7 @@ document.addEventListener('click', event => {
     document.body.innerHTML = '<div class="empty">אין הרשאה למסך זה</div>';
     return;
   }
-  try { await load(); } catch (error) { toast(error.message); }
+  try { await Promise.all([load(), loadDeliveryHistory()]); } catch (error) { toast(error.message); }
   // deep link from the dashboard global search: site-buyers.html?open=<subscriber id>
   const openParam = new URLSearchParams(location.search).get('open');
   if (openParam){
