@@ -272,7 +272,7 @@ window.BSDDataCache = (() => {
     let sessionId = session.user.last_sign_in_at || 'session';
     try { sessionId = JSON.parse(atob(session.access_token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).session_id || sessionId; } catch (_) {}
     const permissions = JSON.stringify(Object.fromEntries(Object.entries(profile).filter(([k]) => k === 'role' || k === 'status' || k.startsWith('can_')).sort()));
-    const next = { userId, day:day(), generation:generation(), sessionId, permissions };
+    const next = { userId, day:day(), generation:generation(), sessionId, permissions, originRevision: 1 };
     next.key = JSON.stringify(next);
     if (context?.key === next.key) return;
     context = next; memory = new Map(); pending = new Map(); fetchedAt = new Map();

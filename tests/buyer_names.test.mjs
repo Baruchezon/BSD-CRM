@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const read=f=>fs.readFileSync(new URL('../'+f,import.meta.url),'utf8');
 const leads=read('leads.html');
 const esc=s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
-function extract(source,start,end,ctx){vm.createContext(ctx);vm.runInContext(source.slice(source.indexOf(start),source.indexOf(end)),ctx);return ctx;}
+function extract(source,start,end,ctx){vm.createContext(ctx);vm.runInContext(read('js/record-origin.js'),ctx);vm.runInContext(source.slice(source.indexOf(start),source.indexOf(end)),ctx);return ctx;}
 test('buyer identity retains full name alongside client number and escapes markup',()=>{
  const ctx=extract(leads,'function leadIdentityCell(','function userName(',{esc,isGrantOnlyViewer:()=>false,notesIconStyle:()=>false,ratingBadge:()=>'',matchCountBadge:()=>'',clientNumberBadge:l=>l.client_number});
  for(const name of ['ישראל ישראלי','שם ארוך מאוד של קונה עם כמה שמות משפחה','<script>']){

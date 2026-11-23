@@ -559,7 +559,8 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=202611131000"></script>
+<script src="js/config.js?v=202611231330"></script>
+<script src="js/record-origin.js?v=202611231310"></script>
 <script src="js/supabaseClient.js?v=202611181945"></script>
 <script src="js/auth.js?v=202611231240"></script>
 <script src="js/whatsapp-api.js?v=202610111200"></script>
@@ -1420,6 +1421,7 @@ function businessIdentityCell(b, statusEmoji){
       <span class="record-title" title="${esc(b.internal_name)}">${statusEmoji}${esc(b.internal_name)}</span>
       <span class="record-number-slot">${bizNumberBadge(b)}</span>
     </div>
+    ${BSDOrigin.html(b)}
     ${businessFlagsRow(b)}
     <div class="record-flags">${anonStatusBadge(b)}${facebookRequestBadge(b.id)}</div>
     <div class="record-sub-line">${b.owner_name ? esc(b.owner_name) : '&nbsp;'}</div>
@@ -2036,6 +2038,7 @@ function openBizForm(id){
   bsdBizResetDirty(); BIZ_EXIT_AFTER_SAVE = null;
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
+    ${biz ? BSDOrigin.html(biz) : ''}
     <h3>${biz ? 'עריכת עסק' : 'עסק חדש'}${biz?.internal_name ? ` <span class="biz-name-big">${esc(biz.internal_name)}</span>` : ''}${biz?.business_number ? ` <span class="biz-number-badge">${esc(biz.business_number)}</span>` : ''}</h3>
     ${biz ? agreementBanner(biz.agreement_status, biz.agreement_number, 'businesses', biz.id, biz.agreement_pdf_path, biz.agreement_pdf_uploaded_at, biz.agreement_pdf_uploaded_by) : ''}
 
@@ -2246,7 +2249,7 @@ function openBizForm(id){
 
       ${biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz) ? `
       <section style="margin-top:12px;background:#fff8e6;border:1px solid #e8d18a;border-radius:8px;padding:2px 12px 12px;">
-      <div class="section-h" style="margin-top:12px;font-size:.95rem;color:#8a5a00;">הפצה והרשאות</div><p style="font-size:14px">הובא על ידי: ${esc(biz.referred_by_agent_name || biz.original_source || biz.source || "לא תועד")}</p>
+      <div class="section-h" style="margin-top:12px;font-size:.95rem;color:#8a5a00;">הפצה והרשאות</div><p style="font-size:14px">${esc(BSDOrigin.text(biz))}</p>
       <div class="field full">
         <!-- 16.11.2026: «פרסום ללקוחות VIP» הישן הוסר מכאן (vip-api הוצא משימוש 13.11 ומחזיר 410). VIP הוא עכשיו צ'קבוקס רגיל בערוצי ההפצה. -->
         <div class="biz-distribution-options">

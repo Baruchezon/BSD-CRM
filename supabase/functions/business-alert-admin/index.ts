@@ -458,7 +458,7 @@ Deno.serve(async req => {
       scope = { subscribers: new Set((owned || []).map(String)), businesses };
       if (!agentActionAllowed(action, body, scope.subscribers, scope.businesses)) return json({ ok: false, error: "forbidden" }, 403, origin);
     }
-    let metaQuery = supabase.from("business_alert_subscribers").select("id,owner_id,referred_by_agent_id,referred_by_agent_name,original_source");
+    let metaQuery = supabase.from("business_alert_subscribers").select("id,owner_id,referred_by_agent_id,referred_by_agent_name,original_source,origin_entered_by_id,origin_entered_by_name");
     if (scope) metaQuery = metaQuery.in("id", [...scope.subscribers]);
     const meta = await metaQuery;
     if (meta.error) throw meta.error;

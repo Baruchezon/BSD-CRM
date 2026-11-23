@@ -295,11 +295,12 @@ tr.row:hover{background:#f8fbff}
 <div id="drawer"></div>
 <div id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
-<script src="js/config.js?v=202611131800"></script>
+<script src="js/config.js?v=202611231330"></script>
+<script src="js/record-origin.js?v=202611231310"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
 <script src="js/auth.js?v=202611231240"></script>
 <script src="js/site-buyers.js?v=202611150730"></script>
-<script src="js/vip-delivery-map.js?v=202611230635"></script>
+<script src="js/vip-delivery-map.js?v=202611231330"></script>
 <script>
 const UI = window.BSDSiteBuyers;
 const API = (window.BSD_CONFIG && window.BSD_CONFIG.SUPABASE_URL || '') + '/functions/v1/business-alert-admin';
@@ -462,8 +463,8 @@ function paintDeliveryHistory(){
   const channelName = { email: 'אימייל', whatsapp: 'וואטסאפ' };
   list.innerHTML = deliveries.length ? '<div class="lead-rows-head"><span>עסק</span><span>קונה פוטנציאלי</span><span>מועד שליחה</span><span>ערוץ</span><span>התאמה</span></div>' +
     deliveries.map(send => `<div class="lead-row">
-      <span><b>${UI.esc(send.business_name)}</b> · ${UI.esc(send.business_number)}</span>
-      <span>${UI.esc(send.buyer_name)}</span>
+      <span><b>${UI.esc(send.business_name)}</b> · ${UI.esc(send.business_number)}${BSDOrigin.html(send.business_origin)}</span>
+      <span>${UI.esc(send.buyer_name)}${BSDOrigin.html(send.buyer_origin)}</span>
       <span>${UI.esc(new Date(send.sent_at).toLocaleString('he-IL', dateOptions))}</span>
       <span>${UI.esc(channelName[send.channel] || 'לא צוין')}</span>
       <span>${Number(send.match_pct) > 0 ? UI.esc(send.match_pct) + '%' : '—'}</span>
@@ -573,7 +574,7 @@ function paint(){
       ? `<button type="button" class="lr-act" data-restore="${id}" aria-label="שחזר" title="שחזר">שחזר</button><button type="button" class="lr-act lr-act-danger" data-purge="${id}" aria-label="מחק לצמיתות" title="מחק לצמיתות">מחק</button>`
       : `<button type="button" class="lr-act" data-archive="${id}" aria-label="העבר לארכיון" title="העבר לארכיון">ארכיון</button>`;
     return `<div class="lead-row${open ? ' on' : ''}" data-id="${id}">
-      <b class="lr-name">${name}</b>
+      <b class="lr-name">${name}${BSDOrigin.html(row)}</b>
       <span class="lr-phone" dir="ltr">${UI.esc(row.phone || '—')}</span>
       <span class="lr-pill badge ${sourceClass[UI.sourceKind(row)] || 'p-web'}">${UI.esc(row.referred_by_agent_name ? 'סוכן: ' + row.referred_by_agent_name : UI.sourceBadge(row))}</span>
       <span class="lr-pill ${statusKind}">${UI.esc(UI.statusLabel(row.status))}</span>
@@ -652,7 +653,7 @@ function openRow(id){
     <b>הסרה:</b> ${UI.esc(UI.statusLabel(row.status))}${row.unsubscribed_at ? ' · ' + UI.esc(new Date(row.unsubscribed_at).toLocaleString('he-IL')) : ''}<br>
     ${row.resubscribed_at ? `<b>חזר להרשמה:</b> ${UI.esc(new Date(row.resubscribed_at).toLocaleString('he-IL'))}<br>` : ''}
     <b>מקור הגעה:</b> ${UI.esc(utm || '—')}<br>
-    <b>הובא על ידי:</b> ${UI.esc(row.referred_by_agent_name || row.original_source || row.source || "לא תועד")}<br><b>עמוד:</b> ${UI.esc(row.source_url || '—')}</p>
+    <b>שיוך ומקור:</b> ${UI.esc(BSDOrigin.text(row))}<br><b>עמוד:</b> ${UI.esc(row.source_url || '—')}</p>
     <div class="views"><b>מה נשלח</b><p class="muted">השם הפנימי גלוי רק כאן, לא בפנייה לנרשם.</p><div>${sendHtml}</div></div>
     <div class="views"><b>עמודים שנצפו</b><div>${viewHtml}</div></div>
     <div class="views" id="matchBox"><b>עסקים שמתאימים</b><div class="muted">טוען התאמות…</div></div>

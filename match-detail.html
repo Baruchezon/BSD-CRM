@@ -211,7 +211,8 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=20260930archive1"></script>
+<script src="js/config.js?v=202611231330"></script>
+<script src="js/record-origin.js?v=202611231310"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
 <script src="js/auth.js?v=202611231240"></script>
 <script src="js/permissions.js?v=202611231240"></script>
@@ -1112,6 +1113,8 @@ function renderHero(){
       <div>
         <div class="hero-title">🏢 <a href="businesses.html?open=${MATCH.business_id}" style="color:inherit;text-decoration:underline;" class="biz-name">${esc(BIZ?.internal_name||'—')}</a>${BIZ?.business_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BIZ.business_number)})</span>`:''}</div>
         <div class="hero-title buyer-name" style="margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${isCounterpartyBroker() ? `🔵 <a href="brokers.html?open=${MATCH.broker_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>` : `🧍 <a href="leads.html?open=${MATCH.buyer_id}" style="color:inherit;text-decoration:underline;">${esc(BUYER?.full_name||'—')}</a>`}${BUYER?.client_number?` <span style="font-size:.75rem;color:#8a93ab;">(${esc(BUYER.client_number)})</span>`:''}${counterpartyBadgeHtml()}<button class="qa-btn" style="background:#dff0e4;border-color:#a9d6b8;padding:5px 11px;font-size:.75rem;" onclick="openQuickCheckinModal()">💬 עדכון מהיר</button></div>
+        ${BSDOrigin.html(BIZ)}
+        ${BSDOrigin.html(BUYER)}
         <div class="hero-sub">
           נוצרה ע"י ${esc(userName(MATCH.created_by))} בתאריך ${fmtDate(MATCH.created_at)}
           · מטפל כרגע: <b>${esc(userName(MATCH.current_handler))}</b>

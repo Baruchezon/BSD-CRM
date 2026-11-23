@@ -11,7 +11,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { readAll, parseSelection, selectRecords, visiblePhones } from './selection.js';
-import { buildSuggestions, decorateForClient, scopeBusinessesForAgent, ENGINE_VERSION, MIN_SCORE } from './engine.js';
+import { buildSuggestions, decorateForClient, scopeBusinessesForAgent, originFields, ENGINE_VERSION, MIN_SCORE } from './engine.js';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -101,13 +101,13 @@ Deno.serve(async (req) => {
   // --- קריאה בלבד: קונים פעילים, עסקים פעילים, התאמות קיימות, הפצות, הערות ---
   const [buyersRes, bizRes, matchesRes, distRes] = await Promise.all([
     readAll(() => supabase.from('leads')
-      .select('id, created_by, handled_by, client_number, full_name, phone, phone2, email, city, address, status, agreement_status, buyer_type, requested_field, requested_categories, requested_area, budget, equity, financing_capacity, requested_revenue, requested_profit, involvement_level, partnership_willingness, notes, meeting_summary, intake_customer_wants, intake_important_details, intake_conversation_summary')
+      .select('id, referred_by_agent_name,origin_entered_by_name,original_source,source,created_by, handled_by, client_number, full_name, phone, phone2, email, city, address, status, agreement_status, buyer_type, requested_field, requested_categories, requested_area, budget, equity, financing_capacity, requested_revenue, requested_profit, involvement_level, partnership_willingness, notes, meeting_summary, intake_customer_wants, intake_important_details, intake_conversation_summary')
       .eq('type', 'buyer')
       .or('status.is.null,status.neq.סגור')
       .or('is_archived.is.null,is_archived.eq.false')
       .is('crm_stage', null)), // 22.10.2026: לא כולל לקוחות בטיפול / שהוחזרו ללידים
     readAll(() => supabase.from('businesses')
-      .select('id, business_number, id_number, internal_name, anon_display_name, field, category, subcategory, city, region, address, asking_price, annual_revenue, operating_profit, net_profit, employees_count, years_active, short_description, sale_reason, notes, anon_summary, internal_business_summary, website, owner_phone, anon_card_show_price, created_at, status, agreement_status')
+      .select('id, referred_by_agent_name,origin_entered_by_name,original_source,source,business_number, id_number, internal_name, anon_display_name, field, category, subcategory, city, region, address, asking_price, annual_revenue, operating_profit, net_profit, employees_count, years_active, short_description, sale_reason, notes, anon_summary, internal_business_summary, website, owner_phone, anon_card_show_price, created_at, status, agreement_status')
       .eq('listing_status', 'active')
       .or('is_archived.is.null,is_archived.eq.false')
       .is('crm_stage', null)), // 22.10.2026: לא כולל לקוחות בטיפול / שהוחזרו ללידים
@@ -137,9 +137,9 @@ Deno.serve(async (req) => {
       if (m?.business_id) matchCounts[m.business_id] = (matchCounts[m.business_id] || 0) + 1;
     }
     return jsonResponse({ ok: true, engine_version: ENGINE_VERSION,
-      buyers: buyers.map((b: any) => ({ id: b.id, name: b.full_name || 'קונה ללא שם', number: b.client_number || '', detail: [b.requested_field, b.requested_area].filter(Boolean).join(' · '), phones: visiblePhones(fullAccess, [b.phone, b.phone2]) })),
+      buyers: buyers.map((b: any) => ({ ...originFields(b), id: b.id, name: b.full_name || 'קונה ללא שם', number: b.client_number || '', detail: [b.requested_field, b.requested_area].filter(Boolean).join(' · '), phones: visiblePhones(fullAccess, [b.phone, b.phone2]) })),
       businesses: businesses.map((b: any) => ({
-        id: b.id, name: b.internal_name || b.anon_display_name || 'עסק ללא שם', number: b.business_number || '',
+        ...originFields(b), id: b.id, name: b.internal_name || b.anon_display_name || 'עסק ללא שם', number: b.business_number || '',
         id_number: b._anon_scope ? '' : (b.id_number || ''),
         detail: [b.field, b.city].filter(Boolean).join(' · '),
         field: String(b.field || b.category || '').trim(),

@@ -19,9 +19,10 @@
 
     function entityName(entity, className = '') {
       const name = '<strong>' + escape(entity.name) + '</strong>';
-      return entity.href
+      const link = entity.href
         ? `<a class="${className}" href="${escape(entity.href)}">${name}</a>`
         : `<span class="${className}">${name}</span>`;
+      return link + (entity.origin ? `<small class="bsd-record-origin" style="display:block;font-size:14px;line-height:1.45">${escape(entity.origin)}</small>` : '');
     }
 
     function branch(match, view, index, detailsId) {

@@ -817,6 +817,15 @@ export function buildPartyBrief(kind, row, extras = {}) {
  * @param {{ buyers: any[], businesses: any[], fullAccess: boolean, notes?: any[], callsByBuyer?: Map<string, { gist: string, at: string }> }} ctx
  * @returns {any[]}
  */
+export function originFields(row) {
+  if (row?._anon_scope || row?._anonymous) return { _anonymous: true };
+  return {
+    referred_by_agent_name: row?.referred_by_agent_name || '',
+    origin_entered_by_name: row?.origin_entered_by_name || '',
+    original_source: row?.original_source || row?.source || ''
+  };
+}
+
 export function decorateForClient(list, { buyers, businesses, fullAccess, notes = [], callsByBuyer = null }) {
   const buyerById = new Map(buyers.map(b => [b.id, b]));
   const bizById = new Map(businesses.map(b => [b.id, b]));
@@ -839,11 +848,13 @@ export function decorateForClient(list, { buyers, businesses, fullAccess, notes 
       buyer_brief: buildPartyBrief('buyer', b, { notes: notesFor('leads', b.id), call }),
       business_brief: buildPartyBrief('business', z, { notes: z._anon_scope ? [] : notesFor('businesses', z.id), anon: !!z._anon_scope }),
       buyer_info: {
+        ...originFields(b),
         id: b.id, name: buyerName, client_number: b.client_number || '', city: clean(b.city),
         agreement_status: b.agreement_status || '', status: b.status || '',
         phone: fullAccess ? (b.phone || '') : '', phone2: fullAccess ? (b.phone2 || '') : '', email: fullAccess ? (b.email || '') : '',
       },
       business_info: {
+        ...originFields(z),
         id: z.id, name: bizName, number: z.business_number || '', city: clean(z.city), sector: s.business_sector,
         asking_price: num(z.asking_price), annual_revenue: num(z.annual_revenue), net_profit: num(z.net_profit),
         website: z.website || '', owner_phone: fullAccess ? (z.owner_phone || '') : '',

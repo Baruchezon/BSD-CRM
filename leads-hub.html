@@ -311,7 +311,8 @@
 <div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
 <div id="toastBox"></div>
 
-<script src="js/config.js?v=20260930archive1"></script>
+<script src="js/config.js?v=202611231330"></script>
+<script src="js/record-origin.js?v=202611231310"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
 <script src="js/auth.js?v=202611181930"></script>
 <script src="js/permissions.js?v=202608251215"></script>
@@ -1301,7 +1302,7 @@ function renderTable(){
               ${menuHtml}
             </div>
           </div>
-          <div>${rowNameCell(r)}</div>
+          <div>${rowNameCell(r)}${BSDOrigin.html(r)}</div>
         </div>
       </td>
       <td class="phone-cell${callOn ? ' c-narrow' : ''}" dir="ltr" style="text-align:right;unicode-bidi:isolate;" onclick="event.stopPropagation()">${rowPhoneCell(r)}</td>
@@ -1405,7 +1406,7 @@ function stagedRowHtml(r, callOn){
         <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
         <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:200px;z-index:70;overflow:hidden;">${menu}</div>
       </div>
-      <div><div class="primary-name">${esc(personName)}${label && label !== personName ? ' (' + esc(label) + ')' : ''}</div>
+      <div><div class="primary-name">${esc(personName)}${label && label !== personName ? ' (' + esc(label) + ')' : ''}</div>${BSDOrigin.html(r)}
         <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;"><span class="side-badge ${isBiz ? 'side-seller' : 'side-buyer'}">${isBiz ? 'מוכר עסק' : 'קונה עסק'}</span>${leadSourceBadge(r)}</div>
       </div>
     </div></td>
@@ -1455,7 +1456,7 @@ function openReadOnly(id){
   const r = currentRows().find(x => x.id === id);
   if (!r){ toast('רשומה לא נמצאה'); return; }
   enterHubCardHistory(id);
-  const rows = [];
+  const rows = [['מקור ההגעה המקורי',BSDOrigin.text(r)]];
   if (CURRENT_TAB === 'business'){
     rows.push(['שם עסק', r.internal_name], ['בעלים', r.owner_name], ['טלפון', r.owner_phone],
       ['עיר', r.city], ['תחום', r.field], ['הערות', r.notes], ['🔎 חקר מקדים', r.pre_research]);
@@ -1815,7 +1816,7 @@ function renderWebsiteLeadIntro(r){
   const personName = r.full_name || [r.first_name,r.last_name].filter(Boolean).join(' ') || 'שם לא זוהה';
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
-    <h3>ליד חדש</h3>
+    <h3>ליד חדש</h3>${BSDOrigin.html(r)}
     <div style="background:#fff3d6;border:1px solid #e8cf8a;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a6d1f;margin-bottom:14px;">
       ${esc(r.website_purpose_guess || 'טרם דיברו עם הלקוח.')} — הסיווג להלן הוא ניחוש בלבד, לא סופי.
     </div>
@@ -2173,6 +2174,11 @@ async function ensureWebsiteLeadBusiness(lead, opts){
       // Stable ID makes retries and simultaneous submissions safe without an upsert
       // that could overwrite an existing business. seller_id preserves the source record.
       id: lead.id, seller_id: lead.id,
+      referred_by_agent_id: lead.referred_by_agent_id || null,
+      referred_by_agent_name: lead.referred_by_agent_name || null,
+      original_source: lead.original_source || lead.source || null,
+      origin_entered_by_id: lead.origin_entered_by_id || lead.created_by || null,
+      origin_entered_by_name: lead.origin_entered_by_name || null,
       internal_name: lead.business_name || lead.company || (ownerName ? 'עסק של ' + ownerName : 'עסק מליד'),
       owner_name: ownerName, owner_phone: lead.phone || null, owner_email: lead.email || null,
       field: lead.business_field || null, city: lead.business_city || lead.city || null,
