@@ -1,23 +1,24 @@
-
+// bsd-alert-digest v10 (22.11.2026) — VIP DRAFT BUILDER. It never sends email.
+// Plan items: א (no self-send; every match becomes a vip_email_drafts row + an approval request for Yossi),
+// ב (matching v2), ג (only VIP-approved files, card text fallback with identifier scrub), ה (Process B queue),
+// client_profile (vip_build_client_profile), weekly limit (1 email / client / 7 days, max 3 businesses).
+// Sending is done only by vip-draft-send after an explicit approval (vip_draft_approve).
+// Auth: x-bsd-dispatch-token (cron path, only while bsd_alert_dispatch_auth.enabled) OR a single-use run_token
+// (vip_digest_run_tokens, sha256 stored). Body: {mode:"subscribers"|"queue"|"business", business_id?, subscriber_ids?, test_only?, dry?, include_over_budget?}
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
-import fontkit from "npm:@pdf-lib/fontkit@1.1.1";
-import bidiFactory from "npm:bidi-js@1.0.3";
 const db=createClient(Deno.env.get("SUPABASE_URL")||"",Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"",{auth:{autoRefreshToken:false,persistSession:false}});
-const urlPrefs="https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/bsd-alert-preferences";
-const web="https://www.bsd-bbi.co.il";
-const k=String(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"");
-const RESEND=String(Deno.env.get("RESEND_API_KEY")||"");
-const escape=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const clean=s=>String(s??"").replace(/[\u0000-\u001f\u007f]/g," ").replace(/\s+/g," ").trim();
-const money=n=>Number(n).toLocaleString("he-IL")+" ₪";
-const bidi=bidiFactory();
-const response=(json,status=200)=>new Response(JSON.stringify(json),{status,headers:{"content-type":"application/json;charset=utf-8","cache-control":"no-store"}});
-const LOGO=web+"/assets/bsd-asset-01-logo.png";
-const isActive=s=>s.status==="active"&&s.consent_email===true&&s.consent_general===true&&s.legacy_no_consent!==true&&!s.archived_at&&!s.email_unsubscribed_at&&!s.is_test;
-const normList=a=>Array.isArray(a)?a.filter(x=>typeof x==="string"):[];
-const has=(text,terms)=>terms.some(w=>text.includes(w));
-function classifyBusiness(b){
+const UNSUB="https://zcdlegcvfirwzitfxjcs.supabase.co/functions/v1/business-alert-unsubscribe";
+const LOGO_HDR="https://www.bsd-bbi.co.il/assets/bsd-asset-01-logo.png";
+const SLOGAN="משביחים עסקים, מחברים הזדמנויות, מובילים עסקאות";
+const SIG="<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" dir=\"rtl\" style=\"border-top:1px solid #d9e2ed;margin-top:18px;border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;text-align:right\">\n  <tbody>\n    <tr>\n      <td style=\"vertical-align:middle;padding:16px 0 6px 16px\">\n        <img src=\"cid:logo.png\" alt=\"BSD מתווכי עסקים ישראל\" width=\"130\" height=\"130\" style=\"width:130px;height:auto;display:block;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic\">\n      </td>\n      <td style=\"vertical-align:middle;padding:16px 0 6px 0;font-size:12px;line-height:1.65;color:#243449;text-align:right\">\n        <strong style=\"font-size:15px;color:#143b64\">ברוך איזון</strong><br>\n        <strong>מנכ״ל | BSD מתווכי עסקים ישראל</strong><br>\n        מגדל BSR 3, רח׳ מצדה 9, בני ברק<br>\n        טל׳: 077-4446707<br>\n        נייד / וואטסאפ: 054-2424999<br>\n        <a href=\"mailto:baruch@bsd-bbi.co.il\" style=\"color:#0B2A5B;text-decoration:none\" target=\"_blank\" rel=\"noreferrer\">baruch@bsd-bbi.co.il</a><br>\n        <a href=\"https://www.bsd-bbi.co.il/\" style=\"color:#185a9d;text-decoration:none\" target=\"_blank\" rel=\"noreferrer\">www.bsd-bbi.co.il</a>\n      </td>\n    </tr>\n  </tbody>\n</table>";
+const SIGTXT="ברוך איזון\nמנכ״ל | BSD מתווכי עסקים ישראל\nמגדל BSR 3, רח׳ מצדה 9, בני ברק\nטל׳: 077-4446707\nנייד / וואטסאפ: 054-2424999\nbaruch@bsd-bbi.co.il\nwww.bsd-bbi.co.il";
+const escape=(s:any)=>String(s??"").replace(/[&<>"']/g,(c:string)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"} as any)[c]);
+const clean=(s:any)=>String(s??"").replace(/[\u0000-\u001f\u007f]/g," ").replace(/\s+/g," ").trim();
+const response=(json:any,status=200)=>new Response(JSON.stringify(json),{status,headers:{"content-type":"application/json;charset=utf-8","cache-control":"no-store"}});
+async function sha256(t:string){const h=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));return [...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,"0")).join("");}
+const normList=(a:any)=>Array.isArray(a)?a.filter(x=>typeof x==="string"):[];
+const has=(text:any,terms:any)=>terms.some(w=>text.includes(w));
+function classifyBusiness(b:any){
  const tx=b.taxonomy||{};
  let cats=normList(tx.categories),subs=normList(tx.subcategories),regs=normList(tx.regions);
  const label=clean([b.anon_display_name,b.category,b.subcategory,b.field,b.anon_summary].join(" ")).toLowerCase();
@@ -49,239 +50,260 @@ function classifyBusiness(b){
  if(has(loc,["אשדוד","אשקלון","באר שבע","דרום"])){if(!regs.includes("south"))regs.push("south");}
  return {cats,subs,regs};
 }
-function matchBuyer(s,b){
+
+// ---------- ב: exclusions ("לא/בלי/ללא ...") from looking_for + client profile notes ----------
+const EXCL:[RegExp,(p:any,b:any)=>boolean][]=[
+ [/מסעד|אוכל|מזון|פוד/,(p)=>p.cats.includes("food")],
+ [/קפה/,(p)=>p.subs.includes("cafe")],
+ [/חנו|קמעונ|מסחר/,(p)=>p.cats.includes("retail")||p.cats.includes("grocery")],
+ [/מלאי/,(p)=>["retail","grocery","construction"].some(c=>p.cats.includes(c))],
+ [/מפעל|ייצור|תעשי/,(p)=>p.cats.includes("construction")],
+ [/שותפ/,(_p,b)=>/שותפ|משקיע/.test(clean(b.anon_summary)+clean(b.public_listing_marketing_text))],
+ [/זכיינ|זיכיונ|רשת/,(_p,b)=>/זכיינ|זיכיונ/.test(clean(b.anon_summary)+clean(b.anon_display_name))],
+ [/משמרות|לילה|לילות/,(p)=>p.subs.includes("restaurant")],
+];
+function exclusions(text:string){
+ const out:string[]=[];const re=/(?:^|[\s,.;:(])(?:בלי|ללא|לא\s+(?:רוצה|מעוניין|מעוניינת|מחפש|מחפשת|מתאים|מתאימה|אוהב|אוהבת)?)\s*([^.,;\n|]{2,40})/g;
+ let m;while((m=re.exec(text))){out.push(m[1]);}
+ return out;
+}
+function excludedBy(phrases:string[],p:any,b:any){
+ for(const ph of phrases)for(const [re,fn] of EXCL)if(re.test(ph)&&fn(p,b))return ph.trim();
+ return null;
+}
+const REGION_HE:any={tel_aviv:"אזור תל אביב והמרכז",center:"אזור המרכז",sharon:"אזור השרון",haifa:"אזור חיפה והקריות",north:"הצפון",jerusalem:"אזור ירושלים",south:"הדרום",shfela:"אזור השפלה"};
+// ---------- ב: matching v2 ----------
+function matchBuyer(s:any,b:any,cfg:any,excl:string[],opts:any){
  const profile=classifyBusiness(b);
  const cats=normList(s.categories),subs=normList(s.subcategories),regions=normList(s.regions);
  const inCat=cats.length?cats.some(x=>profile.cats.includes(x)):false;
  const inSub=subs.length?subs.some(x=>profile.subs.includes(x)):false;
- if(subs.length&&!inSub)return null;
- if(!inCat&&!inSub)return null;
- const wanted=clean(s.looking_for).toLowerCase();
- if(/(?:בלי|לא|ללא)\s+(?:מסעד|מזון|קפה)/.test(wanted)&&profile.cats.includes("food"))return null;
- const price=Number(b.asking_price);
- if(!Number.isFinite(price)||price<=0)return null;
- if(s.budget_open!==true){
- const min=s.budget_min==null?null:Number(s.budget_min);
- const max=s.budget_max==null?null:Number(s.budget_max);
- if(min!==null&&price<min)return null;
- if(max!==null&&price>max)return null;
- }
+ const wanted=clean(s.looking_for);
+ const kw=!cats.length&&!subs.length&&wanted.length>2&&wanted.split(/\s+/).some(w=>w.length>3&&clean(b.anon_display_name+" "+b.anon_summary).includes(w));
+ if(!inCat&&!inSub&&!kw)return {reject:"sector"};
+ const ex=excludedBy(excl,profile,b);
+ if(ex)return {reject:"client_excluded:"+ex};
+ const flags:string[]=[];
+ const price=Number(b.asking_price);const hasPrice=Number.isFinite(price)&&price>0;
+ let budgetScore=cfg.budget_weight,budgetNote="";
+ if(!hasPrice){flags.push("no_price");budgetScore=0;budgetNote="price_on_request";}
+ else if(s.budget_open!==true){
+  const min=s.budget_min==null?null:Number(s.budget_min),max=s.budget_max==null?null:Number(s.budget_max);
+  if(min!==null&&price<min*cfg.low)return {reject:"below_budget"};
+  if(max!==null&&price>max*cfg.high){
+   if(!opts.include_over_budget)return {reject:"over_budget_1.3x"};
+   flags.push("over_budget_1.3x");budgetScore=-20;budgetNote="over_1.3x";
+  }else if(max!==null&&price>max){flags.push("over_budget");budgetScore=Math.round(cfg.budget_weight/2);budgetNote="over";}
+  else budgetNote="within";
+ }else budgetNote="open";
  const all=regions.includes("all")||regions.length===0;
  const isSame=regions.some(r=>profile.regs.includes(r));
- const isClose=regions.includes("center")&&profile.regs.includes("tel_aviv")
-   ||regions.includes("tel_aviv")&&profile.regs.includes("center")
-   ||regions.includes("north")&&profile.regs.includes("haifa")
-   ||regions.includes("sharon")&&profile.regs.includes("center");
- if(!all&&!isSame&&!isClose)return null;
- const score=(inSub?75:55)+(all?10:isSame?25:12);
- return {business:b,score,category:inSub?"subcategory":"category",location:isSame?"same":isClose?"near":"all"};
+ const isClose=regions.includes("center")&&profile.regs.includes("tel_aviv")||regions.includes("tel_aviv")&&profile.regs.includes("center")
+  ||regions.includes("north")&&profile.regs.includes("haifa")||regions.includes("sharon")&&profile.regs.includes("center");
+ if(!all&&!isSame&&!isClose)return {reject:"region"};
+ const sector=inSub?cfg.sector_weight:inCat?Math.round(cfg.sector_weight*0.8):Math.round(cfg.sector_weight*0.6);
+ const loc=all?Math.round(cfg.location_weight*0.6):isSame?cfg.location_weight:Math.round(cfg.location_weight*0.6);
+ const score=sector+loc+budgetScore;
+ const parts=[inSub?"בתת-התחום שבחרת":inCat?"בתחום שבחרת":"בתחום שתיארת",isSame?"באזור שבחרת":isClose?"באזור סמוך לאזור שבחרת":"",
+  budgetNote==="within"?"ובתוך התקציב שציינת":budgetNote==="over"?"ומעט מעל התקציב שציינת":budgetNote==="over_1.3x"?"אך במחיר גבוה מהתקציב שציינת":budgetNote==="price_on_request"?"והמחיר לפי פנייה":""].filter(Boolean);
+ const region=profile.regs.map((r:string)=>REGION_HE[r]).find(Boolean)||"";
+ return {business:b,score,flags,why:"זה עסק "+parts.join(", ")+".",region,match:{sector:inSub?"sub":inCat?"cat":"keyword",location:isSame?"same":isClose?"near":"all",budget:budgetNote}};
 }
-function approved(b){
+function approved(b:any){
  return b.public_listing_active===true&&b.anon_card_active===true&&b.listing_status==="active"
- &&b.distribution_status==="all_authorized"&&!b.is_archived&&Boolean(b.business_number)
- &&Boolean(clean(b.anon_summary)||clean(b.public_listing_marketing_text))
- &&Boolean(clean(b.anon_display_name));
+ &&(b.distribution_status==="all_authorized"||b.distribution_status==="selective")&&!b.is_archived&&Boolean(b.business_number)
+ &&Boolean(clean(b.anon_summary)||clean(b.public_listing_marketing_text))&&Boolean(clean(b.anon_display_name));
 }
-function summary(b,max=430){
- const s=clean(b.anon_summary)||clean(b.public_listing_marketing_text);
- return s.length>max?s.slice(0,max).replace(/\s+\S*$/,"")+"…":s;
-}
-function to64(arr){let out="";for(let i=0;i<arr.length;i+=16384)out+=String.fromCharCode(...arr.slice(i,i+16384));return btoa(out);}
-function url64(bytes){return to64(bytes).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");}
-async function token(s){
- const exp=Math.floor(Date.now()/1000)+60*24*3600;
- const payload=String(s.id)+"."+exp+"."+String(s.email||"").toLowerCase();
- const key=await crypto.subtle.importKey("raw",new TextEncoder().encode("bsd-alert-pref-v1:"+k),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
- const sig=await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(payload));
- return String(s.id)+"."+exp+"."+url64(new Uint8Array(sig));
-}
-const drawText=(page,font,v,right,y,size,color)=>{
- const str=clean(v).replace(/[^\u05D0-\u05EA\s]/g," ").replace(/\s+/g," ").trim();if(!str)return;
- const visual=str;
- const width=font.widthOfTextAtSize(visual,size);
- page.drawText(visual,{x:Math.max(18,right-width),y,size,font,color});
-};
-function wrap(font,value,maxWidth,size,maxLines=4){
- const words=clean(value).split(" ").filter(Boolean);
- const lines=[];let line="";
- const measure=t=>font.widthOfTextAtSize(t,size);
- for(const w of words){const tryLine=line?line+" "+w:w;if(measure(tryLine)>maxWidth&&line){lines.push(line);line=w;}else line=tryLine;if(lines.length>=maxLines)break;}
- if(line&&lines.length<maxLines)lines.push(line);
- return lines;
-}
-let fontBuffer=null;
-async function makePdf(items){
- const pdf=await PDFDocument.create();
- pdf.registerFontkit(fontkit);
- if(!fontBuffer){
- const rsp=await fetch("https://raw.githubusercontent.com/openmaptiles/fonts/master/noto-sans/NotoSansHebrew-Regular.ttf",{signal:AbortSignal.timeout(14000)});
- if(!rsp.ok)throw new Error("pdf_font_http_"+rsp.status);
- fontBuffer=new Uint8Array(await rsp.arrayBuffer());
- if(fontBuffer.length<10000)throw new Error("pdf_font_invalid");
+// ---------- ג: card text = marketing text, else anon_summary; drop sentences with identifiers ----------
+const IDENT=[/מ["״']ר|מטר(?:ים)? רבוע|\bm2\b|\bsqm\b/i,/בע["״']?מ/,/ח\.פ|ח״פ|ח"פ|עוסק מורשה|עוסק פטור/,/רו["״']?ח|עו["״']?ד|רואה חשבון|עורך דין|ושות['׳]?/,
+ /(?:נוסד|הוקם|הוקמה|משנת|מאז|בשנת)\s*\d{4}|\b(?:19|20)\d{2}\b/,/דור(?:ות)?\s|דור\s?(?:שני|שלישי|רביעי)/,/עוקבים|followers/i,
+ /רחוב|רח['׳]\s|כתובת|קומה\s\d/,/הערה|פנימי|אנונימיות/,/רכבת קלה/,/\d{9}/];
+const IDENT2=[/\d,(?!000\b)\d{3}\b/,/ותק.{0,20}\d+\s*שנ|\b\d{2,}\s*שנ(?:ה|ים|ות)\b/,/הון עצמי|ההון העצמי|בעל(?:י)? מניות|יתרת חובה|טעונ(?:ים|ה) בדיקה|זמניים|אינה מאומתת|לפי כרטיס העסק|לפי הנתונים שסופקו|לפי הנמסר/];
+function cardText(b:any,max=420){
+ const rawSrc=String(b.public_listing_marketing_text||"").trim()?b.public_listing_marketing_text:b.anon_summary;
+ const src=String(b.public_listing_marketing_text||"").trim()?"marketing_text":"anon_summary";
+ const frags=String(rawSrc||"").split(/\n+|•|(?<=[.!?])\s+/).map(clean).filter(Boolean);
+ const kept:string[]=[],removed:string[]=[];
+ for(const x of frags){
+  if(/[:：]$/.test(x)||(x.split(" ").length<=4&&!/[.!?]$/.test(x)))continue;   // headings
+  if(IDENT.some(r=>r.test(x))||IDENT2.some(r=>r.test(x)))removed.push(x);else kept.push(/[.!?…]$/.test(x)?x:x+".");
  }
- const f=await pdf.embedFont(fontBuffer,{subset:true});
- const latin=await pdf.embedFont(StandardFonts.HelveticaBold);
- const page=pdf.addPage([595,842]);
- const navy=rgb(.055,.12,.21),blue=rgb(.08,.19,.31),gold=rgb(.82,.65,.33),grey=rgb(.38,.45,.53),white=rgb(1,1,1);
- page.drawRectangle({x:0,y:735,width:595,height:107,color:navy});
- let logoDrawn=false;
- try {
-  const logoResponse=await fetch(LOGO,{signal:AbortSignal.timeout(8000)});
-  if(logoResponse.ok){
-    const logoBytes=new Uint8Array(await logoResponse.arrayBuffer());
-    if(logoBytes.length>=100 && logoBytes.length<3500000){
-      const embedded=await pdf.embedPng(logoBytes);
-      const fit=embedded.scaleToFit(68,68);
-      page.drawImage(embedded,{x:58-fit.width/2,y:787-fit.height/2,width:fit.width,height:fit.height});
-      logoDrawn=true;
-    }
-  }
- } catch(error) {console.warn("PDF logo fallback",error instanceof Error?error.message:String(error));}
- if(!logoDrawn){
-  page.drawCircle({x:58,y:783,size:27,borderWidth:1.8,borderColor:gold});
-  page.drawText("BSD",{x:35,y:773,size:18,font:latin,color:gold});
- }
- drawText(page,f,"משביחים עסקים. מחברים הזדמנויות. מובילים עסקאות.",560,783,10,white);
- drawText(page,f,"שלוש הזדמנויות עסקיות עבורך",558,690,22,blue);
- drawText(page,f,"סקירה ראשונית אנונימית, בהתאם להעדפות החיפוש.",556,664,10,grey);
- for(let i=0;i<items.length;i++){
-  const b=items[i].business;const top=630-i*173;
-  page.drawRectangle({x:34,y:top-156,width:527,height:158,color:rgb(.982,.989,.997),borderColor:rgb(.83,.88,.93),borderWidth:1});
-  page.drawRectangle({x:550,y:top-155,width:5,height:156,color:gold});
-  page.drawText("0"+(i+1),{x:45,y:top-24,size:16,font:latin,color:gold});
-  drawText(page,f,b.anon_display_name,540,top-28,15,blue);
-  drawText(page,f,clean(b.city||b.region),535,top-52,10,grey);
-  page.drawText(Number(b.asking_price).toLocaleString("en-US"),{x:427,y:top-72,size:13,font:latin,color:gold});
-  drawText(page,f,"שקלים",530,top-72,12,gold);
-  let y=top-94;
-  for(const ln of wrap(f,summary(b,340),475,10,4)){drawText(page,f,ln,530,y,10,blue);y-=15;}
-  page.drawText(String(b.business_number),{x:47,y:top-143,size:8,font:latin,color:grey});
- }
- page.drawRectangle({x:0,y:0,width:595,height:85,color:rgb(.956,.973,.99)});
- drawText(page,f,"לפרטים נוספים נשמח לשמוע ממך",551,57,12,blue);
- page.drawText("www.bsd-bbi.co.il     077 4446707    054 2424999",{x:42,y:37,size:10,font:latin,color:blue});
- drawText(page,f,"הנתונים הם הצגה ראשונית בלבד, כפי שנמסרו ל BSD. אין התחייבות לזמינות או למחיר.",550,16,7,grey);
- return new Uint8Array(await pdf.save());
+ let out="";for(const x of kept){if((out+" "+x).trim().length>max)break;out=(out+" "+x).trim();}
+ if(!out&&kept[0])out=kept[0].slice(0,max).replace(/\s+\S*$/,"")+"…";
+ return {text:out,source:src,removed};
 }
-function mailBody(s,items,prefLink){
- const removal=s.unsubscribe_token?web+"/הסרה/?token="+encodeURIComponent(s.unsubscribe_token)+"&channel=email":null;
- const cards=items.map((row,i)=>{
- const b=row.business;
- return "<tr><td style='padding:13px 0'><div style='border:1px solid #dde5f0;border-right:4px solid #cba459;border-radius:10px;padding:14px;background:#fbfcfe'>"
- +"<div style='font-size:12px;color:#92712f'>עסק "+(i+1)+" · "+escape(b.business_number)+"</div>"
- +"<div style='font-size:18px;font-weight:bold;color:#0f294c;margin:5px 0'>"+escape(b.anon_display_name)+"</div>"
- +"<div style='font-size:13px;color:#425772'>"+escape(b.city||b.region||"")+" <strong style='color:#a0772e'>"+escape(money(b.asking_price))+"</strong></div>"
- +"<div style='font-size:13px;line-height:1.75;margin-top:8px'>"+escape(summary(b,240))+"</div></div></td></tr>";
- }).join("");
- return "<!doctype html><html lang='he' dir='rtl'><meta charset='utf-8'><body style='background:#f0f3f8;padding:22px 8px;font-family:Arial,Helvetica,sans-serif;color:#172f4b;direction:rtl'><table role='presentation' width='100%' cellspacing='0' cellpadding='0' style='max-width:620px;margin:auto;background:#fff;border-collapse:collapse;border-radius:12px;overflow:hidden'>"
- +"<tr><td style='background:#0b203c;color:#fff;padding:22px 26px;text-align:right'><img src='"+LOGO+"' alt='BSD' width='62' style='width:62px;height:auto;float:left'><div style='font-size:24px;font-weight:bold;color:#d8b569'>BSD</div><div style='font-size:12px'>משביחים עסקים. מחברים הזדמנויות. מובילים עסקאות.</div></td></tr>"
- +"<tr><td style='padding:25px 26px 10px;text-align:right'><div style='font-size:12px;color:#bb8b3b'>הזדמנויות שנבחרו במיוחד עבורך</div>"
- +"<h1 style='font-size:23px;line-height:1.5;margin:9px 0 14px;color:#10294c'>"+escape(items.length===1?"עסק חדש שעשוי להתאים לך":items.length+" עסקים שעשויים להתאים לך")+"</h1>"
- +"<p style='font-size:15px;line-height:1.8'>שלום "+escape(s.first_name)+",</p><p style='font-size:14px;line-height:1.8'>בהתאם לתחומי העניין, אזור החיפוש והתקציב שבחרת, ריכזנו עבורך הזדמנויות בתחום המבוקש. מצורף PDF מסודר עם סיכום אנונימי של כל עסק.</p>"
- +"<table role='presentation' width='100%' style='border-collapse:collapse'>"+cards+"</table>"
- +"<p style='font-size:14px;line-height:1.8'>מעניין אותך לקבל פרטים נוספים? אפשר להשיב למייל עם מספר העסק, ונשמח לחזור אליך וללוות אותך.</p>"
- +"<table role='presentation' align='center'><tr><td style='background:#d6aa56;border-radius:9px;text-align:center'><a href='"+escape(prefLink)+"' style='display:block;color:#09213d;text-decoration:none;font-size:14px;font-weight:bold;padding:12px 19px'>שינוי תחומי העניין והתקציב שלי</a></td></tr></table>"
- +"<p style='font-size:12px;text-align:center;color:#64748b;line-height:1.7'>הקישור אישי, ומציג את ההעדפות שבחרת. אפשר לעדכן אותן בכל עת בתקופת תוקף הקישור.</p>"
- +"<hr style='border:0;border-top:1px solid #e0e6ef;margin-top:25px'><p style='font-size:13px;line-height:1.7'>בברכה,<br><strong>צוות BSD מתווכי עסקים ישראל</strong><br>077 4446707 | 054 2424999<br><a href='"+web+"' style='color:#0b5b93'>www.bsd-bbi.co.il</a></p>"
- +"<p style='font-size:11px;color:#6f7e90;line-height:1.6'>ההצעות נשלחות בהתאם להגדרותיך. המחירים והנתונים נמסרו על ידי בעלי העסקים וטעונים בדיקה. לעדכון ההעדפות ניתן להשתמש בקישור למעלה.</p>"+(removal?"<p style='font-size:11px'><a href='"+escape(removal)+"' style='color:#64748b'>להסרה מרשימת עדכוני האימייל</a></p>":"")+"</td></tr></table></body></html>";
+const T:any={
+ intro:{female:"עברנו בעיון על הפרופיל שמילאת: התחומים, האזור והתקציב. מתוך העסקים שבידינו כרגע בחרנו עבורך {count} שנראות לנו מתאימות לך.",male:"עברנו בעיון על הפרופיל שמילאת: התחומים, האזור והתקציב. מתוך העסקים שבידינו כרגע בחרנו עבורך {count} שנראות לנו מתאימות לך.",neutral:"עברנו בעיון על הפרופיל שמילאת: התחומים, האזור והתקציב. מתוך העסקים שבידינו כרגע בחרנו {count} שנראות לנו מתאימות."},
+ desc:"ריכזנו כאן תיאור קצר של כל עסק, ותקציר מלא יישלח לפי בקשה.",
+ attach:{female:"לחלק מההזדמנויות מצורף תקציר אנונימי, כדי שתוכלי להתרשם בשקט ובקצב שלך.",male:"לחלק מההזדמנויות מצורף תקציר אנונימי, כדי שתוכל להתרשם בשקט ובקצב שלך.",neutral:"לחלק מההזדמנויות מצורף תקציר אנונימי, כדי להתרשם בשקט ובקצב הנוח."},
+ why:{female:"למה חשבנו עלייך",male:"למה חשבנו עליך",neutral:"למה זה מתאים"},
+ finance:{female:"מעבר לחיבור לעסק הנכון, BSD מסייעת גם במימון רכישת העסק ומלווה אותך בכל שלב, עד החתימה ואחריה.",male:"מעבר לחיבור לעסק הנכון, BSD מסייעת גם במימון רכישת העסק ומלווה אותך בכל שלב, עד החתימה ואחריה.",neutral:"מעבר לחיבור לעסק הנכון, BSD מסייעת גם במימון רכישת העסק ומלווה בכל שלב, עד החתימה ואחריה."},
+ cta:{female:"אם אחת ההזדמנויות מעניינת אותך, אפשר פשוט להשיב למייל הזה או להתקשר אליי, ונקבע שיחה קצרה בזמן שנוח לך.",male:"אם אחת ההזדמנויות מעניינת אותך, אפשר פשוט להשיב למייל הזה או להתקשר אליי, ונקבע שיחה קצרה בזמן שנוח לך.",neutral:"אם אחת ההזדמנויות מעניינת, אפשר פשוט להשיב למייל הזה או להתקשר אליי, ונקבע שיחה קצרה בזמן הנוח."},
+ discreet:"פרטים מזהים של העסקים נמסרים לאחר חתימה על הסכם סודיות, כמקובל אצלנו.",
+ footer:"המייל נשלח כי נרשמת באתר BSD לעדכונים על עסקים למכירה. אפשר להסיר את עצמך בכל רגע, בלי סיבה:",unsub:"להסרה מרשימת התפוצה"};
+const COUNT:any={1:"הזדמנות אחת",2:"שתי הזדמנויות",3:"שלוש הזדמנויות"};
+const form=(a:any)=>{a=String(a||"").toLowerCase();return a==="f"||a==="female"?"female":a==="m"||a==="male"?"male":"neutral";};
+const one=(x:string,n:number)=>n===1?x.replace("אם אחת ההזדמנויות מעניינת","אם העסק מעניין").replace("של העסקים נמסרים","של העסק נמסרים"):x;
+function render(s:any,picks:any[],unsub:string,hasFiles:boolean){
+ const g=form(s.address_form),n=picks.length,name=clean(s.first_name)||"שלום";
+ const subject=n===1?name+", הזדמנות אחת שבחרנו עבורך":name+", "+(COUNT[n]||n+" הזדמנויות")+" שבחרנו עבורך";
+ const P=[n===1?T.intro[g].replace("{count}",COUNT[1]).replace("שנראות לנו מתאימות","שנראית לנו מתאימה"):T.intro[g].replace("{count}",COUNT[n]),n===1?T.desc.replace("של כל עסק","של העסק"):T.desc].concat(hasFiles?[T.attach[g]]:[]);
+ const tail=[T.finance[g],T.cta[g],T.discreet].map(x=>one(x,n));
+ const card=(m:any)=>{const b=m.business;const price=Number(b.asking_price)>0?Number(b.asking_price).toLocaleString("en-US")+" ₪":"לפי פנייה";
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;margin:0 0 14px 0;background:#ffffff;border:1px solid #dce4ef;border-radius:12px;box-shadow:0 3px 0 #c9d6e8;"><tr><td style="padding:18px 20px 16px 20px;text-align:right;border-top:4px solid #d4a941;border-radius:12px 12px 0 0;">`
+  +`<p style="margin:0 0 4px 0;font-size:12px;color:#647087;">מספר עסק ${escape(b.business_number)}</p><h2 style="margin:0 0 10px 0;font-size:18px;line-height:1.45;color:#0a1d42;">${escape(b.anon_display_name)}</h2>`
+  +(m.region?`<p style="margin:0 0 4px 0;font-size:14px;color:#111c31;">אזור: ${escape(m.region)}</p>`:"")
+  +`<p style="margin:0 0 6px 0;font-size:14px;color:#111c31;">מחיר מבוקש: <strong style="color:#102d61;">${escape(price)}</strong></p>`
+  +`<p style="margin:10px 0 8px 0;font-size:14px;line-height:1.7;color:#111c31;"><strong style="color:#0f5ea8;">${T.why[g]}:</strong> ${escape(m.why)}</p>`
+  +`<p style="margin:0;font-size:14px;line-height:1.7;color:#33415c;">${escape(m.card.text)}</p>`+(m.file?`<p style="margin:8px 0 0 0;font-size:13px;color:#647087;">מצורף: תקציר אנונימי</p>`:"")+`</td></tr></table>`;};
+ const ph=P.map(p=>`<p style="margin:0 0 10px 0;">${escape(p)}</p>`).join("");
+ const th=tail.slice(0,-1).map(p=>`<p style="margin:0 0 8px 0;">${escape(p)}</p>`).join("")+`<p style="margin:0 0 14px 0;font-size:13.5px;color:#4d5b73;">${escape(tail[tail.length-1])}</p>`;
+ const html=`<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>${escape(subject)}</title></head>
+<body style="margin:0;padding:18px 0;background:#eef2f7;font-family:Rubik,Heebo,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" dir="rtl"><tr><td align="center">
+<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#f8fafc;border-radius:16px;overflow:hidden;border:1px solid #d9e2ed;">
+<tr><td style="background:#143b64;background:linear-gradient(135deg,#0a1d42,#143b64 60%,#1f5a96);padding:22px 24px;text-align:right;">
+<table role="presentation" width="100%"><tr><td style="text-align:right;vertical-align:middle;"><div style="font-size:21px;font-weight:700;color:#ffffff;">BSD - עסקים למכירה</div>
+<div style="font-size:13.5px;color:#f1d384;margin-top:4px;">${SLOGAN}</div></td>
+<td style="text-align:left;vertical-align:middle;width:74px;"><img src="${LOGO_HDR}" width="64" height="64" alt="BSD" style="display:block;border:0;width:64px;height:64px;"></td></tr></table></td></tr>
+<tr><td style="padding:24px 26px 6px 26px;text-align:right;color:#111c31;font-size:15px;line-height:1.75;">
+<p style="margin:0 0 12px 0;">שלום ${escape(name)},</p>${ph}<div style="height:8px"></div>
+${picks.map(card).join("\n")}
+<div style="height:6px"></div>${th}<p style="margin:0;">בברכה,</p>${SIG}</td></tr>
+<tr><td style="padding:14px 26px 18px 26px;background:#eaf0f7;text-align:right;font-size:12px;line-height:1.6;color:#5a6780;">
+<div style="color:#143b64;font-weight:700;margin-bottom:4px;">${SLOGAN}</div>${T.footer} <a href="${escape(unsub)}" style="color:#0f5ea8;">${T.unsub}</a></td></tr>
+</table></td></tr></table></body></html>`;
+ const L=[SLOGAN,"","שלום "+name+",",""].concat(P,[""]);
+ picks.forEach((m,i)=>{const b=m.business;L.push(`${i+1}) מספר עסק ${b.business_number}, ${b.anon_display_name}`);if(m.region)L.push("אזור: "+m.region);
+  L.push("מחיר מבוקש: "+(Number(b.asking_price)>0?Number(b.asking_price).toLocaleString("en-US")+" ₪":"לפי פנייה"),T.why[g]+": "+m.why,m.card.text,"");});
+ const text=L.concat(tail,["","בברכה,",SIGTXT,"",SLOGAN,T.footer+" "+unsub]).join("\n");
+ return {subject,html,text};
 }
-async function run(body){
- const settings=await db.from("bsd_alert_dispatch_auth").select("token,enabled").eq("id",true).single();
- if(settings.error||!settings.data)throw new Error("auth_settings_unavailable");
- const send=body?.send===true;
- if(send&&!settings.data.enabled)return {ok:false,error:"dispatch_disabled"};
- const subs=await db.from("business_alert_subscribers").select("id,first_name,email,unsubscribe_token,status,consent_general,consent_email,legacy_no_consent,email_unsubscribed_at,archived_at,is_test,categories,subcategories,regions,budget_min,budget_max,budget_open,looking_for").eq("status","active").eq("consent_email",true).eq("is_test",false).limit(200);
- if(subs.error)throw subs.error;
- const biz=await db.from("businesses").select("id,business_number,anon_display_name,anon_summary,public_listing_marketing_text,field,category,subcategory,city,region,asking_price,listing_status,distribution_status,public_listing_active,anon_card_active,is_archived,taxonomy").eq("public_listing_active",true).eq("anon_card_active",true).limit(2000);
+// ---------- shared loaders ----------
+const SUBCOLS="id,first_name,email,unsubscribe_token,status,consent_general,consent_email,legacy_no_consent,email_unsubscribed_at,archived_at,is_test,categories,subcategories,regions,budget_min,budget_max,budget_open,looking_for,address_form,lead_id,buyer_id,crm_lead_id";
+const BIZCOLS="id,business_number,anon_display_name,anon_summary,public_listing_marketing_text,field,category,subcategory,city,region,asking_price,listing_status,distribution_status,agreement_status,public_listing_active,anon_card_active,is_archived,taxonomy";
+const ok=(s:any)=>s.status==="active"&&s.consent_email===true&&s.consent_general===true&&s.legacy_no_consent!==true&&!s.archived_at&&!s.email_unsubscribed_at&&Boolean(s.unsubscribe_token)&&/@/.test(String(s.email||""));
+async function loadCfg(){const r=await db.from("business_alert_match_settings").select("budget_low_ratio,budget_high_ratio,min_score,sector_weight,budget_weight,location_weight").eq("id",true).single();
+ const d:any=r.data||{};return {low:Number(d.budget_low_ratio||0.7),high:Number(d.budget_high_ratio||1.3),min:Number(d.min_score||60),sector_weight:Number(d.sector_weight||50),budget_weight:Number(d.budget_weight||30),location_weight:Number(d.location_weight||20)};}
+async function vipFiles(ids:string[]){
+ if(!ids.length)return new Map();
+ const r=await db.from("business_sale_files").select("id,business_id,file_name,version_number,created_at").in("business_id",ids).eq("document_type","anonymous_summary").is("deleted_at",null).not("vip_approved_at","is",null).order("created_at",{ascending:false});
+ const m=new Map();for(const f of r.data||[])if(!m.has(f.business_id))m.set(f.business_id,f);return m;
+}
+async function businessStatus(id:string){const r=await db.rpc("vip_business_status",{p_business_id:id});return r.data||{};}
+// ---------- draft for one subscriber ----------
+async function draftFor(s:any,candidates:any[],cfg:any,opts:any,process:string){
+ const stat:any={subscriber_id:s.id,is_test:s.is_test};
+ const pend=await db.from("vip_email_drafts").select("id").eq("subscriber_id",s.id).in("status",["draft","approved","sending"]).limit(1);
+ if((pend.data||[]).length){stat.skip="pending_draft";return stat;}
+ const pr=await db.rpc("vip_build_client_profile",{p_subscriber_id:s.id});
+ if(pr.error||!pr.data?.ok){stat.skip="profile_failed";return stat;}
+ const prof=pr.data;
+ if(prof.last_vip_email_at&&Date.parse(prof.last_vip_email_at)>Date.now()-7*24*3600*1000){stat.skip="weekly_limit";return stat;}
+ const received=new Set<string>(prof.received||[]);
+ const excl=exclusions(clean(s.looking_for)+" | "+clean(prof.notes_text));
+ const rejects:any={};const matches:any[]=[];
+ for(const b of candidates){
+  if(received.has(b.business_number)){rejects[b.business_number]="already_received";continue;}
+  const m:any=matchBuyer(s,b,cfg,excl,opts);
+  if(m.reject){rejects[b.business_number]=m.reject;continue;}
+  if(m.score<cfg.min&&!m.flags.includes("no_price")){rejects[b.business_number]="score_"+m.score;continue;}
+  if(m.flags.includes("no_price")&&m.score<cfg.min-cfg.budget_weight){rejects[b.business_number]="score_"+m.score;continue;}
+  matches.push(m);
+ }
+ matches.sort((a,b)=>b.score-a.score||Number(a.business.asking_price||9e15)-Number(b.business.asking_price||9e15));
+ const picks=matches.slice(0,3);
+ stat.exclusions=excl;stat.rejected=rejects;stat.selected=picks.map(p=>p.business.business_number);
+ if(!picks.length){stat.skip="no_match";return stat;}
+ const files=await vipFiles(picks.map(p=>p.business.id));
+ const flags=new Set<string>();
+ for(const p of picks){
+  p.card=cardText(p.business);p.file=files.get(p.business.id)||null;
+  if(!p.card.text&&!p.file){p.drop=true;rejects[p.business.business_number]="no_clean_card_text";continue;}
+  if(p.card.removed.length)p.flags.push("card_text_scrubbed");
+  if(!p.card.text)p.flags.push("card_text_empty");
+  const st=await businessStatus(p.business.id);
+  for(const f of (st.flags||[]))if(!p.flags.includes(f))p.flags.push(f);
+  if(st.held)p.flags.push("public_listing_held");
+  p.flags.forEach((f:string)=>flags.add(f));
+ }
+ for(let i=picks.length-1;i>=0;i--)if(picks[i].drop)picks.splice(i,1);
+ stat.selected=picks.map(p=>p.business.business_number);
+ if(!picks.length){stat.skip="no_clean_card_text";return stat;}
+ const unsub=UNSUB+"?"+new URLSearchParams({token:s.unsubscribe_token,channel:"email"}).toString();
+ const hasFiles=picks.some(p=>p.file);
+ const r=render(s,picks,unsub,hasFiles);
+ const html_sha256=await sha256(r.html);   // computed after the unsubscribe link is in
+ stat.subject=r.subject;stat.flags=[...flags];stat.html_sha256=html_sha256;
+ stat.cards=picks.map(p=>({n:p.business.business_number,score:p.score,why:p.why,source:p.card.source,removed:p.card.removed.length,file:p.file?.file_name||null,flags:p.flags}));
+ if(opts.dry){stat.dry=true;return stat;}
+ const lead=s.lead_id||s.buyer_id||s.crm_lead_id||(prof.lead_ids||[])[0]||null;
+ const reasons:any={};for(const p of picks)reasons[p.business.business_number]={score:p.score,text:p.why,match:p.match,flags:p.flags,card_source:p.card.source,removed_sentences:p.card.removed};
+ const ins=await db.from("vip_email_drafts").insert({subscriber_id:s.id,buyer_lead_id:lead,process,business_numbers:picks.map(p=>p.business.business_number),
+  match_reasons:reasons,content_source:hasFiles?(picks.every(p=>p.file)?"anon_file":"mixed"):"card_text",file_ids:picks.filter(p=>p.file).map(p=>p.file.id),
+  subject:r.subject,html:r.html,text_body:r.text,html_sha256,unsubscribe_url:unsub,inline_logo_b64:null,
+  client_profile:JSON.stringify({lead_ids:prof.lead_ids,received:prof.received,sources:prof.sources,exclusions:excl,gmail_checked:false}).slice(0,4000),
+  status:"draft",flags:[...flags],created_by:"bsd-alert-digest v10"}).select("id").single();
+ if(ins.error){stat.error=ins.error.message;return stat;}
+ stat.draft_id=ins.data.id;return stat;
+}
+async function subscribers(opts:any){
+ let q=db.from("business_alert_subscribers").select(SUBCOLS).eq("status","active").eq("consent_email",true).eq("is_test",opts.test_only===true).limit(500);
+ if(Array.isArray(opts.subscriber_ids)&&opts.subscriber_ids.length)q=q.in("id",opts.subscriber_ids.slice(0,50));
+ const r=await q;if(r.error)throw r.error;return (r.data||[]).filter(ok);
+}
+async function run(opts:any){
+ const cfg=await loadCfg();
+ const biz=await db.from("businesses").select(BIZCOLS).eq("public_listing_active",true).eq("anon_card_active",true).limit(2000);
  if(biz.error)throw biz.error;
- const approvedList=(biz.data||[]).filter(approved);
- const report=[];
- for(const s of (subs.data||[]).filter(isActive)){
-  const matches=approvedList.map(b=>matchBuyer(s,b)).filter(Boolean).sort((a,b)=>b.score-a.score||Number(a.business.asking_price)-Number(b.business.asking_price));
-  const previously=await db.from("business_alert_sends").select("business_number,status,sent_at,created_by").eq("subscriber_id",s.id);
-  if(previously.error)throw previously.error;
-  const sentRecords=(previously.data||[]).filter(x=>x.status!=="failed");
-  const ids=new Set(sentRecords.map(x=>x.business_number));
-  const pending=matches.filter(m=>!ids.has(m.business.business_number)).slice(0,3);
-  const last=sentRecords.filter(x=>x.created_by==="auto_digest").map(x=>Date.parse(x.sent_at)).filter(Number.isFinite).reduce((a,b)=>Math.max(a,b),0);
-  const tooSoon=last>Date.now()-24*3600*1000;
-  const first=(sentRecords.filter(x=>x.created_by==="auto_digest").length===0);
-  const minNeeded=first?3:1;
-  const ready=pending.length>=minNeeded&&!tooSoon;
-  const stat={subscriber_id:s.id,eligible_matches:matches.length,new_matches:pending.length,first_batch:first,ready,selected:pending.map(x=>x.business.business_number)};
-  if(!send && body?.pdf_stored_probe===true && matches.length>=3){
-    const bytes=await makePdf(matches.slice(0,3));
-    stat.pdf_probe_bytes=bytes.length;
-    stat.pdf_probe_valid=String.fromCharCode(...bytes.slice(0,4))==="%PDF";
-  }
-  if(!send&&body?.pdf_probe===true&&ready){const bytes=await makePdf(pending);stat.pdf_bytes=bytes.length;stat.pdf_signature=String.fromCharCode(...bytes.slice(0,4));}
-
-  if(!send&&body?.test_admin_email===true&&ready){
-   if(!RESEND)throw new Error("resend_missing");
-   const bytes=await makePdf(pending);
-   const html=mailBody({...s,first_name:"לקוח",unsubscribe_token:null},pending,urlPrefs+"?demo=1");
-   const rs=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+RESEND},body:JSON.stringify({
-     from:"BSD עסקים למכירה <info@bsd-bbi.co.il>",reply_to:"info@bsd-bbi.co.il",to:["baruch.ezon@gmail.com"],subject:"[בדיקה] BSD | דוגמת מייל אוטומטי עם קובץ PDF",
-     html,text:"דוגמת מייל אוטומטי של BSD עם קובץ PDF ומסך שינוי העדפות.",
-     attachments:[{filename:"BSD_business_opportunities.pdf",content:to64(bytes),content_type:"application/pdf"}]
-   })});
-   const result=await rs.json().catch(()=>({}));
-   stat.admin_test_sent=rs.ok;stat.admin_test_status=rs.status;stat.pdf_bytes=bytes.length;stat.admin_test_error=rs.ok?null:String(result?.message||"").slice(0,160);
-   report.push(stat);continue;
-  }
-
-  if(!send&&body?.prefs_probe===true&&ready){
-   const purl=urlPrefs+"?token="+encodeURIComponent(await token(s));
-   const pf=await fetch(purl,{signal:AbortSignal.timeout(12000)});
-   const page=await pf.text();
-   stat.preferences_status=pf.status;
-   stat.preferences_prefilled=page.includes(String(s.budget_max))&&page.includes("name='subcategory'");
-  }
-  if(!send||!ready){report.push(stat);continue;}
-  if(!RESEND)throw new Error("resend_missing");
-  const pdf=await makePdf(pending);
-  const prefLink=urlPrefs+"?token="+encodeURIComponent(await token(s));
-  const mail=mailBody(s,pending,prefLink);
-  const rows=pending.map(x=>({subscriber_id:s.id,business_number:x.business.business_number,match_pct:x.score,channel:"email",created_by:"auto_digest",status:"reserved",sent_at:new Date().toISOString()}));
-  const claimed=await db.from("business_alert_sends").upsert(rows,{onConflict:"subscriber_id,business_number",ignoreDuplicates:true}).select("id,business_number");
-  if(claimed.error)throw claimed.error;
-  const claimedIds=(claimed.data||[]).map(x=>x.id);
-  if(claimedIds.length!==rows.length){
-   if(claimedIds.length)await db.from("business_alert_sends").update({status:"failed"}).in("id",claimedIds);
-   report.push({...stat,sent:false,reason:"concurrent_or_duplicate"});continue;
-  }
-  const url="https://api.resend.com/emails";
-  let ok=false,sendId=null,errText="";
-  try{
-   const resp=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+RESEND},body:JSON.stringify({
-     from:"BSD עסקים למכירה <info@bsd-bbi.co.il>",reply_to:"info@bsd-bbi.co.il",to:[s.email],
-     subject:"BSD | "+pending.length+" הזדמנויות עסקיות שנבחרו עבורך",
-     html:mail,
-     text:"שלום "+s.first_name+", מצורף PDF עם הזדמנויות המתאימות לחיפוש שלך. שינוי העדפות: "+prefLink+" לפרטים: info@bsd-bbi.co.il",
-     attachments:[{filename:"BSD_business_opportunities.pdf",content:to64(pdf),content_type:"application/pdf"}]
-   })});
-   ok=resp.ok;
-   const ans=await resp.json().catch(()=>({}));
-   sendId=ans?.id||null;
-   if(!ok)errText=String(ans?.message||ans?.name||resp.status).slice(0,150);
-  }catch(e){errText=e instanceof Error?e.message:String(e);}
-  const fin=await db.from("business_alert_sends").update({status:ok?"sent":"failed",...(sendId?{resend_id:sendId}:{})}).in("id",claimedIds);
-  if(fin.error)console.error("digest_log_failed",fin.error.message);
-  report.push({...stat,sent:ok,pdf_bytes:pdf.length,...(!ok?{error:errText}:{})});
+ const pub=await db.from("public_business_listings").select("business_number").limit(5000);
+ const visible=new Set((pub.data||[]).map((x:any)=>x.business_number));   // Roman's holds: not visible publicly = held
+ const all=(biz.data||[]).filter(approved).filter((b:any)=>visible.has(b.business_number));
+ const report:any[]=[];
+ if(opts.mode==="subscribers"){
+  for(const s of await subscribers(opts))report.push(await draftFor(s,all,cfg,opts,"A_new_subscriber"));
+  return {ok:true,mode:opts.mode,test_only:opts.test_only===true,dry:opts.dry===true,businesses_considered:all.length,report};
  }
- return {ok:true,sending:send,approved_businesses:approvedList.length,subscribers_considered:report.length,report};
+ // Process B: queue rows (or one business_id)
+ let items:any[]=[];
+ if(opts.mode==="business"&&opts.business_id)items=[{id:null,business_id:opts.business_id,reason:"manual"}];
+ else{const qr=await db.from("vip_match_queue").select("id,business_id,reason").is("processed_at",null).order("created_at").limit(20);items=qr.data||[];}
+ const subs=await subscribers(opts);
+ for(const it of items){
+  const b=all.find((x:any)=>x.id===it.business_id);
+  const st=await businessStatus(it.business_id);
+  const res:any={queue_id:it.id,business_id:it.business_id,business_number:st.business_number,reason:it.reason,flags:st.flags};
+  if(!b||!st.eligible||st.held){res.skip=st.held?"held_or_not_public":"not_eligible";}
+  else{res.drafts=[];for(const s of subs)res.drafts.push(await draftFor(s,[b],cfg,opts,"B_new_business"));
+   res.drafts=res.drafts.filter((d:any)=>d.draft_id||d.dry||d.skip!=="no_match");}
+  if(it.id&&!opts.dry)await db.from("vip_match_queue").update({processed_at:new Date().toISOString(),result:res}).eq("id",it.id);
+  report.push(res);
+ }
+ return {ok:true,mode:opts.mode||"queue",test_only:opts.test_only===true,dry:opts.dry===true,report};
 }
 Deno.serve(async req=>{
  if(req.method!=="POST")return response({ok:false,error:"method"},405);
  try{
- const settings=await db.from("bsd_alert_dispatch_auth").select("token").eq("id",true).single();
- const header=req.headers.get("x-bsd-dispatch-token")||"";
- const expected=String(settings.data?.token||"");
- const a=new TextEncoder().encode(header),b=new TextEncoder().encode(expected);
- let difference=a.length^b.length;
- for(let i=0;i<Math.max(a.length,b.length);i++)difference|=(a[i]||0)^(b[i]||0);
- if(!expected||difference||!header)return response({ok:false,error:"forbidden"},403);
- const payload=await req.json().catch(()=>({}));
- return response(await run(payload));
- }catch(e){console.error("bsd_alert_dispatch",e instanceof Error?e.message:String(e));return response({ok:false,error:"dispatch_failed",detail:String(e instanceof Error?e.message:e).slice(0,180)},500);}
+  const payload=await req.json().catch(()=>({}));
+  if(payload?.send===true||payload?.test_admin_email===true)return response({ok:false,error:"self_send_removed"},410);
+  let scope:any=null;
+  const header=req.headers.get("x-bsd-dispatch-token")||"";
+  if(header){
+   const settings=await db.from("bsd_alert_dispatch_auth").select("token,enabled").eq("id",true).single();
+   const expected=String(settings.data?.token||"");
+   const a=new TextEncoder().encode(header),b=new TextEncoder().encode(expected);
+   let diff=a.length^b.length;for(let i=0;i<Math.max(a.length,b.length);i++)diff|=(a[i]||0)^(b[i]||0);
+   if(!expected||diff)return response({ok:false,error:"forbidden"},403);
+   if(settings.data?.enabled!==true)return response({ok:false,error:"dispatch_disabled"},423);
+   scope={};
+  }else if(typeof payload?.run_token==="string"&&payload.run_token.length>=32){
+   const t=await db.rpc("vip_digest_use_token",{p_token:payload.run_token});
+   if(!t.data?.ok)return response({ok:false,error:"forbidden"},403);
+   scope=t.data.scope||{};
+  }else return response({ok:false,error:"forbidden"},403);
+  const opts={mode:["subscribers","queue","business"].includes(payload.mode)?payload.mode:"subscribers",business_id:payload.business_id,
+   subscriber_ids:payload.subscriber_ids,dry:payload.dry===true||scope.dry===true,include_over_budget:payload.include_over_budget===true,
+   test_only:scope.test_only===true?true:payload.test_only===true};
+  return response(await run(opts));
+ }catch(e){console.error("vip_digest",e instanceof Error?e.message:String(e));return response({ok:false,error:"digest_failed",detail:String(e instanceof Error?e.message:e).slice(0,180)},500);}
 });
