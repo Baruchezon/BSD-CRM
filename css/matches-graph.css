@@ -1,0 +1,39 @@
+.match-map { background: #fff; border: 1px solid #dde6ee; border-radius: 16px; box-shadow: 0 8px 20px #203d5a0e; }
+.match-map .vip-map-anchor a { font-weight: 800; color: inherit; overflow-wrap: anywhere; }
+.match-map .vip-map-controls { margin-block: 14px; }
+.match-map .vip-map-anchor { align-content: start; }
+.match-map .vip-map-anchor .vip-map-open { width: fit-content; }
+.match-map .vip-map-node-name { cursor: inherit; }
+.match-map .vip-map-node-name span { color: inherit; }
+.match-map .vip-map-node { align-items: center; }
+.match-map .vip-map-open[aria-expanded="true"] { background: var(--node-ink, #223c5e); color: #fff; }
+.match-map .match-map-broker { --node-bg: #f3ecfc; --node-ink: #613687; --node-border: #c9afe3; }
+.match-map-group-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.match-map a.vip-map-open { display: inline-block; text-decoration: none; }
+.match-map .vip-map-details { scroll-margin-block-start: 12px; overflow-wrap: anywhere; }
+.match-map details { margin-top: 10px; padding: 10px 12px; background: #fff; border: 1px solid #d8e5ef; border-radius: 8px; }
+.match-map summary { cursor: pointer; font-weight: 750; }
+.match-map .match-map-copy { white-space: pre-wrap; }
+.match-map .vip-map-send-list li { margin-top: 6px; }
+.match-map .br-actions { margin-top: 12px; }
+.match-map :is(a, button, select, summary):focus-visible { outline: 2px solid #1856a0; outline-offset: 2px; }
+@media (max-width: 560px) {
+  .match-map .vip-map-node-name { padding: 3px 0; }
+  .match-map .vip-map-controls select { flex: 1 1 100%; }
+}
+.match-map .vip-map-node-name:hover { background: transparent; }
+.match-map .vip-map-node-name a { color: inherit; }
+.match-map-branch-actions { display: flex; flex-wrap: wrap; gap: 5px; }
+@media (max-width: 560px) {
+  .toolbar:has([data-layout="graph"].active) .stat-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+  }
+  .toolbar:has([data-layout="graph"].active) .stat-card {
+    min-width: 0;
+    padding: 4px 5px;
+  }
+  .toolbar:has([data-layout="graph"].active) .stat-num { font-size: 17px; }
+  .toolbar:has([data-layout="graph"].active) .stat-label { font-size: 11px; }
+}

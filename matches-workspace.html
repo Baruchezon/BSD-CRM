@@ -41,6 +41,8 @@
 <script src="js/searchSelect.js?v=202610181400"></script>
 <script src="js/bsd-search.js?v=202610181400"></script>
 <script src="js/outreachModule.js?v=202610181800"></script>
+<link rel="stylesheet" href="css/vip-delivery-map.css?v=202611230635">
+<link rel="stylesheet" href="css/matches-graph.css?v=202611230900">
 <style>
   :root{
     --navy:#0e1b34; --navy-light:#16264a; --gold:#c9a24b; --gold-light:#e8cf8a;
@@ -285,7 +287,7 @@
 <div class="topbar">
   <div>
     <h1>📁 מרכז ההתאמות</h1>
-    <p class="sub">העסק הוא ראש העץ - מתחתיו כל הקונים הפוטנציאליים שלו</p>
+    <p class="sub">התאמות לפי עסק או קונה ומעקב אחר הטיפול</p>
   </div>
   <div class="topbar-right">
     <button class="new-match-btn" onclick="openNewMatchModal()">➕ התאמה חדשה</button>
@@ -299,8 +301,12 @@
   <div class="stat-strip" id="statStrip"></div>
   <div class="controls-row">
     <div class="view-toggle">
-      <button class="view-toggle-btn active" data-view="business">🏢 לפי עסקים</button>
-      <button class="view-toggle-btn" data-view="buyer">🧍 לפי קונים</button>
+      <button type="button" class="view-toggle-btn active" data-view="business" aria-pressed="true">🏢 לפי עסקים</button>
+      <button type="button" class="view-toggle-btn" data-view="buyer" aria-pressed="false">🧍 לפי קונים</button>
+    </div>
+    <div class="view-toggle" role="group" aria-label="סוג תצוגה">
+      <button type="button" class="view-toggle-btn active" data-layout="graph" aria-pressed="true">תרשים</button>
+      <button type="button" class="view-toggle-btn" data-layout="list" aria-pressed="false">רשימה</button>
     </div>
     <button class="ctrl-btn" id="filterToggleBtn" type="button">🔍 סינון מתקדם</button>
     <div class="sort-wrap">
@@ -332,11 +338,17 @@
 <div id="modalRoot"></div>
 <div id="toastRoot"></div>
 
+<script src="js/matches-graph.js?v=202611230900"></script>
 <script>
 let CURRENT_PROFILE = null;
 let ALL_LEADS = [], ALL_BROKERS = [], ALL_BUSINESSES = {}, ALL_MATCHES = [], ALL_PROFILES = {}, ALL_TASKS = [], ALL_ACTIVITY = [], ALL_OUTREACH = [];
 let searchTerm = "", activeQuickView = "", currentView = "business", createdByFilter = "";
 const OPEN_NODES = new Set();
+let layout = 'graph';
+const matchesGraph = window.BSDMatchesGraph.create({
+  escape: esc, formatDate: fmtDateTime, userName, selectView: setMatchView,
+  database: () => window.supabaseClient
+});
 
 const STATUS_COLOR = {
   'התאמה חדשה':'blue', 'ממתין לחתימת סודיות':'orange', 'נחתמה סודיות':'green',
@@ -734,7 +746,60 @@ function filteredMatches(){
   });
 }
 
-function render(){ currentView === 'business' ? renderByBusiness() : renderByBuyer(); }
+function render(){
+  if (layout === 'graph') {
+    const groups = currentView === 'business' ? groupByBusiness() : groupByBuyer();
+    matchesGraph.render(currentView, groups.map(graphGroup), {
+      wireGroup: wireGroupActions, wireMatch: wireBranchActions
+    });
+  } else {
+    currentView === 'business' ? renderByBusiness() : renderByBuyer();
+  }
+}
+
+function graphEntity(rec, kind, id){
+  const business = kind === 'business';
+  const page = business ? 'businesses.html' : kind === 'broker' ? 'brokers.html' : 'leads.html';
+  return {
+    key: (business ? 'biz' : kind) + ':' + id,
+    kind, id, name: (business ? rec?.internal_name : rec?.full_name) || 'כרטיס לא זמין',
+    label: business ? 'עסק' : kind === 'broker' ? 'מתווך' : 'קונה',
+    reference: business ? rec?.business_number : rec?.client_number,
+    summary: business ? [rec?.field, rec?.city || rec?.region].filter(Boolean).join(' · ') : agreementShortLabel(rec?.agreement_status),
+    href: rec ? page + '?open=' + encodeURIComponent(id) : '',
+    canReadNotes: kind === 'buyer' && !!rec && !!CURRENT_PROFILE &&
+      (CURRENT_PROFILE.role === 'admin' || rec.created_by === CURRENT_PROFILE.id)
+  };
+}
+
+function graphGroup(group){
+  const byBusiness = currentView === 'business';
+  const root = byBusiness ? graphEntity(group.b, 'business', group.bid)
+    : graphEntity(group.rec, group.isBroker ? 'broker' : 'buyer', group.id);
+  const rootActions = byBusiness ? `
+    <button class="mini-btn" data-addbuyer="${esc(root.id)}">הוסף קונה</button>
+    <button class="mini-btn" data-outreach="${esc(root.id)}">פנייה יזומה</button>
+    <button class="mini-btn" data-bizreport="${esc(root.id)}">הפק דוח ללקוח</button>` : `
+    <button class="mini-btn" data-quicksend="${esc(group.key)}">עדכון מהיר</button>
+    ${group.isBroker ? '' : `<button class="mini-btn" data-addbiz="${esc(root.id)}">חבר לעסק</button>
+      <button class="mini-btn" data-buyerreport="${esc(root.id)}">דוח לקונה</button>`}`;
+  return {
+    ...root, actions: root.href ? rootActions : '',
+    count: group.matches.length,
+    matches: () => group.matches.slice().sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).map(m=>{
+      const {rec, isBroker} = counterpartyOf(m);
+      const buyer = graphEntity(rec, isBroker ? 'broker' : 'buyer', isBroker ? m.broker_id : m.buyer_id);
+      const business = graphEntity(ALL_BUSINESSES[m.business_id], 'business', m.business_id);
+      return {
+        ...m, buyer, business, other: byBusiness ? buyer : business,
+        statusColor: STATUS_COLOR[m.status] || 'gray',
+        handler: userName(m.current_handler),
+        openTasks: ALL_TASKS.filter(t=>t.match_id===m.id && t.status!=='הושלמה'),
+        actions: branchActionsHtml(m)
+      };
+    })
+  };
+}
 
 function branchRowHtml(m, otherPartyLabel){
   const {rec} = counterpartyOf(m);
@@ -758,14 +823,18 @@ function branchRowHtml(m, otherPartyLabel){
       ${openTasks?` · ${openTasks} משימות פתוחות`:''}
     </div>
     ${stepPathHtml(m)}
-    <div class="br-actions">
+    ${branchActionsHtml(m)}
+  </div>`;
+}
+
+function branchActionsHtml(m){
+  return `<div class="br-actions">
       <button class="mini-btn" data-open="${m.id}">📁 פתח תיק</button>
       <button class="mini-btn" data-quicksend-match="${m.id}" style="background:#dff0e4;border-color:#a9d6b8;">💬 עדכון מהיר</button>
       <button class="mini-btn" data-task="${m.id}">➕ משימה</button>
       <button class="mini-btn" data-note="${m.id}">📝 הערה</button>
       <button class="mini-btn" data-call="${m.id}">☎️ תיעוד שיחה</button>
-    </div>
-  </div>`;
+    </div>`;
 }
 
 function wireBranchActions(container){
@@ -777,8 +846,7 @@ function wireBranchActions(container){
   container.querySelectorAll('[data-stepclick]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); showSideDetailPanel(el.dataset.stepclick, el.dataset.stepname); }));
 }
 
-function renderByBusiness(){
-  const wrap = document.getElementById('mainContent');
+function groupByBusiness(){
   const rows = filteredMatches();
   const bizIds = [...new Set(rows.map(m=>m.business_id))];
   // 18.10.2026 (בקשת ברוך): עד היום תצוגת "לפי עסקים" הציגה רק עסקים שיש להם
@@ -790,7 +858,6 @@ function renderByBusiness(){
       if (!b.is_archived && !bizIds.includes(b.id) && searchHit(q, bizSearchFields(b))) bizIds.push(b.id);
     });
   }
-  if (!bizIds.length){ wrap.innerHTML = `<div class="empty-state">לא נמצאו עסקים או התאמות תואמות לסינון.</div>`; return; }
 
   const bizStats = bizIds.map(bid=>{
     const b = ALL_BUSINESSES[bid];
@@ -807,6 +874,13 @@ function renderByBusiness(){
     };
   });
   applySortMode(bizStats, s=>s.b?.internal_name, s=>s.matches.length);
+  return bizStats;
+}
+
+function renderByBusiness(){
+  const wrap = document.getElementById('mainContent');
+  const bizStats = groupByBusiness();
+  if (!bizStats.length){ wrap.innerHTML = '<div class="empty-state">לא נמצאו עסקים או התאמות תואמות לסינון.</div>'; return; }
 
   wrap.innerHTML = bizStats.map(s=>{
     const isOpen = OPEN_NODES.has('biz:'+s.bid);
@@ -848,14 +922,11 @@ function renderByBusiness(){
     OPEN_NODES.has(key) ? OPEN_NODES.delete(key) : OPEN_NODES.add(key);
     render();
   }));
-  wrap.querySelectorAll('[data-addbuyer]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openAddBuyerModal(el.dataset.addbuyer); }));
-  wrap.querySelectorAll('[data-outreach]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openOutreachModal(el.dataset.outreach); }));
-  wrap.querySelectorAll('[data-bizreport]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='business-report-builder.html?business_id='+el.dataset.bizreport; }));
+  wireGroupActions(wrap);
   wireBranchActions(wrap);
 }
 
-function renderByBuyer(){
-  const wrap = document.getElementById('mainContent');
+function groupByBuyer(){
   const rows = filteredMatches();
   // 03.09.2026 (מודול מתווכים, שלב 4): מפתח קיבוץ מורכב (סוג+מזהה) במקום
   // buyer_id בלבד - אחרת כל התאמות המתווכים (buyer_id ריק אצלן) היו
@@ -870,7 +941,6 @@ function renderByBuyer(){
       if (!l.is_archived && !groupKeys.includes(k) && (searchHit(qb, buyerSearchFields(l)) || (window.BSDSearch && BSDSearch.phoneMatch(qb, [l.phone, l.phone2])))) groupKeys.push(k);
     });
   }
-  if (!groupKeys.length){ wrap.innerHTML = `<div class="empty-state">לא נמצאו התאמות תואמות לסינון.</div>`; return; }
 
   const groupStats = groupKeys.map(key=>{
     const [type, id] = [key.startsWith('broker:') ? 'broker' : 'buyer', key.slice(key.indexOf(':')+1)];
@@ -886,6 +956,13 @@ function renderByBuyer(){
     };
   });
   applySortMode(groupStats, s=>s.rec?.full_name, s=>s.matches.length);
+  return groupStats;
+}
+
+function renderByBuyer(){
+  const wrap = document.getElementById('mainContent');
+  const groupStats = groupByBuyer();
+  if (!groupStats.length){ wrap.innerHTML = '<div class="empty-state">לא נמצאו התאמות תואמות לסינון.</div>'; return; }
 
   wrap.innerHTML = groupStats.map(s=>{
     const isOpen = OPEN_NODES.has(s.key);
@@ -928,10 +1005,17 @@ function renderByBuyer(){
     OPEN_NODES.has(key) ? OPEN_NODES.delete(key) : OPEN_NODES.add(key);
     render();
   }));
+  wireGroupActions(wrap);
+  wireBranchActions(wrap);
+}
+
+function wireGroupActions(wrap){
+  wrap.querySelectorAll('[data-addbuyer]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openAddBuyerModal(el.dataset.addbuyer); }));
+  wrap.querySelectorAll('[data-outreach]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openOutreachModal(el.dataset.outreach); }));
+  wrap.querySelectorAll('[data-bizreport]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='business-report-builder.html?business_id='+el.dataset.bizreport; }));
   wrap.querySelectorAll('[data-addbiz]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openNewMatchModal({ buyerId: el.dataset.addbiz }); }));
   wrap.querySelectorAll('[data-buyerreport]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='leads.html?open='+el.dataset.buyerreport; }));
   wrap.querySelectorAll('[data-quicksend]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickCheckinModalForKey(el.dataset.quicksend); }));
-  wireBranchActions(wrap);
 }
 
 function openOutreachModal(bizId){
@@ -1266,10 +1350,31 @@ async function saveQuickNote(matchId, actionType){
   render();
 }
 
-document.querySelectorAll('.view-toggle-btn').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    currentView = btn.dataset.view;
-    document.querySelectorAll('.view-toggle-btn').forEach(b=>b.classList.toggle('active', b===btn));
+function setMatchView(view, focusKey, pivot = false){
+  currentView = view;
+  if (pivot) {
+    searchTerm = '';
+    document.getElementById('searchBox').value = '';
+  }
+  if (focusKey) matchesGraph.select(view, focusKey);
+  document.querySelectorAll('[data-view]').forEach(button=>{
+    const active = button.dataset.view === view;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active);
+  });
+  render();
+  if (focusKey) document.getElementById('matchGraphEntity')?.focus();
+}
+document.querySelectorAll('[data-view]').forEach(button=>{
+  button.addEventListener('click', ()=>setMatchView(button.dataset.view));
+});
+document.querySelectorAll('[data-layout]').forEach(button=>{
+  button.addEventListener('click', ()=>{
+    layout = button.dataset.layout;
+    document.querySelectorAll('[data-layout]').forEach(item=>{
+      item.classList.toggle('active', item === button);
+      item.setAttribute('aria-pressed', item === button);
+    });
     render();
   });
 });

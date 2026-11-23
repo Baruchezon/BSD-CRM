@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const html = fs.readFileSync(new URL('../matches-workspace.html', import.meta.url), 'utf8');
+const graphScript = fs.readFileSync(new URL('../js/matches-graph.js', import.meta.url), 'utf8');
 const script = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)]
   .map(m=>m[1]).find(s=>s.includes('let CURRENT_PROFILE'))
   .replace(/\(async function init\(\)\{[\s\S]*?\}\)\(\);/, '');
@@ -20,6 +21,7 @@ function setup(){
     window: {addEventListener(){}, searchSelectHTML(){return '';}, initSearchSelect(id, users, options){ context.creatorOptions = options; }},
   };
   vm.createContext(context);
+  vm.runInContext(graphScript, context);
   vm.runInContext(script, context);
   vm.runInContext(`
     ALL_PROFILES={u1:{id:'u1',full_name:'סימון'},u2:{id:'u2',full_name:'רגינה'}};
@@ -30,6 +32,7 @@ function setup(){
       {id:'m2',business_id:'b1',buyer_id:'l2',created_by:'u2',current_handler:'u1',status:'התאמה חדשה'},
       {id:'m3',business_id:'b2',buyer_id:'l2',created_by:null,status:'התאמה חדשה'}
     ];
+    layout='list';
     buildCreatorFilter();
   `, context);
   return {context, elements, run: code=>vm.runInContext(code, context)};
