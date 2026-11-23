@@ -37,3 +37,22 @@
   .toolbar:has([data-layout="graph"].active) .stat-num { font-size: 17px; }
   .toolbar:has([data-layout="graph"].active) .stat-label { font-size: 11px; }
 }
+.match-tree-toggle {
+  text-align: start;
+  color: inherit;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.tree-toggle-label {
+  display: inline-block;
+  margin-inline-start: 8px;
+  color: #234a72;
+  font-size: .76rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.match-map .match-close { margin-block-end: 8px; }
+#matchSearchStatus:not(:empty) { color: var(--muted); font-size: .83rem; padding-block: 5px; }
