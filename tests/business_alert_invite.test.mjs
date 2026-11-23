@@ -106,7 +106,8 @@ test("signup still claims one thank-you and marks an invite as joined", () => {
   const inviteAt = src.indexOf("invite_token");
   const claimAt = src.indexOf("claimWelcome", inviteAt);
   assert.ok(inviteAt > 0 && claimAt > inviteAt);
-  assert.match(src, /status: "joined"/);
+  assert.match(src, /business_alert_complete_invite/);
+  assert.match(readFileSync("supabase/migrations/20261123115926_agent_private_vip_matching.sql", "utf8"), /status='joined'/);
   assert.match(src, /invited_by_baruch/);
   assert.match(readFileSync("supabase/functions/business-alert-signup/email.mjs", "utf8"), /הוזמן ע״י ברוך/);
   assert.match(readFileSync("leads.html", "utf8"), /רשימת תפוצת עסקים|businessAlertInvite/);

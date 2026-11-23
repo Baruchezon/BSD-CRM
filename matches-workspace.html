@@ -36,7 +36,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
 <script src="js/config.js?v=20260930archive1"></script>
 <script src="js/supabaseClient.js"></script>
-<script src="js/auth.js"></script>
+<script src="js/auth.js?v=202611231240"></script>
 <script src="js/sessionExpired.js?v=202610071530"></script>
 <script src="js/searchSelect.js?v=202610181400"></script>
 <script src="js/bsd-search.js?v=202610181400"></script>
@@ -600,12 +600,24 @@ function restoreMatchesPageCache(){
   return true;
 }
 
+async function loadMatchingBusinesses(){
+  const db = window.supabaseClient;
+  const [full, anon] = await Promise.all([
+    db.from('businesses').select('id,internal_name,internal_code,anonymous_name,anon_display_name,business_number,field,category,subcategory,city,region,owner_name,agreement_status,created_by,handled_by,is_archived,created_at,updated_at'),
+    db.from('businesses_anonymous_card').select('id,anon_display_name,business_number,field,category,subcategory,city,agreement_status,created_at,updated_at')
+  ]);
+  if (full.error || anon.error) return { error: full.error || anon.error };
+  const rows = new Map((anon.data || []).map(b => [b.id, { ...b, internal_name: b.anon_display_name || 'עסק אנונימי', _anonymous: true }]));
+  for (const b of full.data || []) rows.set(b.id, b);
+  return { data: [...rows.values()] };
+}
+
 async function loadEverything(){
   const sb = window.supabaseClient;
   const results = await Promise.all([
     sb.from('leads').select('id,full_name,phone,phone2,email,client_number,agreement_status,created_by,handled_by,type,is_archived,created_at,updated_at').eq('type','buyer'),
     sb.from('brokers').select('id,full_name,phone,email,city,looking_for,agreement_status,status,created_by,handled_by,is_archived'),
-    sb.from('businesses').select('id,internal_name,internal_code,anonymous_name,anon_display_name,business_number,field,category,subcategory,city,region,owner_name,agreement_status,created_by,handled_by,is_archived,created_at,updated_at'),
+    loadMatchingBusinesses(),
     sb.from('matches').select('*'),
     sb.from('profiles').select('id,full_name,role'),
     sb.from('tasks').select('id,match_id,business_id,buyer_id,title,status,due_date,assigned_to')

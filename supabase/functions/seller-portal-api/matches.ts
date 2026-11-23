@@ -129,7 +129,7 @@ export function buildOwnerMatches(i: Input) {
   // Company only if the CRM has one for the buyer (leads.company); never invented.
   const nameOf = new Map(shown.map(m => {const l = buyers.get(m.buyer_id), co = safeCompany(l); return [m.id, co ? `${buyerName(l)} · ${co}` : buyerName(l)];}));
   const visibleNotes = (i.notes || []).filter(n => n && num.has(n.match_id) && n.visible_to_client === true && !n.deleted_at);
-  const srcOf = new Map(shown.map(m => [m.id, sourceLabel(m.buyer_source)]));
+  const srcOf = new Map(shown.map(m => { const referrer = readableName(buyers.get(m.buyer_id)?.referred_by_agent_name); return [m.id, sourceLabel(m.buyer_source) || (referrer ? 'סוכן מורשה: ' + referrer : null)]; }));
   const labelsOf = (matchId: string) => {
     const display = nameOf.get(matchId) || '';
     return [...new Set([display, display.split(' · ')[0]].map(s => clean(s, 200)).filter(Boolean))];

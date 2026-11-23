@@ -55,7 +55,7 @@ function canGenerateAnonymousCard(profile, business) {
 
 function canReleaseBusinessAccess(profile, business) {
   if (bsdIsViewer(profile)) return false;
-  return canEditBusiness(profile, business); // רק מטפל/יוצר/אדמין/מנהל יכולים לשחרר
+  return bsdIsAdminOrManager(profile) || bsdOwnsRecord(profile, business);
 }
 
 // ---- קונים (leads) ----
@@ -132,7 +132,7 @@ function canManageUsers(profile) {
 const BSD_ROLE_DEFAULT_PERMISSIONS = {
   admin:   { can_view_anonymous_businesses: true, can_create_businesses: true, can_create_buyers: true, can_record: true, can_use_survey: true, can_use_sale_file: true, can_send_agreement: true, can_send_presentations: true, can_view_buyer_rating: true, can_edit_buyer_rating: true },
   manager: { can_view_anonymous_businesses: true, can_create_businesses: true, can_create_buyers: true, can_record: true, can_use_survey: true, can_use_sale_file: true, can_send_agreement: true, can_send_presentations: true, can_view_buyer_rating: true, can_edit_buyer_rating: true },
-  agent_authorized: { can_view_anonymous_businesses: true, can_create_businesses: true, can_create_buyers: true, can_record: true, can_use_survey: false, can_use_sale_file: false, can_send_agreement: false, can_send_presentations: false, can_view_buyer_rating: true, can_edit_buyer_rating: true },
+  agent_authorized: { can_use_ai_match: true, can_view_anonymous_businesses: true, can_create_businesses: true, can_create_buyers: true, can_record: true, can_use_survey: false, can_use_sale_file: false, can_send_agreement: false, can_send_presentations: false, can_view_buyer_rating: true, can_edit_buyer_rating: true },
   agent:   { can_view_anonymous_businesses: false, can_create_businesses: false, can_create_buyers: false, can_record: false, can_use_survey: false, can_use_sale_file: false, can_send_agreement: false, can_send_presentations: false, can_view_buyer_rating: false, can_edit_buyer_rating: false },
   viewer:  { can_view_anonymous_businesses: true, can_create_businesses: false, can_create_buyers: false, can_record: false, can_use_survey: false, can_use_sale_file: false, can_send_agreement: false, can_send_presentations: false, can_view_buyer_rating: false, can_edit_buyer_rating: false }
 };

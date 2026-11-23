@@ -51,7 +51,7 @@ async function requireStaff(req: Request) {
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) return { error: "not_authenticated" };
   const { data: profile } = await supabase.from("profiles").select("id, full_name, role, status").eq("id", data.user.id).maybeSingle();
-  if (!profile || profile.status !== "active" || !["admin", "manager"].includes(profile.role)) return { error: "forbidden" };
+  if (!profile || profile.status !== "active" || !["admin", "manager", "agent_authorized"].includes(profile.role)) return { error: "forbidden" };
   return { user: data.user, profile };
 }
 
@@ -96,7 +96,7 @@ async function matchingSubscribers(card: Record<string, unknown> | null) {
 
 async function loadCard(cardType: string, cardId: string) {
   const { data, error } = await supabase.from("leads")
-    .select("id, type, first_name, last_name, full_name, phone, email, requested_categories, requested_field, requested_area, budget")
+    .select("id, type, first_name, last_name, full_name, phone, email, requested_categories, requested_field, requested_area, budget, created_by, handled_by")
     .eq("id", cardId)
     .maybeSingle();
   if (error) throw error;
@@ -117,6 +117,8 @@ Deno.serve(async req => {
     const cardType = body.card_type === "buyer" ? "buyer" : body.card_type === "lead" ? "lead" : "";
     const cardId = String(body.card_id || "");
     if (!cardType || !/^[0-9a-f-]{36}$/i.test(cardId)) return json({ ok: false, error: "card" }, 400, origin);
+    const ownCard = await loadCard(cardType, cardId);
+    if (!ownCard || (auth.profile.role === "agent_authorized" && ownCard.created_by !== auth.user.id && ownCard.handled_by !== auth.user.id)) return json({ ok: false, error: "not_found" }, 404, origin);
     const column = cardType === "buyer" ? "buyer_id" : "lead_id";
     const { data: invites, error: listError } = await supabase.from("business_alert_invites")
       .select("id, channel, status, sent_at, opened_at, joined_at, expires_at, created_at")
@@ -176,7 +178,7 @@ Deno.serve(async req => {
       status: "sent",
       sent_at: new Date().toISOString(),
       expires_at: expires,
-      invited_by: "baruch",
+      invited_by: auth.profile.full_name || auth.user.id,
       created_by: auth.user.id
     };
     const { data: saved, error: insertError } = await supabase.from("business_alert_invites").insert(row).select("id, channel, status, sent_at, opened_at, joined_at, expires_at").single();

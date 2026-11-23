@@ -202,8 +202,8 @@
 
 <script src="js/config.js?v=20260930archive1"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
-<script src="js/auth.js?v=202611181930"></script>
-<script src="js/permissions.js?v=202608251215"></script>
+<script src="js/auth.js?v=202611231240"></script>
+<script src="js/permissions.js?v=202611231240"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/push.js?v=202610051500"></script>
 <script>
@@ -425,7 +425,10 @@ function openEditForm(id){
         <div class="field full"><label>הערות</label><textarea id="notes">${esc(u.notes)}</textarea></div>
         <div class="field full" style="background:#fff8e6;border:1px solid #e8d18a;border-radius:8px;padding:10px 12px;">
           <label style="font-weight:700;color:#8a5a00;">🔐 עסקים שהופצו למשתמש זה במפורש</label>
+          <div id="userGrantChoices" style="font-size:14px;">טוען אפשרויות שחרור…</div>
           <div id="userAccessGrantsList" style="font-size:.82rem;margin-top:6px;">טוען...</div>
+          <button type="button" class="btn btn-ghost" onclick="document.getElementById('userBuyerGrantPanel').hidden=!document.getElementById('userBuyerGrantPanel').hidden">הרשאת צפייה בקונים</button>
+          <div id="userBuyerGrantPanel" hidden><div id="userBuyerGrantChoices"></div><div id="userBuyerGrantList"></div></div>
         </div>
       </div>
       <div class="modal-actions">
@@ -439,6 +442,7 @@ function openEditForm(id){
   document.getElementById('editForm').dataset.userId = id;
   document.getElementById('editForm').addEventListener('submit', saveEdit);
   loadUserAccessGrants(id);
+  loadUserGrantChoices(id);
 }
 
 // ============================================================
@@ -463,6 +467,49 @@ async function loadUserAccessGrants(userId){
       <button type="button" class="btn btn-ghost" style="padding:2px 10px;font-size:.75rem;color:#b3402c;" onclick="revokeUserAccessGrant('${g.id}','${userId}')">הסר גישה</button>
     </div>
   `).join('');
+}
+
+async function loadUserGrantChoices(userId){
+  const db=window.supabaseClient;
+  const [businesses,buyers,grants]=await Promise.all([
+    db.from('businesses').select('id,internal_name,business_number').eq('is_archived',false).order('internal_name'),
+    db.from('leads').select('id,full_name,client_number').eq('type','buyer').eq('is_archived',false).order('full_name'),
+    db.from('lead_access_grants').select('id,lead_id,leads(full_name)').eq('granted_to',userId).eq('active',true)
+  ]);
+  const box=document.getElementById('userGrantChoices');
+  if (!box) return;
+  if (businesses.error || buyers.error || grants.error){box.textContent='לא ניתן לטעון אפשרויות שחרור'; return;}
+  box.innerHTML=`<label>בחר עסק לשחרור מלא לסוכן זה <select id="userGrantBusiness"><option value="">בחר עסק</option>${(businesses.data||[]).map(b=>`<option value="${esc(b.id)}">${esc(b.internal_name)} · ${esc(b.business_number)}</option>`).join('')}</select></label><button type="button" class="btn btn-primary" onclick="grantUserBusiness('${userId}')">שחרר גישה מלאה לעסק</button><p>ההרשאה תקפה לעסק שנבחר. קונים והתאמות של סוכנים אחרים נשארים מוגנים.</p>`;
+  document.getElementById('userBuyerGrantChoices').innerHTML=`<label>בחר קונה לשחרור לצפייה <select id="userGrantBuyer"><option value="">בחר קונה</option>${(buyers.data||[]).map(b=>`<option value="${esc(b.id)}">${esc(b.full_name)} · ${esc(b.client_number)}</option>`).join('')}</select></label><button type="button" class="btn btn-primary" onclick="grantUserBuyer('${userId}')">אפשר צפייה בקונה</button>`;
+  document.getElementById('userBuyerGrantList').innerHTML=(grants.data||[]).map(g=>`<div style="padding:6px 0">${esc(g.leads?.full_name||'קונה')} <button type="button" class="btn btn-ghost" onclick="revokeUserBuyer('${g.id}','${userId}')">בטל הרשאה</button></div>`).join('');
+}
+async function grantUserBusiness(userId){
+  const businessId=document.getElementById('userGrantBusiness').value;
+  if (!businessId){toast('בחר עסק');return;}
+  const db=window.supabaseClient;
+  const existing=await db.from('business_access_grants').select('id').eq('business_id',businessId).eq('granted_to',userId).eq('active',true).maybeSingle();
+  if (existing.error){toast('שגיאה בטעינת ההרשאה');return;}
+  const fields={access_level:'full',granted_by:CURRENT_PROFILE.id};
+  const result=existing.data ? await db.from('business_access_grants').update(fields).eq('id',existing.data.id).select('id').single() : await db.from('business_access_grants').insert({...fields,business_id:businessId,granted_to:userId}).select('id').single();
+  if(result.error){toast('שגיאה בשחרור ההרשאה');return;}
+  toast('שוחררה גישה מלאה לעסק שנבחר');loadUserAccessGrants(userId);
+}
+async function grantUserBuyer(userId){
+  const leadId=document.getElementById('userGrantBuyer').value;
+  if(!leadId){toast('בחר קונה');return;}
+  const db=window.supabaseClient;
+  const previous=await db.from('lead_access_grants').select('id').eq('lead_id',leadId).eq('granted_to',userId).eq('active',true).maybeSingle();
+  if(previous.error){toast('שגיאה בטעינת ההרשאה');return;}
+  if(!previous.data){
+    const result=await db.from('lead_access_grants').insert({lead_id:leadId,granted_to:userId,granted_by:CURRENT_PROFILE.id,scopes:['view_card']}).select('id').single();
+    if(result.error){toast('שגיאה בשחרור הקונה');return;}
+  }
+  toast('שוחררה צפייה בקונה שנבחר');loadUserGrantChoices(userId);
+}
+async function revokeUserBuyer(id,userId){
+  const result=await window.supabaseClient.from('lead_access_grants').update({revoked_at:new Date().toISOString(),revoked_by:CURRENT_PROFILE.id}).eq('id',id).select('id').single();
+  if(result.error){toast('שגיאה בביטול הרשאה');return;}
+  toast('הרשאת הצפייה בוטלה');loadUserGrantChoices(userId);
 }
 
 function userNameFromCache(id){

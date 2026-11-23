@@ -213,8 +213,8 @@
 
 <script src="js/config.js?v=20260930archive1"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
-<script src="js/auth.js?v=202611181930"></script>
-<script src="js/permissions.js?v=202608251215"></script>
+<script src="js/auth.js?v=202611231240"></script>
+<script src="js/permissions.js?v=202611231240"></script>
 <script>
 const DISCLOSURE_LABELS = {1:'רמה 1 · אנונימי', 2:'רמה 2 · מורחב', 3:'רמה 3 · מלא'};
 const MATCH_STATUSES = ['התאמה חדשה','ממתין לחתימת סודיות','נחתמה סודיות','מידע ראשוני נשלח','תקציר נשלח',
@@ -273,7 +273,12 @@ async function loadEverything(){
       : window.supabaseClient.from('leads').select('*').eq('id', match.buyer_id).single(),
     window.supabaseClient.rpc('get_active_users_basic')
   ]);
-  BIZ = biz; BUYER = buyer; ALL_USERS = users || [];
+  BIZ = biz;
+  if (!BIZ) {
+    const { data: anonymous } = await window.supabaseClient.from('businesses_anonymous_card').select('*').eq('id', match.business_id).maybeSingle();
+    if (anonymous) BIZ = { ...anonymous, internal_name: anonymous.anon_display_name || 'עסק אנונימי', _anonymous: true };
+  }
+  BUYER = buyer; ALL_USERS = users || [];
 
   renderHero();
   renderQuickActions();

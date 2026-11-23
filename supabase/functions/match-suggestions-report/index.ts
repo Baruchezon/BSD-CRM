@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
     .eq('id', userData.user.id)
     .maybeSingle();
   const fullAccess = !!callerProfile && ['admin', 'manager'].includes(callerProfile.role);
-  const allowed = !!callerProfile && callerProfile.status === 'active' && (fullAccess || callerProfile.can_use_ai_match === true);
+  const allowed = !!callerProfile && callerProfile.status === 'active' && (fullAccess || callerProfile.role === 'agent_authorized' || callerProfile.can_use_ai_match === true);
   if (!allowed) {
     return jsonResponse({ error: 'אין לך הרשאה להפיק הצעות התאמה' }, 403);
   }
@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
   // --- קריאה בלבד: קונים פעילים, עסקים פעילים, התאמות קיימות, הפצות, הערות ---
   const [buyersRes, bizRes, matchesRes, distRes] = await Promise.all([
     readAll(() => supabase.from('leads')
-      .select('id, client_number, full_name, phone, phone2, email, city, address, status, agreement_status, buyer_type, requested_field, requested_categories, requested_area, budget, equity, financing_capacity, requested_revenue, requested_profit, involvement_level, partnership_willingness, notes, meeting_summary, intake_customer_wants, intake_important_details, intake_conversation_summary')
+      .select('id, created_by, handled_by, client_number, full_name, phone, phone2, email, city, address, status, agreement_status, buyer_type, requested_field, requested_categories, requested_area, budget, equity, financing_capacity, requested_revenue, requested_profit, involvement_level, partnership_willingness, notes, meeting_summary, intake_customer_wants, intake_important_details, intake_conversation_summary')
       .eq('type', 'buyer')
       .or('status.is.null,status.neq.סגור')
       .or('is_archived.is.null,is_archived.eq.false')
@@ -120,6 +120,10 @@ Deno.serve(async (req) => {
   let businesses = bizRes.data ?? [];
   // 06.10.2026: סוכן (לא אדמין/מנהל) - רק עסקים ששוחררו אליו, ובעסק אנונימי רק שדות אנונימיים.
   if (!fullAccess) {
+    buyers = buyers.filter((b: any) => b.created_by === userData.user.id || b.handled_by === userData.user.id);
+    const buyerIds = new Set(buyers.map((b: any) => b.id));
+    matchesRes.data = (matchesRes.data || []).filter((m: any) => buyerIds.has(m.buyer_id));
+    distRes.data = (distRes.data || []).filter((d: any) => buyerIds.has(d.buyer_id));
     const levels: Record<string, string> = {};
     await Promise.all(businesses.map(async (b: any) => {
       const { data: lvl, error: lvlErr } = await supabase.rpc('get_business_access_level', { biz_id: b.id, uid: userData.user.id });

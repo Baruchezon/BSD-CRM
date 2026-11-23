@@ -561,11 +561,11 @@
 
 <script src="js/config.js?v=202611131000"></script>
 <script src="js/supabaseClient.js?v=202611181945"></script>
-<script src="js/auth.js?v=202611181945"></script>
+<script src="js/auth.js?v=202611231240"></script>
 <script src="js/whatsapp-api.js?v=202610111200"></script>
 <script src="js/whatsapp-card.js?v=202610111200"></script>
 <script src="js/sessionExpired.js?v=202610071530"></script>
-<script src="js/permissions.js?v=202608251215"></script>
+<script src="js/permissions.js?v=202611231240"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/push.js?v=202610051500"></script>
 <script src="js/searchSelect.js?v=202611161130"></script>
@@ -2246,7 +2246,7 @@ function openBizForm(id){
 
       ${biz && canReleaseBusinessAccess(CURRENT_PROFILE, biz) ? `
       <section style="margin-top:12px;background:#fff8e6;border:1px solid #e8d18a;border-radius:8px;padding:2px 12px 12px;">
-      <div class="section-h" style="margin-top:12px;font-size:.95rem;color:#8a5a00;">הפצה והרשאות</div>
+      <div class="section-h" style="margin-top:12px;font-size:.95rem;color:#8a5a00;">הפצה והרשאות</div><p style="font-size:14px">הובא על ידי: ${esc(biz.referred_by_agent_name || biz.original_source || biz.source || "לא תועד")}</p>
       <div class="field full">
         <!-- 16.11.2026: «פרסום ללקוחות VIP» הישן הוסר מכאן (vip-api הוצא משימוש 13.11 ומחזיר 410). VIP הוא עכשיו צ'קבוקס רגיל בערוצי ההפצה. -->
         <div class="biz-distribution-options">
@@ -2309,10 +2309,10 @@ function openBizForm(id){
           <div>
             <label>
               <input type="checkbox" id="bizSelective" aria-controls="bizSelectedUsers" aria-expanded="false" ${biz.distribution_status==='selective'?'checked':''} onchange="changeDistributionSelection(this)">
-              הפצה למשתמשים נבחרים בלבד
+              הרשאות אישיות לסוכנים נבחרים
             </label>
             <div id="bizSelectedUsers" hidden style="margin:8px 24px 0;padding:10px 12px;background:#f7f5ef;border-radius:8px;">
-              <p style="margin:0 0 8px;font-size:.8rem;">אנונימי מציג את התקציר והכרטיס. גישה מלאה מאפשרת צפייה והורדה לפי ההרשאות הקיימות. חסימה מונעת גישה. כדי לערוך חריגים גם בהפצה לכל הסוכנים, פתח את הרשימה ובסיום בחר שוב ״כל הסוכנים המורשים״.</p>
+              <p style="margin:0 0 8px;font-size:.8rem;">בחר סוכן ורמת גישה לעסק הזה. גישה מלאה מציגה את פרטי העסק והמסמכים. אפשר להשאיר הפצה אנונימית לכולם ובמקביל לתת לסוכן מסוים גישה מלאה. הרשאה זו אינה פותחת קונים או התאמות של סוכנים אחרים.</p>
               <div id="bizAccessGrantsList">טוען משתמשים…</div>
               <button type="button" class="btn btn-ghost" onclick="stageRemoveAllBizGrants()">הסר את כל ההרשאות האישיות</button>
               <button type="button" class="btn btn-ghost" onclick="toggleBizAccessAudit('${biz.id}')">היסטוריית שינויי הרשאה</button>
@@ -2499,10 +2499,6 @@ function syncSelectedUsersPanel(){
 function changeDistributionSelection(input){
   const form = document.getElementById('bizForm');
   form.dataset.distributionEdited = 'true';
-  if (input.checked){
-    const otherId = input.id === 'bizSelective' ? 'bizAllAgents' : 'bizSelective';
-    document.getElementById(otherId).checked = false;
-  }
   syncSelectedUsersPanel();
 }
 
@@ -2511,7 +2507,7 @@ function displayDistributionMode(mode){
   const selective = document.getElementById('bizSelective');
   if (!all || !selective) return;
   all.checked = mode === 'all_authorized';
-  selective.checked = mode === 'selective';
+  selective.checked = mode === 'selective' || Boolean(document.getElementById('bizAccessGrantsList')?.distributionGrants?.draft.size);
   syncSelectedUsersPanel();
 }
 
@@ -2665,6 +2661,10 @@ async function loadBizAccessGrants(bizId){
   }
   const original = new Map((grants.data || []).map(grant => [grant.granted_to, grant]));
   box.distributionGrants = { original, draft: new Map([...original].map(([id, grant]) => [id, grant.access_level])), users: users.data || [] };
+  if (original.size) {
+    document.getElementById('bizSelective').checked = true;
+    syncSelectedUsersPanel();
+  }
   renderBizAccessGrants(box);
 }
 
@@ -2677,7 +2677,7 @@ function renderBizAccessGrants(box){
     `<option value="${esc(user.id)}">${esc(names.get(user.id))}</option>`).join('');
   box.innerHTML = `
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <label>משתמש <select id="bizGrantUser"><option value="">בחר מהרשימה</option>${options}</select></label>
+      <label>סוכן <select id="bizGrantUser"><option value="">בחר מהרשימה</option>${options}</select></label>
       <label>רמת גישה <select id="bizGrantLevel"><option value="">בחר רמה</option>${choices}</select></label>
       <button type="button" class="btn btn-ghost" onclick="stageBizGrant()">הוסף לרשימה</button>
     </div>

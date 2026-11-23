@@ -201,13 +201,13 @@ export function internalAlertFields(row) {
     ["תאריך הרשמה", signupDateLabel(row.consent_at)],
     ["תקציב", budgetText(row)],
     ["הערות", String(row.notes || "").trim()],
-    ["מקור", row.invited_by_baruch ? "הוזמן ע״י ברוך" : ""]
+    ["מקור", row.invited_by_agent ? "הוזמן ע״י הסוכן " + row.invited_by_agent : row.invited_by_baruch ? "הוזמן ע״י ברוך" : ""]
   ].filter(([, value]) => String(value).trim() !== "");
 }
 
 export function internalAlertEmail(row) {
   const name = [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || "ללא שם";
-  const title = row.invited_by_baruch ? "נרשם מההזמנה של ברוך" : (!row.signupKind || row.signupKind === "new" ? "נרשם חדש" : "נרשם מחדש");
+  const title = row.invited_by_agent ? "נרשם מההזמנה של " + row.invited_by_agent : row.invited_by_baruch ? "נרשם מההזמנה של ברוך" : (!row.signupKind || row.signupKind === "new" ? "נרשם חדש" : "נרשם מחדש");
   const subject = `${INTERNAL_SUBJECT_PREFIX} ${title} – ${name}`;
   const fields = internalAlertFields(row);
   const text = fields.map(([label, value]) => `${label}: ${value}`).join("\n");

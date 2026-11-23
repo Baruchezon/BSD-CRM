@@ -255,8 +255,8 @@
 
 <script src="js/config.js?v=20260930archive1"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
-<script src="js/auth.js?v=202611181930"></script>
-<script src="js/permissions.js?v=202610270430"></script>
+<script src="js/auth.js?v=202611231240"></script>
+<script src="js/permissions.js?v=202611231240"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/taskActions.js?v=202610211000"></script>
 <script src="js/push.js?v=202610211000"></script>
@@ -1114,7 +1114,7 @@ window.bsdOnLeadPush = function(){ if (CURRENT_PROFILE) checkNewLeadPopup(CURREN
   const fullAccess = profile.role === 'admin' || profile.role === 'manager';
   const aiBtn = document.getElementById('aiMatchBtn');
   const surveyBtn = document.getElementById('surveyBtn');
-  if (!fullAccess && !profile.can_use_ai_match) aiBtn.style.display = 'none';
+  if (!fullAccess && profile.role !== 'agent_authorized' && !profile.can_use_ai_match) aiBtn.style.display = 'none';
   if (!fullAccess && !profile.can_use_survey) surveyBtn.style.display = 'none';
   const assistantBtn = document.getElementById('personalAssistantBtn');
   if (assistantBtn && typeof canUsePersonalAssistant === 'function' && !canUsePersonalAssistant(profile)) assistantBtn.style.display = 'none';

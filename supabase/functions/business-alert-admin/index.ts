@@ -3,6 +3,7 @@
 // service role to call the business_alert_* functions. Tables stay closed to anon.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { timingSafeEqual } from "node:crypto";
+import { agentActionAllowed, scopedRows, redactAgentHistory } from "../_shared/agent-scope.mjs";
 import { oneAlertDecision, selectAlertBusinesses } from "./one-alert.mjs";
 import {
   SUBSCRIBER_FROM,
@@ -83,7 +84,7 @@ async function requireCaller(req: Request) {
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) return { error: "not_authenticated" as const };
   const { data: profile } = await supabase.from("profiles").select("id, full_name, role, status").eq("id", data.user.id).maybeSingle();
-  if (!profile || profile.status !== "active" || !["admin", "manager"].includes(profile.role)) {
+  if (!profile || profile.status !== "active" || !["admin", "manager", "agent_authorized"].includes(profile.role)) {
     return { error: "forbidden" as const };
   }
   return { user: data.user, profile };
@@ -171,7 +172,7 @@ function listedBusiness(row: Record<string, unknown>) {
   return row.is_archived !== true && (row.public_listing_active === true || row.anon_card_active === true);
 }
 
-async function recomputeMatches(subscriberId?: string) {
+async function recomputeMatches(subscriberId?: string, businessIds?: Set<string>) {
   const settings = await matchSettings();
   let subQuery = supabase.from("business_alert_subscribers").select("id,first_name,last_name,interests,categories,subcategories,regions,region,budget_min,budget_max,budget_open,looking_for,manager_notes,legacy_no_consent,consent_general,consent_email,consent_whatsapp,is_test,status,archived_at").is("archived_at", null);
   if (subscriberId) subQuery = subQuery.eq("id", subscriberId);
@@ -179,7 +180,7 @@ async function recomputeMatches(subscriberId?: string) {
   if (subError) throw subError;
   const { data: businesses, error: bizError } = await supabase.from("businesses").select(BIZ_COLS).limit(2000);
   if (bizError) throw bizError;
-  const listed = (businesses || []).filter(listedBusiness);
+  const listed = (businesses || []).filter(b => listedBusiness(b) && (!businessIds || businessIds.has(b.id)));
   let stored = 0;
   for (const subscriber of subscribers || []) {
     if (subscriber.is_test === true) continue;
@@ -223,9 +224,9 @@ async function recomputeMatches(subscriberId?: string) {
   return { subscribers: (subscribers || []).length, businesses: listed.length, stored, sendingEnabled: settings.sendingEnabled };
 }
 
-async function matchAction(action: string, body: Record<string, unknown>, origin: string | null) {
+async function matchAction(action: string, body: Record<string, unknown>, origin: string | null, scope?: { subscribers: Set<string>; businesses: Set<string> }) {
   if (action === "recompute") {
-    const result = await recomputeMatches(clean(body.id, 80) || undefined);
+    const result = await recomputeMatches(clean(body.id, 80) || undefined, scope?.businesses);
     return json({ ok: true, ...result }, 200, origin);
   }
   if (action === "matches") {
@@ -234,7 +235,7 @@ async function matchAction(action: string, body: Record<string, unknown>, origin
       .eq("subscriber_id", body.id)
       .order("score", { ascending: false });
     if (error) throw error;
-    return json({ ok: true, matches: data || [], sendingEnabled: (await matchSettings()).sendingEnabled }, 200, origin);
+    return json({ ok: true, matches: (data || []).filter(r => !scope || scope.businesses.has(r.business_id)), sendingEnabled: (await matchSettings()).sendingEnabled }, 200, origin);
   }
   if (action === "business_matches") {
     const { data, error } = await supabase.from("business_alert_matches")
@@ -249,7 +250,7 @@ async function matchAction(action: string, body: Record<string, unknown>, origin
     const byId = new Map((people || []).map(person => [person.id, person]));
     return json({
       ok: true,
-      matches: (data || []).map(row => ({ ...row, subscriber: byId.get(row.subscriber_id) || null })),
+      matches: (data || []).filter(row => !scope || scope.subscribers.has(row.subscriber_id)).map(row => ({ ...row, subscriber: byId.get(row.subscriber_id) || null })),
       sendingEnabled: (await matchSettings()).sendingEnabled
     }, 200, origin);
   }
@@ -437,6 +438,37 @@ Deno.serve(async req => {
   try {
     const body = await req.json();
     const action = clean(body.action, 40);
+    const isAgent = auth.profile?.role === "agent_authorized";
+    let scope: { subscribers: Set<string>; businesses: Set<string> } | undefined;
+    const provenance = new Map<string, Record<string, unknown>>();
+    const names = new Map<string, { full: boolean; name: string }>();
+    if (isAgent) {
+      const { data: owned, error } = await supabase.rpc("business_alert_agent_subscriber_ids", { p_actor: auth.user.id });
+      if (error) throw error;
+      // Use the caller's JWT for the safe anonymous view and full business rows.
+      const callerDb = createClient(supabaseUrl!, serviceRoleKey!, { global: { headers: { Authorization: req.headers.get("authorization")! } }, auth: { persistSession: false } });
+      const [anon, full] = await Promise.all([
+        callerDb.from("businesses_anonymous_card").select("id,business_number,anon_display_name"),
+        callerDb.from("businesses").select("id,business_number,internal_name")
+      ]);
+      if (anon.error || full.error) throw anon.error || full.error;
+      const businesses = new Set<string>();
+      for (const b of anon.data || []) { businesses.add(b.id); names.set(b.business_number, { full: false, name: b.anon_display_name || "עסק אנונימי" }); }
+      for (const b of full.data || []) { businesses.add(b.id); names.set(b.business_number, { full: true, name: b.internal_name }); }
+      scope = { subscribers: new Set((owned || []).map(String)), businesses };
+      if (!agentActionAllowed(action, body, scope.subscribers, scope.businesses)) return json({ ok: false, error: "forbidden" }, 403, origin);
+    }
+    let metaQuery = supabase.from("business_alert_subscribers").select("id,owner_id,referred_by_agent_id,referred_by_agent_name,original_source");
+    if (scope) metaQuery = metaQuery.in("id", [...scope.subscribers]);
+    const meta = await metaQuery;
+    if (meta.error) throw meta.error;
+    for (const row of meta.data || []) provenance.set(row.id, row);
+    const visibleRows = (rows: unknown) => (scope ? scopedRows(rows, scope.subscribers) : (Array.isArray(rows) ? rows : []))
+      .map(row => ({ ...row, ...provenance.get(row.id) }));
+    const visibleCard = (data: any) => {
+      const result = { ...data, subscriber: data?.subscriber ? { ...data.subscriber, ...provenance.get(data.subscriber.id) } : null };
+      return scope ? redactAgentHistory(result, names) : result;
+    };
     if (auth.serviceRole && action !== "send_one_alert") {
       return json({ ok: false, error: "test_only" }, 403, origin);
     }
@@ -444,7 +476,7 @@ Deno.serve(async req => {
     if (action === "roster") {
       const { data, error } = await supabase.rpc("business_alert_roster");
       if (error) throw error;
-      return json({ ok: true, subscribers: data || [] }, 200, origin);
+      return json({ ok: true, subscribers: visibleRows(data) }, 200, origin);
     }
 
     if (action === "list") {
@@ -454,7 +486,7 @@ Deno.serve(async req => {
       const { count } = await supabase.from("leads").select("id", { count: "exact", head: true })
         .eq("source", "אתר BSD החדש").eq("type", "buyer").eq("is_archived", false);
       const settings = await matchSettings();
-      return json({ ok: true, subscribers: withArchive(data || [], marks), websiteBuyerLeads: count || 0, from: subscriberFromHeader(), sendingEnabled: settings.sendingEnabled }, 200, origin);
+      return json({ ok: true, subscribers: withArchive(visibleRows(data), marks), websiteBuyerLeads: scope ? 0 : count || 0, from: subscriberFromHeader(), sendingEnabled: settings.sendingEnabled }, 200, origin);
     }
 
     if (action === "screen") {
@@ -471,20 +503,20 @@ Deno.serve(async req => {
       const { count } = await supabase.from("leads").select("id", { count: "exact", head: true })
         .eq("source", "אתר BSD החדש").eq("type", "buyer").eq("is_archived", false);
       const settings = await matchSettings();
-      return json({ ok: true, subscribers: withArchive(data || [], marks), websiteBuyerLeads: count || 0, from: subscriberFromHeader(), sendingEnabled: settings.sendingEnabled }, 200, origin);
+      return json({ ok: true, subscribers: withArchive(visibleRows(data), marks), websiteBuyerLeads: scope ? 0 : count || 0, from: subscriberFromHeader(), sendingEnabled: settings.sendingEnabled }, 200, origin);
     }
 
     if (action === "card") {
       const { data, error } = await supabase.rpc("business_alert_screen_card", { p_subscriber_id: body.id });
       if (error) throw error;
       if (!data?.subscriber) return json({ ok: false, error: "not_found" }, 404, origin);
-      return json({ ok: true, ...data }, 200, origin);
+      return json({ ok: true, ...visibleCard(data) }, 200, origin);
     }
 
     if (action === "sends") {
       const { data, error } = await supabase.rpc("business_alert_sends_history", { p_subscriber_id: body.id });
       if (error) throw error;
-      return json({ ok: true, sends: data || [] }, 200, origin);
+      return json({ ok: true, sends: scope ? redactAgentHistory(data || [], names) : data || [] }, 200, origin);
     }
 
     if (action === "archive" || action === "restore" || action === "purge") {
@@ -539,7 +571,7 @@ Deno.serve(async req => {
     }
 
     if (action === "add_subscriber") {
-      const { data, error } = await supabase.rpc("business_alert_add_manual", {
+      const { data, error } = await supabase.rpc("business_alert_staff_add", { p_actor: auth.user.id, p_payload: {
         p_first_name: clean(body.first_name, 80),
         p_last_name: clean(body.last_name, 80),
         p_phone: clean(body.phone, 40),
@@ -557,7 +589,7 @@ Deno.serve(async req => {
         p_budget_open: body.budget_open === true,
         p_consent_by: clean(auth.profile.full_name, 120) || clean(auth.user.email, 180),
         p_address_form: clean(body.address_form, 20) || null
-      });
+      } });
       if (error) return json({ ok: false, error: "add_rejected", message: error.message }, 400, origin);
       return json({ ok: true, card: data }, 200, origin);
     }
@@ -613,7 +645,7 @@ Deno.serve(async req => {
       const { data, error } = await supabase.rpc("business_alert_crm_detail", { p_subscriber_id: body.id });
       if (error) throw error;
       if (!data?.subscriber) return json({ ok: false, error: "not_found" }, 404, origin);
-      return json({ ok: true, ...data }, 200, origin);
+      return json({ ok: true, ...visibleCard(data) }, 200, origin);
     }
 
     if (action === "status") {
@@ -903,8 +935,11 @@ Deno.serve(async req => {
         budget: detail.budget_max,
         lead_side: "buyer",
         lead_side_source: "business_alert",
-        created_by: auth.user.id,
-        handled_by: auth.user.id
+        created_by: provenance.get(detail.id)?.owner_id || auth.user.id,
+        handled_by: provenance.get(detail.id)?.owner_id || auth.user.id,
+        referred_by_agent_id: provenance.get(detail.id)?.referred_by_agent_id || null,
+        referred_by_agent_name: provenance.get(detail.id)?.referred_by_agent_name || null,
+        original_source: provenance.get(detail.id)?.original_source || detail.source
       }).select("id").single();
       if (error || !lead?.id) throw error ?? new Error("lead_not_created");
       const { error: linkError } = await supabase.from("business_alert_subscribers").update({ crm_lead_id: lead.id }).eq("id", detail.id);
@@ -913,7 +948,7 @@ Deno.serve(async req => {
     }
 
     if (action === "recompute" || action === "matches" || action === "business_matches" || action === "send_match") {
-      return await matchAction(action, body, origin);
+      return await matchAction(action, body, origin, scope);
     }
 
     return json({ ok: false, error: "unknown_action" }, 400, origin);
