@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202610311830';
+    var PAGE_BUILD = '202611230420';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -58,8 +58,8 @@
   .btn-navy{background:var(--navy);color:#fff;}
   .btn-ghost{background:#fff;border:1px solid #d8d3c4;color:var(--navy);}
 
-  .lead-tabs{display:flex;gap:8px;margin-bottom:18px;border-bottom:2px solid #eee6d4;}
-  .lead-tab{padding:12px 20px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:.95rem;font-weight:700;color:#8a8578;border-bottom:3px solid transparent;margin-bottom:-2px;}
+  .lead-tabs{display:flex;gap:8px;margin-bottom:18px;border-bottom:2px solid #eee6d4;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin;}
+  .lead-tab{padding:12px 20px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:.95rem;font-weight:700;color:#8a8578;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;flex:0 0 auto;}
   .lead-tab.active{color:var(--navy);border-bottom-color:var(--gold);}
   .lead-tab .count{display:inline-block;background:#eee6d4;color:#665;border-radius:10px;padding:1px 8px;font-size:.75rem;margin-right:6px;}
   .lead-tab.active .count{background:var(--gold);color:#1c2333;}
@@ -114,6 +114,7 @@
   @media (max-width:700px){
     td.notes-cell{max-width:none;overflow:hidden;}
     td.notes-cell .notes-preview{flex:1 1 auto;width:100%;}
+    .lead-tab{padding:10px 12px;font-size:.88rem;}
   }
   .phone-cell{white-space:nowrap;min-width:100px;}
   .empty-row td{text-align:center;color:#999;padding:30px;}
@@ -213,7 +214,7 @@
     <button type="button" class="lead-tab active" data-tab="manual" onclick="switchTab('manual')">לידים <span class="count" id="countBusiness">0</span></button>
     <button type="button" class="lead-tab" style="display:none" data-tab="seller" onclick="switchTab('seller')">לידים מהאתר <span class="count" id="countSeller">0</span></button>
     <button type="button" class="lead-tab" data-tab="in_progress" onclick="switchTab('in_progress')">לקוחות בטיפול <span class="count" id="countInProgress">0</span></button>
-    <a class="lead-tab" href="site-buyers.html" style="text-decoration:none">נרשמים לעדכונים</a>
+    <a class="lead-tab" href="site-buyers.html" style="text-decoration:none">קונים VIP נרשמים</a>
     <button type="button" class="lead-tab" style="display:none" data-tab="buyer" onclick="switchTab('buyer')">קונים <span class="count" id="countBuyer">0</span></button>
     <button type="button" class="lead-tab" style="display:none" data-tab="partner" onclick="switchTab('partner')">שותפות/השקעה <span class="count" id="countPartner">0</span></button>
     <button type="button" class="lead-tab" data-tab="y2026" onclick="switchTab('y2026')">לידים 2026 <span class="count" id="countY2026">0</span></button>

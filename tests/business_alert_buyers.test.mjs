@@ -281,7 +281,8 @@ test('the tools menu points at the new screen and mail files use the sender cons
   assert.equal(sql.includes('grant select on public.business_alert_subscribers to anon'), false);
   assert.match(app, /navToolsWrap/);
   const leads = fs.readFileSync(new URL('../leads-hub.html', import.meta.url), 'utf8');
-  assert.match(leads, /נרשמים לעדכונים/);
+  assert.match(leads, /קונים VIP נרשמים/);
+  assert.equal(/<a class="lead-tab"[^>]*>נרשמים</.test(leads), false);
   const buyers = fs.readFileSync(new URL('../site-buyers.html', import.meta.url), 'utf8');
   assert.match(buyers, /class="person/);
   assert.equal(buyers.includes('<table>'), false);
