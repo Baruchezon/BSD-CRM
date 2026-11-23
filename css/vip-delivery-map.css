@@ -132,6 +132,7 @@
   font: inherit;
   padding: 4px 2px;
   background: none;
+  box-shadow: none;
   cursor: pointer;
   overflow-wrap: anywhere;
 }
