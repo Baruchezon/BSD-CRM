@@ -8,9 +8,9 @@ create function pg_temp.vip_assert(ok boolean,label text) returns void language 
 begin if ok is not true then raise exception 'VIP security regression: %',label; end if; end $$;
 insert into public.leads(id,type,full_name,email,source,created_by,handled_by,dedupe_override_reason)
  select lead,'buyer','בדיקת VIP '||lead,subscriber||'@example.com','security_test',a,a,'בדיקה בתוך טרנזקציה שמתבטלת' from vip_security_test_ids;
-insert into public.business_alert_subscribers(id,first_name,last_name,email,status,source,created_at,is_test)
- select subscriber,'בדיקה',subscriber::text,subscriber||'@example.com','pending_consent','website',now(),true from vip_security_test_ids
- union all select forwarded,'בדיקה',forwarded::text,forwarded||'@example.com','pending_consent','website',now(),true from vip_security_test_ids;
+insert into public.business_alert_subscribers(id,first_name,last_name,phone,email,status,source,created_at,is_test,consent_email,consent_whatsapp,consent_general)
+ select subscriber,'בדיקה',subscriber::text,'',subscriber||'@example.com','pending_consent','website',now(),true,false,false,false from vip_security_test_ids
+ union all select forwarded,'בדיקה',forwarded::text,'',forwarded||'@example.com','pending_consent','website',now(),true,false,false,false from vip_security_test_ids;
 insert into public.business_alert_invites(id,buyer_id,channel,token,token_hash,prefill,status,sent_at,expires_at,invited_by,created_by)
  select invite,lead,'whatsapp',invite::text,invite::text,jsonb_build_object('email',subscriber||'@example.com'),'sent',now()-interval '1 minute',now()+interval '1 day','agent',a from vip_security_test_ids
  union all select competing,lead,'whatsapp',competing::text,competing::text,jsonb_build_object('email',subscriber||'@example.com'),'sent',now()-interval '1 minute',now()+interval '1 day','agent',b from vip_security_test_ids

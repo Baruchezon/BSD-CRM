@@ -12,8 +12,9 @@ create function pg_temp.agent_assert(ok boolean,label text) returns void languag
 begin if ok is not true then raise exception 'security regression: %',label; end if; end $$;
 select pg_temp.agent_assert(a is not null and b is not null and admin is not null,'test identities exist') from agent_security_test_ids;
 insert into public.leads(id,type,full_name,source,created_by,handled_by)
- select lead_a,'buyer','בדיקת הרשאות '||lead_a,'security_test',a,a from agent_security_test_ids
- union all select lead_b,'buyer','בדיקת הרשאות '||lead_b,'security_test',b,b from agent_security_test_ids;
+ select lead_a,'buyer','בדיקת הרשאות '||lead_a,'security_test',a,a from agent_security_test_ids;
+insert into public.leads(id,type,full_name,source,created_by,handled_by)
+ select lead_b,'buyer','בדיקת הרשאות '||lead_b,'security_test',b,b from agent_security_test_ids;
 insert into public.businesses(id,internal_name,anon_display_name,source,created_by,handled_by,distribution_status,anon_summary,anon_card_active,is_archived)
  select biz,'שם עסק חסוי לבדיקת הרשאות '||biz,'עסק אנונימי לבדיקה','security_test',admin,admin,'all_authorized','תקציר אנונימי לבדיקה',true,false from agent_security_test_ids;
 insert into public.matches(id,business_id,buyer_id,created_by,status)
