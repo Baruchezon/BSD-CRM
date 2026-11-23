@@ -3,19 +3,24 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const html = fs.readFileSync(new URL('../leads-hub.html', import.meta.url),'utf8');
+const inviteScript = fs.readFileSync(new URL('../js/business-alert-invite.js', import.meta.url), 'utf8');
 const fn = name => html.slice(html.indexOf('function '+name+'('), html.indexOf('\n}', html.indexOf('function '+name+'('))+2);
-function harness(editable=true){
- const c={esc:s=>String(s??'').replaceAll('<','&lt;'),canEditRecord:()=>editable,canSendAgreement:()=>true,
+function harness(editable=true, role='admin'){
+ const c={window:{},CURRENT_PROFILE:{role},esc:s=>String(s??'').replaceAll('<','&lt;'),canEditRecord:()=>editable,canSendAgreement:()=>true,
  stagedTable:r=>r.__staged==='business'?'businesses':'leads',notesTooltip:()=> 'הערות',
  leadBusinessLabel:r=>r.business_name||'',leadSourceBadge:()=>'<span>מקור</span>',
  leadCallStatusValue:()=> 'not_contacted',LEAD_CALL_ROW_CLASS:{},LEAD_CALL_STATUSES:[['not_contacted','ממתין']],
  leadCallStatusOptions:()=>'<option>ממתין</option>',nextDueHtml:()=>'',fmtDayMonth:()=>'',
  fmtPhone:p=>p,fmtDate:()=> '04.11.2026',waBtn:p=>`<a href="https://wa.me/${p}">WhatsApp</a>`,
  creatorColor:()=>'',userName:()=> 'משתמש',rowNotesCell:r=>r.notes||'—'};
- vm.createContext(c);vm.runInContext(fn('stagedRowHtml'),c);return c;
+ vm.createContext(c);
+ vm.runInContext(inviteScript,c);
+ c.BSDBusinessAlertInvite=c.window.BSDBusinessAlertInvite;
+ vm.runInContext(['stagedRowHtml','leadCardTypeValue','leadSide','leadIsWebsite'].map(fn).join('\n'),c);
+ return c;
 }
 for(const kind of ['business','buyer']) test(kind+' renders full actionable table rows',()=>{
- const c=harness();const r={id:'r1',__staged:kind,crm_stage:'in_progress',owner_name:'בעל העסק',internal_name:'מאפייה',full_name:'קונה',phone:'0520000000',owner_phone:'0500000000',business_number:'BSD-B-42',notes:'תוכן השיחה',created_by:'u'};
+ const c=harness();const r={id:'r1',__staged:kind,type:kind,crm_stage:'in_progress',owner_name:'בעל העסק',internal_name:'מאפייה',full_name:'קונה',phone:'0520000000',owner_phone:'0500000000',business_number:'BSD-B-42',notes:'תוכן השיחה',created_by:'u'};
  const row=c.stagedRowHtml(r,true);
  assert.equal((row.match(/<td\b/g)||[]).length,8);
  const phone=kind==='business'?r.owner_phone:r.phone;
@@ -26,11 +31,18 @@ for(const kind of ['business','buyer']) test(kind+' renders full actionable tabl
  assert.ok(row.includes('toggleFormsMenu(event)'));assert.ok(row.includes("openStagedCard('r1')"));
  assert.ok(!row.includes('colspan='));assert.ok(!row.includes('tel:BSD-B-42'));
  assert.equal(row.includes('setLeadCallStatus('),kind!=='business');
+ assert.equal(row.includes('הזמנה לרישום VIP'),kind==='buyer');
 });
 test('read only rows omit mutating actions',()=>{
  const row=harness(false).stagedRowHtml({id:'x',__staged:'business'},false);
  assert.ok(!row.includes('deleteRecord('));assert.ok(!row.includes('stagedSendAgreement('));assert.ok(!row.includes('moveStaged('));
  assert.equal((row.match(/<td\b/g)||[]).length,6);
+});
+test('VIP invitation stays hidden for sellers and for users without invitation privileges',()=>{
+ const buyer={id:'b',__staged:'buyer',type:'buyer'};
+ const seller={...buyer,type:'seller'};
+ assert.ok(!harness().stagedRowHtml(seller,false).includes('הזמנה לרישום VIP'));
+ assert.ok(!harness(false,'agent').stagedRowHtml(buyer,false).includes('הזמנה לרישום VIP'));
 });
 test('archive routes staged records to their actual table',async()=>{
  for(const kind of ['business','buyer',null]){

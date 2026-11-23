@@ -23,10 +23,13 @@
     send_failed: "המייל לא יצא. ההזמנה נשמרה כדי שלא תישלח פעמיים."
   };
   const FALLBACK = "שלום {שם} 😊\nתודה על השיחה!\nמוזמן/ת להצטרף לרשימת התפוצה האישית שלנו, ויישלחו אליך עסקים רלוונטיים להגדרות שלך:\n👉 {לינק}\nברוך איזון | BSD";
+  const VIP_TITLE = "הזמנה לרישום VIP";
+  const VIP_MESSAGE = "שלום {שם}, תודה על ההתעניינות! נשמח לצרף אותך לרשימת VIP של BSD ולעדכן אותך על עסקים למכירה שמתאימים לך. להצטרפות, ממלאים ומאשרים את הפרטים בטופס.";
+
   function fillName(template, name) {
     const who = String(name || "").trim();
     const text = String(template || FALLBACK);
-    if (!who) return text.replaceAll("{שם}", "").replace(/שלום\s+😊/g, "שלום 😊");
+    if (!who) return text.replaceAll("{שם}", "").replace(/שלום\s+😊/g, "שלום 😊").replace("שלום ,", "שלום,");
     return text.replaceAll("{שם}", who);
   }
   function applyAddress(text, form) {
@@ -88,20 +91,31 @@
     }).catch(() => { chips.textContent = ""; });
     document.getElementById("inviteOpen").onclick = () => openModal(lead, cardType);
   }
-  function openModal(lead, cardType) {
+  function menuItem(id, profile) {
+    if (!["admin", "manager"].includes(profile?.role)) return "";
+    return `<a href="javascript:void(0)" onclick="openVipInviteFromRow(event, '${esc(id)}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">${VIP_TITLE}</a>`;
+  }
+  function openFromMenu(event, lead) {
+    event.preventDefault();
+    event.stopPropagation();
+    const menu = event.currentTarget.closest(".bsd-forms-menu");
+    if (menu) menu.style.display = "none";
+    if (lead) openModal(lead, lead.type === "buyer" ? "buyer" : "lead", true);
+  }
+  function openModal(lead, cardType, vip = false) {
     const name = lead.first_name || (lead.full_name || "").split(/\s+/)[0] || "";
     const existing = document.getElementById("inviteModal");
     if (existing) existing.remove();
     const overlay = document.createElement("div");
     overlay.id = "inviteModal";
     overlay.style.cssText = "position:fixed;inset:0;background:rgba(14,27,52,.55);z-index:80;display:flex;align-items:center;justify-content:center;padding:16px;";
-    overlay.innerHTML = `<div dir="rtl" style="background:#fff;border-radius:18px;max-width:560px;width:100%;padding:18px;font-family:Heebo,Rubik,Arial,sans-serif;">
-      <h3 style="margin:0 0 8px;">רשימת תפוצת עסקים</h3>
+    overlay.innerHTML = `<div dir="rtl" style="background:#fff;border-radius:18px;max-width:560px;width:100%;max-height:100%;overflow:auto;box-sizing:border-box;padding:18px;font-family:Heebo,Rubik,Arial,sans-serif;">
+      <h3 style="margin:0 0 8px;">${vip ? VIP_TITLE : "רשימת תפוצת עסקים"}</h3>
       <div id="inviteHistory" style="font-size:.82rem;margin-bottom:8px;"></div>
-      <label style="display:flex;gap:8px;align-items:center;"><input type="radio" name="inviteChannel" value="whatsapp" checked style="width:auto;"> וואטסאפ</label>
-      <label style="display:flex;gap:8px;align-items:center;"><input type="radio" name="inviteChannel" value="email" style="width:auto;"> מייל</label>
+      <label style="display:flex;gap:8px;align-items:center;"><input type="radio" name="inviteChannel" value="whatsapp" ${!vip || lead.phone || !lead.email ? "checked" : ""} style="width:auto;"> וואטסאפ</label>
+      <label style="display:flex;gap:8px;align-items:center;"><input type="radio" name="inviteChannel" value="email" ${vip && !lead.phone && lead.email ? "checked" : ""} style="width:auto;"> מייל</label>
       <p style="font-size:.85rem">נוסח ההודעה לעריכה. קישור אישי יתווסף לאחר הכנת ההזמנה.</p>
-      <textarea id="invitePreview" rows="8" style="width:100%;box-sizing:border-box;margin-top:8px;border-radius:12px;padding:10px;font:inherit;"></textarea>
+      <textarea id="invitePreview" rows="${vip ? 5 : 8}" style="width:100%;box-sizing:border-box;margin-top:8px;border-radius:12px;padding:10px;font:inherit;"></textarea>
       <div id="inviteReady" hidden><p id="inviteRealPreview" style="white-space:pre-wrap;overflow-wrap:anywhere"></p><a id="inviteWhatsApp" target="_blank" rel="noopener" style="display:block;background:#128C4A;color:white;padding:14px;border-radius:12px;text-align:center;font-weight:bold">פתח וואטסאפ</a></div>
       <p id="inviteBlock" style="color:#8d2d2d;font-weight:700;"></p>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -111,33 +125,41 @@
     </div>`;
     document.body.appendChild(overlay);
     const preview = overlay.querySelector("#invitePreview");
-    const templates = { whatsapp: FALLBACK, email: FALLBACK };
+    const template = vip ? VIP_MESSAGE : FALLBACK;
+    const templates = { whatsapp: template, email: template };
     let addressForm = "";
     let auto = "";
     function channel() {
       return overlay.querySelector("input[name=inviteChannel]:checked").value;
     }
     function showTemplate() {
-      const next = editableCopy(applyAddress(fillName(templates[channel()] || FALLBACK, name), addressForm));
+      const next = editableCopy(applyAddress(fillName(templates[channel()], name), addressForm));
       if (!preview.value || preview.value === auto) {
         preview.value = next;
         auto = next;
       }
     }
     showTemplate();
+    const channels = overlay.querySelectorAll("input[name=inviteChannel]");
     overlay.querySelector("#inviteClose").onclick = () => overlay.remove();
     let statusError = null;
+    let checking = true;
+    let sending = false;
     call({ action: "status", card_type: cardType, card_id: lead.id }).then(data => {
+      checking = false;
       if (!data.ok) { statusError = data; explain(); return; }
-      if (data.templates?.whatsapp) templates.whatsapp = data.templates.whatsapp;
-      if (data.templates?.email) templates.email = data.templates.email;
+      if (!vip && data.templates?.whatsapp) templates.whatsapp = data.templates.whatsapp;
+      if (!vip && data.templates?.email) templates.email = data.templates.email;
       addressForm = data.address_form || "";
       showTemplate();
       overlay.querySelector("#inviteHistory").innerHTML = (data.invites || []).map(item => `<div>${esc(chip(item))}</div>`).join("");
-    }).catch(() => {});
+      explain();
+    });
     function explain() {
       const note = overlay.querySelector("#inviteBlock");
       const send = overlay.querySelector("#inviteSend");
+      if (vip) send.textContent = channel() === "whatsapp" ? "פתח וואטסאפ" : "שלח במייל";
+      if (checking || sending) { send.disabled = true; return; }
       if (statusError) { note.textContent = reason(statusError); send.disabled = true; return; }
       if (channel() === "whatsapp" && !String(lead.phone || "").replace(/\D/g, "")) {
         note.textContent = REASONS.no_phone;
@@ -152,7 +174,7 @@
       note.textContent = "";
       send.disabled = false;
     }
-    overlay.querySelectorAll("input[name=inviteChannel]").forEach(input => input.addEventListener("change", () => {
+    channels.forEach(input => input.addEventListener("change", () => {
       showTemplate();
       explain();
     }));
@@ -164,9 +186,13 @@
       // Desktop popup must be created in the click stack, not after an await.
       const popup = isWhatsApp && !isMobile ? window.open("about:blank", "_blank") : null;
       if (popup) popup.opener = null;
+      sending = true;
       send.disabled = true;
+      channels.forEach(input => { input.disabled = true; });
       const data = await call({ card_type: cardType, card_id: lead.id, channel: channel(), message: preview.value.replace(/(\nברוך איזון \| BSD\s*)$/, "\n👉 {לינק}$1") });
+      sending = false;
       if (!data.ok) {
+        channels.forEach(input => { input.disabled = false; });
         if (popup) popup.close();
         overlay.querySelector("#inviteBlock").textContent = reason(data);
         send.disabled = ["network", "unknown", "save_failed", "send_failed"].includes(data.error) ? false : true;
@@ -192,10 +218,12 @@
         send.hidden = true;
         mountBusinessAlertInvite(lead);
       } else {
+        channels.forEach(input => { input.disabled = false; });
         overlay.querySelector("#inviteBlock").textContent = REASONS.unknown;
         send.disabled = false;
       }
     };
   }
   window.mountBusinessAlertInvite = mountBusinessAlertInvite;
+  window.BSDBusinessAlertInvite = { menuItem, openFromMenu };
 })();
