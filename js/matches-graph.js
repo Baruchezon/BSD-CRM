@@ -8,10 +8,12 @@
     const selected = {};
     let detailKey = '';
 
-    function select(view, key) {
+    function select(view, key, matchId = '') {
       selected[view] = key;
-      detailKey = '';
+      detailKey = matchId;
     }
+
+    function close() { detailKey = ''; }
 
     function entityName(entity, className = '') {
       const name = '<strong>' + escape(entity.name) + '</strong>';
@@ -79,14 +81,14 @@
       return fill(target, async () => {
         const [statuses, activities, meetings] = await Promise.all([
           database().from('match_status_history').select('status,changed_at,changed_by,note').eq('match_id', id).order('changed_at', { ascending: false }),
-          database().from('match_activity_log').select('action_type,description,note,buyer_response,occurred_at,created_at,performed_by').eq('match_id', id).is('deleted_at', null)
+          database().from('match_activity_log').select('action_type,description,note,buyer_response,occurred_at,created_at,performed_by,visible_to_client').eq('match_id', id).is('deleted_at', null)
             .order('created_at', { ascending: false }),
           database().from('match_meetings').select('meeting_type,meeting_date,start_time,summary_text,decisions,next_action,agent_id,created_by')
             .eq('match_id', id).is('deleted_at', null).order('meeting_date', { ascending: false })
         ]);
         const steps = (statuses.data || []).map(s=>({ title: s.status, text: s.note, at: s.changed_at, who: s.changed_by }));
         const events = (activities.data || []).map(a=>({
-          title: a.action_type || 'פעילות', text: [...new Set([a.description, a.note, a.buyer_response].filter(text=>text && text !== a.action_type))].join('\n'),
+          title: (a.action_type || 'פעילות') + (a.visible_to_client ? ' · שיתוף בפורטל' : ''), text: [...new Set([a.description, a.note, a.buyer_response].filter(text=>text && text !== a.action_type))].join('\n'),
           at: a.occurred_at || a.created_at, who: a.performed_by
         }));
         const appointments = (meetings.data || []).map(m=>({
@@ -141,12 +143,21 @@
       const action = document.getElementById('matchGraphBuyerNotes');
       const openButtons = [...main.querySelectorAll('[data-match-graph]')];
 
+      function closeDetails() {
+        const trigger = detailKey === 'buyer-notes' ? action : openButtons[matches.findIndex(match=>match.id === detailKey)];
+        expand('', false);
+        trigger?.focus();
+      }
+
       function expand(key, focus) {
         detailKey = key;
         details.hidden = !key;
         openButtons.forEach((button,index)=>button.setAttribute('aria-expanded', matches[index].id === key));
         action?.setAttribute('aria-expanded', key === 'buyer-notes');
-        if (!key) return;
+        if (!key) {
+          details.innerHTML = '';
+          return;
+        }
         if (key === 'buyer-notes') {
           details.innerHTML = `<h3 id="matchGraphDetailsTitle" tabindex="-1">הערות הקונה · ${escape(group.name)}</h3><div data-buyer-notes role="status">טוען הערות…</div>`;
           loadNotes(details.querySelector('[data-buyer-notes]'), 'leads', group.id, true);
@@ -172,12 +183,22 @@
           if (match.buyer.canReadNotes) loadNotes(details.querySelector('[data-buyer-notes]'), 'leads', match.buyer.id, true);
           wireMatch(details);
         }
+        const heading = document.getElementById('matchGraphDetailsTitle');
+        const closeButton = document.createElement('button');
+        closeButton.type = 'button';
+        closeButton.className = 'vip-map-open match-close';
+        closeButton.textContent = 'סגור פרטים';
+        closeButton.addEventListener('click', closeDetails);
+        heading.after(closeButton);
         if (focus) {
-          document.getElementById('matchGraphDetailsTitle').focus({ preventScroll: true });
+          heading.focus({ preventScroll: true });
           details.scrollIntoView({ block: 'nearest' });
         }
       }
 
+      details.addEventListener('keydown', event=>{
+        if (event.key === 'Escape') closeDetails();
+      });
       chooser.addEventListener('change', ()=>selectView(view, chooser.value));
       action?.addEventListener('click', ()=>expand(detailKey === 'buyer-notes' ? '' : 'buyer-notes', true));
       openButtons.forEach((button,index)=>button.addEventListener('click', ()=>{
@@ -192,7 +213,7 @@
       expand(validDetail ? detailKey : '', false);
     }
 
-    return { render, select };
+    return { render, select, close };
   }
 
   window.BSDMatchesGraph = { create };

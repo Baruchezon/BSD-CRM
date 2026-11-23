@@ -42,7 +42,7 @@
 <script src="js/bsd-search.js?v=202610181400"></script>
 <script src="js/outreachModule.js?v=202610181800"></script>
 <link rel="stylesheet" href="css/vip-delivery-map.css?v=202611230635">
-<link rel="stylesheet" href="css/matches-graph.css?v=202611230900">
+<link rel="stylesheet" href="css/matches-graph.css?v=202611230930">
 <style>
   :root{
     --navy:#0e1b34; --navy-light:#16264a; --gold:#c9a24b; --gold-light:#e8cf8a;
@@ -305,8 +305,8 @@
       <button type="button" class="view-toggle-btn" data-view="buyer" aria-pressed="false">🧍 לפי קונים</button>
     </div>
     <div class="view-toggle" role="group" aria-label="סוג תצוגה">
-      <button type="button" class="view-toggle-btn active" data-layout="graph" aria-pressed="true">תרשים</button>
-      <button type="button" class="view-toggle-btn" data-layout="list" aria-pressed="false">רשימה</button>
+      <button type="button" class="view-toggle-btn" data-layout="graph" aria-pressed="false">תרשים</button>
+      <button type="button" class="view-toggle-btn active" data-layout="list" aria-pressed="true">רשימה</button>
     </div>
     <button class="ctrl-btn" id="filterToggleBtn" type="button">🔍 סינון מתקדם</button>
     <div class="sort-wrap">
@@ -319,12 +319,14 @@
     </div>
   </div>
   <div class="search-row">
-    <input type="text" id="searchBox" placeholder="חיפוש: שם עסק, מספר, שם קונה, מספר, טלפון, מטפל, סטטוס, הערה, משימה...">
+    <input type="search" id="searchBox" aria-label="חיפוש התאמות" placeholder="חיפוש עסק, קונה, טלפון, סטטוס או מילים מתוך הערות…">
+    <button type="button" class="ctrl-btn" id="collapseMatches">סגור הכול</button>
     <div class="creator-filter">
       <label for="matchCreatorSelect_input">נוצר על ידי</label>
       <div id="matchCreatorFilter"></div>
     </div>
   </div>
+  <div id="matchSearchStatus" role="status"></div>
   <div class="filter-panel" id="filterPanel" style="display:none;">
     <div class="quickviews" id="quickviews"></div>
   </div>
@@ -338,13 +340,14 @@
 <div id="modalRoot"></div>
 <div id="toastRoot"></div>
 
-<script src="js/matches-graph.js?v=202611230900"></script>
+<script src="js/matches-graph.js?v=202611230930"></script>
 <script>
 let CURRENT_PROFILE = null;
 let ALL_LEADS = [], ALL_BROKERS = [], ALL_BUSINESSES = {}, ALL_MATCHES = [], ALL_PROFILES = {}, ALL_TASKS = [], ALL_ACTIVITY = [], ALL_OUTREACH = [];
 let searchTerm = "", activeQuickView = "", currentView = "business", createdByFilter = "";
 const OPEN_NODES = new Set();
-let layout = 'graph';
+let layout = 'list';
+let searchNotes = new Map(), notesSearchPending, notesSearchReady = false;
 const matchesGraph = window.BSDMatchesGraph.create({
   escape: esc, formatDate: fmtDateTime, userName, selectView: setMatchView,
   database: () => window.supabaseClient
@@ -620,10 +623,12 @@ async function loadEverything(){
   ALL_TASKS = tasks || [];
   const matchIds = ALL_MATCHES.map(m=>m.id);
   if (matchIds.length){
-    const { data: activity } = await sb.from('match_activity_log').select('match_id,description,note').in('match_id', matchIds).is('deleted_at', null);
+    const { data: activity } = await sb.from('match_activity_log').select('match_id,description,note,action_type,buyer_response').in('match_id', matchIds).is('deleted_at', null);
     ALL_ACTIVITY = activity || [];
   }
   await loadOutreach();
+  notesSearchReady = false;
+  loadSearchNotes();
   buildCreatorFilter();
   buildQuickViews();
   buildStatStrip();
@@ -692,9 +697,10 @@ function matchSearchHay(m){
   const b = ALL_BUSINESSES[m.business_id];
   const { rec: cp } = counterpartyOf(m);
   const handler = userName(m.current_handler) || "";
-  const acts = ALL_ACTIVITY.filter(a=>a.match_id===m.id).map(a=>(a.description||'')+' '+(a.note||'')).join(' ');
+  const acts = ALL_ACTIVITY.filter(a=>a.match_id===m.id).flatMap(a=>[a.description,a.note,a.action_type,a.buyer_response]);
+  const notes = searchNotes.get('matches:' + m.id) || [];
   const openTasks = ALL_TASKS.filter(t=>t.match_id===m.id).map(t=>t.title).join(' ');
-  return [...bizSearchFields(b), cp?.full_name, cp?.client_number, cp?.phone, cp?.phone2, handler, m.status, m.notes, acts, openTasks]
+  return [...bizSearchFields(b), ...buyerSearchFields(cp), handler, m.status, m.notes, m.next_action, m.last_action, m.final_result, ...acts, ...notes, openTasks]
     .filter(Boolean).join(" ").toLowerCase();
 }
 
@@ -705,8 +711,58 @@ function bizSearchFields(b){
 }
 function buyerSearchFields(l){
   if (!l) return [];
-  return [l.full_name, l.client_number, l.phone, l.phone2, l.email];
+  const notes = canReadBuyerNotes(l) ? searchNotes.get('leads:' + l.id) || [] : [];
+  return [l.full_name, l.client_number, l.phone, l.phone2, l.email, ...notes];
 }
+function canReadBuyerNotes(lead){
+  return !!lead && !!CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || lead.created_by === CURRENT_PROFILE.id);
+}
+
+async function loadSearchNotes(){
+  if (notesSearchReady || notesSearchPending || !CURRENT_PROFILE || !searchTerm.trim()) return;
+  const status = document.getElementById('matchSearchStatus');
+  status.textContent = 'מחפש גם בהערות…';
+  const jobs = [];
+  function chunks(table, ids, query, unpack){
+    for (let index = 0; index < ids.length; index += 75){
+      jobs.push(async () => {
+        const client = window.supabaseClient.from(table);
+        for (let offset = 0; ; offset += 250) {
+          const { data, error } = await query(client, ids.slice(index, index + 75)).range(offset, offset + 249);
+          if (error) throw error;
+          for (const row of data) unpack(row);
+          if (data.length < 250) break;
+        }
+      });
+    }
+  }
+  const index = new Map();
+  function add(key, note){
+    if (!note) return;
+    if (!index.has(key)) index.set(key, []);
+    index.get(key).push(note);
+  }
+  const buyers = ALL_LEADS.filter(canReadBuyerNotes).map(row=>row.id);
+  const matches = ALL_MATCHES.map(row=>row.id);
+  for (const [table, ids] of [['matches', matches], ['leads', buyers]]){
+    chunks('record_notes', ids, (q, batch)=>q.select('id,record_id,note_text').eq('table_name',table).in('record_id',batch).order('id'),
+      row=>add(table + ':' + row.record_id, row.note_text));
+  }
+  chunks('leads', buyers, (q,batch)=>q.select('id,notes').in('id',batch).order('id'), row=>add('leads:' + row.id,row.notes));
+  let failed = false;
+  notesSearchPending = Promise.all(Array.from({length: Math.min(4, jobs.length)}, async ()=>{
+    while (jobs.length){
+      try { await jobs.shift()(); } catch { failed = true; }
+    }
+  }));
+  await notesSearchPending;
+  notesSearchPending = null;
+  notesSearchReady = !failed;
+  searchNotes = index;
+  status.textContent = searchTerm.trim() && !notesSearchReady ? 'חלק מההערות לא נטענו.' : '';
+  if (searchTerm.trim()) render();
+}
+
 function searchHit(q, fields){
   if (window.BSDSearch && BSDSearch.textMatch) return BSDSearch.textMatch(q, fields);
   return fields.filter(Boolean).join(' ').toLowerCase().includes(String(q).trim().toLowerCase());
@@ -767,8 +823,7 @@ function graphEntity(rec, kind, id){
     reference: business ? rec?.business_number : rec?.client_number,
     summary: business ? [rec?.field, rec?.city || rec?.region].filter(Boolean).join(' · ') : agreementShortLabel(rec?.agreement_status),
     href: rec ? page + '?open=' + encodeURIComponent(id) : '',
-    canReadNotes: kind === 'buyer' && !!rec && !!CURRENT_PROFILE &&
-      (CURRENT_PROFILE.role === 'admin' || rec.created_by === CURRENT_PROFILE.id)
+    canReadNotes: kind === 'buyer' && canReadBuyerNotes(rec)
   };
 }
 
@@ -823,6 +878,7 @@ function branchRowHtml(m, otherPartyLabel){
       ${openTasks?` · ${openTasks} משימות פתוחות`:''}
     </div>
     ${stepPathHtml(m)}
+    <button type="button" class="mini-btn" data-process="${esc(m.id)}">תהליך והערות</button>
     ${branchActionsHtml(m)}
   </div>`;
 }
@@ -838,6 +894,15 @@ function branchActionsHtml(m){
 }
 
 function wireBranchActions(container){
+  container.querySelectorAll('[data-process]').forEach(el=>el.addEventListener('click', ()=>{
+    const match = ALL_MATCHES.find(item=>item.id === el.dataset.process);
+    if (!match) return;
+    const { isBroker } = counterpartyOf(match);
+    const group = currentView === 'business' ? 'biz:' + match.business_id : isBroker ? 'broker:' + match.broker_id : 'buyer:' + match.buyer_id;
+    matchesGraph.select(currentView, group, match.id);
+    setMatchLayout('graph');
+    document.getElementById('matchGraphDetailsTitle')?.focus();
+  }));
   container.querySelectorAll('[data-open]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); location.href='match-detail.html?id='+el.dataset.open; }));
   container.querySelectorAll('[data-task]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickTaskModal(el.dataset.task); }));
   container.querySelectorAll('[data-note]').forEach(el=>el.addEventListener('click', (e)=>{ e.stopPropagation(); openQuickNoteModal(el.dataset.note, 'נוספה הערה'); }));
@@ -885,9 +950,9 @@ function renderByBusiness(){
   wrap.innerHTML = bizStats.map(s=>{
     const isOpen = OPEN_NODES.has('biz:'+s.bid);
     return `<div class="tree-node ${isOpen?'open':''}" data-node="biz:${s.bid}">
-      <div class="tree-head" data-toggle="biz:${s.bid}">
+      <div class="tree-head">
         <div>
-          <div class="th-title"><span class="toggle-icon">▶</span> 🏢 ${s.b?.business_number?`<span class="biz-number">#${esc(s.b.business_number.replace('BSD-B-',''))}</span>`:''} ${esc(s.b?.internal_name||'—')}</div>
+          <button type="button" class="th-title match-tree-toggle" data-toggle="biz:${s.bid}" aria-expanded="${isOpen}"><span class="toggle-icon" aria-hidden="true">▶</span> 🏢 ${s.b?.business_number?`<span class="biz-number">#${esc(s.b.business_number.replace('BSD-B-',''))}</span>`:''} ${esc(s.b?.internal_name||'—')}<span class="tree-toggle-label">${isOpen?'סגור':'פתח'}</span></button>
           <div class="th-stats">
             <span>מטפל: ${esc(userName(s.b?.handled_by)||'—')}</span>
             <span>${s.matches.length} קונים</span>
@@ -912,16 +977,12 @@ function renderByBusiness(){
         ${s.matches.sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).map(m=>{
           return branchRowHtml(m, counterpartyLabelHtml(m));
         }).join('')}
+        ${isOpen ? `<button type="button" class="mini-btn" data-toggle="biz:${s.bid}" aria-expanded="true">סגור ענף</button>` : ''}
       </div>
     </div>`;
   }).join('');
 
-  wrap.querySelectorAll('[data-toggle]').forEach(el=>el.addEventListener('click', (e)=>{
-    if (e.target.closest('[data-addbuyer],[data-outreach],[data-bizreport]')) return;
-    const key = el.dataset.toggle;
-    OPEN_NODES.has(key) ? OPEN_NODES.delete(key) : OPEN_NODES.add(key);
-    render();
-  }));
+  wireTreeToggles(wrap);
   wireGroupActions(wrap);
   wireBranchActions(wrap);
 }
@@ -968,9 +1029,9 @@ function renderByBuyer(){
     const isOpen = OPEN_NODES.has(s.key);
     const badge = s.isBroker ? `<span style="display:inline-flex;align-items:center;gap:3px;background:#7a3fd1;color:#fff;font-weight:800;font-size:.65rem;padding:2px 8px;border-radius:10px;margin-inline-start:6px;">🔵 מתווך</span>` : '';
     return `<div class="tree-node ${isOpen?'open':''}" data-node="${s.key}">
-      <div class="tree-head" data-toggle="${s.key}">
+      <div class="tree-head">
         <div>
-          <div class="th-title"><span class="toggle-icon">▶</span> ${s.isBroker?'🔵':'🧍'} ${esc(s.rec?.full_name||'—')} ${(!s.isBroker && s.rec?.client_number)?`<span class="chip chip-gray">${esc(s.rec.client_number)}</span>`:''}${badge}</div>
+          <button type="button" class="th-title match-tree-toggle" data-toggle="${s.key}" aria-expanded="${isOpen}"><span class="toggle-icon" aria-hidden="true">▶</span> ${s.isBroker?'🔵':'🧍'} ${esc(s.rec?.full_name||'—')} ${(!s.isBroker && s.rec?.client_number)?`<span class="chip chip-gray">${esc(s.rec.client_number)}</span>`:''}${badge}<span class="tree-toggle-label">${isOpen?'סגור':'פתח'}</span></button>
           <div class="th-stats">
             <span>מטפל: ${esc(userName(s.rec?.handled_by)||'—')}</span>
             <span>${s.matches.length} עסקים</span>
@@ -995,18 +1056,23 @@ function renderByBuyer(){
           const bizLabel = (b?.business_number?`<span class="biz-number">#${esc(b.business_number.replace('BSD-B-',''))}</span> `:'') + esc(b?.internal_name||'—');
           return branchRowHtml(m, bizLabel);
         }).join('')}
+        ${isOpen ? `<button type="button" class="mini-btn" data-toggle="${s.key}" aria-expanded="true">סגור ענף</button>` : ''}
       </div>
     </div>`;
   }).join('');
 
-  wrap.querySelectorAll('[data-toggle]').forEach(el=>el.addEventListener('click', (e)=>{
-    if (e.target.closest('[data-addbiz],[data-buyerreport],[data-editbuyer],[data-quicksend]')) return;
-    const key = el.dataset.toggle;
-    OPEN_NODES.has(key) ? OPEN_NODES.delete(key) : OPEN_NODES.add(key);
-    render();
-  }));
+  wireTreeToggles(wrap);
   wireGroupActions(wrap);
   wireBranchActions(wrap);
+}
+
+function wireTreeToggles(wrap){
+  wrap.querySelectorAll('[data-toggle]').forEach(button=>button.addEventListener('click', ()=>{
+    const key = button.dataset.toggle;
+    OPEN_NODES.has(key) ? OPEN_NODES.delete(key) : OPEN_NODES.add(key);
+    render();
+    [...wrap.querySelectorAll('[data-toggle]')].find(item=>item.dataset.toggle === key)?.focus();
+  }));
 }
 
 function wireGroupActions(wrap){
@@ -1326,26 +1392,50 @@ async function saveQuickTask(matchId){
 }
 
 function openQuickNoteModal(matchId, defaultAction){
+  const match = ALL_MATCHES.find(item=>item.id === matchId);
+  const ownerUpdate = match?.buyer_id && match.counterparty_type !== 'broker' && ALL_BUSINESSES[match.business_id];
   document.getElementById('modalRoot').innerHTML = `
     <div class="overlay"><div class="modal">
       <div class="modal-head"><h3>${defaultAction==='התקיימה שיחת טלפון'?'☎️ תיעוד שיחה':'📝 הוספת הערה'}</h3><button class="modal-close" data-close>✕</button></div>
       <div class="modal-body">
-        <div class="field"><label>תיאור</label><textarea id="qnText" rows="4" placeholder="מה נאמר / מה קרה..."></textarea></div>
+        <div class="field"><label for="qnText">תיעוד פנימי</label><textarea id="qnText" rows="4"></textarea></div>
+        ${ownerUpdate ? '<div class="field"><label for="qnOwnerText">עדכון לבעל העסק בפורטל</label><textarea id="qnOwnerText" rows="3" aria-describedby="qnOwnerHint"></textarea><small id="qnOwnerHint">הטקסט יוצג לבעל העסק אם ההתאמה פתוחה לצפייה בפורטל.</small></div>' : ''}
       </div>
-      <div class="modal-foot"><button class="btn-ghost" data-close>ביטול</button><button class="btn-primary" onclick="saveQuickNote('${matchId}','${defaultAction}')">שמור</button></div>
+      <div class="modal-foot"><button class="btn-ghost" data-close>ביטול</button><button class="btn-primary" id="qnSave" onclick="saveQuickNote('${matchId}','${defaultAction}')">שמור</button></div>
     </div></div>`;
   document.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', ()=> document.getElementById('modalRoot').innerHTML=""));
 }
 async function saveQuickNote(matchId, actionType){
   const text = document.getElementById('qnText').value.trim();
-  const { error } = await window.supabaseClient.from('match_activity_log').insert({
-    match_id: matchId, action_type: actionType, description: text || actionType, performed_by: CURRENT_PROFILE.id
-  });
-  if (error){ toast('שגיאה: '+error.message); return; }
-  await window.supabaseClient.from('matches').update({ last_action: actionType, last_action_at: new Date().toISOString() }).eq('id', matchId);
+  const forOwner = document.getElementById('qnOwnerText')?.value.trim();
+  if (!text && !forOwner) { toast('יש להזין תיעוד או עדכון לבעל העסק'); return; }
+  const justSaved = new Date().toISOString();
+  const base = { match_id: matchId, action_type: actionType, performed_by: CURRENT_PROFILE.id };
+  const entries = [];
+  if (text) entries.push({ ...base, description: text, visible_to_client: false });
+  if (forOwner) entries.push({ ...base, description: forOwner, visible_to_client: true });
+  const button = document.getElementById('qnSave');
+  if (button.disabled) return;
+  button.disabled = true;
+  let saved, metadataError;
+  try {
+    const { error } = await window.supabaseClient.from('match_activity_log').insert(entries);
+    if (error) throw error;
+    saved = true;
+    const result = await window.supabaseClient.from('matches').update({ last_action: actionType, last_action_at: justSaved }).eq('id', matchId);
+    metadataError = result.error;
+  } catch (error) {
+    if (!saved) { toast('שגיאה בשמירת התיעוד: ' + error.message); return; }
+    metadataError = error;
+  } finally {
+    button.disabled = false;
+  }
+  ALL_ACTIVITY.push(...entries);
   document.getElementById('modalRoot').innerHTML = '';
-  toast('נשמר בהצלחה');
-  const m = ALL_MATCHES.find(x=>x.id===matchId); if (m) m.updated_at = new Date().toISOString();
+  toast(metadataError ? 'התיעוד נשמר. עדכון הפעולה האחרונה נכשל.' :
+    forOwner ? 'העדכון לפורטל נשמר' : 'התיעוד הפנימי נשמר');
+  const m = ALL_MATCHES.find(x=>x.id===matchId); if (m && !metadataError) { m.updated_at = justSaved; m.last_action = actionType; m.last_action_at = justSaved; }
+  saveMatchesPageCache();
   buildStatStrip();
   render();
 }
@@ -1355,6 +1445,7 @@ function setMatchView(view, focusKey, pivot = false){
   if (pivot) {
     searchTerm = '';
     document.getElementById('searchBox').value = '';
+    document.getElementById('matchSearchStatus').textContent = '';
   }
   if (focusKey) matchesGraph.select(view, focusKey);
   document.querySelectorAll('[data-view]').forEach(button=>{
@@ -1368,17 +1459,33 @@ function setMatchView(view, focusKey, pivot = false){
 document.querySelectorAll('[data-view]').forEach(button=>{
   button.addEventListener('click', ()=>setMatchView(button.dataset.view));
 });
-document.querySelectorAll('[data-layout]').forEach(button=>{
-  button.addEventListener('click', ()=>{
-    layout = button.dataset.layout;
-    document.querySelectorAll('[data-layout]').forEach(item=>{
-      item.classList.toggle('active', item === button);
-      item.setAttribute('aria-pressed', item === button);
-    });
-    render();
+function setMatchLayout(next){
+  layout = next;
+  document.querySelectorAll('[data-layout]').forEach(item=>{
+    const active = item.dataset.layout === next;
+    item.classList.toggle('active', active);
+    item.setAttribute('aria-pressed', active);
   });
+  render();
+}
+document.querySelectorAll('[data-layout]').forEach(button=>{
+  button.addEventListener('click', ()=>setMatchLayout(button.dataset.layout));
 });
-document.getElementById('searchBox').addEventListener('input', e=>{ searchTerm = e.target.value; render(); });
+document.getElementById('collapseMatches').addEventListener('click', ()=>{
+  OPEN_NODES.clear();
+  matchesGraph.close();
+  document.getElementById('sideDetailPanel').classList.remove('open');
+  document.body.classList.remove('panel-open');
+  render();
+});
+let noteSearchTimer;
+document.getElementById('searchBox').addEventListener('input', e=>{
+  searchTerm = e.target.value;
+  clearTimeout(noteSearchTimer);
+  if (!searchTerm.trim()) document.getElementById('matchSearchStatus').textContent = '';
+  else noteSearchTimer = setTimeout(loadSearchNotes, 240);
+  render();
+});
 document.getElementById('filterToggleBtn').addEventListener('click', ()=>{
   const p = document.getElementById('filterPanel');
   p.style.display = (p.style.display==='none') ? 'block' : 'none';
@@ -1395,6 +1502,7 @@ document.getElementById('sortModeSelect').addEventListener('change', e=>{ sortMo
   else {
     await loadOutreach();
     if (currentView === 'business') render();
+    loadSearchNotes();
   }
 })();
 window.addEventListener('pagehide', saveMatchesPageCache);
