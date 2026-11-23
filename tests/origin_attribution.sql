@@ -25,6 +25,13 @@ insert into public.businesses(id,internal_name,seller_id,created_by,handled_by)
 select pg_temp.origin_assert((select referred_by_agent_id=t.regular and origin_entered_by_id=t.regular and original_source='facebook' from public.businesses where id=t.business),'lead conversion preserves referring agent despite admin transfer') from origin_test_ids t;
 select set_config('request.jwt.claim.sub','',true);
 insert into public.leads(type,full_name,source,dedupe_override_reason) values('buyer','בדיקת פייסבוק '||gen_random_uuid(),'facebook','בדיקה בתוך טרנזקציה שמתבטלת');
+insert into public.businesses(internal_name,source,handled_by) select 'בדיקת מקור קיים '||business,'facebook',regular from origin_test_ids;
+select set_config('request.jwt.claim.sub',regular::text,true) from origin_test_ids;
+set local role authenticated;
+update public.businesses set origin_entered_by_id=(select authorized from origin_test_ids),origin_entered_by_name='שם מזויף' where internal_name=(select 'בדיקת מקור קיים '||business from origin_test_ids);
+select pg_temp.origin_assert((select origin_entered_by_id is null and origin_entered_by_name is null from public.businesses where internal_name='בדיקת מקור קיים '||t.business),'unknown creator cannot be forged on an existing record') from origin_test_ids t;
+reset role;
+select set_config('request.jwt.claim.sub','',true);
 do $$ begin
  begin
   insert into public.leads(type,full_name) values('buyer','מקור חסר '||gen_random_uuid());
