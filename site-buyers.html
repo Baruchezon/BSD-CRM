@@ -31,6 +31,7 @@
 <title>קונים VIP נרשמים</title>
 <link rel="stylesheet" href="css/style.css?v=202611130900">
 <link rel="stylesheet" href="css/lead-rows.css?v=202611230510">
+<link rel="stylesheet" href="css/vip-delivery-map.css?v=202611230635">
 <style>
 body{margin:0;background:linear-gradient(180deg,#f7f1e4 0,#eef3f8 220px);color:#142033;font-family:Heebo,Rubik,Arial,sans-serif}
 [hidden]{display:none !important}
@@ -40,7 +41,7 @@ body{margin:0;background:linear-gradient(180deg,#f7f1e4 0,#eef3f8 220px);color:#
 .top p{margin:6px 0 0;color:#5d6b80}
 .back{background:#0e1b34;color:#fff;border:0;border-radius:12px;padding:12px 18px;font:inherit;font-weight:800;cursor:pointer}
 .banner{background:#fff4c2;border:1px solid #e2c15a;color:#6d5313;border-radius:14px;padding:12px 14px;font-weight:800;margin-bottom:14px}
-.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
 .card{border:0;border-radius:16px;padding:14px 16px;color:#fff;min-height:92px;text-align:right;font:inherit;cursor:pointer;box-shadow:0 7px 0 rgba(8,16,32,.28),0 14px 22px rgba(14,27,52,.16);transition:transform .12s ease,box-shadow .12s ease}
 .card:hover,.person:hover,.person-row:hover{transform:translateY(-3px)}
 .card:active,.person:active,.person-row:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(8,16,32,.28)}
@@ -48,6 +49,7 @@ body{margin:0;background:linear-gradient(180deg,#f7f1e4 0,#eef3f8 220px);color:#
 .card b{display:block;font-size:1.8rem;line-height:1}
 .card span{display:block;margin-top:6px;font-size:.86rem;opacity:.95}
 .c1{background:linear-gradient(135deg,#0e1b34,#24507a)}
+.c5{background:linear-gradient(135deg,#065b57,#137e72)}
 .c4{background:linear-gradient(135deg,#a33b4a,#e07a62)}
 .panel{background:#fff;border-radius:16px;padding:14px 16px;box-shadow:0 8px 22px rgba(14,27,52,.06)}
 .panel h2{margin:0 0 10px;font-size:1rem;color:#0e1b34}
@@ -109,6 +111,7 @@ tr.row:hover{background:#f8fbff}
 .tone-4{background:linear-gradient(135deg,#5a3d8a,#8b6bc4)}
 .tone-5{background:linear-gradient(135deg,#8a4b12,#e0a15a)}
 @media(max-width:900px){.wrap{padding:12px}.person-row{grid-template-columns:1fr 1fr}}
+@media(max-width:460px){.cards{gap:8px}.card{padding:10px;min-height:84px}}
 @media(max-width:640px){.person-row{grid-template-columns:1fr}}
 .delivery-heading,.delivery-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .delivery-heading label{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -153,6 +156,36 @@ tr.row:hover{background:#f8fbff}
       <button type="button" id="deliveryPrev">הקודם</button>
       <button type="button" id="deliveryNext">הבא</button>
     </div>
+  </section>
+  <section class="panel vip-map" id="vipMap" hidden aria-labelledby="vipMapTitle">
+    <header class="vip-map-header">
+      <div>
+        <h2 id="vipMapTitle">מה נשלח למי</h2>
+        <p>שליחות באימייל שאושרו על ידי ספק הדיוור</p>
+      </div>
+      <div class="vip-map-legend" aria-label="מקרא">
+        <span class="vip-map-business">עסק</span>
+        <span class="vip-map-buyer">קונה</span>
+      </div>
+    </header>
+    <div class="vip-map-controls" id="vipMapControls" hidden>
+      <div class="vip-map-tabs" role="group" aria-label="נקודת מבט">
+        <button type="button" data-map-mode="business" aria-pressed="true">לפי עסק</button>
+        <button type="button" data-map-mode="buyer" aria-pressed="false">לפי קונה</button>
+      </div>
+      <label for="vipMapEntity" id="vipMapEntityLabel"></label>
+      <select id="vipMapEntity"></select>
+    </div>
+    <div id="vipMapStatus" class="vip-map-status" role="status"></div>
+    <div id="vipMapGraph"></div>
+    <section id="vipMapDetails" class="vip-map-details" hidden aria-labelledby="vipMapDetailsTitle">
+      <h3 id="vipMapDetailsTitle" tabindex="-1"></h3>
+      <div id="vipMapDetailRows" aria-live="polite"></div>
+      <div id="vipMapDetailPager" class="delivery-footer" hidden>
+        <button type="button" id="vipMapDetailPrev">הקודם</button>
+        <button type="button" id="vipMapDetailNext">הבא</button>
+      </div>
+    </section>
   </section>
   <div id="subscriberPanel">
 
@@ -266,6 +299,7 @@ tr.row:hover{background:#f8fbff}
 <script src="js/supabaseClient.js?v=202611181930"></script>
 <script src="js/auth.js?v=202611181930"></script>
 <script src="js/site-buyers.js?v=202611150730"></script>
+<script src="js/vip-delivery-map.js?v=202611230635"></script>
 <script>
 const UI = window.BSDSiteBuyers;
 const API = (window.BSD_CONFIG && window.BSD_CONFIG.SUPABASE_URL || '') + '/functions/v1/business-alert-admin';
@@ -279,6 +313,19 @@ const DELIVERY_PAGE_SIZE = 50;
 let deliveryOffset = 0;
 let deliveryRequest = 0;
 let deliveryHistory = null;
+const deliveryMap = window.BSDVIPDeliveryMap.create({
+  escape: UI.esc,
+  onSummary: () => {
+    const count = document.querySelector('#cards [data-kind="map"] b');
+    if (count) count.textContent = deliveryMap.count();
+  },
+  request: async (params, demo) => {
+    if (demo) return window.BSDVIPDeliveryMap.sample(liveRows(), params);
+    const { data, error } = await window.supabaseClient.rpc('business_alert_vip_delivery_map', params);
+    if (error) throw error;
+    return data;
+  }
+});
 
 function text(path, fallback){
   const value = String(path).split('.').reduce((obj, key) => obj && obj[key], COPY);
@@ -393,7 +440,8 @@ function cards(){
   const total = deliveryHistory ? deliveryHistory.total_messages : '…';
   document.getElementById('cards').innerHTML =
     cardButton('c1', liveRows().length, 'סה״כ נרשמים', 'total') +
-    cardButton('c4', total, 'שליחות', 'sends');
+    cardButton('c4', total, 'שליחות', 'sends') +
+    cardButton('c5', deliveryMap.count(), 'מספר העסקים שנשלחו', 'map');
 }
 
 function paintDeliveryHistory(){
@@ -457,12 +505,14 @@ async function loadDeliveryHistory(){
 function setView(next){
   view = next;
   document.getElementById('deliveryPanel').hidden = view !== 'sends';
-  document.getElementById('subscriberPanel').hidden = view === 'sends';
+  document.getElementById('vipMap').hidden = view !== 'map';
+  document.getElementById('subscriberPanel').hidden = view === 'sends' || view === 'map';
   paint();
   if (view === 'sends') {
     paintDeliveryHistory();
     loadDeliveryHistory();
   }
+  if (view === 'map') deliveryMap.load(sample);
 }
 
 function currentFilters(){
@@ -1006,7 +1056,9 @@ document.getElementById('deliveryNext').addEventListener('click', () => {
     await load();
     document.getElementById('byBusiness').innerHTML = '<div><b>מאפייה לדוגמה</b> · דנה לדוגמה, ציון 86 (תחום 38, תקציב 30, אזור 18)</div><div><b>מסעדה לדוגמה</b> · דנה לדוגמה, ציון 30, מחוץ לטווח התקציב</div>';
     const params = new URLSearchParams(location.search);
-    if (params.get('stat') === 'sends') setView('sends');
+    await deliveryMap.load(true);
+    if (params.get('stat') === 'map') setView('map');
+    else if (params.get('stat') === 'sends') setView('sends');
     else {
       if (params.get('stat') === 'archive') setView('archive');
       await loadDeliveryHistory();
@@ -1020,9 +1072,11 @@ document.getElementById('deliveryNext').addEventListener('click', () => {
     document.body.innerHTML = '<div class="empty">אין הרשאה למסך זה</div>';
     return;
   }
-  try { await Promise.all([load(), loadDeliveryHistory()]); } catch (error) { toast(error.message); }
+  try { await Promise.all([load(), loadDeliveryHistory(), deliveryMap.load(false)]); } catch (error) { toast(error.message); }
   // deep link from the dashboard global search: site-buyers.html?open=<subscriber id>
-  const openParam = new URLSearchParams(location.search).get('open');
+  const params = new URLSearchParams(location.search);
+  if (params.get('stat') === 'map') setView('map');
+  const openParam = params.get('open');
   if (openParam){
     if (rows.some(item => item.id === openParam)) openDetail(openParam);
     else toast('הנרשם לא מופיע ברשימה הנוכחית (ייתכן שהוא בארכיון)');
