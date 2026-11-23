@@ -1,17 +1,41 @@
 <!doctype html>
 <html lang="he" dir="rtl">
 <head>
+<script>
+(function(){
+  try{
+    var PAGE_BUILD = '202611230420';
+    window.PAGE_BUILD = PAGE_BUILD;
+    var guardKey = 'bsd_ver_reload_guard:' + (location.pathname.split('/').pop() || 'index');
+    function readGuard(){ try { return localStorage.getItem(guardKey); } catch(e){ try { return sessionStorage.getItem(guardKey); } catch(e2){ return 'storage-blocked'; } } }
+    function writeGuard(v){ try { localStorage.setItem(guardKey, v); return true; } catch(e){ try { sessionStorage.setItem(guardKey, v); return true; } catch(e2){ return false; } } }
+    var loopGuard = readGuard();
+    fetch('version.json?t=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        var serverBuild = (v.version || '').replace(/\D/g,'');
+        if (serverBuild && serverBuild !== PAGE_BUILD && loopGuard !== serverBuild){
+          if (!writeGuard(serverBuild)) return;
+          var url = new URL(location.href);
+          url.searchParams.set('_cb', Date.now());
+          location.replace(url.toString());
+        }
+      })
+      .catch(function(){});
+  } catch(e){}
+})();
+</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>נרשמים לעדכונים</title>
+<title>קונים VIP נרשמים</title>
 <link rel="stylesheet" href="css/style.css?v=202611130900">
 <style>
 body{margin:0;background:linear-gradient(180deg,#f7f1e4 0,#eef3f8 220px);color:#142033;font-family:Heebo,Rubik,Arial,sans-serif}
 [hidden]{display:none !important}
 .wrap{max-width:1280px;margin:0 auto;padding:22px}
 .top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:16px}
-.top h1{margin:0;font-size:1.7rem;color:#0e1b34}
+.top h1{margin:0;font-size:1.7rem;color:#0e1b34;line-height:1.25;max-width:100%}
 .top p{margin:6px 0 0;color:#5d6b80}
 .back{background:#0e1b34;color:#fff;border:0;border-radius:12px;padding:12px 18px;font:inherit;font-weight:800;cursor:pointer}
 .banner{background:#fff4c2;border:1px solid #e2c15a;color:#6d5313;border-radius:14px;padding:12px 14px;font-weight:800;margin-bottom:14px}
@@ -101,7 +125,7 @@ tr.row:hover{background:#f8fbff}
 <div class="wrap">
   <div class="top">
     <div>
-      <h1 id="pageTitle">נרשמים לעדכונים</h1>
+      <h1 id="pageTitle">קונים VIP נרשמים</h1>
       <p id="pageIntro">כאן רואים מי ביקש עדכונים, ומה מתאים לו. בלי להעמיס.</p>
     </div>
     <div class="actions">
@@ -923,11 +947,11 @@ document.addEventListener('click', event => {
 });
 
 (async function start(){
-  try { COPY = await fetch('copy/he.json').then(res => res.json()); } catch (error) { COPY = null; }
+  try { COPY = await fetch('copy/he.json?v=202611230420').then(res => res.json()); } catch (error) { COPY = null; }
   if (COPY){
-    document.getElementById('pageTitle').textContent = text('list.title', 'נרשמים לעדכונים');
+    document.getElementById('pageTitle').textContent = text('list.title', 'קונים VIP נרשמים');
     document.getElementById('pageIntro').textContent = text('list.intro', '');
-    document.title = text('list.title', 'נרשמים לעדכונים');
+    document.title = text('list.title', 'קונים VIP נרשמים');
   }
   sample = new URLSearchParams(location.search).get('sample') === '1' && UI.sampleAllowed();
   if (sample){
