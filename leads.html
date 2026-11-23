@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611092100';
+    var PAGE_BUILD = '202611230515';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -303,7 +303,7 @@
 <script src="js/crmStage.js?v=202610221200"></script>
 <script src="js/phoneCalls.js?v=202610142200"></script>
 <script src="js/listReturn.js?v=202611092100"></script>
-<script src="js/business-alert-invite.js?v=202611150640"></script>
+<script src="js/business-alert-invite.js?v=202611230515"></script>
 <script src="js/meetingPrepSheet.js?v=202611151100"></script>
 <script>
 let ALL_LEADS = [];
@@ -959,6 +959,7 @@ function renderTable(){
             <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
               <a href="javascript:void(0)" onclick="openLeadForm('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">${isGrantOnlyViewer(l) ? '👁️ צפייה' : '✏️ ערוך'}</a>
               ${isGrantOnlyViewer(l) ? '' : `<a href="javascript:void(0)" onclick="openNotesPanel('leads','${l.id}','${esc((l.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(l.id))}${notesIconStyle(l.id) ? ' 🔵' : ''}</a>`}
+              ${(l.type === 'buyer' && !isGrantOnlyViewer(l)) ? BSDBusinessAlertInvite.menuItem(l.id, CURRENT_PROFILE) : ''}
               ${(l.type === 'buyer' && !isGrantOnlyViewer(l)) ? `<a href="javascript:void(0)" onclick="openAddBizToMatchModal('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">➕ הוסף עסק להתאמה</a>` : ''}
               ${(canSendAgreement() && l.agreement_status !== 'יש הסכם חתום' && !isGrantOnlyViewer(l)) ? `<a href="javascript:void(0)" onclick="sendAgreementForLead('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
               ${canManageLead(l) ? `<a href="javascript:void(0)" onclick="moveLeadStage('${l.id}','in_progress')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">⏳ העבר ללקוחות בטיפול</a><a href="javascript:void(0)" onclick="moveLeadStage('${l.id}','lead')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">↩️ החזר ללידים</a>` : ''}
@@ -980,6 +981,11 @@ function renderTable(){
       <td data-label="הערות" class="notes-cell"><div class="notes-preview" title="${esc(l.notes||'')}">${esc(l.notes||'—')}</div></td>
     </tr>`;
   }).join('');
+}
+
+function openVipInviteFromRow(event, id){
+  const row = ALL_LEADS.find(l => l.id === id && l.type === 'buyer' && !isGrantOnlyViewer(l));
+  BSDBusinessAlertInvite.openFromMenu(event, row);
 }
 
 function canEditRecord(createdBy){

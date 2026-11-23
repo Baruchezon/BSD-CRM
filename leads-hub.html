@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611230510';
+    var PAGE_BUILD = '202611230515';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -323,6 +323,7 @@
 <script src="js/phoneCalls.js?v=202610142200"></script>
 <script src="js/push.js?v=202610051500"></script>
 <script src="js/listReturn.js?v=202610311830"></script>
+<script src="js/business-alert-invite.js?v=202611230515"></script>
 <script>
 let ALL_BUSINESSES = [];
 let ALL_SELLERS = [];
@@ -1286,6 +1287,7 @@ function renderTable(){
               ${(editable && isWebsiteLead) ? `<a href="javascript:void(0)" onclick="openLeadAction('${r.id}','buyer')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">✅ העבר לקונה</a><a href="javascript:void(0)" onclick="openLeadAction('${r.id}','seller')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">✅ העבר למוכר</a>${canSendAgreement() ? `<a href="javascript:void(0)" onclick="openLeadAction('${r.id}',null,true)" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}` : ''}
               ${(editable && canSendAgreement() && !isWebsiteLead) ? `<a href="javascript:void(0)" onclick="sendAgreement('${r.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📄 שלח הסכם</a>` : ''}
               ${editable ? `<a href="javascript:void(0)" onclick="deleteRecord('${r.id}')" style="display:block;color:#ffb4b4;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📁 העבר לארכיון</a>` : ''}
+              ${leadCardTypeValue(r) === 'buyer' ? BSDBusinessAlertInvite.menuItem(r.id, CURRENT_PROFILE) : ''}
     `;
     const callStatus = callOn ? leadCallStatusValue(r) : '';
     const rowCls = LEAD_CALL_ROW_CLASS[callStatus] || '';
@@ -1374,6 +1376,10 @@ async function stagedSendAgreement(id){
   toast('טופס ההסכם נפתח. הכרטיס נשאר ב«' + BSDCrmStage.label(r.crm_stage) + '»');
   await loadAll();
 }
+function openVipInviteFromRow(event, id){
+  const row = currentRows().find(r => r.id === id && r.__staged !== 'business');
+  BSDBusinessAlertInvite.openFromMenu(event, row);
+}
 function stagedRowHtml(r, callOn){
   const isBiz = r.__staged === 'business';
   const editable = canEditRecord(r.created_by);
@@ -1381,6 +1387,7 @@ function stagedRowHtml(r, callOn){
   const menu = [
     item(`openStagedCard('${r.id}')`, isBiz ? '📋 פתח כרטיס עסק' : '📋 פתח כרטיס קונה'),
     item(`openNotesPanel('${stagedTable(r)}','${r.id}','${esc(((isBiz ? r.internal_name : r.full_name) || 'רשומה').replace(/'/g,''))}')`, '📝 ' + esc(notesTooltip(r.id))),
+    (!isBiz && leadCardTypeValue(r) === 'buyer') ? BSDBusinessAlertInvite.menuItem(r.id, CURRENT_PROFILE) : '',
     (editable && canSendAgreement()) ? item(`stagedSendAgreement('${r.id}')`, '📄 שלח הסכם') : '',
     (editable && r.crm_stage !== 'in_progress') ? item(`moveStaged('${r.id}','in_progress')`, '⏳ העבר ללקוחות בטיפול') : '',
     (editable && r.crm_stage !== 'lead') ? item(`moveStaged('${r.id}','lead')`, '↩️ החזר ללידים') : '',
