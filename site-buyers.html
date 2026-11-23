@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202611230420';
+    var PAGE_BUILD = '202611230510';
     window.PAGE_BUILD = PAGE_BUILD;
     var guardKey = 'bsd_ver_reload_guard:' + (location.pathname.split('/').pop() || 'index');
     function readGuard(){ try { return localStorage.getItem(guardKey); } catch(e){ try { return sessionStorage.getItem(guardKey); } catch(e2){ return 'storage-blocked'; } } }
@@ -30,6 +30,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>קונים VIP נרשמים</title>
 <link rel="stylesheet" href="css/style.css?v=202611130900">
+<link rel="stylesheet" href="css/lead-rows.css?v=202611230510">
 <style>
 body{margin:0;background:linear-gradient(180deg,#f7f1e4 0,#eef3f8 220px);color:#142033;font-family:Heebo,Rubik,Arial,sans-serif}
 [hidden]{display:none !important}
@@ -476,21 +477,35 @@ function paint(){
     document.getElementById('table').innerHTML = '<div class="empty">' + UI.esc(text('list.empty', 'אין נרשמים להצגה במסנן הזה.')) + '</div>';
     return;
   }
-  document.getElementById('table').innerHTML = '<div class="people">' + list.map((row, index) => {
+  const sourceClass = { website: 'p-web', vip: 'p-vip', our_link: 'p-ours', manual: 'p-hand', call: 'p-phone', invited_by_baruch: 'p-vip' };
+  document.getElementById('table').innerHTML = '<div class="lead-rows">' +
+    '<div class="lead-rows-head"><span>שם</span><span>טלפון</span><span>מקור</span><span>סטטוס</span><span>תחום</span><span>תאריך</span><span>פעולות</span></div>' +
+    list.map(row => {
     const name = UI.esc((((row.first_name || '') + ' ' + (row.last_name || '')).trim()) || 'נרשם');
     const open = document.getElementById('drawer') && document.getElementById('drawer').dataset.open === row.id;
-    const when = row.created_at ? new Date(row.created_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
-    const interest = UI.sectorLabels(row)[0] || 'לא צוין';
+    const when = row.created_at ? new Date(row.created_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit' }) : '—';
+    const interest = UI.sectorLabels(row)[0] || row.looking_for || 'לא צוין';
+    const id = UI.esc(row.id);
+    const statusKind = row.status === 'active' ? 'lr-ok' : (String(row.status || '').indexOf('unsub') === 0 ? 'lr-off' : 'lr-wait');
     const tools = row.archived_at
-      ? `<button type="button" class="soft" data-restore="${UI.esc(row.id)}">שחזר</button><button type="button" class="purge" data-purge="${UI.esc(row.id)}">מחק לצמיתות</button>`
-      : `<button type="button" class="soft" data-archive="${UI.esc(row.id)}">העבר לארכיון</button>`;
-    if (statFilter){
-      return `<div class="person-tools"><button type="button" class="person-row${open ? ' on' : ''}" data-id="${UI.esc(row.id)}"><b>${name}</b><span dir="ltr">${UI.esc(row.phone || '—')}</span><span>${UI.esc(when)}</span><span class="badge ${{ website: 'p-web', vip: 'p-vip', our_link: 'p-ours', manual: 'p-hand', call: 'p-phone' }[UI.sourceKind(row)] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span><span>${UI.esc(interest)}</span></button>${tools}</div>`;
-    }
-    return `<div class="person-tools"><button type="button" class="person tone-${index % 6}${open ? ' on' : ''}" data-id="${UI.esc(row.id)}"><b>${name}</b><span class="badge">${UI.esc(UI.sourceBadge(row))}</span></button>${tools}</div>`;
+      ? `<button type="button" class="lr-act" data-restore="${id}" aria-label="שחזר" title="שחזר">שחזר</button><button type="button" class="lr-act lr-act-danger" data-purge="${id}" aria-label="מחק לצמיתות" title="מחק לצמיתות">מחק</button>`
+      : `<button type="button" class="lr-act" data-archive="${id}" aria-label="העבר לארכיון" title="העבר לארכיון">ארכיון</button>`;
+    return `<div class="lead-row${open ? ' on' : ''}" data-id="${id}">
+      <b class="lr-name">${name}</b>
+      <span class="lr-phone" dir="ltr">${UI.esc(row.phone || '—')}</span>
+      <span class="lr-pill badge ${sourceClass[UI.sourceKind(row)] || 'p-web'}">${UI.esc(UI.sourceBadge(row))}</span>
+      <span class="lr-pill ${statusKind}">${UI.esc(UI.statusLabel(row.status))}</span>
+      <span class="lr-meta">${UI.esc(interest)}</span>
+      <span class="lr-date">${UI.esc(when)}</span>
+      <span class="lr-actions">${tools}</span>
+    </div>`;
   }).join('') + '</div>';
-  document.querySelectorAll('#table .person, #table .person-row').forEach(button => {
-    button.addEventListener('click', () => openDetail(button.getAttribute('data-id')));
+  document.querySelectorAll('#table .lead-row').forEach(row => {
+    const open = () => openDetail(row.getAttribute('data-id'));
+    row.addEventListener('click', event => {
+      if (event.target.closest('button, a')) return;
+      open();
+    });
   });
   document.querySelectorAll('[data-archive]').forEach(button => {
     button.addEventListener('click', event => { event.stopPropagation(); archiveRow(button.getAttribute('data-archive')); });
