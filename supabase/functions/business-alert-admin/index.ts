@@ -210,7 +210,7 @@ async function recomputeMatches(subscriberId?: string, businessIds?: Set<string>
     }
     const keep = new Set(scored.map(row => row.business_id));
     const { data: previous } = await supabase.from("business_alert_matches").select("id,business_id").eq("subscriber_id", subscriber.id);
-    const stale = (previous || []).filter(row => !keep.has(row.business_id)).map(row => row.id);
+    const stale = (previous || []).filter(row => !keep.has(row.business_id) && (!businessIds || businessIds.has(row.business_id))).map(row => row.id);
     if (stale.length) {
       await supabase.from("business_alert_matches").update({
         sendable: false,
