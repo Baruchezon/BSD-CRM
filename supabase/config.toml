@@ -19,3 +19,6 @@ verify_jwt = false
 
 [functions.business-alert-invite-resolve]
 verify_jwt = false
+
+[functions.valuation-repeat-alert]
+verify_jwt = false

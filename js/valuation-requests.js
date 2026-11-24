@@ -1,4 +1,5 @@
 // 24.11.2026 (בקשת ברוך): מסך «בקשות להערכות שווי».
+// v3: 3-digit numbers, visitor_attempt_no badge, repeat/blocks slice.
 // Every submission of the public valuation calculator (www.bsd-bbi.co.il/הערכת-שווי-עסק/)
 // lands in public.valuation_requests (RLS: active admin/manager read only).
 // This file: pure helpers (tested in tests/valuation_requests.test.mjs) + the screen.
@@ -65,6 +66,25 @@
     const n = num(r.annual_turnover);
     return n == null ? '—' : shortShekel(n);
   }
+
+  function padRequestNumber(n) {
+    if (n == null || n === '') return '—';
+    const s = String(n);
+    if (!/^\d+$/.test(s)) return s;
+    return s.padStart(3, '0');
+  }
+  function shortVisitorKey(k) {
+    const s = String(k || '');
+    if (s.startsWith('vid:') && s.length > 12) return 'vid:' + s.slice(4, 12);
+    if (s.length > 16) return s.slice(0, 16) + '…';
+    return s || '—';
+  }
+  function visitorAttemptLabel(r) {
+    const n = num(r && r.visitor_attempt_no);
+    if (n == null) return '';
+    return 'בקשה ' + n + ' של המבקר';
+  }
+  function isRepeatVisitor(r) { return num(r && r.visitor_attempt_no) >= 2; }
   function shekel(n) {
     if (n == null || !isFinite(Number(n))) return '—';
     return '₪' + Math.round(Number(n)).toLocaleString('he-IL');
@@ -100,18 +120,20 @@
     return HE_MONTHS[Number(m) - 1] + ' ' + y;
   }
 
-  function summarize(rows) {
+  function summarize(rows, blocks) {
     const byMonth = {};
     let withContact = 0, valued = 0, sumMid = 0;
+    const repeatKeys = new Set();
     rows.forEach(r => {
       const k = ilMonthKey(r.created_at);
       byMonth[k] = (byMonth[k] || 0) + 1;
       if (r.contact_at || r.contact_name || r.contact_phone) withContact++;
       const m = mid(r);
       if (m != null) { valued++; sumMid += m; }
+      if (isRepeatVisitor(r)) repeatKeys.add(r.visitor_key || ('id:' + (r.id || r.request_number)));
     });
     const months = Object.keys(byMonth).sort().reverse().map(k => ({ key: k, label: monthLabel(k), count: byMonth[k] }));
-    return { total: rows.length, withContact, avgMid: valued ? sumMid / valued : null, months };
+    return { total: rows.length, withContact, avgMid: valued ? sumMid / valued : null, months, repeatVisitors: repeatKeys.size, blockedAttempts: Array.isArray(blocks) ? blocks.length : 0 };
   }
 
   const SLICES = [
@@ -119,7 +141,8 @@
     { id: 'employees', title: 'לפי מספר עובדים', icon: '👥', tone: 't2', key: r => bucketOf(EMPLOYEE_BUCKETS, num(r.employees_count)) || NOT_GIVEN, order: EMPLOYEE_BUCKETS.map(b => b[2]).concat(NOT_GIVEN) },
     { id: 'value', title: 'לפי טווחי שווי', icon: '💎', tone: 't3', key: r => r.result_kind === 'not_profitable' ? 'לא רווחי' : bucketOf(VALUE_BUCKETS, mid(r)), order: VALUE_BUCKETS.map(b => b[2]).concat('לא רווחי') },
     { id: 'profit', title: 'לפי רווח שנתי', icon: '📈', tone: 't4', key: r => bucketOf(PROFIT_BUCKETS, Number(r.profit)), order: PROFIT_BUCKETS.map(b => b[2]) },
-    { id: 'turnover', title: 'לפי מחזור שנתי', icon: '💰', tone: 't5', key: r => bucketOf(TURNOVER_BUCKETS, num(r.annual_turnover)) || NOT_GIVEN, order: TURNOVER_BUCKETS.map(b => b[2]).concat(NOT_GIVEN) }
+    { id: 'turnover', title: 'לפי מחזור שנתי', icon: '💰', tone: 't5', key: r => bucketOf(TURNOVER_BUCKETS, num(r.annual_turnover)) || NOT_GIVEN, order: TURNOVER_BUCKETS.map(b => b[2]).concat(NOT_GIVEN) },
+    { id: 'repeat', title: 'שימוש חוזר / חסימות', icon: '⚠', tone: 't6', kind: 'blocks', key: r => isRepeatVisitor(r) ? 'שימוש חוזר' : 'בקשה אחת' }
   ];
 
   function breakdown(rows, slice) {
@@ -138,7 +161,7 @@
     return list;
   }
 
-  const api = { LABELS, QUESTIONS, SLICES, VALUE_BUCKETS, PROFIT_BUCKETS, EMPLOYEE_BUCKETS, TURNOVER_BUCKETS, NOT_GIVEN, num, employeesText, turnoverText, label, mid, bucketOf, shekel, shortShekel, valueText, ilDateTime, ilMonthKey, monthLabel, summarize, breakdown };
+  const api = { LABELS, QUESTIONS, SLICES, VALUE_BUCKETS, PROFIT_BUCKETS, EMPLOYEE_BUCKETS, TURNOVER_BUCKETS, NOT_GIVEN, num, employeesText, turnoverText, label, mid, bucketOf, shekel, shortShekel, valueText, padRequestNumber, shortVisitorKey, visitorAttemptLabel, isRepeatVisitor, ilDateTime, ilMonthKey, monthLabel, summarize, breakdown };
   root.BSDValuationRequests = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document === 'undefined') return;
@@ -148,10 +171,13 @@
   // numeric ranges ("1–2", "21–50", "51+") must read left-to-right inside the RTL page
   const bidiRange = html => html.replace(/\d[\d.,]*\s*[–-]\s*\d[\d.,]*|\d+\+/g, m => '<bdi dir="ltr">' + m + '</bdi>');
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const state = { all: [], slice: null, filter: null, q: '', showHidden: false, monthsOpen: false };
+  const state = { all: [], blocks: [], slice: null, filter: null, q: '', showHidden: false, monthsOpen: false };
 
   function visible() {
     return state.all.filter(r => state.showHidden || (!r.is_archived && !r.is_test));
+  }
+  function visibleBlocks() {
+    return (state.blocks || []).filter(b => state.showHidden || !b.is_test);
   }
   function filtered() {
     let rows = visible();
@@ -160,13 +186,13 @@
       rows = rows.filter(r => (s.key(r) || '—') === state.filter.key);
     }
     const q = state.q.trim();
-    if (q) rows = rows.filter(r => [String(r.request_number), r.contact_name, r.contact_phone, r.contact_email, label('sector', r.sector), r.contact_city, r.employees_count, r.annual_turnover].some(v => v && String(v).includes(q)));
+    if (q) rows = rows.filter(r => [padRequestNumber(r.request_number), String(r.request_number), visitorAttemptLabel(r), r.visitor_key, r.contact_name, r.contact_phone, r.contact_email, label('sector', r.sector), r.contact_city, r.employees_count, r.annual_turnover].some(v => v && String(v).includes(q)));
     return rows;
   }
 
   function renderSummary() {
     const rows = visible();
-    const s = summarize(rows);
+    const s = summarize(rows, visibleBlocks());
     const cur = ilMonthKey(new Date().toISOString());
     const curCount = (s.months.find(m => m.key === cur) || {}).count || 0;
     const max = Math.max(1, ...s.months.map(m => m.count));
@@ -174,6 +200,8 @@
     $('sumMonth').textContent = curCount.toLocaleString('he-IL');
     $('sumContact').textContent = s.withContact.toLocaleString('he-IL');
     $('sumAvg').textContent = s.avgMid == null ? '—' : shortShekel(s.avgMid);
+    $('sumRepeat').textContent = s.repeatVisitors.toLocaleString('he-IL');
+    $('sumBlocks').textContent = s.blockedAttempts.toLocaleString('he-IL');
     $('months').innerHTML = s.months.length ? s.months.slice(0, 12).map(m =>
       `<div class="mrow"><span class="mname">${esc(m.label)}</span><span class="mbar"><i style="width:${Math.max(4, Math.round(m.count * 100 / max))}%"></i></span><b>${m.count}</b></div>`).join('')
       : '<div class="muted">עדיין אין הערכות.</div>';
@@ -185,9 +213,25 @@
     const panel = $('slicePanel');
     if (!state.slice) { panel.hidden = true; return; }
     const s = SLICES.find(x => x.id === state.slice);
+    panel.hidden = false;
+    if (s.kind === 'blocks') {
+      const blocks = visibleBlocks();
+      const snapLabel = b => {
+        const sn = b.snapshot || {};
+        return (sn.sector_label || label('sector', sn.sector) || '—') + ' · רווח ' + shortShekel(sn.profit);
+      };
+      panel.innerHTML = `<div class="sp-head"><b>${esc(s.icon + ' ' + s.title)}</b><button type="button" class="x" data-close-slice aria-label="סגירה">✕</button></div>` +
+        `<div class="muted small" style="margin-bottom:8px">חסימות: ${blocks.length} · מבקרים שחזרו (2–3): ${summarize(visible(), blocks).repeatVisitors}</div>` +
+        (blocks.length ? blocks.map(b => `<div class="block-row">
+          <b title="${esc(b.visitor_key || '')}">${esc(shortVisitorKey(b.visitor_key))} · ניסיון ${esc(b.attempt_no || (num(b.attempt_count) != null ? num(b.attempt_count) + 1 : '—'))}</b>
+          <span>${esc(snapLabel(b))}</span>
+          <span class="c-val">${b.snapshot && (b.snapshot.value_low != null) ? esc(shortShekel(b.snapshot.value_low) + ' – ' + shortShekel(b.snapshot.value_high)) : '—'}</span>
+          <span class="c-date">${esc(ilDateTime(b.created_at))}</span></div>`).join('')
+          : '<div class="muted">אין חסימות עדיין.</div>');
+      return;
+    }
     const list = breakdown(visible(), s);
     const max = Math.max(1, ...list.map(e => e.count));
-    panel.hidden = false;
     panel.innerHTML = `<div class="sp-head"><b>${esc(s.icon + ' ' + s.title)}</b><button type="button" class="x" data-close-slice aria-label="סגירה">✕</button></div>` +
       (list.length ? list.map(e => `<button type="button" class="brow${state.filter && state.filter.slice === s.id && state.filter.key === e.key ? ' on' : ''}" data-bkey="${esc(e.key)}">
         <span class="bname" title="${esc(e.key)}">${bidiRange(esc(e.key))}</span><span class="bbar"><i class="${s.tone}" style="width:${Math.max(4, Math.round(e.count * 100 / max))}%"></i></span>
@@ -205,10 +249,11 @@
     } else chip.hidden = true;
     $('listCount').textContent = rows.length.toLocaleString('he-IL');
     $('list').innerHTML = rows.length ? rows.map(r => `<button type="button" class="vrow${r.is_test ? ' test' : ''}${r.is_archived ? ' arch' : ''}" data-open="${esc(r.id)}">
-      <span class="c-num">מס׳ ${esc(r.request_number)}</span>
+      <span class="c-num">מס׳ ${esc(padRequestNumber(r.request_number))}</span>
       <span class="c-sector" title="${esc(label('sector', r.sector))}">${esc(label('sector', r.sector))}</span>
       <span class="c-val">${esc(valueText(r))}</span>
       <span class="c-size" title="מספר עובדים · מחזור שנתי">${esc(employeesText(r))} · ${esc(turnoverText(r))}</span>
+      <span class="c-att">${visitorAttemptLabel(r) ? esc(visitorAttemptLabel(r)) + (isRepeatVisitor(r) ? '<span class="badge-rep">⚠ שימוש חוזר</span>' : '') : '—'}</span>
       <span class="c-name" title="${esc(r.contact_name || '')}">${r.contact_name ? esc(r.contact_name) : '<span class="anon">ללא שם</span>'}</span>
       <span class="c-date">${esc(ilDateTime(r.created_at))}</span></button>`).join('')
       : '<div class="empty">אין בקשות להצגה.</div>';
@@ -241,9 +286,11 @@
     const tech = detailRow('תאריך ושעה', esc(ilDateTime(r.created_at)) + ' <small>שעון ישראל</small>') +
       detailRow('עמוד', esc(r.page || '—')) + detailRow('הגיע מ', esc(r.referrer_host || 'ישיר')) +
       (r.utm ? detailRow('קמפיין', esc(r.utm)) : '') + detailRow('מכשיר', esc(r.device_type || '—')) +
-      detailRow('גרסת מחשבון', esc(r.calc_version || '—'));
-    $('sheetBody').innerHTML = `<h2>הערכת שווי מס׳ ${esc(r.request_number)}</h2>
-      ${r.is_test ? '<div class="tag">בדיקה</div>' : ''}${r.is_archived ? '<div class="tag">מוסתר</div>' : ''}
+      detailRow('גרסת מחשבון', esc(r.calc_version || '—')) +
+      (r.visitor_key ? detailRow('מפתח מבקר', '<span dir="ltr">' + esc(shortVisitorKey(r.visitor_key)) + '</span>') : '') +
+      (visitorAttemptLabel(r) ? detailRow('בקשה של המבקר', esc(visitorAttemptLabel(r)) + (isRepeatVisitor(r) ? ' · ⚠ שימוש חוזר' : '')) : '');
+    $('sheetBody').innerHTML = `<h2>הערכת שווי מס׳ ${esc(padRequestNumber(r.request_number))}</h2>
+      ${r.is_test ? '<div class="tag">בדיקה</div>' : ''}${r.is_archived ? '<div class="tag">מוסתר</div>' : ''}${visitorAttemptLabel(r) ? '<div class="tag">' + esc(visitorAttemptLabel(r)) + '</div>' : ''}${isRepeatVisitor(r) ? '<div class="tag">⚠ שימוש חוזר</div>' : ''}
       <h3>מה מילא בטופס</h3>${answers}<h3>התוצאה שקיבל</h3>${result}<h3>פרטי קשר</h3>${contact}<h3>פרטים טכניים</h3>${tech}
       <div class="sheet-actions"><button type="button" class="ghost" data-archive="${esc(r.id)}" data-to="${r.is_archived ? 'false' : 'true'}">${r.is_archived ? 'החזר לרשימה' : 'הסתר מהרשימה (בדיקה/כפילות)'}</button></div>`;
     $('drawer').hidden = false;
@@ -277,6 +324,15 @@
       if (data.length < 1000) break;
     }
     state.all = out;
+    const blocks = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await root.supabaseClient.from('valuation_request_blocks').select('*')
+        .order('created_at', { ascending: false }).range(from, from + 999);
+      if (error) throw error;
+      blocks.push(...data);
+      if (data.length < 1000) break;
+    }
+    state.blocks = blocks;
   }
 
   function bind() {
@@ -311,7 +367,7 @@
     // Local preview only (file:// or localhost with ?demo=1): clearly-dummy rows, no network.
     const params = new URLSearchParams(location.search);
     if (root.BSD_VALUATION_DEMO_ROWS && params.get('demo') === '1' && /^(file:|http:\/\/(localhost|127\.0\.0\.1))/.test(location.href)) {
-      state.all = root.BSD_VALUATION_DEMO_ROWS; $('demoBanner').hidden = false; renderAll(); return;
+      state.all = root.BSD_VALUATION_DEMO_ROWS; state.blocks = root.BSD_VALUATION_DEMO_BLOCKS || []; $('demoBanner').hidden = false; renderAll(); return;
     }
     const profile = await root.requireAuth();
     if (!profile || !['admin', 'manager'].includes(profile.role)) {
