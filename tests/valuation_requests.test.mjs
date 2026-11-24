@@ -21,13 +21,13 @@ test('leads hub: one tab link «בקשות להערכות שווי» next to the
   assert.ok(tabs.indexOf('לקוחות בטיפול') < tabs.indexOf('בקשות להערכות שווי'));
 });
 
-test('page: build stamp, Hebrew RTL, wine/cream/gold, 5 slice buttons, no wrapping names', () => {
+test('page: build stamp, Hebrew RTL, wine/cream/gold, 6 slice buttons, no wrapping names', () => {
   const version = JSON.parse(read('version.json')).version;
   assert.match(page, new RegExp("var PAGE_BUILD = '" + version + "';"));
   assert.match(hub, new RegExp("var PAGE_BUILD = '" + version + "';"));
   assert.match(page, /<html lang="he" dir="rtl">/);
   for (const c of ['#3A0F20', '#F7EFE2', '#C9A24A']) assert.ok(page.includes(c), c);
-  assert.equal(V.SLICES.length, 5);
+  assert.equal(V.SLICES.length, 6);
   assert.match(page, /\.vrow span\{white-space:nowrap;overflow:hidden;text-overflow:ellipsis/);
   assert.match(page, /js\/valuation-requests\.js\?v=\d{12}/);
 });
@@ -76,8 +76,8 @@ test('db: RLS on, read only for active admin/manager, anon writes only through v
   assert.ok(!/^\s*drop table/im.test(rb), 'rollback keeps the data');
 });
 
-test('v2: 5 slice buttons — industry, headcount, value, profit, turnover (age and seniority only in details)', () => {
-  assert.deepEqual(V.SLICES.map(x => x.id), ['sector', 'employees', 'value', 'profit', 'turnover']);
+test('v2: first 5 slices — industry, headcount, value, profit, turnover (age and seniority only in details)', () => {
+  assert.deepEqual(V.SLICES.map(x => x.id).slice(0, 5), ['sector', 'employees', 'value', 'profit', 'turnover']);
   assert.deepEqual(V.EMPLOYEE_BUCKETS.map(b => b[2]), ['0 (רק הבעלים)', '1–2', '3–5', '6–10', '11–20', '21–50', '51+']);
   assert.deepEqual(V.TURNOVER_BUCKETS.map(b => b[2]), ['עד מיליון', '1–3 מיליון', '3–5 מיליון', '5–10 מיליון', '10–20 מיליון', 'מעל 20 מיליון']);
   const emp = V.SLICES.find(x => x.id === 'employees');
@@ -109,4 +109,53 @@ test('v2 db: optional employees/turnover, never a 400, calc untouched, rollback 
   assert.ok(!/raise exception[^;]*(employees|turnover)/.test(sql2), 'no rejection for the new keys');
   assert.match(sql2, /grant execute on function public\.submit_valuation_request\(jsonb\) to anon, authenticated;/);
   assert.ok(!/^\s*alter table[^;]*drop column/im.test(rb2), 'rollback keeps the columns');
+});
+
+const sql3 = read('supabase/migrations/20261124221000_valuation_attempt_ordinal_and_repeat_alert.sql');
+const rb3 = read('supabase/migrations/rollback_20261124221000_valuation_attempt_ordinal_and_repeat_alert.sql');
+
+test('v3: pad to 3 digits, repeat badge from attempt 2, 6th slice, summary counts', () => {
+  assert.equal(V.padRequestNumber(1), '001');
+  assert.equal(V.padRequestNumber(2), '002');
+  assert.equal(V.padRequestNumber(100), '100');
+  assert.equal(V.padRequestNumber(null), '—');
+  assert.equal(V.visitorAttemptLabel({ visitor_attempt_no: 1 }), 'בקשה 1 של המבקר');
+  assert.equal(V.visitorAttemptLabel({ visitor_attempt_no: 3 }), 'בקשה 3 של המבקר');
+  assert.equal(V.visitorAttemptLabel({}), '');
+  assert.equal(V.isRepeatVisitor({ visitor_attempt_no: 1 }), false);
+  assert.equal(V.isRepeatVisitor({ visitor_attempt_no: 2 }), true);
+  assert.deepEqual(V.SLICES.map(x => x.id), ['sector', 'employees', 'value', 'profit', 'turnover', 'repeat']);
+  assert.equal(V.SLICES[5].title, 'שימוש חוזר / חסימות');
+  const rows = [
+    { id: 'a', created_at: '2026-11-24T10:00:00Z', visitor_key: 'vid:11111111-1111-4111-8111-111111111111', visitor_attempt_no: 1, profit: 300000, result_kind: 'range', value_low: 300000, value_high: 600000 },
+    { id: 'b', created_at: '2026-11-24T11:00:00Z', visitor_key: 'vid:11111111-1111-4111-8111-111111111111', visitor_attempt_no: 2, profit: 310000, result_kind: 'range', value_low: 310000, value_high: 620000 },
+    { id: 'c', created_at: '2026-11-24T12:00:00Z', visitor_key: 'vid:22222222-2222-4222-8222-222222222222', visitor_attempt_no: 1, profit: 200000, result_kind: 'range', value_low: 200000, value_high: 400000 }
+  ];
+  const blocks = [{ attempt_no: 4, visitor_key: 'vid:11111111-1111-4111-8111-111111111111', is_test: false }];
+  const s = V.summarize(rows, blocks);
+  assert.equal(s.repeatVisitors, 1);
+  assert.equal(s.blockedAttempts, 1);
+  assert.equal(s.total, 3);
+  assert.match(js, /from\('valuation_request_blocks'\)\.select\('\*'\)/);
+  assert.match(js, /badge-rep/);
+  assert.ok(page.includes('בקשה של המבקר'));
+  assert.ok(page.includes('sumRepeat') && page.includes('sumBlocks'));
+  assert.ok(page.includes('שימוש חוזר') || js.includes('שימוש חוזר / חסימות'));
+  assert.match(js, /⚠ שימוש חוזר/);
+});
+
+test('v3 db: visitor_attempt_no on success, blocks keep attempt_no, alert path does not flip send flags', () => {
+  assert.match(sql3, /visitor_attempt_no/);
+  assert.match(sql3, /attempt_no integer/);
+  assert.match(sql3, /valuation_repeat_alert_auth/);
+  assert.match(sql3, /valuation_repeat_alert_sends/);
+  assert.match(sql3, /valuation_request_blocks_notify/);
+  assert.match(sql3, /valuation-repeat-alert/);
+  assert.match(sql3, /x-bsd-valuation-alert-token/);
+  assert.match(sql3, /valuation_repeat_alert_send_test/);
+  assert.ok(!/update[^;]*(sending_enabled|dry_run|vip_send_enabled|request_details_enabled|bsd_alert_dispatch_auth)/is.test(sql3));
+  assert.ok(!/set\s+(sending_enabled|dry_run|vip_send_enabled|request_details_enabled)/i.test(sql3));
+  assert.match(rb3, /drop trigger if exists valuation_request_blocks_notify_trg/);
+  assert.match(rb3, /drop function if exists public\.valuation_request_blocks_notify/);
+  assert.match(rb3, /create or replace function public\.submit_valuation_request\(p jsonb\)/);
 });
