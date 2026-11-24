@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611230520';
+    var PAGE_BUILD = '202611240635';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -217,6 +217,7 @@
 </div>
 
 <div class="wrap">
+  <div id="globalSearch"></div>
   <div class="toolbar">
     <h2>קונים ומשקיעים</h2>
     <div class="add-btns">
@@ -287,7 +288,7 @@
 <script src="js/config.js?v=202611231330"></script>
 <script src="js/record-origin.js?v=202611231310"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
-<script src="js/auth.js?v=202611231240"></script>
+<script src="js/auth.js?v=202611240635"></script>
 <script src="js/whatsapp-api.js?v=202610111200"></script>
 <script src="js/whatsapp-card.js?v=202610111200"></script>
 <script src="js/permissions.js?v=202611231240"></script>
@@ -296,6 +297,7 @@
 <script src="js/standaloneRecording.js?v=20261012-1"></script>
 <script src="js/notesRecording.js?v=2"></script>
 <script src="js/searchSelect.js?v=202608281530"></script>
+<script src="js/globalSearch.js?v=202611240635"></script>
 <script src="js/bsd-search.js?v=202610081400"></script>
 <script src="js/pdfPipeline.js?v=20261012-1"></script>
 <script src="js/dedupeCheckModule.js?v=20260930dup1"></script>

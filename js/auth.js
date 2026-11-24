@@ -80,6 +80,21 @@ async function bsdFullLogout() {
   window.location.href = 'login.html';
 }
 
+function renderToolsMenu(role){
+  const tools = document.getElementById('navToolsWrap');
+  if (!tools) return;
+  const staff = role === 'admin' || role === 'manager';
+  tools.style.display = staff ? 'inline-block' : 'none';
+  if (!staff || tools.querySelector('a[href^="site-admin.html"]')) return;
+  const menu = tools.querySelector('.bsd-forms-menu');
+  if (!menu) return;
+  const link = document.createElement('a');
+  link.href = 'site-admin.html?v=2026091712';
+  link.textContent = '🌐 ניהול אתר ומעקב';
+  link.style.cssText = 'display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);';
+  menu.insertBefore(link, menu.querySelector('a[href^="ad-reports.html"]'));
+}
+
 // שומר על כל מסך פנימי - מפנה ל-login אם אין session פעיל, ומחזיר את הפרופיל
 async function requireAuth({returnToHubCards = false} = {}) {
   let session = null;
@@ -126,8 +141,7 @@ async function requireAuth({returnToHubCards = false} = {}) {
   async function activateProfile(profile, persistProfile = true){
     const navFormsAll = document.getElementById('navFormsAllLink');
     if (navFormsAll && profile.role !== 'admin' && profile.role !== 'manager') navFormsAll.style.display = 'none';
-    const navTools = document.getElementById('navToolsWrap');
-    if (navTools && profile.role !== 'admin' && profile.role !== 'manager') navTools.style.display = 'none';
+    renderToolsMenu(profile.role);
     if (profile.role === 'agent_authorized') {
       const nav = document.querySelector('.bsd-header .nav-rows .nav');
       if (nav && !nav.querySelector('[data-agent-vip]')) {
@@ -171,6 +185,7 @@ async function requireAuth({returnToHubCards = false} = {}) {
         window.location.href = 'login.html';
         return;
       }
+      renderToolsMenu(result.data.role);
       if (window.BSDSessionCache) window.BSDSessionCache.write(session, result.data);
       // If role or permissions changed, rotate the daily cache namespace now.
       // This prevents a stale privileged or empty dataset from surviving until
@@ -714,11 +729,15 @@ function translateAuthError(error) {
   function writeShared(t){
     try { localStorage.setItem(SHARED_KEY, String(t)); lastWritten = t; } catch(_) {}
   }
-  let lastActivity = Date.now();
-  // A fresh page load is itself activity (the user just navigated here).
-  writeShared(lastActivity);
+  const navigation = window.performance?.getEntriesByType?.('navigation')[0]?.type;
+  const isRestored = navigation === 'reload' || navigation === 'back_forward';
+  const previousActivity = readShared();
+  // A restored browser tab must honor the idle clock before resetting it.
+  let lastActivity = isRestored && previousActivity ? previousActivity : Date.now();
+  if (Date.now() - lastActivity < IDLE_LIMIT_MS) writeShared(lastActivity = Date.now());
   let warningShown = false;
   let countdownInterval = null;
+  let locked = false;
 
   function buildWarningModal(){
     const overlay = document.createElement('div');
@@ -781,7 +800,17 @@ function translateAuthError(error) {
       errEl.textContent = '';
       try {
         const ok = await verifyFingerprint();
-        if (ok){ overlay.remove(); lastActivity = Date.now(); writeShared(lastActivity); }
+        if (ok){
+          lastActivity = Date.now();
+          writeShared(lastActivity);
+          if (window.location.pathname.endsWith('/app.html')){
+            locked = false;
+            overlay.remove();
+          } else {
+            window.__bsdSkipUnloadGuard = true;
+            window.location.replace('app.html');
+          }
+        }
         else { errEl.textContent = 'האימות נכשל, נסה שוב'; }
       } catch(e){
         errEl.textContent = 'האימות בוטל או נכשל';
@@ -791,6 +820,7 @@ function translateAuthError(error) {
   }
 
   function checkIdle(){
+    if (locked) return;
     const shared = readShared();
     if (shared > lastActivity){
       lastActivity = shared;
@@ -799,6 +829,7 @@ function translateAuthError(error) {
     }
     const idleFor = Date.now() - lastActivity;
     if (idleFor >= IDLE_LIMIT_MS){
+      locked = true;
       if (countdownInterval) clearInterval(countdownInterval);
       const overlay = document.getElementById('idleWarningOverlay');
       if (overlay) overlay.remove();
@@ -821,7 +852,7 @@ function translateAuthError(error) {
     // While the warning is showing, movement alone shouldn't silently dismiss it —
     // require the explicit "still here" click so an idle mouse resting near the
     // keyboard doesn't create a false sense of continued presence.
-    if (warningShown) return;
+    if (warningShown || locked) return;
     lastActivity = Date.now();
     if (lastActivity - lastWritten >= WRITE_EVERY_MS) writeShared(lastActivity);
   }
@@ -839,8 +870,10 @@ function translateAuthError(error) {
   window.addEventListener('storage', function(e){
     if (e && e.key === SHARED_KEY) checkIdle();
   });
+  window.addEventListener('pageshow', checkIdle);
 
   setInterval(checkIdle, 1000);
+  checkIdle();
 })();
 
 // ============================================================
