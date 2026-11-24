@@ -1,4 +1,4 @@
-// Dashboard global search (15.11.2026, Baruch): one box under the greeting that finds a record anywhere in the CRM.
+// Shared search for the dashboard, leads and buyers.
 // Data: rpc crm_global_search (SECURITY INVOKER, so results follow the caller's own RLS). Min 2 chars, debounced.
 (function () {
   'use strict';
@@ -13,13 +13,14 @@
     'נרשם לעדכונים': ['#fde4f1', '#be185d'],
     'מתעניין בהכשרה': ['#fff1cc', '#a16207'],
   };
-  const KIND_ICON = { lead: '👤', business: '🏢', broker: '🤝', subscriber: '📬', training: '🎓' };
+  const KIND_ICON = { lead: '👤', review: '📋', business: '🏢', broker: '🤝', subscriber: '📬', training: '🎓' };
 
   function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
   function safeHref(h) {
-    return /^[a-z-]+\.html\?open=[0-9a-f-]{36}$/i.test(String(h || '')) ? h : '#';
+    if (/^[a-z-]+\.html\?open=[0-9a-f-]{36}$/i.test(String(h || ''))) return h;
+    return /^leads-hub\.html\?open=[0-9a-f-]{36}&tab=y2026$/i.test(String(h || '')) ? h : '#';
   }
 
   function injectStyle() {
@@ -70,7 +71,7 @@
     const badges = [badgeHtml(r.badge)];
     if (r.extra_badge) badges.push(`<span class="gs-badge extra">${esc(r.extra_badge)}</span>`);
     if (r.is_archived) badges.push('<span class="gs-badge arch">בארכיון</span>');
-    return `<a class="gs-row" role="option" data-i="${i}" href="${esc(safeHref(r.href))}">
+    return `<a class="gs-row" id="gsResult${i}" role="option" aria-selected="false" href="${esc(safeHref(r.href))}">
       <span class="gs-kind" aria-hidden="true">${KIND_ICON[r.kind] || '🔎'}</span>
       <span class="gs-main"><div class="gs-title">${esc(r.title)}</div><div class="gs-sub">${esc(r.subtitle || '')}</div></span>
       <span class="gs-badges">${badges.join('')}</span></a>`;
@@ -84,37 +85,45 @@
       <div class="gs-shell"><div class="gs-inner">
         <span class="gs-icon" aria-hidden="true">🔎</span>
         <input id="gsInput" class="gs-input" type="search" autocomplete="off" spellcheck="false" enterkeyhint="search"
-          placeholder="חיפוש בכל המערכת: שם, טלפון, מספר עסק, מייל או עיר" aria-label="חיפוש בכל המערכת" role="combobox" aria-expanded="false" aria-controls="gsPanel">
+          placeholder="שם, טלפון, מייל, מספר כרטיס, עיר או תחום" aria-label="חיפוש בכל המערכת" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="gsPanel">
         <button type="button" class="gs-clear" id="gsClear" title="ניקוי" aria-label="ניקוי">✕</button>
       </div></div>
       <div class="gs-panel" id="gsPanel" role="listbox"></div>
-      <div class="gs-hint">לידים, ארכיון, עסקים, קונים, משקיעים, בעלי עסקים ונרשמים לעדכונים, הכול במקום אחד</div>
+      <div class="gs-hint">חיפוש בכל קטגוריות הלידים ובכרטיסי הקונים והעסקים</div>
     </div>`;
     const wrap = host.querySelector('#gsWrap');
     const input = host.querySelector('#gsInput');
     const panel = host.querySelector('#gsPanel');
     let timer = null, seq = 0, results = [], active = -1;
 
-    const close = () => { wrap.classList.remove('open'); input.setAttribute('aria-expanded', 'false'); active = -1; };
+    const close = () => {
+      wrap.classList.remove('open');
+      input.setAttribute('aria-expanded', 'false');
+      setActive(-1);
+    };
     const openPanel = () => { wrap.classList.add('open'); input.setAttribute('aria-expanded', 'true'); };
     const setActive = i => {
       const rows = panel.querySelectorAll('.gs-row');
-      rows.forEach(r => r.classList.remove('on'));
       active = Math.max(-1, Math.min(i, rows.length - 1));
-      if (active >= 0) { rows[active].classList.add('on'); rows[active].scrollIntoView({ block: 'nearest' }); }
+      rows.forEach((row, index) => {
+        row.classList.toggle('on', index === active);
+        row.setAttribute('aria-selected', String(index === active));
+      });
+      if (active >= 0) {
+        input.setAttribute('aria-activedescendant', rows[active].id);
+        rows[active].scrollIntoView({ block: 'nearest' });
+      } else {
+        input.removeAttribute('aria-activedescendant');
+      }
     };
     const paint = (q, rows, error) => {
       results = rows || [];
       if (error) panel.innerHTML = `<div class="gs-empty">החיפוש לא הצליח כרגע. נסה שוב בעוד רגע.</div>`;
       else if (!results.length) panel.innerHTML = `<div class="gs-empty">לא נמצא דבר עבור «${esc(q)}»</div>`;
       else panel.innerHTML = `<div class="gs-count">${results.length === 1 ? 'תוצאה אחת' : results.length + ' תוצאות'}</div>` + results.map(rowHtml).join('');
-      active = -1;
-      openPanel();
+      setActive(-1);
     };
-    async function run(q) {
-      const my = ++seq;
-      panel.innerHTML = '<div class="gs-empty">מחפש…</div>';
-      openPanel();
+    async function run(q, my) {
       try {
         const { data, error } = await window.supabaseClient.rpc('crm_global_search', { p_q: q });
         if (my !== seq) return;
@@ -130,8 +139,13 @@
       const q = input.value.trim();
       wrap.classList.toggle('has-q', !!input.value);
       clearTimeout(timer);
-      if (q.length < MIN) { seq++; close(); panel.innerHTML = ''; return; }
-      timer = setTimeout(() => run(q), DEBOUNCE_MS);
+      const my = ++seq;
+      results = [];
+      setActive(-1);
+      if (q.length < MIN) { close(); panel.innerHTML = ''; return; }
+      panel.innerHTML = '<div class="gs-empty" role="status">מחפש…</div>';
+      openPanel();
+      timer = setTimeout(() => run(q, my), DEBOUNCE_MS);
     });
     input.addEventListener('keydown', e => {
       if (e.key === 'ArrowDown') { e.preventDefault(); if (!wrap.classList.contains('open') && results.length) openPanel(); setActive(active + 1); }
@@ -142,7 +156,11 @@
       } else if (e.key === 'Escape') { close(); }
     });
     input.addEventListener('focus', () => { if (input.value.trim().length >= MIN && panel.innerHTML) openPanel(); });
-    host.querySelector('#gsClear').addEventListener('click', () => { input.value = ''; wrap.classList.remove('has-q'); seq++; close(); panel.innerHTML = ''; input.focus(); });
+    host.querySelector('#gsClear').addEventListener('click', () => {
+      input.value = '';
+      input.dispatchEvent(new Event('input'));
+      input.focus();
+    });
     document.addEventListener('click', e => { if (!wrap.contains(e.target)) close(); });
   }
 

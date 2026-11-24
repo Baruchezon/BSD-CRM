@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611230520';
+    var PAGE_BUILD = '202611240635';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -211,6 +211,8 @@
     <button class="btn btn-navy" onclick="openAddChoice()">+ הוספת ליד</button>
   </div>
 
+  <div id="globalSearch"></div>
+
   <div class="lead-tabs">
     <button type="button" class="lead-tab active" data-tab="manual" onclick="switchTab('manual')">לידים <span class="count" id="countBusiness">0</span></button>
     <button type="button" class="lead-tab" style="display:none" data-tab="seller" onclick="switchTab('seller')">לידים מהאתר <span class="count" id="countSeller">0</span></button>
@@ -314,11 +316,12 @@
 <script src="js/config.js?v=202611231330"></script>
 <script src="js/record-origin.js?v=202611231310"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
-<script src="js/auth.js?v=202611181930"></script>
+<script src="js/auth.js?v=202611240635"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/archiveModule.js?v=20260930delete1"></script>
 <script src="js/leadLifecycle.js?v=202610221200"></script>
 <script src="js/crmStage.js?v=202610221200"></script>
+<script src="js/globalSearch.js?v=202611240635"></script>
 <script src="js/bsd-search.js?v=202610081400"></script>
 <script src="js/bsdNotify.js?v=202610051500"></script>
 <script src="js/phoneCalls.js?v=202610142200"></script>
@@ -724,8 +727,8 @@ function reviewStatusLabel(row){
   if (row.review_status === 'ממתין לבדיקה' || !row.review_status) return 'חדש';
   return row.review_status;
 }
-async function loadY2026ReviewMatches(rows){
-  const toFetch = rows.filter(r => !(r.id in Y2026_REVIEW_MATCHES_CACHE));
+async function loadY2026ReviewMatches(rows, { refresh = false } = {}){
+  const toFetch = rows.filter(r => refresh || !(r.id in Y2026_REVIEW_MATCHES_CACHE));
   if (toFetch.length === 0) return;
   await Promise.all(toFetch.map(async r => {
     try {
@@ -823,14 +826,26 @@ function y2026AgreementSummary(matches){
 function y2026OpenLink(m){
   if (m.table === 'leads') return `leads.html?open=${encodeURIComponent(m.id)}`;
   if (m.table === 'businesses') return `businesses.html?open=${encodeURIComponent(m.id)}`;
-  if (m.table === 'training_leads') return `training-admin.html`;
+  if (m.table === 'training_leads') return `training-admin.html?open=${encodeURIComponent(m.id)}`;
   return null;
 }
 async function openY2026ReviewDetail(id){
-  const r = Y2026_REVIEW_ROWS.find(x => x.id === id) || Y2026_REVIEW_HIDDEN_ROWS.find(x => x.id === id);
+  let r = Y2026_REVIEW_ROWS.find(x => x.id === id) || Y2026_REVIEW_HIDDEN_ROWS.find(x => x.id === id);
+  if (!r){
+    const { data, error } = await window.supabaseClient.from('leads_2026_review').select('*').eq('id', id).maybeSingle();
+    if (error){ toast('לא ניתן לטעון את הרשומה כרגע', true); return; }
+    r = data;
+  }
   if (!r){ toast('רשומה לא נמצאה'); return; }
-  await loadY2026ReviewMatches([r]);
-  const matches = Y2026_REVIEW_MATCHES_CACHE[r.id] || [];
+  await loadY2026ReviewMatches([r], { refresh: true });
+  const matches = [...(Y2026_REVIEW_MATCHES_CACHE[r.id] || [])];
+  const transferredTable = r.transferred_to_table;
+  const transferred = r.review_status === 'הועבר' && !!r.transferred_to_id;
+  if (r.transferred_to_id && ['leads', 'businesses', 'training_leads'].includes(transferredTable)
+      && !matches.some(m => m.id === r.transferred_to_id && m.table === transferredTable)){
+    const { data } = await window.supabaseClient.from(transferredTable).select('id').eq('id', r.transferred_to_id).maybeSingle();
+    if (data) matches.unshift({ table: transferredTable, id: data.id, label: 'כרטיס היעד שאליו הועבר הליד' });
+  }
   const isAdmin = !!(CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin');
 
   const matchesHtml = matches.length === 0 ? '<div style="color:#999;">לא נמצאה התאמה קיימת במערכת</div>' : matches.map(m => {
@@ -873,7 +888,7 @@ async function openY2026ReviewDetail(id){
     <div style="font-size:.78rem;color:#999;margin-bottom:14px;">סטטוס בדיקה: <b>${esc(reviewStatusLabel(r))}</b></div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;">
       <button onclick="closeModal()" style="background:#fff;border:1px solid #d8d3c4;color:var(--navy);padding:8px 14px;border-radius:8px;font-family:inherit;cursor:pointer;">סגירה</button>
-      ${r.is_hidden ? `<button onclick="restoreY2026Review('${r.id}')" style="background:var(--gold);color:#1c2333;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שחזר לרשימה</button>`
+      ${transferred ? '' : r.is_hidden ? `<button onclick="restoreY2026Review('${r.id}')" style="background:var(--gold);color:#1c2333;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">שחזר לרשימה</button>`
         : `<button onclick="saveY2026ReviewEdit('${r.id}')" style="background:#fff;border:1px solid #2b5fa3;color:#2b5fa3;padding:8px 14px;border-radius:8px;font-family:inherit;cursor:pointer;">שמור שינויים</button>
         <button onclick="markY2026ReviewChecked('${r.id}')" style="background:#fff;border:1px solid #2f8f4e;color:#2f8f4e;padding:8px 14px;border-radius:8px;font-family:inherit;cursor:pointer;">✓ סמן כנבדק</button>
         ${matches.length === 0 ? `<button onclick="transferY2026Review('${r.id}')" style="background:#2b5fa3;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;">${normalizeClassification(r.classification) === 'מתעניין בקורס' ? '➡️ העבר למתעניינים בקורס' : '➡️ העבר לרשומה פעילה'}</button>` : ''}
@@ -2668,7 +2683,14 @@ async function rejectWebsiteLead(id){
   if (params.get('tab') === 'vip') {
     history.replaceState(null, '', location.pathname);
   } else if (openId){
-    await openDeepLink(openId);
+    if (params.get('tab') === 'y2026'){
+      params.delete('open');
+      history.replaceState(null, '', location.pathname + '?' + params.toString());
+      switchTab('y2026');
+      await openY2026ReviewDetail(openId);
+    } else {
+      await openDeepLink(openId);
+    }
   } else if (params.get('tab') === 'in_progress') {
     switchTab('in_progress');
   }
