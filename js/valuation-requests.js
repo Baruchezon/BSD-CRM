@@ -1,0 +1,303 @@
+// 24.11.2026 (בקשת ברוך): מסך «בקשות להערכות שווי».
+// Every submission of the public valuation calculator (www.bsd-bbi.co.il/הערכת-שווי-עסק/)
+// lands in public.valuation_requests (RLS: active admin/manager read only).
+// This file: pure helpers (tested in tests/valuation_requests.test.mjs) + the screen.
+(function (root) {
+  'use strict';
+
+  const LABELS = {
+    sector: {
+      food: 'מסעדות, בתי קפה ומזון', retail: 'חנויות, מינימרקטים וקמעונאות', services: 'שירותים, קליניקות ומספרות',
+      kids: 'חינוך, חוגים ופנאי', transport: 'תחבורה, הסעות ולוגיסטיקה', tourism: 'תיירות, מלונאות ואירוח',
+      import: 'ייבוא, סיטונאות והפצה', industry: 'תעשייה, ייצור ומפעלים', online: 'טכנולוגיה, דיגיטל ומסחר מקוון', other: 'תחום אחר'
+    },
+    owner_dependency: { high: 'גבוהה – הכול עובר דרכי', mid: 'בינונית', low: 'נמוכה – העסק עובד גם בלעדיי' },
+    staff: { new: 'רובם חדשים (עד שנה)', mid: 'מעורב', veteran: 'רובם ותיקים (3 שנים ומעלה)', none: 'אין עובדים' },
+    books: { messy: 'נתונים חלקיים, לא הכול בדוחות', mid: 'סביר', organized: 'דוחות מסודרים, נהלים ומערכות' },
+    location: { weak: 'מיקום חלש או שכירות קצרה', mid: 'סביר', strong: 'מיקום מצוין ושכירות ארוכה', na: 'לא רלוונטי (ללא מקום פיזי)' },
+    risk: { high: 'לקוח/ספק מרכזי או סיכון מהותי', mid: 'רגיל', low: 'לקוחות וספקים מפוזרים' },
+    trend: { down: 'ירידה', flat: 'יציבות', up: 'עלייה' },
+    business_age: { young: 'עד 3 שנים', mid: '3 עד 10 שנים', old: 'מעל 10 שנים' }
+  };
+  const QUESTIONS = [
+    ['sector', 'תחום העסק'], ['owner_dependency', 'תלות בבעלים'], ['staff', 'עובדים (ותק)'], ['books', 'סדר בעסק'],
+    ['location', 'מיקום וחוזה שכירות'], ['risk', 'סיכונים'], ['trend', 'מגמת רווחים (3 שנים)'], ['business_age', 'ותק העסק']
+  ];
+
+  const VALUE_BUCKETS = [
+    [0, 250000, 'עד 250 אלף'], [250000, 500000, '250–500 אלף'], [500000, 1000000, '500 אלף – מיליון'],
+    [1000000, 2000000, '1–2 מיליון'], [2000000, 5000000, '2–5 מיליון'], [5000000, Infinity, 'מעל 5 מיליון']
+  ];
+  const PROFIT_BUCKETS = [
+    [-Infinity, 1, 'לא רווחי'], [1, 150000, 'עד 150 אלף'], [150000, 300000, '150–300 אלף'],
+    [300000, 600000, '300–600 אלף'], [600000, 1200000, '600 אלף – 1.2 מיליון'], [1200000, Infinity, 'מעל 1.2 מיליון']
+  ];
+
+  function label(field, code) {
+    if (code == null || code === '') return '—';
+    return (LABELS[field] && LABELS[field][code]) || String(code);
+  }
+  function mid(r) {
+    if (r.result_kind !== 'range' || r.value_low == null) return null;
+    return (Number(r.value_low) + Number(r.value_high)) / 2;
+  }
+  function bucketOf(buckets, n) {
+    if (n == null || !isFinite(n)) return null;
+    for (const b of buckets) if (n >= b[0] && n < b[1]) return b[2];
+    return null;
+  }
+  function shekel(n) {
+    if (n == null || !isFinite(Number(n))) return '—';
+    return '₪' + Math.round(Number(n)).toLocaleString('he-IL');
+  }
+  function shortShekel(n) {
+    n = Number(n);
+    if (!isFinite(n)) return '—';
+    if (Math.abs(n) >= 1000000) return '₪' + (n / 1000000).toLocaleString('he-IL', { maximumFractionDigits: 2 }) + 'M';
+    if (Math.abs(n) >= 1000) return '₪' + Math.round(n / 1000).toLocaleString('he-IL') + 'K';
+    return '₪' + Math.round(n).toLocaleString('he-IL');
+  }
+  function valueText(r) {
+    if (r.result_kind === 'not_profitable') return 'לא רווחי – אין מכפיל';
+    return shortShekel(r.value_low) + ' – ' + shortShekel(r.value_high);
+  }
+  // Israel time, always (the box/browser zone may differ).
+  const IL_FMT = (typeof Intl !== 'undefined') ? new Intl.DateTimeFormat('he-IL', {
+    timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
+  }) : null;
+  const IL_MONTH = (typeof Intl !== 'undefined') ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit' }) : null;
+  function ilDateTime(iso) {
+    if (!iso || !IL_FMT) return '—';
+    const p = {};
+    IL_FMT.formatToParts(new Date(iso)).forEach(x => { p[x.type] = x.value; });
+    return `${p.day}.${p.month}.${p.year} ${p.hour}:${p.minute}`;
+  }
+  function ilMonthKey(iso) {
+    return IL_MONTH ? IL_MONTH.format(new Date(iso)).slice(0, 7) : String(iso).slice(0, 7);
+  }
+  const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+  function monthLabel(key) {
+    const [y, m] = key.split('-');
+    return HE_MONTHS[Number(m) - 1] + ' ' + y;
+  }
+
+  function summarize(rows) {
+    const byMonth = {};
+    let withContact = 0, valued = 0, sumMid = 0;
+    rows.forEach(r => {
+      const k = ilMonthKey(r.created_at);
+      byMonth[k] = (byMonth[k] || 0) + 1;
+      if (r.contact_at || r.contact_name || r.contact_phone) withContact++;
+      const m = mid(r);
+      if (m != null) { valued++; sumMid += m; }
+    });
+    const months = Object.keys(byMonth).sort().reverse().map(k => ({ key: k, label: monthLabel(k), count: byMonth[k] }));
+    return { total: rows.length, withContact, avgMid: valued ? sumMid / valued : null, months };
+  }
+
+  const SLICES = [
+    { id: 'sector', title: 'לפי תחום', icon: '🏪', tone: 't1', key: r => label('sector', r.sector) },
+    { id: 'staff', title: 'לפי עובדים', icon: '👥', tone: 't2', key: r => label('staff', r.staff) },
+    { id: 'value', title: 'לפי טווחי שווי', icon: '💎', tone: 't3', key: r => r.result_kind === 'not_profitable' ? 'לא רווחי' : bucketOf(VALUE_BUCKETS, mid(r)), order: VALUE_BUCKETS.map(b => b[2]).concat('לא רווחי') },
+    { id: 'profit', title: 'לפי רווח שנתי', icon: '📈', tone: 't4', key: r => bucketOf(PROFIT_BUCKETS, Number(r.profit)), order: PROFIT_BUCKETS.map(b => b[2]) },
+    { id: 'age', title: 'לפי ותק העסק', icon: '⏳', tone: 't5', key: r => label('business_age', r.business_age), order: ['עד 3 שנים', '3 עד 10 שנים', 'מעל 10 שנים'] }
+  ];
+
+  function breakdown(rows, slice) {
+    const map = new Map();
+    rows.forEach(r => {
+      const k = slice.key(r) || '—';
+      const e = map.get(k) || { key: k, count: 0, sumMid: 0, valued: 0 };
+      e.count++;
+      const m = mid(r);
+      if (m != null) { e.valued++; e.sumMid += m; }
+      map.set(k, e);
+    });
+    let list = Array.from(map.values()).map(e => ({ key: e.key, count: e.count, pct: rows.length ? Math.round(e.count * 100 / rows.length) : 0, avgMid: e.valued ? e.sumMid / e.valued : null }));
+    if (slice.order) list.sort((a, b) => (slice.order.indexOf(a.key) + 1 || 99) - (slice.order.indexOf(b.key) + 1 || 99));
+    else list.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key, 'he'));
+    return list;
+  }
+
+  const api = { LABELS, QUESTIONS, SLICES, VALUE_BUCKETS, PROFIT_BUCKETS, label, mid, bucketOf, shekel, shortShekel, valueText, ilDateTime, ilMonthKey, monthLabel, summarize, breakdown };
+  root.BSDValuationRequests = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  if (typeof document === 'undefined') return;
+
+  // ---------------- screen ----------------
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const state = { all: [], slice: null, filter: null, q: '', showHidden: false, monthsOpen: false };
+
+  function visible() {
+    return state.all.filter(r => state.showHidden || (!r.is_archived && !r.is_test));
+  }
+  function filtered() {
+    let rows = visible();
+    if (state.filter) {
+      const s = SLICES.find(x => x.id === state.filter.slice);
+      rows = rows.filter(r => (s.key(r) || '—') === state.filter.key);
+    }
+    const q = state.q.trim();
+    if (q) rows = rows.filter(r => [String(r.request_number), r.contact_name, r.contact_phone, r.contact_email, label('sector', r.sector), r.contact_city].some(v => v && String(v).includes(q)));
+    return rows;
+  }
+
+  function renderSummary() {
+    const rows = visible();
+    const s = summarize(rows);
+    const cur = ilMonthKey(new Date().toISOString());
+    const curCount = (s.months.find(m => m.key === cur) || {}).count || 0;
+    const max = Math.max(1, ...s.months.map(m => m.count));
+    $('sumTotal').textContent = s.total.toLocaleString('he-IL');
+    $('sumMonth').textContent = curCount.toLocaleString('he-IL');
+    $('sumContact').textContent = s.withContact.toLocaleString('he-IL');
+    $('sumAvg').textContent = s.avgMid == null ? '—' : shortShekel(s.avgMid);
+    $('months').innerHTML = s.months.length ? s.months.slice(0, 12).map(m =>
+      `<div class="mrow"><span class="mname">${esc(m.label)}</span><span class="mbar"><i style="width:${Math.max(4, Math.round(m.count * 100 / max))}%"></i></span><b>${m.count}</b></div>`).join('')
+      : '<div class="muted">עדיין אין הערכות.</div>';
+  }
+
+  function renderSlices() {
+    $('slices').innerHTML = SLICES.map(s =>
+      `<button type="button" class="slice ${s.tone}${state.slice === s.id ? ' on' : ''}" data-slice="${s.id}"><span class="ico">${s.icon}</span><span class="st">${esc(s.title)}</span></button>`).join('');
+    const panel = $('slicePanel');
+    if (!state.slice) { panel.hidden = true; return; }
+    const s = SLICES.find(x => x.id === state.slice);
+    const list = breakdown(visible(), s);
+    const max = Math.max(1, ...list.map(e => e.count));
+    panel.hidden = false;
+    panel.innerHTML = `<div class="sp-head"><b>${esc(s.icon + ' ' + s.title)}</b><button type="button" class="x" data-close-slice aria-label="סגירה">✕</button></div>` +
+      (list.length ? list.map(e => `<button type="button" class="brow${state.filter && state.filter.slice === s.id && state.filter.key === e.key ? ' on' : ''}" data-bkey="${esc(e.key)}">
+        <span class="bname" title="${esc(e.key)}">${esc(e.key)}</span><span class="bbar"><i class="${s.tone}" style="width:${Math.max(4, Math.round(e.count * 100 / max))}%"></i></span>
+        <span class="bnum">${e.count} · ${e.pct}%</span><span class="bavg">${e.avgMid == null ? '—' : 'ממוצע ' + shortShekel(e.avgMid)}</span></button>`).join('')
+        : '<div class="muted">אין נתונים.</div>') +
+      '<div class="muted small">לחיצה על שורה מסננת את הרשימה למטה.</div>';
+  }
+
+  function renderList() {
+    const rows = filtered();
+    const chip = $('filterChip');
+    if (state.filter) {
+      chip.hidden = false;
+      chip.innerHTML = `מסונן: ${esc(state.filter.key)} <button type="button" data-clear-filter aria-label="ניקוי סינון">✕</button>`;
+    } else chip.hidden = true;
+    $('listCount').textContent = rows.length.toLocaleString('he-IL');
+    $('list').innerHTML = rows.length ? rows.map(r => `<button type="button" class="vrow${r.is_test ? ' test' : ''}${r.is_archived ? ' arch' : ''}" data-open="${esc(r.id)}">
+      <span class="c-num">מס׳ ${esc(r.request_number)}</span>
+      <span class="c-sector" title="${esc(label('sector', r.sector))}">${esc(label('sector', r.sector))}</span>
+      <span class="c-val">${esc(valueText(r))}</span>
+      <span class="c-name" title="${esc(r.contact_name || '')}">${r.contact_name ? esc(r.contact_name) : '<span class="anon">ללא שם</span>'}</span>
+      <span class="c-date">${esc(ilDateTime(r.created_at))}</span></button>`).join('')
+      : '<div class="empty">אין בקשות להצגה.</div>';
+  }
+
+  function renderAll() { renderSummary(); renderSlices(); renderList(); }
+
+  function detailRow(k, v) { return `<div class="dr"><span>${esc(k)}</span><b>${v}</b></div>`; }
+  function openDetail(id) {
+    const r = state.all.find(x => x.id === id);
+    if (!r) return;
+    const answers = QUESTIONS.map(([f, q]) => detailRow(q, esc(label(f, r[f])))).join('') + detailRow('רווח שנתי לבעלים', '<bdi dir="ltr">' + esc(shekel(r.profit)) + '</bdi>');
+    const result = r.result_kind === 'not_profitable'
+      ? detailRow('תוצאה', 'עסק לא רווחי – הוצג הסבר שמכפיל רווח לא מתאים')
+      : detailRow('שווי שמרני', '<bdi dir="ltr">' + esc(shekel(r.value_low)) + '</bdi>' + ` <small>(מכפיל ${Number(r.multiple_low).toFixed(1)})</small>`) +
+        detailRow('שווי גבוה', '<bdi dir="ltr">' + esc(shekel(r.value_high)) + '</bdi>' + ` <small>(מכפיל ${Number(r.multiple_high).toFixed(1)})</small>`) +
+        (r.value_ups && r.value_ups.length ? detailRow('▲ העלו את השווי', esc(r.value_ups.join(' · '))) : '') +
+        (r.value_downs && r.value_downs.length ? detailRow('▼ הורידו את השווי', esc(r.value_downs.join(' · '))) : '');
+    const hasContact = r.contact_at || r.contact_name || r.contact_phone || r.contact_email;
+    const contact = hasContact
+      ? detailRow('שם', esc(r.contact_name || '—')) +
+        detailRow('טלפון', r.contact_phone ? `<a href="tel:${esc(r.contact_phone)}" dir="ltr">${esc(r.contact_phone)}</a>` : '—') +
+        detailRow('אימייל', r.contact_email ? `<a href="mailto:${esc(r.contact_email)}" dir="ltr">${esc(r.contact_email)}</a>` : '—') +
+        detailRow('עיר', esc(r.contact_city || '—')) +
+        (r.contact_purposes && r.contact_purposes.length ? detailRow('מטרה', esc(r.contact_purposes.join(', '))) : '') +
+        (r.lead_id ? detailRow('ליד ב-CRM', `<a href="leads-hub.html?open=${encodeURIComponent(r.lead_id)}">פתח כרטיס ליד</a>`) : '')
+      : '<div class="muted">המבקר לא השאיר פרטים (נשמר לסטטיסטיקה).</div>';
+    const tech = detailRow('תאריך ושעה', esc(ilDateTime(r.created_at)) + ' <small>שעון ישראל</small>') +
+      detailRow('עמוד', esc(r.page || '—')) + detailRow('הגיע מ', esc(r.referrer_host || 'ישיר')) +
+      (r.utm ? detailRow('קמפיין', esc(r.utm)) : '') + detailRow('מכשיר', esc(r.device_type || '—')) +
+      detailRow('גרסת מחשבון', esc(r.calc_version || '—'));
+    $('sheetBody').innerHTML = `<h2>הערכת שווי מס׳ ${esc(r.request_number)}</h2>
+      ${r.is_test ? '<div class="tag">בדיקה</div>' : ''}${r.is_archived ? '<div class="tag">מוסתר</div>' : ''}
+      <h3>מה מילא בטופס</h3>${answers}<h3>התוצאה שקיבל</h3>${result}<h3>פרטי קשר</h3>${contact}<h3>פרטים טכניים</h3>${tech}
+      <div class="sheet-actions"><button type="button" class="ghost" data-archive="${esc(r.id)}" data-to="${r.is_archived ? 'false' : 'true'}">${r.is_archived ? 'החזר לרשימה' : 'הסתר מהרשימה (בדיקה/כפילות)'}</button></div>`;
+    $('drawer').hidden = false;
+    try { history.replaceState(null, '', '?open=' + encodeURIComponent(r.id)); } catch (_) {}
+  }
+  function closeDetail() {
+    $('drawer').hidden = true;
+    try { history.replaceState(null, '', location.pathname); } catch (_) {}
+  }
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toast._t); toast._t = setTimeout(() => { t.hidden = true; }, 3500);
+  }
+
+  async function setArchived(id, to) {
+    const { error } = await root.supabaseClient.rpc('set_valuation_request_archived', { p_id: id, p_archived: to });
+    if (error) { toast('שגיאה: ' + error.message); return; }
+    const r = state.all.find(x => x.id === id);
+    if (r) r.is_archived = to;
+    toast(to ? 'הוסתר מהרשימה (לא נמחק)' : 'הוחזר לרשימה');
+    closeDetail(); renderAll();
+  }
+
+  async function load() {
+    const out = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await root.supabaseClient.from('valuation_requests').select('*')
+        .order('request_number', { ascending: false }).range(from, from + 999);
+      if (error) throw error;
+      out.push(...data);
+      if (data.length < 1000) break;
+    }
+    state.all = out;
+  }
+
+  function bind() {
+    document.addEventListener('click', e => {
+      const t = e.target.closest ? e.target : null;
+      if (!t) return;
+      const sl = t.closest('[data-slice]');
+      if (sl) { state.slice = state.slice === sl.dataset.slice ? null : sl.dataset.slice; renderSlices(); return; }
+      if (t.closest('[data-close-slice]')) { state.slice = null; renderSlices(); return; }
+      const b = t.closest('[data-bkey]');
+      if (b) {
+        const same = state.filter && state.filter.slice === state.slice && state.filter.key === b.dataset.bkey;
+        state.filter = same ? null : { slice: state.slice, key: b.dataset.bkey };
+        renderSlices(); renderList();
+        if (!same) $('listPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      if (t.closest('[data-clear-filter]')) { state.filter = null; renderSlices(); renderList(); return; }
+      const o = t.closest('[data-open]');
+      if (o) { openDetail(o.dataset.open); return; }
+      const a = t.closest('[data-archive]');
+      if (a) { setArchived(a.dataset.archive, a.dataset.to === 'true'); return; }
+      if (t.closest('[data-close-drawer]') || t === $('drawer')) closeDetail();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('drawer').hidden) closeDetail(); });
+    $('search').addEventListener('input', e => { state.q = e.target.value; renderList(); });
+    $('showHidden').addEventListener('change', e => { state.showHidden = e.target.checked; renderAll(); });
+  }
+
+  async function start() {
+    bind();
+    // Local preview only (file:// or localhost with ?demo=1): clearly-dummy rows, no network.
+    const params = new URLSearchParams(location.search);
+    if (root.BSD_VALUATION_DEMO_ROWS && params.get('demo') === '1' && /^(file:|http:\/\/(localhost|127\.0\.0\.1))/.test(location.href)) {
+      state.all = root.BSD_VALUATION_DEMO_ROWS; $('demoBanner').hidden = false; renderAll(); return;
+    }
+    const profile = await root.requireAuth();
+    if (!profile || !['admin', 'manager'].includes(profile.role)) {
+      document.querySelector('.wrap').innerHTML = '<div class="empty">אין הרשאה למסך זה</div>';
+      return;
+    }
+    try { await load(); } catch (err) { toast('שגיאה בטעינה: ' + (err.message || err)); }
+    renderAll();
+    const open = params.get('open');
+    if (open) openDetail(open);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})(typeof window !== 'undefined' ? window : globalThis);
