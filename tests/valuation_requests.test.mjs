@@ -11,6 +11,8 @@ const hub = read('leads-hub.html');
 const js = read('js/valuation-requests.js');
 const sql = read('supabase/migrations/20261124193000_valuation_requests.sql');
 const rb = read('supabase/migrations/rollback_20261124193000_valuation_requests.sql');
+const sql2 = read('supabase/migrations/20261124203000_valuation_requests_employees_turnover.sql');
+const rb2 = read('supabase/migrations/rollback_20261124203000_valuation_requests_employees_turnover.sql');
 
 test('leads hub: one tab link «בקשות להערכות שווי» next to the other lead tabs', () => {
   const tabs = hub.slice(hub.indexOf('<div class="lead-tabs">'), hub.indexOf('id="y2026HiddenLinkWrap"'));
@@ -72,4 +74,39 @@ test('db: RLS on, read only for active admin/manager, anon writes only through v
   assert.match(sql, /generated always as identity/);
   assert.match(rb, /revoke execute on function public\.submit_valuation_request\(jsonb\) from anon, authenticated;/);
   assert.ok(!/^\s*drop table/im.test(rb), 'rollback keeps the data');
+});
+
+test('v2: 5 slice buttons — industry, headcount, value, profit, turnover (age and seniority only in details)', () => {
+  assert.deepEqual(V.SLICES.map(x => x.id), ['sector', 'employees', 'value', 'profit', 'turnover']);
+  assert.deepEqual(V.EMPLOYEE_BUCKETS.map(b => b[2]), ['0 (רק הבעלים)', '1–2', '3–5', '6–10', '11–20', '21–50', '51+']);
+  assert.deepEqual(V.TURNOVER_BUCKETS.map(b => b[2]), ['עד מיליון', '1–3 מיליון', '3–5 מיליון', '5–10 מיליון', '10–20 מיליון', 'מעל 20 מיליון']);
+  const emp = V.SLICES.find(x => x.id === 'employees');
+  const tur = V.SLICES.find(x => x.id === 'turnover');
+  const cases = [[0, '0 (רק הבעלים)'], [2, '1–2'], [3, '3–5'], [10, '6–10'], [11, '11–20'], [50, '21–50'], [51, '51+'], [null, 'לא צוין']];
+  for (const [n, k] of cases) assert.equal(emp.key({ employees_count: n, staff: 'veteran' }), k, String(n));
+  for (const [n, k] of [[999999, 'עד מיליון'], [1000000, '1–3 מיליון'], [4500000, '3–5 מיליון'], [5000000, '5–10 מיליון'], [19999999, '10–20 מיליון'], [20000000, 'מעל 20 מיליון'], [null, 'לא צוין']])
+    assert.equal(tur.key({ annual_turnover: n }), k, String(n));
+  const rows = [{ employees_count: 4 }, { employees_count: null }, { employees_count: 0 }, { employees_count: 60 }];
+  assert.deepEqual(V.breakdown(rows, emp).map(e => e.key), ['0 (רק הבעלים)', '3–5', '51+', 'לא צוין']);
+  assert.equal(V.employeesText({ employees_count: 0 }), '0 (רק הבעלים)');
+  assert.equal(V.employeesText({ employees_count: 12 }), '12 עובדים');
+  assert.equal(V.employeesText({}), '—');
+  assert.equal(V.turnoverText({ annual_turnover: 2500000 }), '₪2.5M');
+  // details panel keeps seniority and business age; the row shows headcount · turnover
+  assert.ok(V.QUESTIONS.some(q => q[0] === 'staff') && V.QUESTIONS.some(q => q[0] === 'business_age'));
+  assert.match(js, /detailRow\('מספר עובדים'/);
+  assert.match(js, /detailRow\('מחזור שנתי'/);
+  assert.match(js, /class="c-size"/);
+  assert.ok(page.includes('<span>עובדים · מחזור</span>'));
+});
+
+test('v2 db: optional employees/turnover, never a 400, calc untouched, rollback keeps data', () => {
+  assert.match(sql2, /add column if not exists employees_count integer/);
+  assert.match(sql2, /add column if not exists annual_turnover numeric/);
+  assert.match(sql2, /employees_count between 0 and 100000/);
+  assert.match(sql2, /annual_turnover between 0 and 10000000000/);
+  assert.ok(!/valuation_calc\(text, numeric, jsonb\)\s*returns/.test(sql2), 'valuation_calc not redefined');
+  assert.ok(!/raise exception[^;]*(employees|turnover)/.test(sql2), 'no rejection for the new keys');
+  assert.match(sql2, /grant execute on function public\.submit_valuation_request\(jsonb\) to anon, authenticated;/);
+  assert.ok(!/^\s*alter table[^;]*drop column/im.test(rb2), 'rollback keeps the columns');
 });

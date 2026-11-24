@@ -1,0 +1,7 @@
+-- Rollback for 20261124203000_valuation_requests_employees_turnover.sql (no data loss).
+-- 1) Restore the v1 submit function (it ignores employees/turnover again; the site keeps working):
+--    re-run the create or replace function public.submit_valuation_request block from
+--    20261124193000_valuation_requests.sql (backup copy: submit_valuation_request_v1_backup.sql).
+-- 2) The two nullable columns stay (they hold visitor data). Drop them only with Baruch's approval
+--    after an export:
+--    alter table public.valuation_requests drop column employees_count, drop column annual_turnover;

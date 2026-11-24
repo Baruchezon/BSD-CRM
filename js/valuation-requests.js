@@ -20,7 +20,7 @@
     business_age: { young: 'עד 3 שנים', mid: '3 עד 10 שנים', old: 'מעל 10 שנים' }
   };
   const QUESTIONS = [
-    ['sector', 'תחום העסק'], ['owner_dependency', 'תלות בבעלים'], ['staff', 'עובדים (ותק)'], ['books', 'סדר בעסק'],
+    ['sector', 'תחום העסק'], ['owner_dependency', 'תלות בבעלים'], ['staff', 'ותק העובדים'], ['books', 'סדר בעסק'],
     ['location', 'מיקום וחוזה שכירות'], ['risk', 'סיכונים'], ['trend', 'מגמת רווחים (3 שנים)'], ['business_age', 'ותק העסק']
   ];
 
@@ -28,6 +28,15 @@
     [0, 250000, 'עד 250 אלף'], [250000, 500000, '250–500 אלף'], [500000, 1000000, '500 אלף – מיליון'],
     [1000000, 2000000, '1–2 מיליון'], [2000000, 5000000, '2–5 מיליון'], [5000000, Infinity, 'מעל 5 מיליון']
   ];
+  // v2 (24.11.2026): real headcount and annual turnover from the site form (informational only).
+  const EMPLOYEE_BUCKETS = [
+    [0, 1, '0 (רק הבעלים)'], [1, 3, '1–2'], [3, 6, '3–5'], [6, 11, '6–10'], [11, 21, '11–20'], [21, 51, '21–50'], [51, Infinity, '51+']
+  ];
+  const TURNOVER_BUCKETS = [
+    [0, 1000000, 'עד מיליון'], [1000000, 3000000, '1–3 מיליון'], [3000000, 5000000, '3–5 מיליון'],
+    [5000000, 10000000, '5–10 מיליון'], [10000000, 20000000, '10–20 מיליון'], [20000000, Infinity, 'מעל 20 מיליון']
+  ];
+  const NOT_GIVEN = 'לא צוין';
   const PROFIT_BUCKETS = [
     [-Infinity, 1, 'לא רווחי'], [1, 150000, 'עד 150 אלף'], [150000, 300000, '150–300 אלף'],
     [300000, 600000, '300–600 אלף'], [600000, 1200000, '600 אלף – 1.2 מיליון'], [1200000, Infinity, 'מעל 1.2 מיליון']
@@ -45,6 +54,16 @@
     if (n == null || !isFinite(n)) return null;
     for (const b of buckets) if (n >= b[0] && n < b[1]) return b[2];
     return null;
+  }
+  function num(v) { return v == null || v === '' || !isFinite(Number(v)) ? null : Number(v); }
+  function employeesText(r) {
+    const n = num(r.employees_count);
+    if (n == null) return '—';
+    return n === 0 ? '0 (רק הבעלים)' : n.toLocaleString('he-IL') + ' עובדים';
+  }
+  function turnoverText(r) {
+    const n = num(r.annual_turnover);
+    return n == null ? '—' : shortShekel(n);
   }
   function shekel(n) {
     if (n == null || !isFinite(Number(n))) return '—';
@@ -97,10 +116,10 @@
 
   const SLICES = [
     { id: 'sector', title: 'לפי תחום', icon: '🏪', tone: 't1', key: r => label('sector', r.sector) },
-    { id: 'staff', title: 'לפי עובדים', icon: '👥', tone: 't2', key: r => label('staff', r.staff) },
+    { id: 'employees', title: 'לפי מספר עובדים', icon: '👥', tone: 't2', key: r => bucketOf(EMPLOYEE_BUCKETS, num(r.employees_count)) || NOT_GIVEN, order: EMPLOYEE_BUCKETS.map(b => b[2]).concat(NOT_GIVEN) },
     { id: 'value', title: 'לפי טווחי שווי', icon: '💎', tone: 't3', key: r => r.result_kind === 'not_profitable' ? 'לא רווחי' : bucketOf(VALUE_BUCKETS, mid(r)), order: VALUE_BUCKETS.map(b => b[2]).concat('לא רווחי') },
     { id: 'profit', title: 'לפי רווח שנתי', icon: '📈', tone: 't4', key: r => bucketOf(PROFIT_BUCKETS, Number(r.profit)), order: PROFIT_BUCKETS.map(b => b[2]) },
-    { id: 'age', title: 'לפי ותק העסק', icon: '⏳', tone: 't5', key: r => label('business_age', r.business_age), order: ['עד 3 שנים', '3 עד 10 שנים', 'מעל 10 שנים'] }
+    { id: 'turnover', title: 'לפי מחזור שנתי', icon: '💰', tone: 't5', key: r => bucketOf(TURNOVER_BUCKETS, num(r.annual_turnover)) || NOT_GIVEN, order: TURNOVER_BUCKETS.map(b => b[2]).concat(NOT_GIVEN) }
   ];
 
   function breakdown(rows, slice) {
@@ -119,13 +138,15 @@
     return list;
   }
 
-  const api = { LABELS, QUESTIONS, SLICES, VALUE_BUCKETS, PROFIT_BUCKETS, label, mid, bucketOf, shekel, shortShekel, valueText, ilDateTime, ilMonthKey, monthLabel, summarize, breakdown };
+  const api = { LABELS, QUESTIONS, SLICES, VALUE_BUCKETS, PROFIT_BUCKETS, EMPLOYEE_BUCKETS, TURNOVER_BUCKETS, NOT_GIVEN, num, employeesText, turnoverText, label, mid, bucketOf, shekel, shortShekel, valueText, ilDateTime, ilMonthKey, monthLabel, summarize, breakdown };
   root.BSDValuationRequests = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document === 'undefined') return;
 
   // ---------------- screen ----------------
   const $ = id => document.getElementById(id);
+  // numeric ranges ("1–2", "21–50", "51+") must read left-to-right inside the RTL page
+  const bidiRange = html => html.replace(/\d[\d.,]*\s*[–-]\s*\d[\d.,]*|\d+\+/g, m => '<bdi dir="ltr">' + m + '</bdi>');
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const state = { all: [], slice: null, filter: null, q: '', showHidden: false, monthsOpen: false };
 
@@ -139,7 +160,7 @@
       rows = rows.filter(r => (s.key(r) || '—') === state.filter.key);
     }
     const q = state.q.trim();
-    if (q) rows = rows.filter(r => [String(r.request_number), r.contact_name, r.contact_phone, r.contact_email, label('sector', r.sector), r.contact_city].some(v => v && String(v).includes(q)));
+    if (q) rows = rows.filter(r => [String(r.request_number), r.contact_name, r.contact_phone, r.contact_email, label('sector', r.sector), r.contact_city, r.employees_count, r.annual_turnover].some(v => v && String(v).includes(q)));
     return rows;
   }
 
@@ -169,7 +190,7 @@
     panel.hidden = false;
     panel.innerHTML = `<div class="sp-head"><b>${esc(s.icon + ' ' + s.title)}</b><button type="button" class="x" data-close-slice aria-label="סגירה">✕</button></div>` +
       (list.length ? list.map(e => `<button type="button" class="brow${state.filter && state.filter.slice === s.id && state.filter.key === e.key ? ' on' : ''}" data-bkey="${esc(e.key)}">
-        <span class="bname" title="${esc(e.key)}">${esc(e.key)}</span><span class="bbar"><i class="${s.tone}" style="width:${Math.max(4, Math.round(e.count * 100 / max))}%"></i></span>
+        <span class="bname" title="${esc(e.key)}">${bidiRange(esc(e.key))}</span><span class="bbar"><i class="${s.tone}" style="width:${Math.max(4, Math.round(e.count * 100 / max))}%"></i></span>
         <span class="bnum">${e.count} · ${e.pct}%</span><span class="bavg">${e.avgMid == null ? '—' : 'ממוצע ' + shortShekel(e.avgMid)}</span></button>`).join('')
         : '<div class="muted">אין נתונים.</div>') +
       '<div class="muted small">לחיצה על שורה מסננת את הרשימה למטה.</div>';
@@ -180,13 +201,14 @@
     const chip = $('filterChip');
     if (state.filter) {
       chip.hidden = false;
-      chip.innerHTML = `מסונן: ${esc(state.filter.key)} <button type="button" data-clear-filter aria-label="ניקוי סינון">✕</button>`;
+      chip.innerHTML = `מסונן: ${bidiRange(esc(state.filter.key))} <button type="button" data-clear-filter aria-label="ניקוי סינון">✕</button>`;
     } else chip.hidden = true;
     $('listCount').textContent = rows.length.toLocaleString('he-IL');
     $('list').innerHTML = rows.length ? rows.map(r => `<button type="button" class="vrow${r.is_test ? ' test' : ''}${r.is_archived ? ' arch' : ''}" data-open="${esc(r.id)}">
       <span class="c-num">מס׳ ${esc(r.request_number)}</span>
       <span class="c-sector" title="${esc(label('sector', r.sector))}">${esc(label('sector', r.sector))}</span>
       <span class="c-val">${esc(valueText(r))}</span>
+      <span class="c-size" title="מספר עובדים · מחזור שנתי">${esc(employeesText(r))} · ${esc(turnoverText(r))}</span>
       <span class="c-name" title="${esc(r.contact_name || '')}">${r.contact_name ? esc(r.contact_name) : '<span class="anon">ללא שם</span>'}</span>
       <span class="c-date">${esc(ilDateTime(r.created_at))}</span></button>`).join('')
       : '<div class="empty">אין בקשות להצגה.</div>';
@@ -198,7 +220,9 @@
   function openDetail(id) {
     const r = state.all.find(x => x.id === id);
     if (!r) return;
-    const answers = QUESTIONS.map(([f, q]) => detailRow(q, esc(label(f, r[f])))).join('') + detailRow('רווח שנתי לבעלים', '<bdi dir="ltr">' + esc(shekel(r.profit)) + '</bdi>');
+    const answers = detailRow('מספר עובדים', esc(employeesText(r))) +
+      detailRow('מחזור שנתי', num(r.annual_turnover) == null ? '—' : '<bdi dir="ltr">' + esc(shekel(r.annual_turnover)) + '</bdi>') +
+      QUESTIONS.map(([f, q]) => detailRow(q, esc(label(f, r[f])))).join('') + detailRow('רווח שנתי לבעלים', '<bdi dir="ltr">' + esc(shekel(r.profit)) + '</bdi>');
     const result = r.result_kind === 'not_profitable'
       ? detailRow('תוצאה', 'עסק לא רווחי – הוצג הסבר שמכפיל רווח לא מתאים')
       : detailRow('שווי שמרני', '<bdi dir="ltr">' + esc(shekel(r.value_low)) + '</bdi>' + ` <small>(מכפיל ${Number(r.multiple_low).toFixed(1)})</small>`) +
