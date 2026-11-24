@@ -352,6 +352,7 @@ Deno.test('email access: admin only; owner email from the DB; new password email
  assert(JSON.stringify(m.to)==='["owner@example.com"]','to = owner email from the DB, never from the request');
  const password=pw(m.text);assert(password&&strongPassword(password)&&m.html.includes(password)&&m.text.includes('שם משתמש: 23456'),'username + new password in the email');
  assert(m.text.includes('«פורטל בעלי עסקים»')&&m.text.includes('צוות BSD')&&m.text.includes('https://www.bsd-bbi.co.il/')&&!m.text.includes('מטעמי אבטחה'),'Baruch wording');
+ assert(m.text.includes('באזור האישי אפשר לעקוב באופן שוטף אחרי כל הפרסומים, החשיפה והפעילות סביב העסק שלך.')&&m.html.includes('באזור האישי אפשר לעקוב באופן שוטף אחרי כל הפרסומים, החשיפה והפעילות סביב העסק שלך.'),'ongoing activity sentence');
  assert(acc.password_hash!==oldHash&&await verifyPassword(password,acc.password_hash),'new hash committed');
  assert((await f.request('login',{username:'23456',password:'Correct234!'},{'x-seller-token':''})).status===401,'old password stops');
  assert((await f.request('login',{username:'23456',password},{'x-seller-token':''})).status===200,'new password works');

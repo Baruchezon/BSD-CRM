@@ -15,6 +15,8 @@ export function accessEmailText(d: Data): string {
     '',
     'תודה על האמון ועל שיתוף הפעולה. פתחנו עבורך אזור אישי מאובטח ב-BSD, שבו אפשר לראות את המסמכים, העדכונים ודוחות הפרסום של העסק שלך, וגם איפה העסק מופץ.',
     '',
+    'באזור האישי אפשר לעקוב באופן שוטף אחרי כל הפרסומים, החשיפה והפעילות סביב העסק שלך.',
+    '',
     'איך נכנסים:',
     `1. נכנסים לאתר BSD בכתובת ${SITE_URL}`,
     '2. לוחצים בראש העמוד על הכפתור הכחול «פורטל בעלי עסקים»',
@@ -47,7 +49,7 @@ export function accessEmailHtml(d: Data): string {
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f5f8;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" dir="rtl" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;border-top:5px solid #c9a854;font-family:Arial,Helvetica,sans-serif;text-align:right">
 <tr><td style="padding:22px 26px 0"><h1 style="margin:0 0 6px;font-size:21px;color:#0f2a44">${name ? `שלום ${esc(name)},` : 'שלום,'}</h1>
-<p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#1f2d3d">תודה על האמון ועל שיתוף הפעולה. פתחנו עבורך אזור אישי מאובטח ב-BSD, שבו אפשר לראות את המסמכים, העדכונים ודוחות הפרסום של העסק שלך, וגם איפה העסק מופץ.</p></td></tr>
+<p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#1f2d3d">תודה על האמון ועל שיתוף הפעולה. פתחנו עבורך אזור אישי מאובטח ב-BSD, שבו אפשר לראות את המסמכים, העדכונים ודוחות הפרסום של העסק שלך, וגם איפה העסק מופץ.</p><p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#1f2d3d">באזור האישי אפשר לעקוב באופן שוטף אחרי כל הפרסומים, החשיפה והפעילות סביב העסק שלך.</p></td></tr>
 <tr><td style="padding:0 26px"><div style="background:#f7f9fb;border:1px solid #e3e8ee;border-radius:12px;padding:14px 16px">
 <p style="margin:0 0 6px;font-weight:700;color:#0f2a44;font-size:15px">איך נכנסים</p>
 <table role="presentation" cellspacing="0" cellpadding="0" width="100%">${step(1, `נכנסים לאתר BSD בכתובת <a href="${SITE_URL}" dir="ltr" style="color:#0f5ea8;font-weight:700;white-space:nowrap">${SITE}</a>`)}${step(2, 'לוחצים בראש העמוד על הכפתור הכחול «פורטל בעלי עסקים»')}${step(3, 'מזינים את שם המשתמש והסיסמה:')}</table>
