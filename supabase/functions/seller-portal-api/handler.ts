@@ -3,7 +3,7 @@ import {MR_CATEGORY,MR_DIR,MR_MAX_BYTES,MR_MAX_RAW,validPeriod,decodeBase64,sha2
 import {buildOwnerMatches} from './matches.ts';
 import {buildOwnerOutreach} from './outreach.ts';
 import {buildTimeline} from './timeline.ts';
-import {ACCESS_EMAIL_SUBJECT,PORTAL_MAIL_NAME,PORTAL_MAIL_BCC,PREVIEW_PASSWORD,PREVIEW_USERNAME,MASKED_PASSWORD,accessEmailHtml,accessEmailText,bsdSender,validEmail,validResendId} from './access-email.ts';
+import {portalFirstName,ACCESS_EMAIL_SUBJECT,PORTAL_MAIL_NAME,PORTAL_MAIL_BCC,PREVIEW_PASSWORD,PREVIEW_USERNAME,MASKED_PASSWORD,accessEmailHtml,accessEmailText,bsdSender,validEmail,validResendId} from './access-email.ts';
 import {digest,randomText,activationToken,validActivationToken,PENDING_ACTIVATION,strongPassword,hashPassword,verifyPassword,usableHash,sessionAllowed,fileAllowed,pathAllowed,clientIp,generatePassword,extraFileType,safeFileName,EXTRA_MAX_BYTES} from './security.ts';
 type Options={origins:string[];portalUrl:string;phone:string;ipSalt:string;ipHeader?:string;activationHours?:number;pruneRate?:number;site?:string;mail?:{from?:string;apiKey?:string;fetch?:typeof fetch}};
 // Rate limit ceilings per 15 minutes. Global ceilings bound abuse even if a
@@ -234,7 +234,7 @@ export function createHandler(db:any,opts:Options){
       if(!a)throw new Error('username_capacity');
      }
      await event(a.id,'credentials_reset',null,p.id);
-     return reply(200,{ok:true,username:a.username,password,name:business.owner_name||'',phone:business.owner_phone||'',contact_phone:opts.phone,site:opts.site||'www.bsd-bbi.co.il'});
+     return reply(200,{ok:true,username:a.username,password,name:portalFirstName(business.owner_name,business.internal_name),phone:business.owner_phone||'',contact_phone:opts.phone,site:opts.site||'www.bsd-bbi.co.il'});
     }
     if(action==='admin_email_access'||action==='admin_email_preview'){
      // «שליחה במייל» (08.10.2026): emails the website link, username and a NEW password to the
@@ -261,7 +261,7 @@ export function createHandler(db:any,opts:Options){
      if(!from||!opts.mail?.apiKey){if(!preview)await audit({status:'failed',to,reason:'sender_not_ready'});return reply(503,{error:'sender_not_ready'});}
      const bcc=to.toLowerCase()===PORTAL_MAIL_BCC?'':PORTAL_MAIL_BCC;
      const envelope={from:`${PORTAL_MAIL_NAME} <${from}>`,to:[to],...(bcc?{bcc:[bcc]}:{}),reply_to:from,subject:ACCESS_EMAIL_SUBJECT};
-     const render=(username:string,password:string)=>{const m={name:business.owner_name,username,password,phone:opts.phone};return {html:accessEmailHtml(m),text:accessEmailText(m)};};
+     const render=(username:string,password:string)=>{const m={name:portalFirstName(business.owner_name,business.internal_name),username,password,phone:opts.phone};return {html:accessEmailHtml(m),text:accessEmailText(m)};};
      if(preview){const c=render(live?a.username:PREVIEW_USERNAME,PREVIEW_PASSWORD);return reply(200,{ok:true,preview:true,from:envelope.from,to,bcc,reply_to:from,subject:ACCESS_EMAIL_SUBJECT,html:c.html,text:c.text,username_known:live,password_note:PREVIEW_PASSWORD});}
      if(!await attempt('email_access:business:'+business.id,LIMITS.emailAccess))return reply(429,{error:'try_later'});
      const {password,creds}=await freshCredentials();
@@ -370,7 +370,7 @@ export function createHandler(db:any,opts:Options){
      await event(a.id,'credentials_reset',null,p.id);
      const activation_url=opts.portalUrl.replace(/#.*$/,'')+'#activate='+secret;
      const contact=await query(db.from('businesses').select('owner_email').eq('id',business.id).maybeSingle());
-     return reply(200,{ok:true,username:a.username,activation_url,activation_expires_at,portal_url:opts.portalUrl,phone:business.owner_phone,email:contact?.owner_email||'',name:business.owner_name,contact_phone:opts.phone});
+     return reply(200,{ok:true,username:a.username,activation_url,activation_expires_at,portal_url:opts.portalUrl,phone:business.owner_phone,email:contact?.owner_email||'',name:portalFirstName(business.owner_name,business.internal_name),contact_phone:opts.phone});
     }
     if(action==='admin_preview'){
      // QA view-as-owner for admin/manager. A separate session flagged preview is
