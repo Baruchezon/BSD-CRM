@@ -6,7 +6,8 @@
 (()=>{'use strict';
 const SITE='www.bsd-bbi.co.il';
 function message(d){
- const name=String(d.name||'').trim();
+ const first=String(d.name||'').trim().split(/[\s+,;/|%]+/u)[0];
+ const name=/^\p{L}[\p{L}\p{M}'’״׳-]*$/u.test(first)?first:'';
  return [
   `שלום${name?' '+name:''},`,
   'תודה על האמון ועל שיתוף הפעולה. אנחנו ב-BSD מלווים אותך לאורך כל תהליך מכירת העסק.',
