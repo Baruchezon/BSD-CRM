@@ -8,8 +8,15 @@ const SITE = 'www.bsd-bbi.co.il';
 const SITE_URL = 'https://www.bsd-bbi.co.il/';
 type Data = {name?: string | null; username: string; password: string; phone?: string | null};
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]!));
+// 25.11.2026: Personal greeting only; never include surname or CRM annotations.
+export function portalFirstName(value: unknown, businessName?: unknown): string {
+  const raw = String(value ?? '').trim();
+  if (!raw || raw === String(businessName ?? '').trim()) return '';
+  const first = raw.split(/[\s+,;/|%]+/u)[0];
+  return /^\p{L}[\p{L}\p{M}'’״׳-]*$/u.test(first) ? first : '';
+}
 export function accessEmailText(d: Data): string {
-  const name = String(d.name || '').trim();
+  const name = portalFirstName(d.name);
   return [
     `שלום${name ? ' ' + name : ''},`,
     '',
@@ -40,7 +47,7 @@ function contactTelHref(display: string, escaped: string): string {
   return 'tel:' + escaped;
 }
 export function accessEmailHtml(d: Data): string {
-  const name = String(d.name || '').trim(), rawPhone = String(d.phone || ''), phone = esc(rawPhone);
+  const name = portalFirstName(d.name), rawPhone = String(d.phone || ''), phone = esc(rawPhone);
   const tel = contactTelHref(rawPhone, phone);
   const step = (n: number, html: string) => `<tr><td style="width:30px;vertical-align:top;padding:6px 0"><span style="display:inline-block;width:24px;height:24px;line-height:24px;border-radius:50%;background:#0f2a44;color:#fff;text-align:center;font-weight:700;font-size:13px">${n}</span></td><td style="padding:6px 8px 6px 0;font-size:15px;line-height:1.6;color:#1f2d3d">${html}</td></tr>`;
   const cred = (k: string, v: string) => `<tr><td style="padding:6px 0;font-size:15px;color:#4a5a6a;white-space:nowrap">${k}</td><td style="padding:6px 12px 6px 0"><b dir="ltr" style="font-family:Consolas,Menlo,monospace;font-size:18px;letter-spacing:1px;color:#0f2a44">${esc(v)}</b></td></tr>`;
