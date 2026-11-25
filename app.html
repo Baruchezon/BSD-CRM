@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611242210';
+    var PAGE_BUILD = '202611250730';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -110,6 +110,35 @@
   .empty-note{padding:20px;text-align:center;color:#999;font-size:.85rem;}
 
   .logout{background:transparent;border:1px solid rgba(255,255,255,.5);color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-family:inherit;}
+  /* 25.11.2026: 4 מונים אחידים - שונים בעיצוב מהריבועים הצבעוניים שמעליהם */
+  .ext-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  .ext-tile{height:132px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+    background:#fff;border:2px solid var(--gold);border-radius:16px;cursor:pointer;font-family:inherit;padding:10px 12px;
+    box-shadow:0 4px 12px rgba(14,27,52,.08);transition:box-shadow .15s ease, background .15s ease;}
+  .ext-tile:hover{background:#fbf7ec;box-shadow:0 8px 20px rgba(14,27,52,.14);}
+  .ext-tile:active{background:#f5eedb;}
+  .ext-ico{font-size:1.2rem;line-height:1;}
+  .ext-num{font-size:2rem;font-weight:800;color:var(--navy);line-height:1.1;}
+  .ext-lbl{font-size:.82rem;font-weight:700;color:#4a5470;text-align:center;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+  @media (max-width:760px){ .ext-grid{grid-template-columns:repeat(2,1fr);gap:12px;} .ext-tile{height:124px;} }
+  .ext-overlay{position:fixed;inset:0;background:rgba(14,27,52,.55);display:none;align-items:center;justify-content:center;z-index:3000;padding:16px;}
+  .ext-overlay.open{display:flex;}
+  .ext-modal{background:#fff;border-radius:16px;width:100%;max-width:980px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.3);}
+  .ext-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;background:var(--navy);color:#fff;}
+  .ext-head h3{margin:0;font-size:1.1rem;}
+  .ext-close{background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;}
+  .ext-sub{padding:10px 20px;font-size:.85rem;color:#4a5470;background:#fbf7ec;border-bottom:1px solid #eee3c6;}
+  .ext-body{overflow:auto;padding:14px 20px 20px;}
+  .ext-body table{width:100%;border-collapse:collapse;font-size:.85rem;}
+  .ext-body th{background:#f1efe6;color:var(--navy);text-align:right;padding:8px;position:sticky;top:0;white-space:nowrap;}
+  .ext-body td{padding:8px;border-bottom:1px solid #eee;vertical-align:top;}
+  .ext-body tr:nth-child(even) td{background:#fcfbf7;}
+  .ext-body a{color:#1a4a8f;}
+  .ext-h4{margin:16px 0 8px;color:var(--navy);font-size:.95rem;border-right:4px solid var(--gold);padding-right:8px;}
+  .ext-empty{padding:24px;text-align:center;color:#8a93a8;}
+  @media (max-width:760px){ .ext-body table, .ext-body thead, .ext-body tbody, .ext-body tr, .ext-body td{display:block;width:100%;}
+    .ext-body thead{display:none;} .ext-body tr{border:1px solid #eee;border-radius:10px;margin-bottom:10px;padding:6px 0;}
+    .ext-body td{border:none;padding:4px 10px;} .ext-body td[data-l]:before{content:attr(data-l) ": ";font-weight:700;color:var(--navy);} }
 </style>
 </head>
 <body>
@@ -189,12 +218,25 @@
     <a href="businesses.html" class="kpi-link"><div class="kpi c-navy"><div class="icon">🏢</div><div class="num" id="k_businesses">–</div><div class="label">עסקים למכירה</div></div></a>
     <a href="matches-workspace.html" class="kpi-link"><div class="kpi c-green"><div class="icon">🔗</div><div class="num" id="k_matches">–</div><div class="label">התאמות פתוחות</div></div></a>
     <a href="users.html" class="kpi-link"><div class="kpi c-teal"><div class="icon">🧑‍💼</div><div class="num" id="k_activeUsers">–</div><div class="label">משתמשים פעילים</div></div></a>
-    <a href="tasks.html" class="kpi-link"><div class="kpi c-orange"><div class="icon">✅</div><div class="num" id="k_tasks">–</div><div class="label">משימות פתוחות</div></div></a>
-    <a href="matches-workspace.html" class="kpi-link"><div class="kpi c-purple"><div class="icon">💬</div><div class="num" id="k_awaiting">–</div><div class="label">התאמות ממתינות לתגובה</div></div></a>
-    <a href="matches-workspace.html" class="kpi-link"><div class="kpi c-teal"><div class="icon">🤝</div><div class="num" id="k_meetingHeld">–</div><div class="label">התקיימה פגישה</div></div></a>
-    <a href="matches-workspace.html" class="kpi-link"><div class="kpi c-red"><div class="icon">📉</div><div class="num" id="k_negotiation">–</div><div class="label">עסקאות במו"מ</div></div></a>
-    <a href="matches-workspace.html" class="kpi-link"><div class="kpi c-green"><div class="icon">🏁</div><div class="num" id="k_closed">–</div><div class="label">עסקאות שנסגרו</div></div></a>
-    <a href="users.html" class="kpi-link"><div class="kpi c-red"><div class="icon">⏰</div><div class="num" id="k_inactive">–</div><div class="label">משתמשים לא פעילים 30+ יום</div></div></a>
+  </div>
+
+  <!-- 25.11.2026: 4 מונים אחידים (מנהל/אדמין) - VIP, הערכת שווי, פורטל בעלי עסקים, כניסות לאתר. לחיצה = רשימה מלאה -->
+  <div id="extTilesWrap" style="display:none;">
+    <div class="section-title">לקוחות, כלים ואתר</div>
+    <div class="ext-grid">
+      <button type="button" class="ext-tile" onclick="openExtList('vip')"><span class="ext-ico">⭐</span><span class="ext-num" id="x_vip">–</span><span class="ext-lbl">לקוחות VIP</span></button>
+      <button type="button" class="ext-tile" onclick="openExtList('valuation')"><span class="ext-ico">🧮</span><span class="ext-num" id="x_valuation">–</span><span class="ext-lbl">השתמשו בהערכת שווי</span></button>
+      <button type="button" class="ext-tile" onclick="openExtList('portal')"><span class="ext-ico">🔑</span><span class="ext-num" id="x_portal">–</span><span class="ext-lbl">השתמשו בפורטל בעלי עסקים</span></button>
+      <button type="button" class="ext-tile" onclick="openExtList('site')"><span class="ext-ico">🌐</span><span class="ext-num" id="x_site">–</span><span class="ext-lbl">נכנסו לאתר בשבוע האחרון</span></button>
+    </div>
+  </div>
+
+  <div id="extOverlay" class="ext-overlay" onclick="if(event.target===this)closeExtList()">
+    <div class="ext-modal" role="dialog" aria-modal="true">
+      <div class="ext-head"><h3 id="extTitle"></h3><button type="button" class="ext-close" onclick="closeExtList()" aria-label="סגירה">✕</button></div>
+      <div class="ext-sub" id="extSub"></div>
+      <div class="ext-body" id="extBody"></div>
+    </div>
   </div>
 
   <div class="section-title">נתונים לפי תקופה</div>
@@ -396,28 +438,139 @@ function getGreeting(){
 async function loadGeneral(){
   if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'agent') {
     // "סוכן" = לקוח חיצוני שמקבל שירות מהמערכת, לא איש צוות BSD - אין לו עניין
-    // או הרשאה לראות נתוני ניהול צוות כמו משתמשים פעילים/לא פעילים
+    // או הרשאה לראות נתוני ניהול צוות כמו משתמשים פעילים
     const usersTile = document.getElementById('k_activeUsers')?.closest('.kpi-link');
     if (usersTile) usersTile.style.display = 'none';
-    const inactiveTile = document.getElementById('k_inactive')?.closest('.kpi-link');
-    if (inactiveTile) inactiveTile.style.display = 'none';
   }
-  const thirtyDaysAgo = new Date(Date.now() - 30*24*60*60*1000).toISOString();
   const values = await Promise.all([
     count('leads', q=>ownFilter(q.eq('type','buyer'))),
     count('businesses', q=>ownFilter(q)),
     count('matches', q=>matchesOwnFilter(q.not('status','in','("העסקה נסגרה","העסקה נעצרה")'))),
-    count('profiles', q=>q.eq('status','active')),
-    count('tasks', q=>tasksOwnFilter(q.eq('status','פתוחה'))),
-    count('matches', q=>matchesOwnFilter(q.eq('status','נשלח לקונה - ממתין לתגובה (אנונימי)'))),
-    count('matches', q=>matchesOwnFilter(q.eq('status','התקיימה פגישה'))),
-    count('matches', q=>matchesOwnFilter(q.eq('status','המשך מו"מ'))),
-    count('matches', q=>matchesOwnFilter(q.eq('status','העסקה נסגרה'))),
-    count('profiles', q=>q.eq('status','active').or(`last_login_at.is.null,last_login_at.lt.${thirtyDaysAgo}`))
+    count('profiles', q=>q.eq('status','active'))
   ]);
-  ['k_buyers','k_businesses','k_matches','k_activeUsers','k_tasks','k_awaiting','k_meetingHeld','k_negotiation','k_closed','k_inactive']
-    .forEach((id, index) => { document.getElementById(id).textContent = values[index]; });
+  ['k_buyers','k_businesses','k_matches','k_activeUsers']
+    .forEach((id, index) => { const el = document.getElementById(id); if (el) el.textContent = values[index]; });
 }
+
+// ===== 25.11.2026: 4 מונים - VIP / הערכת שווי / פורטל בעלי עסקים / כניסות לאתר (מנהל/אדמין בלבד) =====
+function extCanSee(){ return !!(CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || CURRENT_PROFILE.role === 'manager')); }
+async function loadExtTiles(){
+  const wrap = document.getElementById('extTilesWrap');
+  if (!extCanSee()){ wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  try {
+    const { data, error } = await window.supabaseClient.rpc('dashboard_external_counts');
+    if (error) throw error;
+    document.getElementById('x_vip').textContent = data.vip ?? 0;
+    document.getElementById('x_valuation').textContent = data.valuation ?? 0;
+    document.getElementById('x_portal').textContent = data.portal ?? 0;
+    document.getElementById('x_site').textContent = data.site_visitors_7d ?? 0;
+    window.__EXT_COUNTS = data;
+  } catch (e) {
+    console.warn('loadExtTiles', e);
+    ['x_vip','x_valuation','x_portal','x_site'].forEach(id => { document.getElementById(id).textContent = '!'; });
+  }
+}
+function extDate(v, withTime){
+  if (!v) return '—';
+  const d = new Date(v); if (isNaN(d)) return esc(v);
+  return withTime ? d.toLocaleString('he-IL',{timeZone:'Asia/Jerusalem',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})
+                  : d.toLocaleDateString('he-IL',{timeZone:'Asia/Jerusalem',day:'2-digit',month:'2-digit',year:'numeric'});
+}
+function extMoney(n){ if (n===null||n===undefined||n==='') return '—'; return Number(n).toLocaleString('he-IL') + ' ₪'; }
+function extTel(p){ if (!p) return '—'; return `<a href="tel:${esc(String(p).replace(/[^0-9+]/g,''))}">${esc(p)}</a>`; }
+function extMail(m){ if (!m) return '—'; return `<a href="mailto:${esc(m)}">${esc(m)}</a>`; }
+function extTable(cols, rows){
+  if (!rows.length) return '<div class="ext-empty">אין עדיין נתונים</div>';
+  return `<table><thead><tr>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${
+    rows.map(r=>`<tr>${cols.map(c=>`<td data-l="${c[0]}">${c[1](r)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+const EXT_STATUS = { active:'פעיל', blocked:'חסום' };
+async function openExtList(kind){
+  const titles = { vip:'⭐ לקוחות VIP', valuation:'🧮 השתמשו במערכת הערכת השווי', portal:'🔑 השתמשו בפורטל בעלי עסקים', site:'🌐 כניסות לאתר - 7 הימים האחרונים' };
+  document.getElementById('extTitle').textContent = titles[kind] || '';
+  document.getElementById('extSub').textContent = 'טוען...';
+  document.getElementById('extBody').innerHTML = '<div class="ext-empty">טוען נתונים...</div>';
+  document.getElementById('extOverlay').classList.add('open');
+  let data;
+  try {
+    const res = await window.supabaseClient.rpc('dashboard_external_list', { p_kind: kind });
+    if (res.error) throw res.error;
+    data = res.data;
+  } catch (e) {
+    document.getElementById('extSub').textContent = '';
+    document.getElementById('extBody').innerHTML = '<div class="ext-empty">לא הצלחתי לטעון את הנתונים. נסה שוב בעוד רגע.</div>';
+    return;
+  }
+  const sub = document.getElementById('extSub'), body = document.getElementById('extBody');
+  if (kind === 'vip'){
+    const rows = data || [];
+    sub.textContent = `${rows.length} לקוחות VIP פעילים שנרשמו לקבלת עסקים (בלי רשומות בדיקה ובלי ארכיון). מהחדש לישן.`;
+    body.innerHTML = extTable([
+      ['שם', r=>`<b>${esc(r.name||'—')}</b>`],
+      ['טלפון', r=>extTel(r.phone)],
+      ['מייל', r=>extMail(r.email)],
+      ['תאריך הרשמה', r=>extDate(r.created_at, true)],
+      ['מה מחפש', r=>esc(r.looking_for||'—')],
+      ['אזורים', r=>esc((r.regions||[]).join(', ')||'—')],
+      ['תקציב', r=>(r.budget_min||r.budget_max)?`${extMoney(r.budget_min)} – ${extMoney(r.budget_max)}`:'—'],
+      ['נשלח לאחרונה', r=>extDate(r.last_sent_at)]
+    ], rows) + '<div style="margin-top:12px;"><a href="site-buyers.html">למסך הקונים VIP המלא ←</a></div>';
+  } else if (kind === 'valuation'){
+    const rows = data || [];
+    const c = window.__EXT_COUNTS || {};
+    sub.textContent = `${c.valuation ?? 0} אנשים שונים, ${rows.length} הערכות שווי מהמחשבון באתר (בלי בדיקות). מהחדש לישן.`;
+    body.innerHTML = extTable([
+      ['מס׳', r=>esc(r.request_number)],
+      ['תאריך', r=>extDate(r.created_at, true)],
+      ['שם', r=>`<b>${esc(r.name||'לא השאיר פרטים')}</b>`],
+      ['טלפון', r=>extTel(r.phone)],
+      ['מייל', r=>extMail(r.email)],
+      ['ענף', r=>esc(r.sector||'—')],
+      ['רווח שנתי', r=>extMoney(r.profit)],
+      ['שווי שיצא', r=>(r.value_low||r.value_high)?`${extMoney(r.value_low)} – ${extMoney(r.value_high)}`:'—'],
+      ['ניסיון מס׳', r=>esc(r.attempt_no||1)]
+    ], rows) + '<div style="margin-top:12px;"><a href="valuation-requests.html">למסך בקשות הערכת השווי המלא ←</a></div>';
+  } else if (kind === 'portal'){
+    const rows = data || [];
+    sub.textContent = `${rows.length} בעלי עסקים נכנסו לפורטל לפחות פעם אחת (בלי כניסות תצוגה מקדימה של הצוות). לפי כניסה אחרונה.`;
+    body.innerHTML = extTable([
+      ['בעל העסק', r=>`<b>${esc(r.name||'—')}</b>`],
+      ['עסק', r=>`${esc(r.business||'—')}${r.business_number?`<br><span style="color:#8a93a8;font-size:.78rem;">${esc(r.business_number)}</span>`:''}`],
+      ['טלפון', r=>extTel(r.phone)],
+      ['כניסה ראשונה', r=>extDate(r.first_login, true)],
+      ['כניסה אחרונה', r=>extDate(r.last_login, true)],
+      ['מס׳ כניסות', r=>esc(r.logins)],
+      ['זמן פעיל', r=>`${esc(r.active_minutes||0)} דק׳`],
+      ['סטטוס', r=>esc(EXT_STATUS[r.status]||r.status||'—')]
+    ], rows) + '<div style="margin-top:12px;"><a href="portal-admin.html">לניהול הפורטל ←</a></div>';
+  } else if (kind === 'site'){
+    const d = data || {}; const c = window.__EXT_COUNTS || {};
+    sub.textContent = `${c.site_visitors_7d ?? 0} מבקרים שונים, ${c.site_sessions_7d ?? 0} ביקורים ו-${c.site_pageviews_7d ?? 0} צפיות בדפים ב-7 הימים האחרונים. באתר לא נשמרים שמות של מבקרים, רק נתונים כלליים.`;
+    const devHe = { mobile:'נייד', desktop:'מחשב', tablet:'טאבלט' };
+    const devices = Object.entries(d.devices||{}).map(([k,v])=>`${esc(devHe[k]||k)}: <b>${esc(v)}</b>`).join(' · ') || '—';
+    body.innerHTML =
+      `<div class="ext-h4">לפי ימים</div>` + extTable([
+        ['תאריך', r=>extDate(r.day)],
+        ['מבקרים', r=>`<b>${esc(r.visitors)}</b>`],
+        ['ביקורים', r=>esc(r.sessions)],
+        ['צפיות בדפים', r=>esc(r.pageviews)],
+        ['טפסים והרשמות', r=>esc(r.leads)]
+      ], d.days||[]) +
+      `<div class="ext-h4">מכשירים</div><div>${devices}</div>` +
+      `<div class="ext-h4">הדפים הנצפים ביותר</div>` + extTable([
+        ['דף', r=>`${esc(r.title||r.path||'—')}<br><span style="color:#8a93a8;font-size:.75rem;direction:ltr;unicode-bidi:embed;">${esc(r.path||'')}</span>`],
+        ['צפיות', r=>esc(r.views)],
+        ['מבקרים', r=>esc(r.visitors)]
+      ], d.pages||[]) +
+      `<div class="ext-h4">מאיפה הגיעו</div>` + extTable([
+        ['מקור', r=>`<span style="direction:ltr;unicode-bidi:embed;">${esc(r.source)}</span>`],
+        ['מבקרים', r=>esc(r.visitors)]
+      ], d.sources||[]);
+  }
+}
+function closeExtList(){ document.getElementById('extOverlay').classList.remove('open'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeExtList(); });
 
 async function loadPeriod(){
   let startISO = customFrom || periodStartDate(currentPeriod);
@@ -518,7 +671,7 @@ async function loadActivity(){
 }
 
 const DASHBOARD_VALUE_IDS = [
-  'k_buyers','k_businesses','k_matches','k_activeUsers','k_tasks','k_awaiting','k_meetingHeld','k_negotiation','k_closed','k_inactive',
+  'k_buyers','k_businesses','k_matches','k_activeUsers',
   'p_newBuyers','p_newBusinesses','p_newMatches','g_close_sub','g_tasks_sub','g_agree_sub'
 ];
 function saveDashboardCache(){
@@ -1125,6 +1278,7 @@ window.bsdOnLeadPush = function(){ if (CURRENT_PROFILE) checkNewLeadPopup(CURREN
     await Promise.all([loadGeneral(), loadPeriod(), loadGauges(), loadActivity()]);
     saveDashboardCache();
   }
+  loadExtTiles();
   initTasksPopupWatcher(profile);
   checkVersionNotice();
   checkNewMessagesPopup(profile);
