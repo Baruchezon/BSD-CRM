@@ -4,6 +4,7 @@ import {
   inquiryKind, isTestSubmission, leadTypeFor, normalizeBusinessNumber, oneLine, parseMessageContext,
   phone9, purposeGuess, safeHttpUrl, websiteLeadSide,
 } from './logic.ts';
+import { autosendEnabled, sendLeadFollowup, wantsWhatsApp } from './whatsapp-followup.ts';
 
 export { websiteLeadSide };
 
@@ -167,6 +168,9 @@ Deno.serve(async req => {
     const guess = INTAKE_V2 ? purposeGuess(kind)
       : (isTraining ? 'מתעניין בהכשרת מתווכי עסקים' : type === 'seller' ? 'מעוניין למכור עסק' : type === 'partner' ? 'מעוניין בשותפות או השקעה' : /לקנות|buy/.test(purposes.join(' ').toLowerCase()) ? 'מחפש לקנות עסק' : 'דורש בדיקה');
     const leadSide = websiteLeadSide(purposes, isTraining);
+    // 26.11.2026: dedicated, not pre-checked consent box on the website form (never inferred from the phone).
+    const waConsent = !isTest && wantsWhatsApp(body);
+    const waAutosend = autosendEnabled(k => Deno.env.get(k));
 
     // Structured context: new payload fields first, then the lines the current form folds into «message».
     const ctx = parseMessageContext(message);
@@ -209,6 +213,8 @@ Deno.serve(async req => {
         notes: `${existing.notes ? `${existing.notes}\n\n` : ''}[פנייה חוזרת מאתר BSD ${today}]\nשם בטופס: ${fullName}\nמטרת הפנייה: ${purposes.join(', ') || 'לא נבחרה'}\nהודעה: ${ctx.original || 'לא נכתבה'}${contextLines ? `\n${contextLines}` : ''}`,
       };
       if (!existing.email) patch.email = contactEmail;
+      // consent stamp + removal-list check are done by the DB trigger (opt-out always wins)
+      if (waConsent) { patch.whatsapp_opt_in = true; patch.whatsapp_consent_source = 'website'; }
       const { error: upErr } = await supabase.from('leads').update(patch).eq('id', leadId);
       if (upErr) throw upErr;
       if (business?.id) await supabase.from('leads').update({ business_id: business.id }).eq('id', leadId).is('business_id', null);
@@ -236,6 +242,11 @@ Deno.serve(async req => {
         lead_side: leadSide,
         lead_side_source: leadSide ? 'website_form' : null,
       };
+      if (waConsent) {
+        payload.whatsapp_opt_in = true;
+        payload.whatsapp_consent_source = 'website';
+        if (waAutosend) payload.whatsapp_channel = 'api';
+      }
       if (isTest) { payload.is_archived = true; payload.archive_reason = 'is_test'; payload.archived_at = new Date().toISOString(); }
       if (type === 'seller') payload.business_city = city;
       else payload.requested_area = city;
@@ -314,7 +325,22 @@ Deno.serve(async req => {
       if (subErr) console.error('submission log not stored', subErr.message);
     }
 
-    return json({ ok: true, leadId, attachedExisting: !!existing, emailSent: emailDelivery.sent, emailError: emailDelivery.error ?? null }, 200, origin);
+    // Automatic WhatsApp opening message from 077 (only with consent; never blocks or fails the intake).
+    let waResult: { sent: boolean; reason: string } | null = null;
+    if (waConsent) {
+      waResult = await Promise.race([
+        sendLeadFollowup(supabase, leadId, fullName, phone, kind),
+        new Promise<{ sent: boolean; reason: string }>(r => setTimeout(() => r({ sent: false, reason: 'timeout' }), 8000)),
+      ]);
+      const { error: waLogErr } = await supabase.from('audit_log').insert({
+        table_name: 'leads', record_id: leadId, action: 'whatsapp_opening', actor_id: adminId,
+        details: { consent: true, autosend: waAutosend, sent: waResult.sent, reason: waResult.reason },
+      });
+      if (waLogErr) console.error('whatsapp audit not stored', waLogErr.message);
+    }
+
+    return json({ ok: true, leadId, attachedExisting: !!existing, emailSent: emailDelivery.sent, emailError: emailDelivery.error ?? null,
+      whatsappSent: waResult?.sent ?? false }, 200, origin);
   } catch (error) {
     console.error('website-lead failed', error);
     return json({ ok: false, error: 'save_failed' }, 500, origin);
