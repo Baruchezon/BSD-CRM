@@ -165,3 +165,4 @@
 .vip-map-list > .vip-map-details { margin-top: -4px; }
 .view-switch button { font: inherit; font-weight: 750; border: 1px solid transparent; border-radius: 8px; padding: 7px 14px; background: transparent; color: #142a49; cursor: pointer; }
 .view-switch [aria-pressed="true"] { background: #223c5e; color: #fff; }
+#schemaBtn { background: #17365D; color: #fff; font-weight: 800; }
