@@ -40,6 +40,6 @@ Deno.test('templates: DOCUMENT header templates carry a header_handle example', 
 });
 Deno.test('templates: render text used for the CRM thread', () => {
   const s = renderTemplateText(TEMPLATES.bsd_agreement_to_sign, ['דני', 'מכירת עסק']);
-  assert.ok(s.startsWith('שלום דני, הסכם ההתקשרות שלך עם BSD בנושא מכירת עסק'));
+  assert.ok(s.startsWith('היי דני 👋\nשמחים להתחיל לעבוד יחד! ההסכם שלך עם BSD למכירת עסק'));
   assert.ok(s.endsWith('BSD Business Brokers Israel'));
 });

@@ -50,7 +50,7 @@ export const TEMPLATES: Record<string, TemplateDef> = {
   bsd_agreement_to_sign: {
     name: 'bsd_agreement_to_sign', category: 'UTILITY', language: 'he', audience: 'agreement', needsAgreementPermission: true,
     description: 'שליחת הסכם התקשרות לחתימה (כפתור «לצפייה וחתימה»)',
-    body: 'שלום {{1}}, הסכם ההתקשרות שלך עם BSD בנושא {{2}} מוכן לחתימה. אפשר לעיין בהסכם ולחתום עליו דיגיטלית בלחיצה על «לצפייה וחתימה». לשאלות אפשר להשיב להודעה זו.',
+    body: 'היי {{1}} 👋\nשמחים להתחיל לעבוד יחד! ההסכם שלך עם BSD ל{{2}} מוכן ומחכה לך.\nהחתימה דיגיטלית ולוקחת פחות מדקה: לוחצים על «לצפייה וחתימה» וזהו.\nיש שאלה? פשוט עונים להודעה הזו, אנחנו כאן בשבילך.',
     params: [
       { key: 'first_name', label: 'שם פרטי', example: 'דני', max: 30 },
       { key: 'agreement_kind', label: 'סוג ההסכם', example: 'מכירת עסק', max: 30 },
@@ -61,7 +61,7 @@ export const TEMPLATES: Record<string, TemplateDef> = {
   bsd_signing_reminder: {
     name: 'bsd_signing_reminder', category: 'UTILITY', language: 'he', audience: 'agreement', needsAgreementPermission: true,
     description: 'תזכורת לחתימה על הסכם שנשלח',
-    body: 'שלום {{1}}, תזכורת: הסכם ההתקשרות עם BSD שנשלח אליך בתאריך {{2}} עדיין ממתין לחתימה. אפשר לחתום בלחיצה על «לצפייה וחתימה». אם כבר חתמת, אין צורך לעשות דבר.',
+    body: 'היי {{1}}, רק תזכורת קטנה 🙂\nההסכם ששלחנו לך ב-{{2}} עדיין מחכה לחתימה. ברגע שהוא ייחתם, נוכל להתקדם במלוא הקצב.\nזה לוקח פחות מדקה: לוחצים על «לצפייה וחתימה».\nכבר חתמת? מעולה, אפשר להתעלם מההודעה.',
     params: [
       { key: 'first_name', label: 'שם פרטי', example: 'דני', max: 30 },
       { key: 'sent_date', label: 'תאריך שליחה', example: '11.10.2026', max: 10 },
@@ -71,7 +71,7 @@ export const TEMPLATES: Record<string, TemplateDef> = {
   bsd_agreement_signed_copy: {
     name: 'bsd_agreement_signed_copy', category: 'UTILITY', language: 'he', audience: 'agreement', header: 'DOCUMENT',
     description: 'העתק ההסכם החתום ללקוח (PDF מצורף)',
-    body: 'שלום {{1}}, תודה! ההסכם עם BSD נחתם בהצלחה. מצורף העתק ההסכם החתום (מספר הסכם {{2}}) לשמירה אצלך.',
+    body: 'מזל טוב {{1}}, ההסכם נחתם! 🎉\nתודה על האמון ב-BSD. מצורף העתק ההסכם החתום (מספר {{2}}) לשמירה אצלך.\nמכאן אנחנו לוקחים את זה קדימה, ונעדכן אותך בכל שלב בדרך.',
     params: [
       { key: 'first_name', label: 'שם פרטי', example: 'דני', max: 30 },
       { key: 'agreement_number', label: 'מספר הסכם', example: 'BSD-2026-1042', max: 40 },
@@ -81,7 +81,7 @@ export const TEMPLATES: Record<string, TemplateDef> = {
   bsd_files_ready: {
     name: 'bsd_files_ready', category: 'UTILITY', language: 'he', audience: 'any', header: 'DOCUMENT',
     description: 'שליחת מסמך שהלקוח ביקש (PDF מצורף)',
-    body: 'שלום {{1}}, בהמשך לבקשתך מצורף המסמך {{2}}. לשאלות אפשר להשיב להודעה זו.',
+    body: 'היי {{1}}, כמו שביקשת, מצורף {{2}} 📎\nאם משהו לא ברור, או שבא לך לעבור על זה יחד, פשוט עונים להודעה הזו ונחזור אליך.',
     params: [
       { key: 'first_name', label: 'שם פרטי', example: 'דני', max: 30 },
       { key: 'document_title', label: 'שם המסמך', example: 'תיק מכירה', max: 50 },
@@ -91,7 +91,7 @@ export const TEMPLATES: Record<string, TemplateDef> = {
   bsd_meeting_summary: {
     name: 'bsd_meeting_summary', category: 'UTILITY', language: 'he', audience: 'any',
     description: 'סיכום פגישה (טקסט קצר, ללא שורות חדשות)',
-    body: 'שלום {{1}}, תודה על הפגישה בתאריך {{2}}. עיקרי הדברים: {{3}}. נשמח להמשיך בטיפול, ולשאלות אפשר להשיב להודעה זו.',
+    body: 'היי {{1}}, תודה על הפגישה ב-{{2}}, היה לנו נעים מאוד! 🤝\nבקצרה, על מה סיכמנו: {{3}}.\nאנחנו כבר ממשיכים לעבוד על זה. כל שאלה, אפשר לענות כאן.',
     params: [
       { key: 'first_name', label: 'שם פרטי', example: 'דני', max: 30 },
       { key: 'meeting_date', label: 'תאריך הפגישה', example: '11.10.2026', max: 10 },
@@ -102,7 +102,7 @@ export const TEMPLATES: Record<string, TemplateDef> = {
   bsd_buyer_update: {
     name: 'bsd_buyer_update', category: 'UTILITY', language: 'he', audience: 'buyer',
     description: 'עדכון סטטוס לקונה (נוסח קבוע לבחירה)',
-    body: 'שלום {{1}}, עדכון לגבי הפנייה שלך ל-BSD (מספר לקוח {{2}}): {{3}}. לפרטים נוספים אפשר להשיב להודעה זו.',
+    body: 'היי {{1}}, עדכון חדש מ-BSD לגבי הפנייה שלך (מספר לקוח {{2}}) 📌\n{{3}}.\nאנחנו איתך לאורך כל הדרך. לכל שאלה פשוט עונים להודעה הזו.',
     params: [
       { key: 'first_name', label: 'שם פרטי', example: 'דני', max: 30 },
       { key: 'client_number', label: 'מספר לקוח', example: '1042', max: 20 },
@@ -113,21 +113,21 @@ export const TEMPLATES: Record<string, TemplateDef> = {
   bsd_portal_access: {
     name: 'bsd_portal_access', category: 'UTILITY', language: 'he', audience: 'business_owner',
     description: 'קישור כניסה לאזור האישי של בעל העסק (בלי סיסמה)',
-    body: 'שלום {{1}}, פתחנו עבורך אזור אישי מאובטח ב-BSD, שבו אפשר לצפות במסמכים ובעדכונים של העסק שלך. להפעלת החשבון ולכניסה לוחצים על «כניסה לאזור האישי». הקישור אישי, נא לא להעביר אותו לאחרים.',
+    body: 'היי {{1}} 👋\nפתחנו לך אזור אישי ב-BSD: מקום אחד שבו רואים את כל המסמכים, העדכונים וההתקדמות של העסק שלך, בכל רגע.\nכדי להיכנס לוחצים על «כניסה לאזור האישי».\n🔒 הקישור אישי ומאובטח, נא לא להעביר אותו לאחרים.',
     params: [{ key: 'first_name', label: 'שם פרטי', example: 'דני', max: 30 }],
     footer: TEMPLATE_FOOTER, urlButton: { text: 'כניסה לאזור האישי', exampleCode: 'Ab3kD9xQ' }, quickReplies: [optOut],
   },
-  bsd_vip_access: {
-    name: 'bsd_vip_access', category: 'UTILITY', language: 'he', audience: 'buyer',
+  bsd_vip_link: {
+    name: 'bsd_vip_link', category: 'UTILITY', language: 'he', audience: 'buyer',
     description: 'קישור כניסה לאזור לקוחות VIP (בלי סיסמה)',
-    body: 'שלום {{1}}, נפתחה עבורך גישה לאזור לקוחות VIP של BSD, שבו מוצגים העסקים שהתאמנו עבורך. לכניסה לוחצים על «כניסה לאזור VIP». הקישור אישי, נא לא להעביר אותו לאחרים.',
+    body: 'היי {{1}}, הגישה שלך לאזור הלקוחות האישי ב-BSD מוכנה.\nלכניסה לוחצים על «כניסה לאזור VIP».\n🔒 הקישור אישי, נא לא להעביר אותו לאחרים.',
     params: [{ key: 'first_name', label: 'שם פרטי', example: 'דני', max: 30 }],
     footer: TEMPLATE_FOOTER, urlButton: { text: 'כניסה לאזור VIP', exampleCode: 'Ab3kD9xQ' }, quickReplies: [optOut],
   },
   bsd_lead_followup: {
     name: 'bsd_lead_followup', category: 'UTILITY', language: 'he', audience: 'any',
     description: 'מענה לפנייה חדשה ותיאום שיחה',
-    body: 'שלום {{1}}, קיבלנו את פנייתך ל-BSD בנושא {{2}}. נשמח לתאם איתך שיחה קצרה. מתי נוח לך?',
+    body: 'היי {{1}}, תודה שפנית ל-BSD! 🙏\nקיבלנו את הפנייה שלך בנושא {{2}}, ונשמח לדבר איתך כדי להבין בדיוק מה מתאים לך.\nמתי נוח לך שנתקשר?',
     params: [
       { key: 'first_name', label: 'שם פרטי', example: 'דני', max: 30 },
       { key: 'topic', label: 'נושא הפנייה', example: 'מכירת עסק', max: 40 },
@@ -138,24 +138,24 @@ export const TEMPLATES: Record<string, TemplateDef> = {
   bsd_training_form: {
     name: 'bsd_training_form', category: 'UTILITY', language: 'he', audience: 'training',
     description: 'קישור אישי לטופס הרישום להכשרה',
-    body: 'שלום {{1}}, בהמשך להתעניינותך בהכשרת מתווכי העסקים של BSD, זה הקישור האישי לטופס הרישום. אפשר להשיב להודעה זו עם כל שאלה.',
+    body: 'היי {{1}}, שמחים לשמוע שההכשרה של BSD מעניינת אותך! 🚀\nזה הקישור האישי לטופס ההרשמה, כמה דקות וזה מאחוריך.\nיש שאלות לפני? פשוט עונים להודעה הזו.',
     params: [{ key: 'first_name', label: 'שם פרטי', example: 'דני', max: 30 }],
     footer: TEMPLATE_FOOTER, urlButton: { text: 'לטופס הרישום', exampleCode: 'Ab3kD9xQ' }, quickReplies: [optOut],
   },
   bsd_anon_offer: {
     name: 'bsd_anon_offer', category: 'MARKETING', language: 'he', audience: 'buyer', header: 'DOCUMENT',
     description: 'פרסומת: הצעת עסק חדש עם תקציר אנונימי (רק למי שאישר פרסומת)',
-    body: 'פרסומת: שלום {{1}}, יש ב-BSD עסק חדש שעשוי להתאים לך: {{2}}. מצורף תקציר אנונימי. מעוניין בפרטים נוספים? אפשר ללחוץ «כן, מעוניין». להסרה מרשימת התפוצה לוחצים «הסר אותי».',
+    body: 'פרסומת: היי {{1}}, יש לנו משהו שעשוי לעניין אותך 👀\nעסק חדש נכנס עכשיו ל-BSD: {{2}}.\nצירפנו תקציר אנונימי עם הנתונים העיקריים. עסקים טובים לא נשארים הרבה זמן בשוק, אז אם זה מדבר אליך, לוחצים «כן, מעניין אותי» ונחזור אליך.\nלהסרה מרשימת התפוצה לוחצים «הסר אותי».',
     params: [
       { key: 'first_name', label: 'שם פרטי', example: 'דני', max: 30 },
       { key: 'business_teaser', label: 'תיאור קצר (אנונימי)', example: 'בית קפה במרכז הארץ', max: 60 },
     ],
-    footer: TEMPLATE_FOOTER, quickReplies: [{ text: 'כן, מעוניין', payload: 'ANON_INTERESTED' }, optOut],
+    footer: TEMPLATE_FOOTER, quickReplies: [{ text: 'כן, מעניין אותי', payload: 'ANON_INTERESTED' }, optOut],
   },
   bsd_training_brochure: {
     name: 'bsd_training_brochure', category: 'MARKETING', language: 'he', audience: 'training', header: 'DOCUMENT',
     description: 'פרסומת: ברושור ההכשרה (PDF מצורף, רק למי שאישר פרסומת)',
-    body: 'פרסומת: שלום {{1}}, מצורף הברושור של הכשרת מתווכי העסקים של BSD, עם כל הפרטים על התוכנית. להרשמה או לשאלות אפשר להשיב להודעה זו. להסרה מרשימת התפוצה לוחצים «הסר אותי».',
+    body: 'פרסומת: היי {{1}}, חלמת להיות מתווך עסקים מקצועי? 💼\nמצורף הברושור של תוכנית ההכשרה של BSD, עם כל מה שצריך לדעת: הלימודים, הליווי האישי והדרך לעסקה הראשונה שלך.\nלהרשמה או לשאלות פשוט עונים להודעה הזו.\nלהסרה מרשימת התפוצה לוחצים «הסר אותי».',
     params: [{ key: 'first_name', label: 'שם פרטי', example: 'דני', max: 30 }],
     footer: TEMPLATE_FOOTER, quickReplies: [optOut],
   },

@@ -26,7 +26,7 @@ export const SIGNING_PAGES: Record<string, string> = {
   'bsd-contract-signing-seller.html': 'seller', 'bsd-contract-signing-buyer.html': 'buyer', 'bsd-contract-signing-broker.html': 'broker',
 };
 const LINK_KIND: Record<string, string> = {
-  bsd_agreement_to_sign: 'agreement', bsd_signing_reminder: 'agreement', bsd_portal_access: 'portal', bsd_vip_access: 'vip', bsd_training_form: 'training',
+  bsd_agreement_to_sign: 'agreement', bsd_signing_reminder: 'agreement', bsd_portal_access: 'portal', bsd_vip_link: 'vip', bsd_training_form: 'training',
 };
 const LINK_TTL_DAYS: Record<string, number> = { agreement: 60, portal: 3, vip: 14, training: 30 };
 
