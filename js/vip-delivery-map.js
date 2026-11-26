@@ -91,37 +91,19 @@
       details.hidden = true;
     }
 
-    function paint() {
-      const pairs = overview?.pairs || [];
-      controls.hidden = pairs.length === 0;
-      if (!pairs.length) {
-        graph.innerHTML = '';
-        clearDetails();
-        return;
-      }
-      const byBusiness = mode === 'business';
-      const groups = groupPairs(pairs, mode);
-      const group = groups.find(item => item.id === selected) || groups[0];
-      selected = group.id;
-      displayedPairs = group.pairs;
-      label.textContent = byBusiness ? 'בחירת עסק' : 'בחירת קונה';
-      select.innerHTML = groups.map(item => {
-        const reference = byBusiness ? ' · ' + item.id : '';
-        return `<option value="${escape(item.id)}">${escape(item.name + reference)}</option>`;
-      }).join('');
-      select.value = selected;
-      panel.querySelectorAll('[data-map-mode]').forEach(button => {
-        button.setAttribute('aria-pressed', button.dataset.mapMode === mode);
-      });
+    const ALL = '__all__';
+
+    function diagram(group, byBusiness, base) {
       const destinationCount = (byBusiness ? buyerCount : businessCount)(group.pairs.length);
-      graph.innerHTML = `<div class="vip-map-diagram ${byBusiness ? '' : 'vip-map-reverse'}">
+      return `<div class="vip-map-diagram ${byBusiness ? '' : 'vip-map-reverse'}" data-map-group="${escape(group.id)}">
         <div class="vip-map-anchor ${byBusiness ? 'vip-map-business' : 'vip-map-buyer'}">
           <span>${byBusiness ? 'עסק שנשלח' : 'קונה שקיבל'}</span>
           <strong>${escape(group.name)}</strong>${window.BSDOrigin?.html(group.origin) || ''}
+          ${byBusiness ? `<span>${escape(group.id)}</span>` : ''}
           <span>${byBusiness ? 'נשלח אל ' : 'קיבל '}${destinationCount}</span>
         </div>
         <ul class="vip-map-branches" aria-label="${byBusiness ? 'קונים שקיבלו' : 'עסקים שנשלחו'}">
-          ${group.pairs.map((pair, index) => `<li>
+          ${group.pairs.map((pair, i) => { const index = base + i; return `<li>
             <span class="vip-map-arrow" aria-hidden="true"></span>
             <div class="vip-map-node ${byBusiness ? 'vip-map-buyer' : 'vip-map-business'}">
               <button type="button" class="vip-map-node-name" data-map-switch="${index}">
@@ -131,9 +113,43 @@
               <button type="button" class="vip-map-open" data-map-details="${index}"
                 aria-label="מה נשלח למי: ${escape(pair.business_name)} אל ${escape(pair.buyer_name)}">מה נשלח למי</button>
             </div>
-        </li>`).join('')}
+        </li>`; }).join('')}
         </ul>
       </div>`;
+    }
+
+    function paint() {
+      // keep the details box outside the graph before re-rendering it
+      if (details.parentNode !== panel) panel.append(details);
+      const pairs = overview?.pairs || [];
+      controls.hidden = pairs.length === 0;
+      if (!pairs.length) {
+        graph.innerHTML = '';
+        clearDetails();
+        return;
+      }
+      const byBusiness = mode === 'business';
+      const groups = groupPairs(pairs, mode);
+      const showAll = !selected || selected === ALL || !groups.some(item => item.id === selected);
+      const shown = showAll ? groups : groups.filter(item => item.id === selected);
+      selected = showAll ? ALL : selected;
+      label.textContent = byBusiness ? 'בחירת עסק' : 'בחירת קונה';
+      select.innerHTML = `<option value="${ALL}">${byBusiness ? 'כל העסקים' : 'כל הקונים'} (${numberLabel(groups.length)})</option>` +
+        groups.map(item => {
+          const reference = byBusiness ? ' · ' + item.id : '';
+          return `<option value="${escape(item.id)}">${escape(item.name + reference)}</option>`;
+        }).join('');
+      select.value = selected;
+      panel.querySelectorAll('[data-map-mode]').forEach(button => {
+        button.setAttribute('aria-pressed', button.dataset.mapMode === mode);
+      });
+      displayedPairs = [];
+      const html = shown.map(group => {
+        const block = diagram(group, byBusiness, displayedPairs.length);
+        displayedPairs.push(...group.pairs);
+        return block;
+      }).join('');
+      graph.innerHTML = `<div class="vip-map-list${showAll ? ' vip-map-all' : ''}">${html}</div>`;
     }
 
     async function load(isDemo) {
@@ -175,11 +191,12 @@
       paint();
     }
 
-    async function showDetails(pair, offset = 0, focus = false) {
+    async function showDetails(pair, offset = 0, focus = false, anchor = null) {
       const token = ++detailRequest;
       activePair = pair;
       detailOffset = offset;
       details.hidden = false;
+      if (anchor) anchor.after(details);
       detailTitle.textContent = pair.business_name + ' נשלח אל ' + pair.buyer_name;
       detailRows.textContent = 'טוען פרטי שליחה…';
       prev.disabled = true;
@@ -207,7 +224,7 @@
 
     controls.addEventListener('click', event => {
       const button = event.target.closest('[data-map-mode]');
-      if (button && button.dataset.mapMode !== mode) choose(button.dataset.mapMode);
+      if (button && button.dataset.mapMode !== mode) choose(button.dataset.mapMode, ALL);
     });
     select.addEventListener('change', () => choose(mode, select.value));
     graph.addEventListener('click', event => {
@@ -215,11 +232,11 @@
       if (!button) return;
       const pair = displayedPairs[Number(button.dataset.mapSwitch ?? button.dataset.mapDetails)];
       if (button.hasAttribute('data-map-details')) {
-        showDetails(pair, 0, true);
+        showDetails(pair, 0, true, button.closest('.vip-map-diagram'));
       } else {
         const business = mode === 'business';
         choose(business ? 'buyer' : 'business', business ? pair.subscriber_id : pair.business_number);
-        select.focus();
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     });
     prev.addEventListener('click', () => showDetails(activePair, detailOffset - pageSize));

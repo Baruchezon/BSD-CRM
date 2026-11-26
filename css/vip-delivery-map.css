@@ -160,3 +160,6 @@
   .vip-map-node { padding-inline: 5px; }
   .vip-map-open { font-size: .75rem; }
 }
+/* full scrollable list of all diagrams (default view) */
+.vip-map-list { display: grid; gap: 14px; }
+.vip-map-list > .vip-map-details { margin-top: -4px; }
