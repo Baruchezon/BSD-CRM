@@ -2,37 +2,35 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const html = fs.readFileSync(new URL('../businesses.html', import.meta.url), 'utf8');
-// Load the real helpers from the page (esc … refreshOwnerContactActions) without a DOM.
-const start = html.indexOf('function esc(s)');
-const end = html.indexOf('function refreshOwnerContactActions');
-assert.ok(start > 0 && end > start);
-const api = new Function(html.slice(start, end) + '; return { ownerContactActions, waPhoneDigits, waBtn };')();
+const read = file => fs.readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+const html = read('businesses.html');
+const window = { addEventListener() {} };
+const document = { addEventListener() {} };
+new Function('window', 'document', read('js/record-actions.js'))(window, document);
+const { contactActions } = window.BSDRecordActions;
 
-test('owner phone renders a tel: dial button and a wa.me WhatsApp button', () => {
-  const out = api.ownerContactActions('050-123-4567');
-  assert.match(out, /class="oc-btn oc-tel" href="tel:0501234567"/);
-  assert.match(out, /class="oc-btn oc-wa" href="https:\/\/wa\.me\/972501234567" target="_blank" rel="noopener"/);
-  assert.match(out, />WhatsApp<\/a>$/);
+test('card phone renders a dial button and a WhatsApp button', () => {
+  const out = contactActions(['050-123-4567']);
+  assert.match(out, /class="bsd-contact-call" href="tel:0501234567"/);
+  assert.match(out, /class="bsd-contact-wa" href="https:\/\/wa\.me\/972501234567" target="_blank" rel="noopener"/);
 });
 
-test('number rule: digits only, 0 → 972, existing 972 kept', () => {
-  assert.match(api.ownerContactActions('+972 54-765-4321'), /wa\.me\/972547654321"/);
-  assert.match(api.ownerContactActions('972-52-1112222'), /wa\.me\/972521112222"/);
-  assert.match(api.ownerContactActions('(03) 555 1234'), /wa\.me\/97235551234"/);
-  assert.match(api.ownerContactActions('+972 54-765-4321'), /href="tel:\+972547654321"/);
+test('normalizes Israeli and international numbers and deduplicates the same number', () => {
+  assert.match(contactActions(['+972 54-765-4321']), /href="tel:\+972547654321"/);
+  assert.match(contactActions(['972-52-1112222']), /wa\.me\/972521112222"/);
+  assert.match(contactActions(['(03) 555 1234']), /wa\.me\/97235551234"/);
+  assert.match(contactActions(['0044 7700 900123']), /wa\.me\/447700900123"/);
+  assert.equal((contactActions(['0501234567', '+972 50 123 4567']).match(/wa\.me/g) || []).length, 1);
 });
 
-test('empty phone shows nothing; output is escaped', () => {
-  for (const v of [null, undefined, '', '   ']) assert.equal(api.ownerContactActions(v), '');
-  const out = api.ownerContactActions('050"><img src=x onerror=alert(1)>1234567');
-  assert.ok(!out.includes('<img'));
+test('empty or unusable phone shows nothing', () => {
+  assert.equal(contactActions([null, undefined, '', '   ', '050"><img src=x onerror=alert(1)>1234567']), '');
 });
 
-test('card section uses it under the owner phone; list WhatsApp button unchanged; build bumped', () => {
-  assert.match(html, /fieldRowPhone\('owner_phone','טלפון הבעלים', biz\?\.owner_phone, `<div class="owner-contact-actions" id="owner_phone_actions">\$\{ownerContactActions\(biz\?\.owner_phone\)\}<\/div>`\)/);
-  assert.match(api.waBtn('0501234567'), /^<a href="https:\/\/wa\.me\/972501234567" target="_blank" rel="noopener" title="WhatsApp" onclick="event\.stopPropagation\(\)"/);
-  assert.match(html, /\.oc-btn\.oc-wa\{background:linear-gradient/);
-  const version = JSON.parse(fs.readFileSync(new URL('../version.json', import.meta.url), 'utf8')).version;
+test('seller contact actions appear above the form in the card header', () => {
+  assert.match(html, /<h3>\$\{biz \? 'עריכת עסק'.*<\/h3>\s*<div class="bsd-card-contacts" data-card-contacts><\/div>/);
+  assert.match(html, /BSDRecordActions\.bindContacts\(modal, \['owner_phone'\]\);\s*bsdTabifyBizForm\(biz\);/);
+  assert.match(html, /title="WhatsApp" onclick="event\.stopPropagation\(\)"/);
+  const version = JSON.parse(read('version.json')).version;
   assert.match(html, new RegExp(`var PAGE_BUILD = '${version}';`));
 });

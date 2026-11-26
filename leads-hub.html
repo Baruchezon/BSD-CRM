@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611242210';
+    var PAGE_BUILD = '202611260805';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -43,6 +43,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="css/style.css?v=202610251400">
+<link rel="stylesheet" href="css/record-actions.css?v=202611260805">
 <script src="js/bsdBlackBox.js?v=20261010"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
 <style>
@@ -318,6 +319,7 @@
 <script src="js/record-origin.js?v=202611231310"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
 <script src="js/auth.js?v=202611240635"></script>
+<script src="js/record-actions.js?v=202611260805"></script>
 <script src="js/permissions.js?v=202608251215"></script>
 <script src="js/archiveModule.js?v=20260930delete1"></script>
 <script src="js/leadLifecycle.js?v=202610221200"></script>
@@ -1313,7 +1315,7 @@ function renderTable(){
       <td>
         <div style="display:flex;align-items:flex-start;gap:8px;">
           <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
-            <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
+            <button type="button" class="row-menu-btn" data-record-menu onclick="BSDRecordActions.toggleMenu(event)" aria-expanded="false" aria-label="פעולות" title="פעולות">⋮</button>
             <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
               ${menuHtml}
             </div>
@@ -1419,7 +1421,7 @@ function stagedRowHtml(r, callOn){
   return `<tr class="${rowClass}" data-staged="${isBiz ? 'business' : 'lead'}" data-lead-id="${esc(r.id)}" style="cursor:pointer;" onclick="openStagedCard('${r.id}')">
     <td><div style="display:flex;align-items:flex-start;gap:8px;">
       <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
-        <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
+        <button type="button" class="row-menu-btn" data-record-menu onclick="BSDRecordActions.toggleMenu(event)" aria-expanded="false" aria-label="פעולות" title="פעולות">⋮</button>
         <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:200px;z-index:70;overflow:hidden;">${menu}</div>
       </div>
       <div><div class="primary-name">${esc(personName)}${label && label !== personName ? ' (' + esc(label) + ')' : ''}</div>${BSDOrigin.html(r)}
@@ -1493,6 +1495,7 @@ function openReadOnly(id){
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>צפייה בליד — לא ניתן לערוך</h3>
+    ${BSDRecordActions.contactActions(CURRENT_TAB === 'business' ? [r.owner_phone] : [r.phone, r.phone2])}
     <div style="background:#f7f5ee;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#665;margin-bottom:14px;">
       הליד הוזן ע"י <b>${esc(userName(r.created_by))}</b> — רק הוא, מנהל, או אדמין יכולים לערוך אותו.
     </div>
@@ -1833,6 +1836,7 @@ function renderWebsiteLeadIntro(r){
   const modal = document.getElementById('modalBox');
   modal.innerHTML = `
     <h3>ליד חדש</h3>${BSDOrigin.html(r)}
+    ${BSDRecordActions.contactActions([r.phone, r.phone2])}
     <div style="background:#fff3d6;border:1px solid #e8cf8a;border-radius:8px;padding:10px 12px;font-size:.8rem;color:#8a6d1f;margin-bottom:14px;">
       ${esc(r.website_purpose_guess || 'טרם דיברו עם הלקוח.')} — הסיווג להלן הוא ניחוש בלבד, לא סופי.
     </div>
@@ -1885,6 +1889,7 @@ function renderWebsiteLeadConversationForm(r){
   modal.style.maxWidth = '760px';
   modal.innerHTML = `
     <h3>כרטיס ליד — ${esc(personName)} ${leadSideBadge(r, { editable:false })}</h3>
+    <div class="bsd-card-contacts" data-card-contacts></div>
     <div style="font-size:.76rem;color:#777;margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;">
       <span>מקור: <b>${esc(r.source || 'לא ידוע')}</b></span>
       <span>נקלט: <b>${fmtDateTime(r.created_at)}</b></span>
@@ -1976,6 +1981,7 @@ function renderWebsiteLeadConversationForm(r){
     </div>
   `;
   document.getElementById('overlay').classList.add('open');
+  BSDRecordActions.bindContacts(modal, ['wlPhone'], [r.phone2]);
   initLeadCardNoteFields(modal);
   updateLeadTransferHint();
 }

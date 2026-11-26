@@ -1,0 +1,60 @@
+.bsd-forms-menu.bsd-record-menu-open {
+  position: fixed !important;
+  right: auto !important;
+  margin: 0 !important;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto !important;
+  overscroll-behavior: contain;
+  white-space: normal;
+  box-sizing: border-box;
+  z-index: 160 !important;
+}
+
+.bsd-card-contacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-block: 8px 12px;
+}
+.bsd-card-contacts:empty { display: none; }
+.bsd-card-contact-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.bsd-card-contacts a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding-inline: 12px;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+.bsd-contact-call { background: #1d4ed8; }
+.bsd-contact-wa { background: #146c40; }
+
+@media (max-width: 700px), (pointer: coarse) {
+  button.row-menu-btn[data-record-menu] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    font-size: 20px;
+    touch-action: manipulation;
+  }
+  .bsd-record-menu-open > a {
+    min-height: 44px;
+    display: flex !important;
+    align-items: center;
+    box-sizing: border-box;
+  }
+}

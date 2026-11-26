@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611240635';
+    var PAGE_BUILD = '202611260805';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -43,6 +43,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="css/style.css?v=202610251400">
+<link rel="stylesheet" href="css/record-actions.css?v=202611260805">
 <script src="js/bsdBlackBox.js?v=20261010"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
 <style>
@@ -289,6 +290,7 @@
 <script src="js/record-origin.js?v=202611231310"></script>
 <script src="js/supabaseClient.js?v=202611181930"></script>
 <script src="js/auth.js?v=202611240635"></script>
+<script src="js/record-actions.js?v=202611260805"></script>
 <script src="js/whatsapp-api.js?v=202610111200"></script>
 <script src="js/whatsapp-card.js?v=202610111200"></script>
 <script src="js/permissions.js?v=202611231240"></script>
@@ -959,7 +961,7 @@ function renderTable(){
       <td data-label="שם / עסק">
         <div class="record-identity">
           <div style="position:relative;flex-shrink:0;" onclick="event.stopPropagation()">
-            <button type="button" class="row-menu-btn" onclick="toggleFormsMenu(event)" title="פעולות">⋮</button>
+            <button type="button" class="row-menu-btn" data-record-menu onclick="BSDRecordActions.toggleMenu(event)" aria-expanded="false" aria-label="פעולות" title="פעולות">⋮</button>
             <div class="bsd-forms-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#152645;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);min-width:180px;z-index:70;overflow:hidden;">
               <a href="javascript:void(0)" onclick="openLeadForm('${l.id}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;">${isGrantOnlyViewer(l) ? '👁️ צפייה' : '✏️ ערוך'}</a>
               ${isGrantOnlyViewer(l) ? '' : `<a href="javascript:void(0)" onclick="openNotesPanel('leads','${l.id}','${esc((l.full_name||'רשומה').replace(/'/g,''))}')" style="display:block;color:#fff;text-decoration:none;padding:11px 16px;font-size:.85rem;border-top:1px solid rgba(255,255,255,.08);">📝 ${esc(notesTooltip(l.id))}${notesIconStyle(l.id) ? ' 🔵' : ''}</a>`}
@@ -1245,6 +1247,7 @@ function openLeadForm(id, forcedType, prefillData){
   const typeLabel = type==='buyer' ? 'קונה' : type==='partner' ? 'שותפות/השקעה' : 'מוכר';
   modal.innerHTML = `
     <h3>${lead ? 'עריכת' : 'הוספת'} ${typeLabel}${lead ? ' · ' + esc(lead.full_name || [lead.first_name,lead.last_name].filter(Boolean).join(' ') || 'ללא שם') : ''}</h3>
+    <div class="bsd-card-contacts" data-card-contacts></div>
     ${(lead && isGrantOnlyViewer(lead)) ? `<div style="background:#eef4fb;border:1px solid #cddcef;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#1a3d8f;margin-bottom:10px;">🔓 <b>שוחרר אליי</b> — צפייה בלבד, ללא אפשרות עריכה, מחיקה או שחרור לאחרים.</div>` : ''}
     ${lead ? agreementBanner(lead.agreement_status, lead.agreement_number, 'leads', lead.id, lead.agreement_pdf_path, lead.agreement_pdf_uploaded_at, lead.agreement_pdf_uploaded_by) : ''}
     ${lead && type === 'buyer' ? '<div id="anonReceivedBox" style="margin-bottom:10px;"></div>' : ''}
@@ -1378,6 +1381,7 @@ function openLeadForm(id, forcedType, prefillData){
   document.getElementById('leadForm').dataset.leadId = lead ? lead.id : '';
   document.getElementById('leadForm').dataset.leadType = type;
   document.getElementById('leadForm').addEventListener('submit', saveLead);
+  BSDRecordActions.bindContacts(modal, ['phone', 'phone2']);
   if (lead && !isGrantOnlyViewer(lead) && window.mountBusinessAlertInvite) window.mountBusinessAlertInvite(lead);
   // בדיקת כפילות בזמן הקלדה - רק בהוספת קונה/ליד חדש (לא בעריכת רשומה קיימת)
   if (!lead){
