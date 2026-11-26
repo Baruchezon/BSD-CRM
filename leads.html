@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611261245';
+    var PAGE_BUILD = '202611261305';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -105,7 +105,7 @@
   .phone-cell{white-space:nowrap;min-width:100px;}
   .records-table > thead > tr > th:first-child,
   .records-table > tbody > tr > td:first-child{width:360px;min-width:360px;}
-  .record-identity{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:start;width:100%;}
+  .record-identity{display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;align-items:start;width:100%;}
   .record-info{min-width:0;display:flex;flex-direction:column;align-items:stretch;}
   .record-title-line{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:4px;min-height:24px;width:100%;}
   .record-title{display:block;min-width:0;white-space:normal;overflow:visible;overflow-wrap:anywhere;line-height:1.4;color:inherit;font-weight:800;}

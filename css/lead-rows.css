@@ -224,29 +224,46 @@ table.lead-compact th{overflow:hidden;text-overflow:ellipsis;}
     padding:14px 8px !important;
   }
 
-  /* 8 columns when call status is on: two lines, every field still present. */
-  table.lead-compact.call-cols tr{
-    grid-template-columns:minmax(72px,1.2fr) max-content minmax(0,7.2em) minmax(0,4.8em);
+  /* 26.11.2026 (בקשת ברוך): בטלפון השם מקבל שורה מלאה משלו, קריא ובשורה אחת.
+     כפתור ⋮ הוגדל לגודל אצבע (44px), ובעמודה הצרה הקודמת השם נדחס לאות-אות.
+     עכשיו: שורה 1 = ⋮ + שם מלא לכל רוחב הכרטיס, ושאר הפרטים בשתי שורות מתחתיו. */
+  table.lead-compact:not(.y2026) td:nth-child(1){grid-column:1 / -1 !important;grid-row:1 !important;}
+  table.lead-compact:not(.y2026) td:nth-child(1) > div{gap:10px;}
+  table.lead-compact:not(.y2026) td:nth-child(1) > div > div:last-child{flex:1 1 auto;min-width:0;overflow:hidden;}
+  table.lead-compact:not(.y2026) td:nth-child(1) .primary-name{
+    font-size:.98rem;
+    line-height:1.35;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    word-break:normal;
+    overflow-wrap:normal;
   }
-  table.lead-compact.call-cols td:nth-child(1){grid-area:1 / 1;}
-  table.lead-compact.call-cols td:nth-child(2){grid-area:1 / 2;}
-  table.lead-compact.call-cols td:nth-child(4){grid-area:1 / 3;}
-  table.lead-compact.call-cols td:nth-child(7){grid-area:1 / 4;}
-  table.lead-compact.call-cols td:nth-child(3){grid-area:2 / 1;}
-  table.lead-compact.call-cols td:nth-child(6){grid-area:2 / 2;}
-  table.lead-compact.call-cols td:nth-child(5){grid-area:2 / 3;}
-  table.lead-compact.call-cols td:nth-child(8){grid-area:2 / 4;}
+  table.lead-compact:not(.y2026) td:nth-child(1) .sub-name{display:block;margin-inline-start:0;}
+  table.lead-compact:not(.y2026) tr{row-gap:4px !important;padding:8px 10px !important;}
+
+  /* 8 columns when call status is on: name line, then two lines, every field still present. */
+  table.lead-compact.call-cols tr{
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,7.2em) minmax(0,5.8em);
+  }
+  table.lead-compact.call-cols td:nth-child(2){grid-area:2 / 1 / 3 / 3;}
+  table.lead-compact.call-cols td:nth-child(4){grid-area:2 / 3;}
+  table.lead-compact.call-cols td:nth-child(7){grid-area:2 / 4;}
+  table.lead-compact.call-cols td:nth-child(3){grid-area:3 / 1;}
+  table.lead-compact.call-cols td:nth-child(6){grid-area:3 / 2 / 4 / 4;}
+  table.lead-compact.call-cols td:nth-child(5){grid-area:3 / 4;}
+  table.lead-compact.call-cols td:nth-child(8){grid-area:4 / 1 / 5 / -1;}
+  table.lead-compact.call-cols td.c-city{white-space:nowrap !important;max-width:none !important;}
 
   /* 6 columns on the other lead tabs. */
   table.lead-compact:not(.call-cols):not(.y2026) tr{
     grid-template-columns:minmax(0,1.4fr) auto minmax(0,.8fr);
   }
-  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(1){grid-area:1 / 1;}
-  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(2){grid-area:1 / 2;}
-  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(5){grid-area:1 / 3;}
-  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(3){grid-area:2 / 1;}
-  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(4){grid-area:2 / 2;}
-  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(6){grid-area:2 / 3;}
+  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(2){grid-area:2 / 1;}
+  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(3){grid-area:2 / 2;}
+  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(5){grid-area:2 / 3;}
+  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(4){grid-area:3 / 1;}
+  table.lead-compact:not(.call-cols):not(.y2026) td:nth-child(6){grid-area:3 / 2 / 4 / 4;}
 
   /* לידים 2026: name, classification, exists, date, review status. */
   table.lead-compact.y2026 tr{
