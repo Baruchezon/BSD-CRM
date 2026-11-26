@@ -4,7 +4,7 @@
 <script>
 (function(){
   try{
-    var PAGE_BUILD = '202610270430';
+    var PAGE_BUILD = '202611261245';
     window.PAGE_BUILD = PAGE_BUILD;
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -142,6 +142,7 @@
 </div>
 
 <div class="wrap">
+  <div id="globalSearch"></div>
 
   <div class="back-bar" id="backBar" style="display:none;"></div>
 
@@ -208,6 +209,7 @@
 <script src="js/whatsapp-api.js?v=202610111200"></script>
 <script src="js/whatsapp-card.js?v=202610111200"></script>
 <script src="js/permissions.js?v=202608251709"></script>
+<script src="js/globalSearch.js?v=202611261245"></script>
 <script>
 let ALL_BROKERS = [];
 let ARCHIVED_BROKERS = [];
