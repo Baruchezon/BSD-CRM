@@ -508,7 +508,7 @@ async function openExtList(kind){
   const sub = document.getElementById('extSub'), body = document.getElementById('extBody');
   if (kind === 'vip'){
     const rows = data || [];
-    sub.textContent = `${rows.length} לקוחות VIP פעילים שנרשמו לקבלת עסקים (בלי רשומות בדיקה ובלי ארכיון). מהחדש לישן.`;
+    sub.textContent = `${rows.length} לקוחות VIP שנרשמו לקבלת עסקים (בלי רשומות בדיקה ובלי ארכיון). מהחדש לישן.`;
     body.innerHTML = extTable([
       ['שם', r=>`<b>${esc(r.name||'—')}</b>`],
       ['טלפון', r=>extTel(r.phone)],
@@ -517,7 +517,8 @@ async function openExtList(kind){
       ['מה מחפש', r=>esc(r.looking_for||'—')],
       ['אזורים', r=>esc((r.regions||[]).join(', ')||'—')],
       ['תקציב', r=>(r.budget_min||r.budget_max)?`${extMoney(r.budget_min)} – ${extMoney(r.budget_max)}`:'—'],
-      ['נשלח לאחרונה', r=>extDate(r.last_sent_at)]
+      ['נשלח לאחרונה', r=>extDate(r.last_sent_at)],
+      ['סטטוס', r=>r.status==='active'?'פעיל':(String(r.status||'').startsWith('unsubscribed')?'הסיר עצמו מהדיוור':esc(r.status||'—'))]
     ], rows) + '<div style="margin-top:12px;"><a href="site-buyers.html">למסך הקונים VIP המלא ←</a></div>';
   } else if (kind === 'valuation'){
     const rows = data || [];

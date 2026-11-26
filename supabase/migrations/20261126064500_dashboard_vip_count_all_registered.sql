@@ -1,0 +1,4 @@
+-- 26.11.2026: dashboard VIP tile counts every registered VIP subscriber (not only status='active'),
+-- matching the VIP screen (site-buyers.html): excludes test rows and archived rows only.
+-- Applied live by rewriting dashboard_external_counts / dashboard_external_list:
+--   "archived_at is null and status = 'active'"  ->  "archived_at is null"

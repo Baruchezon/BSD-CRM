@@ -163,3 +163,5 @@
 /* full scrollable list of all diagrams (default view) */
 .vip-map-list { display: grid; gap: 14px; }
 .vip-map-list > .vip-map-details { margin-top: -4px; }
+.view-switch button { font: inherit; font-weight: 750; border: 1px solid transparent; border-radius: 8px; padding: 7px 14px; background: transparent; color: #142a49; cursor: pointer; }
+.view-switch [aria-pressed="true"] { background: #223c5e; color: #fff; }

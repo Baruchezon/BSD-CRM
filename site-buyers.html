@@ -31,7 +31,7 @@
 <title>קונים VIP נרשמים</title>
 <link rel="stylesheet" href="css/style.css?v=202611130900">
 <link rel="stylesheet" href="css/lead-rows.css?v=202611230510">
-<link rel="stylesheet" href="css/vip-delivery-map.css?v=202611260640">
+<link rel="stylesheet" href="css/vip-delivery-map.css?v=202611260650">
 <style>
 body{margin:0;background:linear-gradient(180deg,#f7f1e4 0,#eef3f8 220px);color:#142033;font-family:Heebo,Rubik,Arial,sans-serif}
 [hidden]{display:none !important}
@@ -142,6 +142,10 @@ tr.row:hover{background:#f8fbff}
   <section class="panel" id="deliveryPanel" hidden aria-labelledby="deliveryTitle">
     <div class="delivery-heading">
       <h2 id="deliveryTitle">יומן שליחות VIP</h2>
+      <div class="vip-map-tabs view-switch" role="group" aria-label="סוג תצוגה">
+        <button type="button" aria-pressed="true">רשימה</button>
+        <button type="button" data-goto-view="map" aria-pressed="false">סכמות</button>
+      </div>
       <label>מיון לפי
         <select id="deliverySort">
           <option value="date">תאריך שליחה</option>
@@ -162,6 +166,10 @@ tr.row:hover{background:#f8fbff}
       <div>
         <h2 id="vipMapTitle">מה נשלח למי</h2>
         <p>שליחות באימייל שאושרו על ידי ספק הדיוור</p>
+      </div>
+      <div class="vip-map-tabs view-switch" role="group" aria-label="סוג תצוגה">
+        <button type="button" data-goto-view="sends" aria-pressed="false">רשימה</button>
+        <button type="button" aria-pressed="true">סכמות</button>
       </div>
       <div class="vip-map-legend" aria-label="מקרא">
         <span class="vip-map-business">עסק</span>
@@ -1044,6 +1052,11 @@ document.getElementById('deliveryNext').addEventListener('click', () => {
   deliveryOffset += DELIVERY_PAGE_SIZE;
   loadDeliveryHistory();
 });
+
+document.querySelectorAll('[data-goto-view]').forEach(btn => btn.addEventListener('click', () => {
+  setView(btn.dataset.gotoView);
+  document.getElementById(btn.dataset.gotoView === 'map' ? 'vipMap' : 'deliveryPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}));
 
 (async function start(){
   try { COPY = await fetch('copy/he.json?v=202611230420').then(res => res.json()); } catch (error) { COPY = null; }
