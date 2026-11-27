@@ -71,13 +71,62 @@
     const [lead, recordNotes, calls, activity] = await Promise.all([leadPromise, notesPromise, callsPromise, activityPromise]);
     return { meetings, lead: lead || null, recordNotes: recordNotes || [], calls: calls || [], activity: activity || [] };
   }
+  // ליד מוכר שעדיין אין לו כרטיס עסק: אותו טופס, הנתונים נלקחים מהליד והסיכום נשמר בכרטיס הליד.
+  function leadAsBusiness(lead) {
+    const fullName = text(lead.full_name) || [lead.first_name, lead.last_name].map(text).filter(Boolean).join(' ');
+    return Object.assign({}, lead, {
+      internal_name: text(lead.business_name) || text(lead.company),
+      owner_name: fullName,
+      owner_phone: lead.phone || '',
+      owner_email: lead.email || '',
+      address: text(lead.business_address) || text(lead.address),
+      city: text(lead.business_city) || text(lead.city),
+      field: text(lead.business_field) || text(lead.field),
+      seller_id: lead.id
+    });
+  }
+  function text(v) { return v == null ? '' : String(v).trim(); }
+  async function loadLeadContext(db, lead, biz) {
+    const meetingSelect = 'id,meeting_date,meeting_type,summary_text,decisions,notes,raw_transcript,match_id';
+    const { data, error } = await db.from('match_meetings').select(meetingSelect)
+      .eq('buyer_id', lead.id).is('match_id', null).is('deleted_at', null).order('meeting_date', { ascending: false }).limit(30);
+    if (error) throw error;
+    const p9 = phone9(lead.phone);
+    const notesPromise = soft(db.from('record_notes').select('note_text,created_at').eq('table_name', 'leads').eq('record_id', lead.id).order('created_at', { ascending: false }).limit(8));
+    const filters = ['lead_id.eq.' + lead.id];
+    if (p9) filters.push('caller_phone9.eq.' + p9, 'destination_e164.ilike.%' + p9 + '%');
+    const callsPromise = soft(db.from('phone_calls').select('id,started_at,ai_gist,ai_body,transcript,lead_id').eq('is_test', false).order('started_at', { ascending: false }).limit(6).or(filters.join(',')));
+    const [recordNotes, calls] = await Promise.all([notesPromise, callsPromise]);
+    return { meetings: data || [], lead: lead, recordNotes: recordNotes || [], calls: calls || [], activity: [] };
+  }
+  async function findLinkedBusiness(db, lead) {
+    if (lead.business_id) {
+      const linked = await soft(db.from('businesses').select('*').eq('id', lead.business_id).maybeSingle());
+      if (linked && linked.is_archived !== true) return linked;
+    }
+    const rows = await soft(db.from('businesses').select('*').eq('seller_id', lead.id).limit(5));
+    return (rows || []).find(b => b && b.is_archived !== true) || null;
+  }
+  async function openFromLead(lead) {
+    if (!lead || !lead.id) throw Error('יש לפתוח ליד שמור');
+    const db = window.supabaseClient;
+    if (!db) throw Error('אין חיבור מאומת למסד הנתונים');
+    // אם לליד כבר יש כרטיס עסק - פותחים את הטופס המלא של העסק, בדיוק כמו בכרטיס העסק.
+    const linked = await findLinkedBusiness(db, lead);
+    if (linked) return open(linked);
+    const biz = leadAsBusiness(lead);
+    const ctx = await loadLeadContext(db, lead, biz);
+    return open(biz, { lead, ctx });
+  }
   let active = null;
-  async function open(biz) {
+  async function open(biz, leadMode) {
     if (!biz || !biz.id) throw Error('יש לפתוח עסק שמור');
     const db = window.supabaseClient;
     if (!db) throw Error('אין חיבור מאומת למסד הנתונים');
     const api = contentApi();
-    const ctx = await loadPrepContext(db, biz);
+    const fromLead = !!(leadMode && leadMode.lead);
+    const ctx = fromLead ? leadMode.ctx : await loadPrepContext(db, biz);
+    const cardWord = fromLead ? 'הליד' : 'העסק';
     const existing = document.getElementById('bsdMeetingPrepOverlay');
     if (existing) existing.remove();
     const overlay = document.createElement('div');
@@ -89,8 +138,8 @@
       <div class="screenonly" style="display:flex;flex-wrap:wrap;gap:8px">
         <button type="button" id="bsdPrepClose">סגור</button>
         <button type="button" id="bsdPrepPrint">הדפסה / שמירה כ PDF</button>
-        <button type="button" id="bsdPrepSave">שמור סיכום בכרטיס העסק</button>
-        <button type="button" id="bsdPrepResearch">🔎 רענון חקר שוק מהרשת</button>
+        <button type="button" id="bsdPrepSave">שמור סיכום בכרטיס ${cardWord}</button>
+        ${fromLead ? '' : '<button type="button" id="bsdPrepResearch">🔎 רענון חקר שוק מהרשת</button>'}
         <span id="bsdPrepStatus" role="status" aria-live="polite"></span>
       </div>
       <div class="screenonly" style="display:grid;gap:8px;background:white;padding:12px;border:1px solid #d5dbe5;border-radius:8px">
@@ -103,7 +152,7 @@
       </div>`;
     document.body.appendChild(overlay);
     const parentState = history.state && typeof history.state === 'object' ? history.state : {};
-    const meetingHistory = parentState.bsdCardType === 'business';
+    const meetingHistory = parentState.bsdCardType === 'business' || (fromLead && !!parentState.bsdCardType);
     if (meetingHistory) history.pushState({ ...parentState, bsdMeetingPrep: true }, '', location.href);
     let closing = false;
     const onBack = () => {
@@ -138,18 +187,22 @@
     el('bsdPrepSave').onclick = async () => {
       const e = edits();
       if (!e.summary.trim()) { el('bsdPrepStatus').textContent = 'יש להקליד סיכום לפני שמירה'; return; }
-      if (!window.confirm('לשמור סיכום פגישה חדש בכרטיס העסק?')) return;
-      const row = { business_id: biz.id, meeting_type: el('bsdPrepType').value, meeting_date: e.date, summary_text: e.summary, decisions: e.next, status: 'טיוטה' };
+      if (!window.confirm('לשמור סיכום פגישה חדש בכרטיס ' + cardWord + '?')) return;
+      const owner = fromLead ? { buyer_id: leadMode.lead.id } : { business_id: biz.id };
+      const row = { ...owner, meeting_type: el('bsdPrepType').value, meeting_date: e.date, summary_text: e.summary, decisions: e.next, status: 'טיוטה' };
       el('bsdPrepSave').disabled = true;
       try {
         const { error } = await db.from('match_meetings').insert(row);
         if (error) throw error;
-        el('bsdPrepStatus').textContent = 'הסיכום נשמר בכרטיס העסק';
-        if (typeof window.loadBizMeetings === 'function') await window.loadBizMeetings(biz.id);
+        el('bsdPrepStatus').textContent = 'הסיכום נשמר בכרטיס ' + cardWord;
+        if (fromLead) {
+          ctx.meetings.unshift(row);
+          if (typeof window.loadLeadMeetings === 'function') await window.loadLeadMeetings(leadMode.lead.id);
+        } else if (typeof window.loadBizMeetings === 'function') await window.loadBizMeetings(biz.id);
       } catch (err) { el('bsdPrepStatus').textContent = 'השמירה נכשלה: ' + (err.message || err); }
       finally { el('bsdPrepSave').disabled = false; }
     };
-    el('bsdPrepResearch').onclick = async () => {
+    if (el('bsdPrepResearch')) el('bsdPrepResearch').onclick = async () => {
       if (!window.confirm('לחפש ברשת מידע פומבי על העסק ולשמור אותו בכרטיס? זה לשימוש פנימי בלבד, ולא נשלח ללקוח.')) return;
       const btn = el('bsdPrepResearch');
       btn.disabled = true;
@@ -186,5 +239,5 @@
       }
     };
   }
-  window.BSDMeetingPrep = { open };
+  window.BSDMeetingPrep = { open, openFromLead };
 })();

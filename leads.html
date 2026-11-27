@@ -9,7 +9,7 @@
     // בטעינה ראשונה של הטאב/session, כדי לתפוס דף שהגיע ישירות מקאש ישן
     // של הדפדפן (בניגוד לגרסה הקודמת שהשוותה רק מול sessionStorage ולכן
     // לא תפסה בעיה כזו בטעינה ראשונה).
-    var PAGE_BUILD = '202611261305';
+    var PAGE_BUILD = '202611271230';
     window.PAGE_BUILD = PAGE_BUILD; // single source of truth - the visible "גרסה" label below is computed from this, never hardcoded again
     // 10.10.2026 (staging): guard per page + per device (localStorage) instead of per tab, so a
     // page whose PAGE_BUILD simply wasn't bumped is reloaded at most once per deploy on this
@@ -309,6 +309,8 @@
 <script src="js/phoneCalls.js?v=202610142200"></script>
 <script src="js/listReturn.js?v=202611092100"></script>
 <script src="js/business-alert-invite.js?v=202611231240"></script>
+<script src="js/meetingPrepContent.js?v=202611100710"></script>
+<script src="js/meetingPrepForm.js?v=202611271230"></script>
 <script src="js/meetingPrepSheet.js?v=202611151100"></script>
 <script>
 let ALL_LEADS = [];
@@ -1311,7 +1313,7 @@ function openLeadForm(id, forcedType, prefillData){
           ${fieldRow('partnership_willingness','נכונות לשותפות', lead?.partnership_willingness)}
         ` : `
           <div class="section-h">פרטי העסק והמוכר</div>
-          ${(lead && !isGrantOnlyViewer(lead)) ? `<div class="field full"><button type="button" style="font-weight:800;border:0;border-radius:14px;padding:10px 14px;color:#fff;cursor:pointer;background:linear-gradient(135deg,#0e1b34,#1e3a8a);box-shadow:0 5px 0 rgba(8,16,32,.28);" onclick="BSDMeetingSheet.openFromSeller(ALL_LEADS.find(l=>l.id==='${lead.id}')).catch(e=>toast((e&&e.message)||'לא ניתן להכין את הדף',true))">דף הכנה לפגישה (הדפסה)</button></div>` : ''}
+          ${(lead && !isGrantOnlyViewer(lead)) ? `<div class="field full"><button type="button" class="btn btn-ghost" style="margin:8px 0;font-weight:700;" onclick="BSDMeetingPrep.openFromLead(ALL_LEADS.find(l=>l.id==='${lead.id}')).catch(e=>toast((e&&e.message)||'לא ניתן לפתוח את הטופס',true))">📄 טופס הכנה לפגישה | הדפסה וסיכום</button> <button type="button" style="margin:8px 8px 8px 0;font-weight:800;border:0;border-radius:14px;padding:10px 14px;color:#fff;cursor:pointer;background:linear-gradient(135deg,#0e1b34,#1e3a8a);box-shadow:0 5px 0 rgba(8,16,32,.28);" onclick="BSDMeetingSheet.openFromSeller(ALL_LEADS.find(l=>l.id==='${lead.id}')).catch(e=>toast((e&&e.message)||'לא ניתן להכין את הדף',true))">דף הכנה לפגישה (הדפסה)</button></div>` : ''}
           ${fieldRow('business_name','שם העסק', lead?.business_name)}
           ${fieldRow('business_field','תחום העסק', lead?.business_field)}
           ${fieldRow('business_city','עיר העסק', lead?.business_city)}
